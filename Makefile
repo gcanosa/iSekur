@@ -59,6 +59,14 @@ build/web.o: build/web_assets.h
 build/web_assets.h: web/index.html | build
 	{ printf 'static const char index_html[] = R"ISEKURHTML('; cat web/index.html; printf ')ISEKURHTML";\n'; } > $@
 
+# git build id (e.g. v0.2-4-g686b410-dirty) for --version and CTCP VERSION; the
+# file is only rewritten when it changes, so it doesn't force rebuilds
+build/core.o: build/version.h
+build/version.h: FORCE | build
+	@printf '#define ISEKUR_BUILD "%s"\n' "$$(git describe --tags --always --dirty 2>/dev/null)" > $@.tmp
+	@cmp -s $@.tmp $@ && rm -f $@.tmp || mv $@.tmp $@
+FORCE:
+
 build:
 	mkdir -p build
 
@@ -87,4 +95,4 @@ clean:
 	rm -rf build isekur
 
 -include $(wildcard build/*.d)
-.PHONY: all test debug install uninstall clean
+.PHONY: all test debug install uninstall clean FORCE

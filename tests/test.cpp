@@ -100,6 +100,8 @@ int main() {
     core.exec(home, "/grep world");  // earlier results are not matched again
     assert(home->lines.size() == 6);
 
+    assert(ctcp_version().rfind(version_string() + " :: ", 0) == 0 && version_string().find(ISEKUR_VERSION) != std::string::npos);
+
     Server sv;  // token bucket: 2 at once, then one per second
     sv.flood_burst = 2, sv.flood_ms = 1000, sv.tokens = 2, sv.tokens_at = 0;
     for (int i = 0; i < 4; i++) sv.sendq.push_back("L" + std::to_string(i) + "\r\n");

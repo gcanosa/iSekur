@@ -675,7 +675,7 @@ void Core::handle(Server* s, const Msg& m) {
                 std::string rep, note;
                 if (!notice && !self) {
                     if (verb == "VERSION" && opt_on(s, "ctcp_version", true))
-                        rep = "VERSION " + opt(s, "ctcp_version_reply", "iSekur " ISEKUR_VERSION " - https://sekurnet.org");
+                        rep = "VERSION " + ctcp_version();
                     else if (verb == "PING" && opt_on(s, "ctcp_ping", true))
                         rep = "PING " + arg.substr(0, 64);
                     else if (verb == "TIME" && opt_on(s, "ctcp_time", true))

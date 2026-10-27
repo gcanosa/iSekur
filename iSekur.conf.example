@@ -40,10 +40,10 @@ away_message   = Not here right now
 history_fetch = 100
 
 # CTCP answers (at most one reply every 2s per server, against floods).
+# VERSION says e.g. "iSekur 0.2 :: Linux 6.8.0/x86_64 :: ... :: <github link>".
 ctcp_version = on
 ctcp_time    = on
 ctcp_ping    = on
-; ctcp_version_reply = iSekur IRC client
 
 # One [server.<name>] section per network. All of them connect at startup
 # unless autoconnect = false.
