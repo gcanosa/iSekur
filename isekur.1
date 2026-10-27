@@ -71,7 +71,16 @@ Scroll.
 Toggle the nicklist / mouse.
 .TP
 .B Tab
-Complete a nick.
+Complete a nick, or the config key after \fB/set\fR (matching keys are listed as you type).
+.TP
+.B Ctrl+A / Ctrl+E / Ctrl+U / Ctrl+K
+Start / end of line, delete to start / end.
+.TP
+.B Alt+Backspace
+Delete the previous word.
+.TP
+.B Cmd+Backspace
+Delete to start, when the terminal forwards Cmd (CSI u).
 .PP
 Actions can be rebound in the
 .B [keys]

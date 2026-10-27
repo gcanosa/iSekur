@@ -288,6 +288,30 @@ void Tui::draw() {
         draw_row(0, top + ch - 1 - k, cw, rows[idx]);
     }
 
+    // "/set key": live list of the config keys it matches, Tab completes
+    std::vector<std::string> sk;
+    if (set_keys(sk) && !sk.empty()) {
+        int n = std::min((int)sk.size(), std::max(1, ch / 2));
+        Style ks = T.get("input"), kk = sty(T, "set_key", "info"), kv = sty(T, "set_value", "input"), ke = T.get("separator");
+        for (Style* st : {&kk, &kv, &ke})
+            if (st->bg < 0) st->bg = ks.bg;
+        for (int i = 0; i < n; i++) {
+            int yy = top + ch - n + i;
+            fill(yy, 0, W, ks);
+            if (i == n - 1 && (int)sk.size() > n) {
+                text(1, yy, W, "... " + std::to_string(sk.size() - (size_t)n + 1) + " more", ks, false);
+                break;
+            }
+            size_t dot = sk[(size_t)i].rfind('.');
+            std::string sec = dot == std::string::npos ? "general" : sk[(size_t)i].substr(0, dot);
+            std::string key = dot == std::string::npos ? sk[(size_t)i] : sk[(size_t)i].substr(dot + 1);
+            bool secret = key.find("pass") != std::string::npos || key.find("hash") != std::string::npos;
+            int x2 = text(1, yy, W, sk[(size_t)i], kk, false);
+            x2 = text(x2, yy, W, " = ", ke, false);
+            text(x2, yy, W, secret ? "********" : ini_get(c.cfg, sec, key), kv, false);
+        }
+    }
+
     // status bar
     int y = H - 2, x = 0;
     Style ss = T.get("status"), sh = sty(T, "status_hi", "status");
@@ -364,8 +388,13 @@ void Tui::draw() {
 }
 
 // ---- keyboard --------------------------------------------------------------
+// vendor/termbox2.c: CSI u / modifyOtherKeys decoding, TB_MOD_SUPER = Cmd
+extern "C" int isekur_extract_pre(struct tb_event*, size_t*);
+extern "C" int isekur_extract_post(struct tb_event*, size_t*);
+static const int TB_MOD_SUPER = 16;
+
 static std::string keyspec(int mod, int key, uint32_t ch) {
-    std::string s = mod & TB_MOD_ALT ? "M-" : "";
+    std::string s = std::string(mod & TB_MOD_SUPER ? "D-" : "") + (mod & TB_MOD_ALT ? "M-" : "");
     if (ch) { utf8_put(s, ch); return s; }
     if (key >= TB_KEY_ARROW_RIGHT && key <= TB_KEY_ARROW_UP) {
         if (mod & TB_MOD_CTRL) s += "C-";
@@ -398,6 +427,8 @@ bool Tui::init(std::string& err) {
     if (r != TB_OK) { err = tb_strerror(r); return false; }
     mouse_on = ini_get(c.cfg, "general", "mouse", "on") != "off";
     tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
+    tb_set_func(TB_FUNC_EXTRACT_PRE, isekur_extract_pre);
+    tb_set_func(TB_FUNC_EXTRACT_POST, isekur_extract_post);
     std::string mode = ini_get(c.cfg, "general", "colors", "auto");
     const char* ct = getenv("COLORTERM");
     truecolor = mode == "truecolor" ||
@@ -490,6 +521,20 @@ void Tui::key(int mod, int k, uint32_t ch) {
     auto it = keymap.find(keyspec(mod, k, ch));
     if (it != keymap.end() && action(it->second)) return;
     if (k != TB_KEY_TAB) completing = false;
+    bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
+    if (mod & TB_MOD_SUPER) {  // Cmd, when the terminal reports it (CSI u)
+        if (bs) input.erase(0, cur), cur = 0;
+        else if (k == TB_KEY_ARROW_LEFT) cur = 0;
+        else if (k == TB_KEY_ARROW_RIGHT) cur = input.size();
+        return;
+    }
+    if ((mod & TB_MOD_ALT) && bs) {  // Option/Alt+Backspace: previous word
+        size_t st = cur;
+        while (st > 0 && input[st - 1] == U' ') st--;
+        while (st > 0 && input[st - 1] != U' ') st--;
+        input.erase(st, cur - st), cur = st;
+        return;
+    }
     if (mod & TB_MOD_ALT) return;  // unbound Alt combos do nothing
     if (ch || k == TB_KEY_SPACE) { input.insert(cur++, 1, ch ? (char32_t)ch : U' '); return; }
     switch (k) {
@@ -561,20 +606,36 @@ void Tui::submit() {
     c.exec(c.active, line);
 }
 
+// While the cursor is in the key of "/set <key>": config keys containing what's typed
+bool Tui::set_keys(std::vector<std::string>& out) const {
+    std::string s = to_utf8(input.substr(0, cur));
+    if (s.rfind("/set ", 0) != 0 || s.find(' ', 5) != std::string::npos) return false;
+    std::string q = irc_lower(s.substr(5));
+    for (auto& [sec, kv] : c.cfg)
+        for (auto& [k, v] : kv) {
+            std::string full = (sec == "general" ? "" : sec + ".") + k;
+            if (irc_lower(full).find(q) != std::string::npos) out.push_back(full);
+        }
+    return true;
+}
+
 void Tui::complete() {
     Buffer* b = c.active;
     if (!completing) {
         size_t st = cur;
         while (st > 0 && input[st - 1] != U' ') st--;
-        std::string pfx = irc_lower(to_utf8(input.substr(st, cur - st)));
-        if (pfx.empty()) return;
         comp.clear();
-        for (auto& kv : b->nicks)
-            if (kv.first.rfind(pfx, 0) == 0) comp.push_back(kv.second.nick);
-        if (b->type == BT::QUERY && irc_lower(b->name).rfind(pfx, 0) == 0) comp.push_back(b->name);
+        if (set_keys(comp)) st = 5;  // after "/set "
+        else {
+            std::string pfx = irc_lower(to_utf8(input.substr(st, cur - st)));
+            if (pfx.empty()) return;
+            for (auto& kv : b->nicks)
+                if (kv.first.rfind(pfx, 0) == 0) comp.push_back(kv.second.nick);
+            if (b->type == BT::QUERY && irc_lower(b->name).rfind(pfx, 0) == 0) comp.push_back(b->name);
+            std::sort(comp.begin(), comp.end(),
+                      [](auto& x, auto& y) { return irc_lower(x) < irc_lower(y); });
+        }
         if (comp.empty()) return;
-        std::sort(comp.begin(), comp.end(),
-                  [](auto& x, auto& y) { return irc_lower(x) < irc_lower(y); });
         completing = true, comp_i = 0, comp_start = st;
     } else {
         comp_i = (comp_i + 1) % comp.size();
