@@ -1,0 +1,41 @@
+# Solarized dark.
+[colors]
+default        = #93a1a1 #002b36
+topic          = #fdf6e3 #073642 bold
+tabbar         = #586e75 #073642
+tab_server     = #b58900 #073642 bold
+tab_active     = #002b36 #268bd2 bold
+tab_data       = #2aa198 #073642
+tab_msg        = #eee8d5 #073642 bold
+tab_hilight    = #d33682 #073642 bold
+status         = #586e75 #073642
+status_hi      = #93a1a1 #073642
+input          = #eee8d5 #002b36
+input_prompt   = #268bd2 #002b36 bold
+timestamp      = #586e75 #002b36
+separator      = #073642 #002b36
+nicklist       = #839496 #002b36
+nicklist_title = #586e75 #002b36 italic
+nicklist_border= #073642 #002b36
+nicklist_op    = #cb4b16 #002b36 bold
+nicklist_voice = #859900 #002b36
+msg_self       = #268bd2 #002b36 bold
+hilight        = #fdf6e3 #d33682 bold
+hilight_text   = #eee8d5 #002b36
+join           = #859900 #002b36
+part           = #cb4b16 #002b36
+quit           = #dc322f #002b36
+notice         = #b58900 #002b36 bold
+action         = #6c71c4 #002b36 italic
+info           = #2aa198 #002b36
+error          = #dc322f #002b36 bold
+
+[nicks]
+palette = #b58900 #cb4b16 #dc322f #d33682 #6c71c4 #268bd2 #2aa198 #859900
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

@@ -1,0 +1,69 @@
+# iSekur -- plain GNU make (use `gmake` on the BSDs).
+#   make          build ./isekur
+#   make test     build + run tests
+#   make debug    ASan+UBSan build
+#   make clean
+
+CXX      ?= c++
+CC       ?= cc
+
+# OpenSSL: pkg-config first, then Homebrew prefixes (macOS ships no headers),
+# then plain -lssl -lcrypto.
+PKG_OPENSSL := $(shell pkg-config --exists openssl 2>/dev/null && echo yes)
+ifeq ($(PKG_OPENSSL),yes)
+  OPENSSL_CFLAGS := $(shell pkg-config --cflags openssl)
+  OPENSSL_LIBS   := $(shell pkg-config --libs openssl)
+else
+  BREW_OPENSSL := $(firstword $(wildcard /opt/homebrew/opt/openssl@3 /usr/local/opt/openssl@3 /opt/homebrew/opt/openssl /usr/local/opt/openssl))
+  ifneq ($(BREW_OPENSSL),)
+    OPENSSL_CFLAGS := -I$(BREW_OPENSSL)/include
+    OPENSSL_LIBS   := -L$(BREW_OPENSSL)/lib -lssl -lcrypto
+  else
+    OPENSSL_LIBS   := -lssl -lcrypto
+  endif
+endif
+
+OPT      ?= -O2
+COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-strong \
+            -DTB_OPT_ATTR_W=32 -Ivendor -Isrc -Ibuild $(OPENSSL_CFLAGS)
+CXXFLAGS += -std=c++17 $(COMMON)
+CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers
+LDLIBS   += $(OPENSSL_LIBS)
+
+SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp
+OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o
+
+all: isekur
+
+isekur: $(OBJ)
+	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
+
+build/%.o: src/%.cpp | build
+	$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
+
+build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+# the webchat page is compiled into the binary
+build/web.o: build/web_assets.h
+build/web_assets.h: web/index.html | build
+	cd web && xxd -i index.html > ../$@
+
+build:
+	mkdir -p build
+
+test: build/test
+	./build/test
+
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/net.o build/web.o build/termbox2.o
+	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
+
+debug:
+	$(MAKE) clean
+	$(MAKE) OPT="-O0 -fsanitize=address,undefined" LDFLAGS="-fsanitize=address,undefined"
+
+clean:
+	rm -rf build isekur
+
+-include $(wildcard build/*.d)
+.PHONY: all test debug clean

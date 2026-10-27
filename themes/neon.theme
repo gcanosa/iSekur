@@ -1,0 +1,41 @@
+# Neon: synthwave pinks and cyans on deep purple.
+[colors]
+default        = #f0e6ff #12001f
+topic          = #12001f #ff2fd6 bold
+tabbar         = #b48cff #1e0033
+tab_server     = #00f0ff #1e0033 bold
+tab_active     = #12001f #00f0ff bold
+tab_data       = #9d7bff #1e0033
+tab_msg        = #ffffff #1e0033 bold
+tab_hilight    = #ff2fd6 #1e0033 bold underline
+status         = #b48cff #1e0033
+status_hi      = #00f0ff #1e0033 bold
+input          = #ffffff #12001f
+input_prompt   = #ff2fd6 #12001f bold
+timestamp      = #6b4a9e #12001f
+separator      = #ff2fd6 #12001f
+nicklist       = #d8c8ff #1a002b
+nicklist_title = #ff2fd6 #1a002b bold
+nicklist_border= #ff2fd6 #12001f
+nicklist_op    = #00f0ff #1a002b bold
+nicklist_voice = #39ff14 #1a002b
+msg_self       = #00f0ff #12001f bold
+hilight        = #12001f #39ff14 bold
+hilight_text   = #39ff14 #12001f
+join           = #39ff14 #12001f
+part           = #ff6e27 #12001f
+quit           = #ff3864 #12001f
+notice         = #fffb00 #12001f bold
+action         = #ff2fd6 #12001f italic
+info           = #00f0ff #12001f
+error          = #ff3864 #12001f bold
+
+[nicks]
+palette = #ff2fd6 #00f0ff #39ff14 #fffb00 #ff6e27 #b48cff #ff3864 #00ffa3 #7df9ff #ff9ff3
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 13
+separator      = ┃
+timestamp      = %H:%M:%S
