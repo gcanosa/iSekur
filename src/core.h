@@ -190,6 +190,8 @@ long long now_ms();
 std::string b64(const std::string& s);
 std::string unb64(const std::string& s);  // "" on bad input
 std::string fmt_time(time_t t, const std::string& fmt);
+std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
+std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
 std::string safe_name(const std::string& n);  // network name -> safe log file name
 bool parse_log_line(const std::string& s, Line& l);

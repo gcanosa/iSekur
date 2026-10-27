@@ -5,7 +5,9 @@
 #include <pwd.h>
 #include <glob.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
 #include "core.h"
+#include "version.h"
 
 static const size_t MAX_LINES = 2000;
 
@@ -26,7 +28,7 @@ void Core::load_config() {
     if (!found)
         print(home, LK::INFO, "No config at " + cfg_path +
                                   " - see iSekur.conf.example. Try /server irc.example.org 6697 -tls");
-    print(home, LK::INFO, "Welcome to iSekur " ISEKUR_VERSION ". /help lists commands.");
+    print(home, LK::INFO, "Welcome to " + version_string() + ". /help lists commands.");
 
     for (auto& [sec, kv] : cfg) {
         if (sec.rfind("server.", 0) != 0) continue;
@@ -75,6 +77,21 @@ Server* Core::add_server(const ServerCfg& sc) {
 void Core::load_flood(Server* s) {
     s->flood_burst = std::max(1, atoi(opt(s, "flood_burst", "5").c_str()));
     s->flood_ms = atoi(opt(s, "flood_interval_ms", "2000").c_str());
+}
+
+// The build id only shows when it says more than the version (untagged or
+// modified builds); release tarballs without git just say "iSekur 0.2".
+std::string version_string() {
+    std::string build = ISEKUR_BUILD, v = "iSekur " ISEKUR_VERSION;
+    return build.empty() || build == "v" ISEKUR_VERSION ? v : v + " (" + build + ")";
+}
+
+// irssi/BitchX style: client, version, where it runs, a tagline and a link
+std::string ctcp_version() {
+    utsname u{};
+    std::string os = uname(&u) == 0 ? std::string(u.sysname) + " " + u.release + "/" + u.machine : "unknown OS";
+    return version_string() + " :: " + os +
+           " :: modern, secure, lightweight & powerful IRCv3 client :: https://github.com/gcanosa/iSekur";
 }
 
 // ---- buffers ---------------------------------------------------------------

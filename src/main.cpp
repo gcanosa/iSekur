@@ -59,7 +59,7 @@ int main(int argc, char** argv) {
         if (a == "-c" && i + 1 < argc) c.cfg_path = argv[++i];
         else if (a == "-d" || a == "--daemon") daemon = true;
         else if (a == "--hash-password") return hash_pw_cmd();
-        else if (a == "-v" || a == "--version") { puts("iSekur " ISEKUR_VERSION); return 0; }
+        else if (a == "-v" || a == "--version") { puts(version_string().c_str()); return 0; }
         else return usage();
     }
     if (daemon) {
