@@ -3,6 +3,7 @@
 #include <ctime>
 #include <map>
 #include <memory>
+#include <set>
 #include <string>
 #include <vector>
 #include <poll.h>
@@ -16,6 +17,7 @@ struct Web {
     void add_fds(std::vector<pollfd>& v);
     void process(const std::vector<pollfd>& v);  // after poll()
     void on_event(Ev e, Buffer* b, const Line* l);
+    void flush();  // once per loop pass: send coalesced buffer updates
     bool running() const { return lfd >= 0; }
 
 private:
@@ -31,6 +33,8 @@ private:
     std::string user, pass_hash;
     std::vector<std::unique_ptr<Client>> clients;
     size_t fd_start = 0, fd_count = 0;
+    std::set<int> pending, known;  // buffer ids: updates to send / already sent
+    std::string last_order;
     std::map<std::string, time_t> sessions;                   // token -> expiry
     std::map<std::string, std::pair<int, time_t>> fails;      // ip -> (count, locked until)
 
@@ -40,6 +44,8 @@ private:
     void snapshot(Client& cl);
     std::string buf_json(Buffer* b);
     std::string order_json();
+    std::string lines_json(Buffer* b);
+    void flush_buf(Buffer* b);
     std::string theme_json();
 };
 

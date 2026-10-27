@@ -138,6 +138,8 @@ struct Core {
     std::string opt(const Server* s, const std::string& key, const std::string& def) const;
     bool opt_on(const Server* s, const std::string& key, bool def) const;
     void log_line(Buffer* b, const Line& l);
+    std::string log_path(Buffer* b) const;
+    void load_history(Buffer* b);
     Server* add_server(const ServerCfg& sc);
     void connect(Server* s);
     void disconnect(Server* s, const std::string& why);
@@ -165,3 +167,4 @@ std::string unb64(const std::string& s);  // "" on bad input
 std::string fmt_time(time_t t, const std::string& fmt);
 std::vector<std::string> split(const std::string& s, char sep);
 std::string safe_name(const std::string& n);  // network name -> safe log file name
+bool parse_log_line(const std::string& s, Line& l);

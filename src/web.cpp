@@ -431,7 +431,7 @@ std::string Web::buf_json(Buffer* b) {
     static const char* STATE[] = {"disconnected", "connecting", "registering", "connected"};
     Server* s = b->srv;
     std::string srv = s ? s->cfg.name : "isekur";  // same label as the console tabs
-    // ponytail: whole nicklist on every change; diff it if huge channels lag the web
+    // ponytail: whole nicklist per update (coalesced in flush()); diff it if huge channels lag
     std::string nicks = "[";
     for (auto& kv : b->nicks) {
         if (nicks.size() > 1) nicks += ",";
@@ -467,15 +467,20 @@ std::string Web::theme_json() {
     return o + "]}";
 }
 
+std::string Web::lines_json(Buffer* b) {
+    std::string ls = "{\"t\":\"lines\",\"buf\":" + std::to_string(b->id) + ",\"lines\":[";
+    size_t from = b->lines.size() > BACKLOG ? b->lines.size() - BACKLOG : 0;
+    for (size_t i = from; i < b->lines.size(); i++) ls += (i > from ? "," : "") + line_json(b->lines[i]);
+    return ls + "]}";
+}
+
 void Web::snapshot(Client& cl) {
     auto send = [&](const std::string& j) { cl.conn.out += ws_frame(j); };
     send(theme_json());
     for (auto& b : c.bufs) {
         send(buf_json(b.get()));
-        std::string ls = "{\"t\":\"lines\",\"buf\":" + std::to_string(b->id) + ",\"lines\":[";
-        size_t from = b->lines.size() > BACKLOG ? b->lines.size() - BACKLOG : 0;
-        for (size_t i = from; i < b->lines.size(); i++) ls += (i > from ? "," : "") + line_json(b->lines[i]);
-        send(ls + "]}");
+        send(lines_json(b.get()));
+        known.insert(b->id);
     }
     send(order_json());
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
@@ -490,18 +495,41 @@ void Web::broadcast(const std::string& json) {
     }
 }
 
+void Web::flush_buf(Buffer* b) {
+    pending.erase(b->id);
+    broadcast(buf_json(b));
+    if (known.insert(b->id).second) broadcast(lines_json(b));  // new tab: send its history
+}
+
+// Buffer updates (nicklists!) are coalesced to one per buffer per loop pass,
+// so a netsplit is one message per channel instead of one per quit.
+void Web::flush() {
+    if (lfd < 0 || clients.empty()) { pending.clear(); return; }
+    for (auto& b : c.bufs)
+        if (pending.count(b->id)) flush_buf(b.get());
+    pending.clear();
+    std::string o = order_json();
+    if (o != last_order) broadcast(o), last_order = o;
+}
+
 void Web::on_event(Ev e, Buffer* b, const Line* l) {
     if (lfd < 0 || clients.empty()) return;
     switch (e) {
-    case Ev::LINE: broadcast("{\"t\":\"line\",\"buf\":" + std::to_string(b->id) + ",\"line\":" + line_json(*l) + "}"); break;
-    case Ev::BUFFER: broadcast(buf_json(b)); broadcast(order_json()); break;
+    case Ev::LINE: {
+        bool fresh = !known.count(b->id);  // its history (incl. this line) goes out now
+        if (fresh || pending.count(b->id)) flush_buf(b);
+        if (!fresh) broadcast("{\"t\":\"line\",\"buf\":" + std::to_string(b->id) + ",\"line\":" + line_json(*l) + "}");
+        break;
+    }
+    case Ev::BUFFER: pending.insert(b->id); break;
     case Ev::CLOSE: {
+        pending.erase(b->id), known.erase(b->id);
         broadcast("{\"t\":\"close\",\"buf\":" + std::to_string(b->id) + "}");
         std::string o = "{\"t\":\"order\",\"ids\":[";
         bool first = true;
         for (auto& x : c.bufs)
             if (x.get() != b) o += (first ? "" : ",") + std::to_string(x->id), first = false;
-        broadcast(o + "]}");
+        broadcast(last_order = o + "]}");
         break;
     }
     case Ev::THEME: broadcast(theme_json()); break;
