@@ -165,11 +165,12 @@ std::string ws_frame(const std::string& p, int op) {
     return f + p;
 }
 
-long ws_parse(const std::string& b, int& op, std::string& payload) {
+long ws_parse(const std::string& b, int& op, std::string& payload, bool* fin) {
     if (b.size() < 2) return 0;
     unsigned char b0 = (unsigned char)b[0], b1 = (unsigned char)b[1];
-    // ponytail: no fragmented messages; browsers don't fragment chat-sized text
-    if (!(b0 & 0x80) || !(b1 & 0x80)) return -1;  // must be FIN and masked
+    if (!(b1 & 0x80)) return -1;                     // clients must mask
+    if (!(b0 & 0x80) && (!fin || (b0 & 0x08))) return -1;  // control frames are never split
+    if (fin) *fin = b0 & 0x80;
     op = b0 & 0x0f;
     uint64_t len = b1 & 0x7f;
     size_t pos = 2;
@@ -211,9 +212,11 @@ static bool gen_selfsigned(const std::string& crt, const std::string& key, std::
         X509_gmtime_adj(X509_getm_notBefore(x), 0);
         X509_gmtime_adj(X509_getm_notAfter(x), 3650L * 24 * 3600);
         X509_set_pubkey(x, pk);
-        X509_NAME* name = X509_get_subject_name(x);
+        X509_NAME* name = X509_NAME_new();  // own copy: OpenSSL 4 made the getter const
         X509_NAME_add_entry_by_txt(name, "CN", MBSTRING_ASC, (const unsigned char*)"isekur", -1, -1, 0);
+        X509_set_subject_name(x, name);
         X509_set_issuer_name(x, name);
+        X509_NAME_free(name);
         ok = X509_sign(x, pk, EVP_sha256()) > 0;
     }
     if (ok) {
@@ -439,19 +442,29 @@ static Buffer* by_id(Core& c, int id) {
 void Web::ws_frames(Client& cl) {
     for (;;) {
         int op;
+        bool fin;
         std::string p;
-        long n = ws_parse(cl.in, op, p);
+        long n = ws_parse(cl.in, op, p, &fin);
+        auto bad = [&] { cl.conn.out += ws_frame("", 8); cl.conn.closing = true; };
         if (n == 0) return;
-        if (n < 0) { cl.conn.out += ws_frame("", 8); cl.conn.closing = true; return; }
+        if (n < 0) return bad();
         cl.in.erase(0, (size_t)n);
-        if (op == 8) { cl.conn.out += ws_frame("", 8); cl.conn.closing = true; return; }
+        if (op == 8) return bad();
         if (op == 9) { cl.conn.out += ws_frame(p, 10); continue; }
+        if (op < 8) {  // data: a message may arrive as a frame plus continuations (op 0)
+            if ((op == 0) != (cl.frag_op != 0)) return bad();
+            if (op) cl.frag_op = op;
+            if ((cl.frag += p).size() > (1 << 20)) return bad();
+            if (!fin) continue;
+            op = cl.frag_op, cl.frag_op = 0, p.swap(cl.frag), cl.frag.clear();
+        }
         if (op != 1) continue;
         auto m = json_flat(p);
         Buffer* b = by_id(c, atoi(m["buf"].c_str()));
         if (!b) continue;
         if (m["t"] == "input") c.exec(b, m["text"]);
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
+        else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         if (cl.conn.closing) return;
     }
 }
@@ -482,7 +495,7 @@ std::string Web::buf_json(Buffer* b) {
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
-           ",\"act\":" + std::to_string(b->activity) + ",\"joined\":" + (b->joined ? "1" : "0") +
+           ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
            ",\"me\":" + json_str(s ? s->nick : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
            ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + ",\"nicks\":" + nicks + "}";
@@ -558,7 +571,8 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::LINE: {
         bool fresh = !known.count(b->id);  // its history (incl. this line) goes out now
         if (fresh || pending.count(b->id)) flush_buf(b);
-        if (!fresh) broadcast("{\"t\":\"line\",\"buf\":" + std::to_string(b->id) + ",\"line\":" + line_json(*l) + "}");
+        if (!fresh) broadcast("{\"t\":\"line\",\"buf\":" + std::to_string(b->id) + ",\"u\":" +
+                             std::to_string(b->unread) + ",\"line\":" + line_json(*l) + "}");
         break;
     }
     case Ev::BUFFER: pending.insert(b->id); break;

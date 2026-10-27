@@ -20,6 +20,7 @@ nicklist_border= #ff2fd6 #12001f
 nicklist_op    = #00f0ff #1a002b bold
 nicklist_voice = #39ff14 #1a002b
 msg_self       = #00f0ff #12001f bold
+marker         = #39ff14
 hilight        = #12001f #39ff14 bold
 hilight_text   = #39ff14 #12001f
 join           = #39ff14 #12001f

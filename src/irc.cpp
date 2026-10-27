@@ -223,8 +223,6 @@ void Core::connect(Server* s) {
     s->caps.clear(), s->caps_ls.clear();
     s->sasl_step = 0, s->cap_done = false, s->nick_tries = 0;
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear();
-    s->flood_burst = std::max(1, atoi(opt(s, "flood_burst", "5").c_str()));
-    s->flood_ms = atoi(opt(s, "flood_interval_ms", "2000").c_str());
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
     s->nick = s->cfg.nick;
     s->last_rx = time(nullptr);

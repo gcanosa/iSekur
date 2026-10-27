@@ -25,6 +25,8 @@ private:
         Conn conn;
         std::string in;
         bool ws = false;
+        std::string frag;  // a fragmented message so far
+        int frag_op = 0;
         time_t since = 0;
     };
     int lfd = -1;
@@ -56,7 +58,8 @@ private:
 std::string hash_password(const std::string& pw);
 bool check_password(const std::string& pw, const std::string& stored);
 std::string ws_frame(const std::string& payload, int opcode = 1);
-// decodes one client frame from buf; returns bytes consumed, 0 = need more, -1 = bad
-long ws_parse(const std::string& buf, int& opcode, std::string& payload);
+// decodes one client frame from buf; returns bytes consumed, 0 = need more, -1 = bad.
+// Without `fin`, a frame that isn't the last of its message is bad.
+long ws_parse(const std::string& buf, int& opcode, std::string& payload, bool* fin = nullptr);
 std::string json_str(const std::string& s);
 std::map<std::string, std::string> json_flat(const std::string& s);

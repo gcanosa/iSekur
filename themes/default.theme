@@ -24,6 +24,7 @@ nicklist_border= #3b3f5c
 nicklist_op    = #ff9e64 default bold
 nicklist_voice = #9ece6a default
 msg_self       = #82aaff default bold
+marker         = #ff5fd7
 hilight        = #ffffff #c2185b bold
 hilight_text   = #ffd6ec default
 join           = #9ece6a

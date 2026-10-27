@@ -269,7 +269,15 @@ void Tui::draw() {
     // chat
     std::vector<Row> rows;  // bottom-up
     int need = ch + b->scroll;
-    for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it) {
+    size_t n = 0;
+    for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it, ++n) {
+        if (b->unread && n == (size_t)b->unread) {  // read marker above the new lines
+            Row mk;
+            std::string bar = "── new ";
+            for (int k = 7; k < cw; k++) bar += "─";
+            cells(mk, bar, sty(T, "marker", "separator"), false);
+            rows.push_back(mk);
+        }
         auto r = wrap(c, *it, b, cw);
         rows.insert(rows.end(), r.rbegin(), r.rend());
     }
@@ -389,6 +397,12 @@ bool Tui::init(std::string& err) {
     tb_set_output_mode(truecolor ? TB_OUTPUT_TRUECOLOR : TB_OUTPUT_256);
     nicklist = c.theme.lay("nicklist", "on") != "off";
 
+    load_keys();
+    return true;
+}
+
+void Tui::load_keys() {
+    keymap.clear();
     for (int i = 1; i <= 10; i++) keymap["M-" + std::to_string(i % 10)] = "tab_" + std::to_string(i);
     keymap["M-Right"] = keymap["C-n"] = "next_tab";
     keymap["M-Left"] = keymap["C-p"] = "prev_tab";
@@ -404,7 +418,6 @@ bool Tui::init(std::string& err) {
     if (ks != c.cfg.end())
         for (auto& [act, specs] : ks->second)
             for (auto& sp : split(specs, ' ')) keymap[sp] = act;
-    return true;
 }
 
 void Tui::shutdown() { tb_shutdown(); }
@@ -450,6 +463,7 @@ bool Tui::action(const std::string& a) {
 }
 
 void Tui::key(int mod, int k, uint32_t ch) {
+    if (c.keys_changed) c.keys_changed = false, load_keys();
     auto it = keymap.find(keyspec(mod, k, ch));
     if (it != keymap.end() && action(it->second)) return;
     if (k != TB_KEY_TAB) completing = false;

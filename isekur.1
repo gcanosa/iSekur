@@ -1,0 +1,98 @@
+.TH ISEKUR 1 "October 27, 2026" "iSekur 0.2" "User Commands"
+.SH NAME
+isekur \- colorful terminal IRC client with a built-in webchat
+.SH SYNOPSIS
+.B isekur
+.RB [ \-c
+.IR config ]
+.RB [ \-d | \-\-daemon ]
+.RB [ \-\-hash\-password ]
+.RB [ \-v | \-\-version ]
+.SH DESCRIPTION
+.B isekur
+is a terminal IRC client with multiple servers and tabs, 24-bit color themes,
+TLS, IRCv3 and SASL. Its optional webchat mirrors the running session in a
+browser over HTTPS and WebSocket, so you can keep chatting from elsewhere.
+.SH OPTIONS
+.TP
+.BI \-c " file"
+Use
+.I file
+instead of
+.IR ~/.config/isekur/isekur.conf .
+.TP
+.BR \-d ", " \-\-daemon
+Run in the background without a terminal; attach with the webchat, which must
+be enabled. Output goes to
+.I isekur.log
+next to the config file.
+.TP
+.B \-\-hash\-password
+Read a password and print a
+.B [web] password_hash
+line for the config.
+.TP
+.BR \-v ", " \-\-version
+Print the version.
+.SH KEYS
+.TP
+.B Alt+1..9, Alt+0
+Go to tab 1..10.
+.TP
+.B Alt+Left/Right, Ctrl+P/N
+Previous / next tab.
+.TP
+.B Alt+A
+Next tab with activity.
+.TP
+.B Ctrl+X
+Next server.
+.TP
+.B Ctrl+W
+Close the tab.
+.TP
+.B PgUp, PgDn
+Scroll.
+.TP
+.B F2, F3
+Toggle the nicklist / mouse.
+.TP
+.B Tab
+Complete a nick.
+.PP
+Actions can be rebound in the
+.B [keys]
+section, also live with
+.BR "/set keys.next_tab M\-n" .
+.SH COMMANDS
+.B /server host
+.RB [ port "] [" \-tls "] [" \-noverify ],
+.BR /connect ", " /disconnect ", " /join ", " /part ", " /msg ", " /query ,
+.BR /me ", " /notice ", " /nick ", " /topic ", " /close ", " /win " N, " /raw ,
+.BR /ctcp ", " /theme ", " /set " [section.]key [value], " /save ,
+.BR /ignore " [mask], " /unignore " mask, " /clear ", " /quit .
+Other commands are sent to the server unchanged.
+.B /help
+lists them in the client.
+.SH FILES
+.TP
+.I ~/.config/isekur/isekur.conf
+Configuration (INI). See
+.I iSekur.conf.example
+in the data directory.
+.TP
+.I ~/.config/isekur/themes/*.theme
+User themes; also looked up in
+.I ./themes
+and the installed data directory.
+.TP
+.I <log_dir>/<server>/<name>.log
+Chat logs when
+.B log = on
+is set; earlier days are kept as
+.IR <name>.YYYY\-MM\-DD.log .
+.TP
+.I ~/.config/isekur/web.sessions
+Hashed webchat login sessions.
+.SH SEE ALSO
+https://github.com/gcanosa/iSekur

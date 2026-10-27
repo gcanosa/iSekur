@@ -53,6 +53,13 @@ int main() {
         assert(ws_parse(f.substr(0, f.size() - 1), op, p) == 0);  // incomplete
     }
     assert(ws_parse(ws_frame("unmasked"), op, p) == -1);
+    std::string part = client_frame("frag"), ping = client_frame("x");
+    part[0] = 0x01;  // text, not FIN
+    ping[0] = (char)0x09;  // ping without FIN: control frames can't be split
+    bool fin = true;
+    assert(ws_parse(part, op, p) == -1);  // callers that don't handle fragments
+    assert(ws_parse(part, op, p, &fin) == (long)part.size() && !fin && op == 1 && p == "frag");
+    assert(ws_parse(ping, op, p, &fin) == -1);
 
     assert(json_str("a\"b\\\n\xe9") == "\"a\\\"b\\\\\\u000a\xc3\xa9\"");
     auto j = json_flat("{\"t\":\"input\", \"buf\": 12, \"text\":\"x\\\"y\\u00e9\\ud83d\\ude00\"}");
