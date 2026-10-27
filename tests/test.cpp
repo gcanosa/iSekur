@@ -61,5 +61,8 @@ int main() {
     std::string h = hash_password("s3cret");
     assert(check_password("s3cret", h) && !check_password("s3cre", h) && !check_password("x", "junk"));
 
+    assert(safe_name("../../etc/passwd") == "_.._.._etc_passwd" && safe_name("#Chan[x]") == "#chan{x}");
+    assert(safe_name(".hidden") == "_.hidden" && safe_name("") == "_");
+
     puts("all tests passed");
 }

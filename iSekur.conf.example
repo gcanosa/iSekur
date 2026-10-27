@@ -9,6 +9,17 @@ theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes
 timestamp = %H:%M
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
 
+# Chat logs: channels and queries go to <log_dir>/<server>/<name>.log
+# (private files, formatting stripped). Any of these can also be set per server.
+log       = off
+; log_dir = ~/irclogs        ; default: "logs" next to this file
+
+# CTCP answers (at most one reply every 2s per server, against floods).
+ctcp_version = on
+ctcp_time    = on
+ctcp_ping    = on
+; ctcp_version_reply = iSekur IRC client
+
 # One [server.<name>] section per network. All of them connect at startup
 # unless autoconnect = false.
 [server.sekurnet]

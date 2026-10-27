@@ -1,5 +1,6 @@
 // Terminal frontend (termbox2).
 #pragma once
+#include <cstdint>
 #include <map>
 #include <string>
 #include <vector>

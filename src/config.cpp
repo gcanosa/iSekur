@@ -107,7 +107,7 @@ RGB parse_color(const std::string& s) {
 std::string rgb_hex(RGB c) {
     if (c < 0) return "";
     char b[8];
-    snprintf(b, sizeof b, "#%06x", c);
+    snprintf(b, sizeof b, "#%06x", (unsigned)c & 0xffffff);
     return b;
 }
 
