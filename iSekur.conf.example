@@ -67,8 +67,10 @@ autoconnect = false
 # Built-in webchat: open the same session from a browser.
 # HTTPS is mandatory unless bound to localhost; without cert/key a self-signed
 # certificate is generated next to this file on first run.
+# autostart = off (default): start it when needed with /web start, or launch
+# with --web; /web stop turns it off. --daemon always starts it.
 [web]
-enabled       = false
+autostart     = off
 bind          = 127.0.0.1
 port          = 8443
 user          = me

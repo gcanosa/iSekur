@@ -13,7 +13,10 @@ struct Web {
     Core& c;
     explicit Web(Core& core) : c(core) {}
     ~Web();
-    bool start(std::string& err);  // no-op when [web] enabled != true
+    bool start(std::string& err);  // listen now (no-op if already running)
+    void stop();
+    static bool autostart(const Ini& cfg);
+    std::string url;  // where it listens, "" when stopped
     void add_fds(std::vector<pollfd>& v);
     void process(const std::vector<pollfd>& v);  // after poll()
     void on_event(Ev e, Buffer* b, const Line* l);
@@ -44,6 +47,7 @@ private:
     void save_sessions();
     std::map<std::string, std::pair<int, time_t>> fails;      // ip -> (count, locked until)
 
+    bool start_(std::string& err);
     void http(Client& cl);
     void ws_frames(Client& cl);
     void broadcast(const std::string& json);

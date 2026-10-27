@@ -152,6 +152,12 @@ struct Core {
     void set_attached(bool a);
     std::string quit_msg = "iSekur IRC";
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend
+    // /web start|stop: done by main() after the event pass, since a stop asked
+    // from the browser must not tear down the connection it is still reading
+    enum class WebReq { NONE, START, STOP } web_req = WebReq::NONE;
+    Buffer* web_req_buf = nullptr;  // where /web was typed: gets the answer
+    std::string web_url;  // "" = webchat stopped
+    bool daemon = false;
 
     void load_config();
     // [server.<name>] key, falling back to [general], then `def`

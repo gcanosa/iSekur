@@ -355,7 +355,7 @@ static const char* HELP =
     "Commands: /server host [port] [-tls] [-noverify] · /connect [name] · /disconnect [msg] · "
     "/quit [msg] · /join #chan [key] · /part [#chan] [msg] · /msg target text · /query nick [text] · "
     "/me action · /notice target text · /nick new · /topic [text] · /close · /win N · "
-    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /ignore [mask] · /unignore mask · /grep [-all] text · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
+    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /ignore [mask] · /unignore mask · /grep [-all] text · /web [start|stop|status] · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
 
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
@@ -430,7 +430,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         dirty = true;
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
-                                : sec == "web"              ? "  (web settings apply on restart)"
+                                : sec == "web"              ? "  (applies after /web stop and /web start)"
                                                             : "") +
                                "  - /save writes it to the config");
         return;
@@ -515,6 +515,16 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "close" || cmd == "wc") { close(b); return; }
+    if (cmd == "web") {  // /web [start|stop|status]
+        std::string a = argv.empty() ? "status" : argv[0];
+        web_req_buf = b;
+        if (a == "start") web_req = WebReq::START;
+        else if (a == "stop" && daemon) print(b, LK::ERROR, "The daemon is only reachable through the webchat; not stopping it");
+        else if (a == "stop") web_req = WebReq::STOP;
+        else if (a == "status") print(b, LK::INFO, web_url.empty() ? "Webchat is stopped (/web start)" : "Webchat on " + web_url);
+        else print(b, LK::ERROR, "Usage: /web [start|stop|status]");
+        return;
+    }
     if (cmd == "away" && s) s->auto_away = false;  // yours now; falls through to the server
     if (cmd == "grep") {  // /grep [-all] text: matching lines from scrollback, newest last
         bool all = !argv.empty() && argv[0] == "-all";

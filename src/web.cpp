@@ -236,15 +236,32 @@ static bool gen_selfsigned(const std::string& crt, const std::string& key, std::
 }
 
 // ---- server ----------------------------------------------------------------
-Web::~Web() {
+Web::~Web() { stop(); }
+
+// Drops every browser and the listener; logins stay valid (web.sessions).
+void Web::stop() {
     clients.clear();
-    if (ctx) SSL_CTX_free(ctx);
-    if (lfd >= 0) close(lfd);
+    if (ctx) SSL_CTX_free(ctx), ctx = nullptr;
+    if (lfd >= 0) close(lfd), lfd = -1;
+    secure = false;
+    pending.clear(), known.clear(), last_order.clear();
+    url.clear();
+}
+
+// [web] autostart (or the older "enabled") decides whether main() calls this at launch.
+bool Web::autostart(const Ini& cfg) {
+    std::string v = ini_get(cfg, "web", "autostart", ini_get(cfg, "web", "enabled", "off"));
+    return v == "on" || v == "true" || v == "yes" || v == "1";
 }
 
 bool Web::start(std::string& err) {
+    if (running()) return true;
+    if (!start_(err)) { stop(); return false; }
+    return true;
+}
+
+bool Web::start_(std::string& err) {
     const Ini& cfg = c.cfg;
-    if (ini_get(cfg, "web", "enabled", "false") != "true") return true;
     std::string bind = ini_get(cfg, "web", "bind", "127.0.0.1");
     int port = atoi(ini_get(cfg, "web", "port", "8443").c_str());
     user = ini_get(cfg, "web", "user");
@@ -278,9 +295,8 @@ bool Web::start(std::string& err) {
     load_sessions();
     lfd = listen_tcp(bind, port, err);
     if (lfd < 0) { err = "web listen " + bind + ":" + std::to_string(port) + ": " + err; return false; }
-    c.print(c.bufs.front().get(), LK::INFO,
-            std::string("Webchat on ") + (secure ? "https://" : "http://") + bind + ":" +
-                std::to_string(port) + "/");
+    url = std::string(secure ? "https://" : "http://") + (bind.find(':') != std::string::npos ? "[" + bind + "]" : bind) +
+          ":" + std::to_string(port) + "/";
     return true;
 }
 
