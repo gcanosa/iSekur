@@ -116,7 +116,15 @@ struct Server {
     bool user_quit = false;
     Buffer* status = nullptr;
 
-    void send(const std::string& line);  // appends \r\n
+    // Flood control: once registered, lines go through a token bucket
+    // (flood_burst lines at once, then one per flood_interval_ms).
+    std::deque<std::string> sendq;
+    double tokens = 0;
+    long long tokens_at = 0;
+    int flood_burst = 5, flood_ms = 2000;
+    void send(const std::string& line);      // queued when registered
+    void send_now(const std::string& line);  // PING/PONG/QUIT: never wait
+    int drain(long long now);                // ms until the next line may go, -1 = idle
     bool is_chan(const std::string& t) const;
     int prefix_rank(const std::string& pfx) const;  // lower = higher rank
 };
@@ -148,6 +156,8 @@ struct Core {
     void disconnect(Server* s, const std::string& why);
     void on_readable(Server* s, short revents);
     void tick(time_t now);  // pings, timeouts, reconnects
+    int drain();            // flush send queues; ms until the next one is due
+    bool ignored(const std::string& prefix) const;
 
     Buffer* find(Server* s, const std::string& name);
     Buffer* open(Server* s, BT t, const std::string& name);

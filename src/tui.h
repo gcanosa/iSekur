@@ -22,13 +22,19 @@ private:
     std::vector<std::string> hist;
     size_t hpos = 0;
     std::map<std::string, std::string> keymap;  // "M-Right" -> "next_tab"
-    bool nicklist = true, truecolor = true;
+    bool nicklist = true, truecolor = true, mouse_on = true;
+    // clickable regions from the last draw(): tabs, activity numbers, nicks
+    struct Hit { int y, x0, x1; int tab; std::string nick; };
+    std::vector<Hit> hits;
+    int nl_x = -1, nl_scroll = 0;
+    const Buffer* nl_buf = nullptr;
     // nick completion
     std::vector<std::string> comp;
     size_t comp_i = 0, comp_start = 0;
     bool completing = false;
 
     void key(int mod, int key, uint32_t ch);
+    void mouse(int mod, int key, int x, int y);
     bool action(const std::string& a);
     void complete();
     void submit();

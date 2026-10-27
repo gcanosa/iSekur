@@ -186,6 +186,7 @@ void Tui::draw() {
     int W = tb_width(), H = tb_height();
     Buffer* b = c.active;
     c.dirty = false;
+    hits.clear(), nl_x = -1;
     if (H < 6 || W < 30 || !b) {
         text(0, 0, W, "terminal too small", def, false);
         tb_present();
@@ -224,12 +225,17 @@ void Tui::draw() {
     int first = 0, span = 0;
     for (int i = 0; i <= ai; i++) span += width(labels[(size_t)i]);
     while (span > W && first < ai) span -= width(labels[(size_t)first++]);
-    for (int i = first, x = 0; i < (int)labels.size() && x < W; i++) x = draw_row(x, 1, W, labels[(size_t)i]);
+    for (int i = first, x = 0; i < (int)labels.size() && x < W; i++) {
+        int x0 = x;
+        x = draw_row(x, 1, W, labels[(size_t)i]);
+        hits.push_back({1, x0, x, i, ""});
+    }
 
     // nick list
     int top = 2, ch = chat_height();
     int nlw = nicklist && b->type == BT::CHANNEL && W >= 60 ? atoi(T.lay("nicklist_width", "18").c_str()) : 0;
     int cw = W - (nlw ? nlw + 1 : 0);
+    nl_x = nlw ? cw : -1;
     if (nlw) {
         Style bs = sty(T, "nicklist_border", "separator");
         for (int y = top; y < top + ch; y++) text(cw, y, W, T.lay("separator", "│"), bs, false);
@@ -240,11 +246,15 @@ void Tui::draw() {
             int rx = s->prefix_rank(x->prefix), ry = s->prefix_rank(y->prefix);
             return rx != ry ? rx < ry : irc_lower(x->nick) < irc_lower(y->nick);
         });
+        if (nl_buf != b) nl_buf = b, nl_scroll = 0;
+        nl_scroll = std::max(0, std::min(nl_scroll, (int)v.size() - (ch - 1)));
+        v.erase(v.begin(), v.begin() + nl_scroll);
         Style hs = sty(T, "nicklist_title", "nicklist");
         fill(top, cw + 1, W, hs);
-        text(cw + 2, top, W, std::to_string(v.size()) + " users", hs, false);
+        text(cw + 2, top, W, std::to_string(v.size() + (size_t)nl_scroll) + " users" + (nl_scroll ? " ↑" : ""), hs, false);
         for (size_t i = 0; i < v.size() && (int)i < ch - 1; i++) {
             const NickEntry* e = v[i];
+            hits.push_back({top + 1 + (int)i, cw + 1, W, -1, e->nick});
             Style ns = e->prefix.empty() ? T.get("nicklist")
                      : e->prefix[0] == '+' ? sty(T, "nicklist_voice", "nicklist")
                                            : sty(T, "nicklist_op", "nicklist");
@@ -302,7 +312,10 @@ void Tui::draw() {
         for (size_t i = 0; i < act.size(); i++) {
             Style as = act[i].second == 3 ? T.get("tab_hilight") : act[i].second == 2 ? T.get("tab_msg") : T.get("tab_data");
             as.bg = ss.bg;
-            x = text(x, y, W, (i ? "," : "") + std::to_string(act[i].first), as, false);
+            if (i) x = text(x, y, W, ",", as, false);
+            int x0 = x;
+            x = text(x, y, W, std::to_string(act[i].first), as, false);
+            hits.push_back({y, x0, x, act[i].first - 1, ""});
         }
         x = text(x, y, W, "] ", ss, false);
     }
@@ -366,7 +379,8 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
 bool Tui::init(std::string& err) {
     int r = tb_init();
     if (r != TB_OK) { err = tb_strerror(r); return false; }
-    tb_set_input_mode(TB_INPUT_ALT);
+    mouse_on = ini_get(c.cfg, "general", "mouse", "on") != "off";
+    tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
     std::string mode = ini_get(c.cfg, "general", "colors", "auto");
     const char* ct = getenv("COLORTERM");
     truecolor = mode == "truecolor" ||
@@ -384,6 +398,7 @@ bool Tui::init(std::string& err) {
     keymap["PgUp"] = "scroll_up";
     keymap["PgDn"] = "scroll_down";
     keymap["F2"] = "toggle_nicklist";
+    keymap["F3"] = "toggle_mouse";
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
     if (ks != c.cfg.end())
@@ -400,6 +415,7 @@ void Tui::on_readable() {
     tb_event ev;
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
+        else if (ev.type == TB_EVENT_MOUSE) mouse(ev.mod, ev.key, ev.x, ev.y);
         c.dirty = true;
     }
 }
@@ -424,6 +440,11 @@ bool Tui::action(const std::string& a) {
     else if (a == "scroll_up") c.active->scroll += chat_height() / 2;
     else if (a == "scroll_down") c.active->scroll = std::max(0, c.active->scroll - chat_height() / 2);
     else if (a == "toggle_nicklist") nicklist = !nicklist;
+    else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
+        mouse_on = !mouse_on;
+        tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
+        c.print(c.active, LK::INFO, std::string("Mouse ") + (mouse_on ? "on (Shift+drag selects text)" : "off"));
+    }
     else return false;
     return true;
 }
@@ -460,6 +481,27 @@ void Tui::key(int mod, int k, uint32_t ch) {
     case TB_KEY_CTRL_RSQ_BRACKET: case TB_KEY_CTRL_UNDERSCORE:
         input.insert(cur++, 1, (char32_t)k);
         break;
+    }
+}
+
+// Wheel scrolls the chat (or the nicklist under the pointer); left click picks
+// a tab or an activity number, or opens a query with a nick.
+void Tui::mouse(int mod, int k, int x, int y) {
+    if (mod & TB_MOD_MOTION) return;
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) {
+        int d = k == TB_KEY_MOUSE_WHEEL_UP ? 3 : -3;
+        bool over_nicks = nl_x >= 0 && x > nl_x && y >= 2 && y < 2 + chat_height();
+        if (over_nicks) nl_scroll = std::max(0, nl_scroll - d);
+        else c.active->scroll = std::max(0, c.active->scroll + d);
+        c.dirty = true;
+        return;
+    }
+    if (k != TB_KEY_MOUSE_LEFT) return;
+    for (auto& h : hits) {
+        if (h.y != y || x < h.x0 || x >= h.x1) continue;
+        if (h.tab >= 0 && h.tab < (int)c.bufs.size()) c.select(c.bufs[(size_t)h.tab].get());
+        else if (!h.nick.empty()) c.exec(c.active, "/query " + h.nick);
+        return;
     }
 }
 

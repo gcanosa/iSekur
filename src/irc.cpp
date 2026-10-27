@@ -1,6 +1,7 @@
 // IRC protocol: parsing, connection lifecycle, CAP/SASL, message handling.
 #include <algorithm>
 #include <cstring>
+#include <fnmatch.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
@@ -78,11 +79,45 @@ time_t parse_server_time(const std::string& iso) {
 }
 
 // ---- Server helpers --------------------------------------------------------
-void Server::send(const std::string& line) {
+static std::string wire(const std::string& line) {
     std::string l = line;
     for (auto& c : l)
         if (c == '\r' || c == '\n' || c == '\0') c = ' ';  // no command injection
-    conn.out += l + "\r\n";
+    return l + "\r\n";
+}
+
+void Server::send_now(const std::string& line) { conn.out += wire(line); }
+
+void Server::send(const std::string& line) {
+    if (state != SS::CONNECTED || flood_ms <= 0) { send_now(line); return; }
+    sendq.push_back(wire(line));
+    drain(now_ms());
+}
+
+int Server::drain(long long now) {
+    if (sendq.empty()) return -1;
+    tokens = std::min<double>(flood_burst, tokens + (double)(now - tokens_at) / flood_ms);
+    tokens_at = now;
+    while (!sendq.empty() && tokens >= 1) conn.out += sendq.front(), sendq.pop_front(), tokens -= 1;
+    return sendq.empty() ? -1 : (int)((1 - tokens) * flood_ms) + 1;
+}
+
+int Core::drain() {
+    int wait = 1000;
+    long long now = now_ms();
+    for (auto& s : servers) {
+        int w = s->drain(now);
+        if (w >= 0) wait = std::min(wait, w);
+    }
+    return wait;
+}
+
+bool Core::ignored(const std::string& prefix) const {
+    if (prefix.find('!') == std::string::npos) return false;  // servers are never ignored
+    std::string who = irc_lower(prefix);
+    for (auto& mask : split(ini_get(cfg, "general", "ignore"), ' '))
+        if (fnmatch(irc_lower(mask).c_str(), who.c_str(), 0) == 0) return true;
+    return false;
 }
 
 bool Server::is_chan(const std::string& t) const {
@@ -187,7 +222,10 @@ void Core::connect(Server* s) {
     s->user_quit = false;
     s->caps.clear(), s->caps_ls.clear();
     s->sasl_step = 0, s->cap_done = false, s->nick_tries = 0;
-    s->inbuf.clear(), s->umodes.clear();
+    s->inbuf.clear(), s->umodes.clear(), s->sendq.clear();
+    s->flood_burst = std::max(1, atoi(opt(s, "flood_burst", "5").c_str()));
+    s->flood_ms = atoi(opt(s, "flood_interval_ms", "2000").c_str());
+    s->tokens = s->flood_burst, s->tokens_at = now_ms();
     s->nick = s->cfg.nick;
     s->last_rx = time(nullptr);
     s->reconnect_at = 0;
@@ -256,7 +294,7 @@ void Core::tick(time_t now) {
             disconnect(s, "ping timeout");
         } else if (now >= s->ping_at) {
             s->ping_sent_ms = now_ms();
-            s->send("PING :LAG" + std::to_string(s->ping_sent_ms));
+            s->send_now("PING :LAG" + std::to_string(s->ping_sent_ms));
             s->ping_at = now + 30;
         }
     }
@@ -298,7 +336,7 @@ void Core::handle(Server* s, const Msg& m) {
     };
     const std::string& cmd = m.cmd;
 
-    if (cmd == "PING") { s->send("PONG :" + m.p(0)); return; }
+    if (cmd == "PING") { s->send_now("PONG :" + m.p(0)); return; }
     if (cmd == "PONG") {
         if (m.p(1).rfind("LAG", 0) == 0) {
             s->lag = (now_ms() - atoll(m.p(1).c_str() + 3)) / 1000.0;
@@ -557,6 +595,8 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "ACCOUNT" || cmd == "CHGHOST" || cmd == "SETNAME" || cmd == "BATCH" ||
         cmd == "TAGMSG")
         return;
+    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE") && !is_me(m.nick) && ignored(m.prefix))
+        return;  // includes CTCP: ignored users get no replies either
     if (cmd == "INVITE") {
         print(reply_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));
         return;

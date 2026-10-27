@@ -35,7 +35,10 @@ private:
     size_t fd_start = 0, fd_count = 0;
     std::set<int> pending, known;  // buffer ids: updates to send / already sent
     std::string last_order;
-    std::map<std::string, time_t> sessions;                   // token -> expiry
+    std::map<std::string, time_t> sessions;                   // sha256(token) -> expiry
+    std::string sessions_path;
+    void load_sessions();
+    void save_sessions();
     std::map<std::string, std::pair<int, time_t>> fails;      // ip -> (count, locked until)
 
     void http(Client& cl);
