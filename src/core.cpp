@@ -89,6 +89,7 @@ Buffer* Core::open(Server* s, BT t, const std::string& name) {
     for (size_t i = 0; i < bufs.size(); i++)
         if (bufs[i]->srv == s && s) pos = i + 1;
     bufs.insert(bufs.begin() + (long)pos, std::move(b));
+    if (s && t != BT::STATUS) load_history(bp);
     if (!active) active = bp;
     dirty = true;
     notify(Ev::BUFFER, bp);
@@ -144,6 +145,14 @@ void Core::add(Buffer* b, Line l) {
     dirty = true;
     log_line(b, ln);
     notify(Ev::LINE, b, &ln);
+    // copy highlights and private messages to the first window, so whatever
+    // happened while you were away is in one place
+    Buffer* home = bufs.front().get();
+    if (ln.hilight && b != home && b->srv && opt_on(b->srv, "hilight_window", true)) {
+        Line copy = ln;
+        copy.text = "\x02[" + b->srv->cfg.name + "/" + b->name + "]\x02 " + ln.text;
+        add(home, copy);
+    }
 }
 
 std::string Core::opt(const Server* s, const std::string& key, const std::string& def) const {
@@ -170,16 +179,19 @@ std::string safe_name(const std::string& n) {
     return o;
 }
 
+std::string Core::log_path(Buffer* b) const {
+    std::string dir = opt(b->srv, "log_dir", cfg_path.substr(0, cfg_path.rfind('/') + 1) + "logs");
+    if (dir.rfind("~/", 0) == 0)
+        if (const char* h = getenv("HOME")) dir = h + dir.substr(1);
+    return dir + "/" + safe_name(b->srv->cfg.name) + "/" + safe_name(b->name) + ".log";
+}
+
 // [general] log = on writes channels and queries to <log_dir>/<server>/<name>.log
 void Core::log_line(Buffer* b, const Line& l) {
     if (!b->srv || b->type == BT::STATUS || !opt_on(b->srv, "log", false)) return;
     if (!b->log) {
-        std::string dir = opt(b->srv, "log_dir", cfg_path.substr(0, cfg_path.rfind('/') + 1) + "logs");
-        if (dir.rfind("~/", 0) == 0)
-            if (const char* h = getenv("HOME")) dir = h + dir.substr(1);
-        dir += "/" + safe_name(b->srv->cfg.name);
-        mkdir_p(dir);
-        std::string path = dir + "/" + safe_name(b->name) + ".log";
+        std::string path = log_path(b);
+        mkdir_p(path.substr(0, path.rfind('/')));
         mode_t old = umask(077);  // chat logs are private
         b->log = fopen(path.c_str(), "a");
         umask(old);
@@ -195,6 +207,53 @@ void Core::log_line(Buffer* b, const Line& l) {
     }
     fprintf(b->log, "%s %s%s\n", fmt_time(l.ts, "%Y-%m-%d %H:%M:%S").c_str(), who.c_str(), txt.c_str());
     fflush(b->log);
+}
+
+// One line written by log_line() back into a Line; false for headers/garbage.
+bool parse_log_line(const std::string& s, Line& l) {
+    tm t{};
+    if (s.size() < 21 || !strptime(s.substr(0, 19).c_str(), "%Y-%m-%d %H:%M:%S", &t)) return false;
+    t.tm_isdst = -1;
+    l = Line{mktime(&t), LK::INFO, "", ""};
+    std::string r = s.substr(20);
+    size_t e;
+    if (r.rfind("-!- ", 0) == 0) l.text = r.substr(4);
+    else if (r[0] == '<' && (e = r.find("> ")) != std::string::npos)
+        l.kind = LK::MSG, l.nick = r.substr(1, e - 1), l.text = r.substr(e + 2);
+    else if (r.rfind("* ", 0) == 0 && (e = r.find(' ', 2)) != std::string::npos)
+        l.kind = LK::ACTION, l.nick = r.substr(2, e - 2), l.text = r.substr(e + 1);
+    else if (r[0] == '-' && (e = r.find("- ", 1)) != std::string::npos)
+        l.kind = LK::NOTICE, l.nick = r.substr(1, e - 1), l.text = r.substr(e + 2);
+    else return false;
+    return true;
+}
+
+// Fill a newly opened tab with the tail of its log (log_history lines, default 200).
+void Core::load_history(Buffer* b) {
+    int n = atoi(opt(b->srv, "log_history", "200").c_str());
+    if (n <= 0 || !opt_on(b->srv, "log", false)) return;
+    FILE* f = fopen(log_path(b).c_str(), "r");
+    if (!f) return;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f), from = std::max(0L, size - 512L * n);  // generous bytes/line guess
+    fseek(f, from, SEEK_SET);
+    std::string data((size_t)(size - from), '\0');
+    data.resize(fread(&data[0], 1, data.size(), f));
+    fclose(f);
+    auto rows = split(data, '\n');
+    if (from > 0 && !rows.empty()) rows.erase(rows.begin());  // partial first line
+    std::vector<Line> hist;
+    for (auto& r : rows) {
+        Line l;
+        if (parse_log_line(r, l)) hist.push_back(l);
+    }
+    if (hist.size() > (size_t)n) hist.erase(hist.begin(), hist.end() - n);
+    if (hist.empty()) return;
+    for (auto& l : hist) {
+        l.self = irc_lower(l.nick) == irc_lower(b->srv->nick);
+        b->lines.push_back(l);  // not add(): history must not be logged again
+    }
+    b->lines.push_back(Line{time(nullptr), LK::INFO, "", "--- end of log history ---"});
 }
 
 void Core::print(Buffer* b, LK k, const std::string& text) {

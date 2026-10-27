@@ -108,6 +108,7 @@ int main(int argc, char** argv) {
             if (fds[srv0 + i].revents) c.on_readable(polled[i], fds[srv0 + i].revents);
         if (!daemon && (fds[0].revents || fds[1].revents)) tui.on_readable();
         web.process(fds);
+        web.flush();
 
         time_t now = time(nullptr);
         c.tick(now);

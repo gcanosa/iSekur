@@ -82,9 +82,10 @@ button, input { font: inherit; color: inherit; }
   #nicks { display: none; position: fixed; inset: 0 0 0 40%; z-index: 5; width: auto; }
   #nicks.open { display: block; }
   #menu { display: inline-block; }
-  .l { grid-template-columns: 1fr; }
+  .l { display: block; padding: 2px 10px; }
   .l .ts { display: none; }
-  .l .nk { text-align: left; border: 0; padding: 0; }
+  .l .nk { display: inline; border: 0; padding: 0 6px 0 0; font-weight: 700; }
+  .l.hl .nk { padding: 0 4px; margin-right: 6px; border-radius: 4px; }
 }
 </style>
 </head>

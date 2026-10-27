@@ -13,6 +13,10 @@ colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolo
 # (private files, formatting stripped). Any of these can also be set per server.
 log       = off
 ; log_dir = ~/irclogs        ; default: "logs" next to this file
+log_history = 200            ; lines restored into a tab from its log (0 = off)
+
+# Copy highlights and private messages to window 1 ("what did I miss").
+hilight_window = on
 
 # CTCP answers (at most one reply every 2s per server, against floods).
 ctcp_version = on
