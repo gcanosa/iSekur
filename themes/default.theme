@@ -1,0 +1,45 @@
+# iSekur default theme.
+# Each [colors] entry: <fg> [bg] [bold|italic|underline|reverse|dim...]
+# Colors: #rrggbb, 0-255 (xterm), a name (red, cyan, orange...) or "default".
+# #rrggbb is exact on truecolor terminals and mapped to the nearest of 256 otherwise.
+
+[colors]
+default        = default default
+topic          = #e6e6fa #3b2a6b
+tabbar         = #8a8fb0 #1c1d2b
+tab_server     = #b8a1ff #1c1d2b bold
+tab_active     = #1c1d2b #c792ea bold
+tab_data       = #7aa2f7 #1c1d2b
+tab_msg        = #ffffff #1c1d2b bold
+tab_hilight    = #ff5fd7 #1c1d2b bold
+status         = #8a8fb0 #1c1d2b
+status_hi      = #e0e0ff #1c1d2b
+input          = default default
+input_prompt   = #c792ea default bold
+timestamp      = #5c6080
+separator      = #3b3f5c
+nicklist       = #b0b4d0 default
+nicklist_title = #8a8fb0 default italic
+nicklist_border= #3b3f5c
+nicklist_op    = #ff9e64 default bold
+nicklist_voice = #9ece6a default
+msg_self       = #82aaff default bold
+hilight        = #ffffff #c2185b bold
+hilight_text   = #ffd6ec default
+join           = #9ece6a
+part           = #f7768e
+quit           = #db4b4b
+notice         = #ffcb6b default bold
+action         = #c792ea default italic
+info           = #7dcfff
+error          = #ff5370 default bold
+
+[nicks]
+palette = #ff6b6b #ffa94d #ffd43b #a9e34b #69db7c #38d9a9 #3bc9db #4dabf7 #748ffc #9775fa #da77f2 #f783ac
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

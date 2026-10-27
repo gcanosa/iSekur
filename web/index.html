@@ -1,0 +1,387 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>iSekur Webchat</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%23c792ea%22/%3E%3C/svg%3E">
+<style>
+:root {
+  --bg: #0e0f17; --fg: #d6d8e6; --muted: #6b6f8a; --panel: #151725; --line: #24273a;
+  --accent: #c792ea; --accent2: #82aaff; --hl-bg: #4a1d3f; --err: #ff5370;
+  --join: #c3e88d; --part: #f78c6c; --info: #89ddff; --notice: #ffcb6b; --action: #c792ea;
+  --mono: ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, "DejaVu Sans Mono", monospace;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--mono); }
+button, input { font: inherit; color: inherit; }
+#login { display: none; height: 100%; align-items: center; justify-content: center; padding: 16px; }
+#login form { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
+  border-radius: 12px; padding: 28px; display: grid; gap: 12px;
+  box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent); }
+#login h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .5px;
+  background: linear-gradient(90deg, var(--accent), var(--accent2), var(--join));
+  -webkit-background-clip: text; background-clip: text; color: transparent; }
+#login input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+#login input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
+#login button { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #111;
+  border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
+#loginerr { color: var(--err); min-height: 1.4em; font-size: 13px; }
+
+#app { display: none; height: 100%; grid-template-columns: 220px 1fr auto;
+  grid-template-rows: auto 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "side input input"; }
+#side { grid-area: side; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); overflow-y: auto; padding: 8px 0; }
+#side .srv { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
+#side .tab { display: flex; gap: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
+#side .tab .n { color: var(--muted); min-width: 1.6em; text-align: right; }
+#side .tab:hover { background: #ffffff08; }
+#side .tab.active { background: var(--tab_active-bg, #ffffff12); color: var(--tab_active-fg, inherit); border-left-color: var(--accent); }
+#side .tab.a1 { color: var(--tab_data-fg, #9aa0c0); }
+#side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
+#side .tab.a3 { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
+#side .tab.off { opacity: .55; }
+#topic { grid-area: topic; background: var(--topic-bg, var(--panel)); color: var(--topic-fg, inherit);
+  padding: 8px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; min-height: 38px; }
+#topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#topic button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+#menu { display: none; }
+#msgs { grid-area: msgs; overflow-y: auto; padding: 6px 0; overflow-wrap: anywhere; }
+.l { display: grid; grid-template-columns: auto 13ch 1fr; gap: 0 10px; padding: 1px 14px; }
+.l:hover { background: #ffffff06; }
+.l .ts { color: var(--timestamp-fg, var(--muted)); }
+.l .nk { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  border-right: 1px solid var(--separator-fg, var(--line)); padding-right: 10px; }
+.l .tx { white-space: pre-wrap; }
+.l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
+.l.hl { background: #ff00aa10; }
+.k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
+.k-part, .k-part .nk, .k-quit, .k-quit .nk { color: var(--part-fg, var(--part)); }
+.k-info .tx, .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-info .nk, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--info-fg, var(--info)); }
+.k-error .tx, .k-error .nk { color: var(--error-fg, var(--err)); }
+.k-notice .nk { color: var(--notice-fg, var(--notice)); }
+.k-action .tx, .k-action .nk { color: var(--action-fg, var(--action)); font-style: italic; }
+.l .self { color: var(--msg_self-fg, var(--accent2)); }
+.tx a { color: var(--accent2); }
+#nicks { grid-area: nicks; width: 190px; background: var(--nicklist-bg, var(--panel)); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 0; }
+#nicks .hd { color: var(--muted); padding: 2px 12px 6px; font-size: 12px; }
+#nicks div.u { padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+#nicks .op { color: var(--nicklist_op-fg, #ff9e64); }
+#nicks .voice { color: var(--nicklist_voice-fg, #9ece6a); }
+#nicks .away { opacity: .45; }
+#status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
+#status b { color: var(--status_hi-fg, var(--fg)); font-weight: 400; }
+#input { grid-area: input; display: flex; gap: 8px; padding: 8px 10px; background: var(--input-bg, var(--bg)); }
+#prompt { color: var(--input_prompt-fg, var(--accent)); align-self: center; white-space: nowrap; }
+#line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
+#line:focus { outline: none; border-color: var(--accent); }
+@media (max-width: 760px) {
+  #app { grid-template-columns: 1fr; grid-template-areas: "topic" "msgs" "status" "input"; }
+  #side { display: none; position: fixed; inset: 0 30% 0 0; z-index: 5; box-shadow: 0 0 40px #000; }
+  #side.open { display: block; }
+  #nicks { display: none; position: fixed; inset: 0 0 0 40%; z-index: 5; width: auto; }
+  #nicks.open { display: block; }
+  #menu { display: inline-block; }
+  .l { grid-template-columns: 1fr; }
+  .l .ts { display: none; }
+  .l .nk { text-align: left; border: 0; padding: 0; }
+}
+</style>
+</head>
+<body>
+<div id="login">
+  <form id="lf" autocomplete="on">
+    <h1>iSekur</h1>
+    <input id="lu" name="username" placeholder="user" autocomplete="username" required>
+    <input id="lp" name="password" type="password" placeholder="password" autocomplete="current-password" required>
+    <button>Connect</button>
+    <div id="loginerr"></div>
+  </form>
+</div>
+<div id="app">
+  <nav id="side"></nav>
+  <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="logout">logout</button></div>
+  <main id="msgs" aria-live="polite"></main>
+  <aside id="nicks"></aside>
+  <div id="status"></div>
+  <form id="input"><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
+</div>
+<script>
+"use strict";
+const $ = s => document.querySelector(s);
+const bufs = new Map(); let order = [], active = 0, ws = null, theme = {nicks: []};
+const hist = []; let hpos = 0;
+const MIRC = [0xffffff,0x000000,0x00007f,0x009300,0xff0000,0x7f0000,0x9c009c,0xfc7f00,0xffff00,0x00fc00,0x009393,0x00ffff,0x0000fc,0xff00ff,0x7f7f7f,0xd2d2d2,
+0x470000,0x472100,0x474700,0x324700,0x004700,0x00472c,0x004747,0x002747,0x000047,0x2e0047,0x470047,0x47002a,0x740000,0x743a00,0x747400,0x517400,0x007400,0x007449,0x007474,0x004074,0x000074,0x4b0074,0x740074,0x740045,
+0xb50000,0xb56300,0xb5b500,0x7db500,0x00b500,0x00b571,0x00b5b5,0x0063b5,0x0000b5,0x7500b5,0xb500b5,0xb5006b,0xff0000,0xff8c00,0xffff00,0xb2ff00,0x00ff00,0x00ffa0,0x00ffff,0x008cff,0x0000ff,0xa500ff,0xff00ff,0xff0098,
+0xff5959,0xffb459,0xffff71,0xcfff60,0x6fff6f,0x65ffc9,0x6dffff,0x59b4ff,0x5959ff,0xc459ff,0xff66ff,0xff59bc,0xff9c9c,0xffd39c,0xffff9c,0xe2ff9c,0x9cff9c,0x9cffdb,0x9cffff,0x9cd3ff,0x9c9cff,0xdc9cff,0xff9cff,0xff94d3,
+0x000000,0x131313,0x282828,0x363636,0x4d4d4d,0x656565,0x818181,0x9f9f9f,0xbcbcbc,0xe2e2e2,0xffffff].map(c => "#" + c.toString(16).padStart(6, "0"));
+
+const ircLower = s => s.toLowerCase().replace(/[\[\]\\~]/g, c => ({"[":"{","]":"}","\\":"|","~":"^"})[c]);
+function nickColor(n) {
+  let h = 5381; const s = ircLower(n);
+  for (const b of new TextEncoder().encode(s)) h = (Math.imul(h, 33) + b) >>> 0;
+  return theme.nicks.length ? theme.nicks[h % theme.nicks.length] : "";
+}
+
+// mIRC formatting -> DOM (text only ever goes through textContent)
+const URL_RE = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
+function addText(parent, text, st) {
+  if (!text) return;
+  const span = document.createElement("span");
+  let fg = st.fg, bg = st.bg;
+  if (st.rev) [fg, bg] = [bg || "var(--bg)", fg || "var(--fg)"];
+  if (fg) span.style.color = fg;
+  if (bg) span.style.background = bg;
+  if (st.b) span.style.fontWeight = "700";
+  if (st.i) span.style.fontStyle = "italic";
+  if (st.u) span.style.textDecoration = "underline";
+  let last = 0;
+  for (const m of text.matchAll(URL_RE)) {
+    span.append(text.slice(last, m.index));
+    const a = document.createElement("a");
+    a.href = m[0]; a.textContent = m[0]; a.target = "_blank"; a.rel = "noopener noreferrer";
+    span.append(a); last = m.index + m[0].length;
+  }
+  span.append(text.slice(last));
+  parent.append(span);
+}
+function mirc(parent, s) {
+  let st = {}, buf = "";
+  const flush = () => { addText(parent, buf, st); buf = ""; };
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i];
+    if (c === "\x02") { flush(); st = {...st, b: !st.b}; }
+    else if (c === "\x1d") { flush(); st = {...st, i: !st.i}; }
+    else if (c === "\x1f") { flush(); st = {...st, u: !st.u}; }
+    else if (c === "\x16") { flush(); st = {...st, rev: !st.rev}; }
+    else if (c === "\x0f") { flush(); st = {}; }
+    else if (c === "\x1e" || c === "\x11") {}
+    else if (c === "\x03") {
+      flush();
+      const m = /^(\d{1,2})(?:,(\d{1,2}))?/.exec(s.slice(i + 1));
+      st = {...st};
+      if (!m) { st.fg = st.bg = undefined; continue; }
+      st.fg = MIRC[+m[1]]; if (m[2] !== undefined) st.bg = MIRC[+m[2]];
+      i += m[0].length;
+    } else if (c === "\x04") {
+      flush();
+      const m = /^([0-9a-fA-F]{6})(?:,([0-9a-fA-F]{6}))?/.exec(s.slice(i + 1));
+      st = {...st};
+      if (!m) { st.fg = st.bg = undefined; continue; }
+      st.fg = "#" + m[1]; if (m[2]) st.bg = "#" + m[2];
+      i += m[0].length;
+    } else if (c >= " ") buf += c;
+  }
+  flush();
+}
+
+const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
+function lineEl(b, l) {
+  const d = document.createElement("div");
+  d.className = "l k-" + l.k + (l.h ? " hl" : "");
+  const ts = document.createElement("span"); ts.className = "ts";
+  const t = new Date(l.ts * 1000); ts.textContent = t.toTimeString().slice(0, 5);
+  const nk = document.createElement("span"); nk.className = "nk";
+  const tx = document.createElement("span"); tx.className = "tx";
+  if (l.k === "msg") {
+    const e = b.nickmap && b.nickmap.get(ircLower(l.n));
+    nk.textContent = (e && e[0] ? e[0][0] : "") + l.n;
+    if (l.s) nk.className += " self"; else if (!l.h) nk.style.color = nickColor(l.n);
+    mirc(tx, l.x);
+  } else if (l.k === "action") { nk.textContent = "*"; mirc(tx, l.n + " " + l.x); }
+  else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, l.x); }
+  else { nk.textContent = MARK[l.k] || "--"; mirc(tx, l.x); }
+  nk.title = l.n;
+  d.append(ts, nk, tx);
+  return d;
+}
+
+function label(b) { return b.type === "status" ? b.srv : b.name; }
+
+function renderSide() {
+  const side = $("#side"); side.textContent = "";
+  let lastSrv = null;
+  order.forEach((id, i) => {
+    const b = bufs.get(id); if (!b) return;
+    if (b.srv !== lastSrv) {
+      const h = document.createElement("div"); h.className = "srv"; h.textContent = b.srv; side.append(h); lastSrv = b.srv;
+    }
+    const t = document.createElement("div");
+    t.className = "tab" + (id === active ? " active" : "") + (b.act ? " a" + b.act : "") +
+      ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
+    const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
+    const nm = document.createElement("span"); nm.textContent = b.type === "status" ? "status" : b.name;
+    t.append(n, nm);
+    t.onclick = () => { select(id); side.classList.remove("open"); };
+    side.append(t);
+  });
+}
+
+function renderTopic() {
+  const b = bufs.get(active), t = $("#topic .t"); t.textContent = "";
+  if (!b) return;
+  if (b.type === "channel") mirc(t, b.topic || "");
+  else if (b.type === "query") t.textContent = "Query with " + b.name;
+  else t.textContent = b.srv + " - " + b.state;
+  $("#prompt").textContent = "[" + label(b) + "]";
+  const nick = b.me ? b.me + " · " : "";
+  const st = $("#status"); st.textContent = "";
+  const add = (txt, bold) => { const e = document.createElement(bold ? "b" : "span"); e.textContent = txt; st.append(e); };
+  add("[" + nick); add(label(b) + (b.modes ? "(+" + b.modes + ")" : ""), true); add("]  ");
+  const acts = order.map((id, i) => [i + 1, bufs.get(id)]).filter(([, x]) => x && x.act);
+  if (acts.length) add("[Act: " + acts.map(([i]) => i).join(",") + "]");
+}
+
+function renderNicks() {
+  const el = $("#nicks"), b = bufs.get(active);
+  el.style.display = b && b.type === "channel" ? "" : "none";
+  el.textContent = "";
+  if (!b || b.type !== "channel") return;
+  const pf = b.prefixes || "@+";
+  const rank = p => p ? (pf.indexOf(p[0]) < 0 ? pf.length : pf.indexOf(p[0])) : pf.length;
+  const list = [...b.nicks].sort((x, y) => rank(x[0]) - rank(y[0]) || ircLower(x[1]).localeCompare(ircLower(y[1])));
+  const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = list.length + " users"; el.append(hd);
+  for (const [p, n, away] of list) {
+    const d = document.createElement("div");
+    d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "");
+    d.textContent = (p ? p[0] : " ") + n;
+    d.onclick = () => send({t: "input", buf: active, text: "/query " + n});
+    el.append(d);
+  }
+}
+
+function renderMsgs() {
+  const m = $("#msgs"), b = bufs.get(active); m.textContent = "";
+  if (!b) return;
+  const frag = document.createDocumentFragment();
+  for (const l of b.lines) frag.append(lineEl(b, l));
+  m.append(frag); m.scrollTop = m.scrollHeight;
+}
+
+function select(id) {
+  if (!bufs.has(id)) return;
+  active = id;
+  const b = bufs.get(id);
+  if (b.act) { b.act = 0; send({t: "read", buf: id}); }
+  renderSide(); renderTopic(); renderNicks(); renderMsgs();
+  if (matchMedia("(min-width: 761px)").matches) $("#line").focus();
+}
+
+function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
+
+function applyTheme() {
+  const r = document.documentElement.style;
+  for (const [k, v] of Object.entries(theme.el || {})) {
+    if (v.fg) r.setProperty("--" + k + "-fg", v.fg); else r.removeProperty("--" + k + "-fg");
+    if (v.bg) r.setProperty("--" + k + "-bg", v.bg); else r.removeProperty("--" + k + "-bg");
+  }
+  const d = (theme.el || {}).default || {};
+  if (d.bg) r.setProperty("--bg", d.bg);
+  if (d.fg) r.setProperty("--fg", d.fg);
+}
+
+function onMsg(ev) {
+  const m = JSON.parse(ev.data);
+  if (m.t === "theme") { theme = m; applyTheme(); renderMsgs(); }
+  else if (m.t === "buf") {
+    const old = bufs.get(m.id);
+    m.lines = old ? old.lines : [];
+    m.nickmap = new Map(m.nicks.map(e => [ircLower(e[1]), e]));
+    bufs.set(m.id, m);
+    if (m.id === active && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
+    renderSide();
+    if (m.id === active) { renderTopic(); renderNicks(); }
+  } else if (m.t === "lines") {
+    const b = bufs.get(m.buf); if (b) b.lines = m.lines;
+    if (m.buf === active) renderMsgs();
+  } else if (m.t === "line") {
+    const b = bufs.get(m.buf); if (!b) return;
+    b.lines.push(m.line); if (b.lines.length > 2000) b.lines.shift();
+    if (m.buf === active) {
+      const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+      box.append(lineEl(b, m.line));
+      while (box.childElementCount > 2000) box.firstChild.remove();
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+  } else if (m.t === "close") {
+    bufs.delete(m.buf);
+    if (m.buf === active) { const i = order.indexOf(m.buf); active = order[i > 0 ? i - 1 : 1] || order[0]; }
+  } else if (m.t === "order") {
+    order = m.ids;
+    if (!bufs.has(active)) { active = order[0]; select(active); } else renderSide();
+  } else if (m.t === "active") {
+    select(m.buf);
+  }
+}
+
+function connect() {
+  ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
+  ws.onmessage = onMsg;
+  ws.onclose = () => { ws = null; setTimeout(boot, 3000); };
+}
+
+async function boot() {
+  const r = await fetch("/session", {credentials: "same-origin"}).catch(() => null);
+  if (!r) { setTimeout(boot, 3000); return; }
+  if (r.ok) { $("#login").style.display = "none"; $("#app").style.display = "grid"; connect(); }
+  else { $("#app").style.display = "none"; $("#login").style.display = "flex"; $("#lu").focus(); }
+}
+
+$("#lf").onsubmit = async e => {
+  e.preventDefault();
+  const r = await fetch("/login", {method: "POST", credentials: "same-origin", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({user: $("#lu").value, pass: $("#lp").value})});
+  if (r.ok) { $("#lp").value = ""; $("#loginerr").textContent = ""; boot(); return; }
+  const j = await r.json().catch(() => ({}));
+  $("#loginerr").textContent = r.status === 429 ? "Too many attempts. Try again in " + j.wait + "s." : "Wrong user or password.";
+};
+$("#logout").onclick = async () => { await fetch("/logout", {method: "POST", credentials: "same-origin"}); if (ws) { ws.onclose = null; ws.close(); } boot(); };
+$("#menu").onclick = () => $("#side").classList.toggle("open");
+$("#nickbtn").onclick = () => $("#nicks").classList.toggle("open");
+
+let comp = null;
+$("#line").addEventListener("keydown", e => {
+  const inp = e.target;
+  if (e.key === "Tab") {
+    e.preventDefault();
+    const b = bufs.get(active); if (!b) return;
+    if (!comp) {
+      const v = inp.value, end = inp.selectionStart, start = v.lastIndexOf(" ", end - 1) + 1, pfx = ircLower(v.slice(start, end));
+      if (!pfx) return;
+      const list = b.nicks.map(n => n[1]).filter(n => ircLower(n).startsWith(pfx)).sort((x, y) => ircLower(x).localeCompare(ircLower(y)));
+      if (!list.length) return;
+      comp = {list, i: -1, start, end, v};
+    }
+    comp.i = (comp.i + 1) % comp.list.length;
+    const word = comp.list[comp.i] + (comp.start === 0 ? ": " : " ");
+    inp.value = comp.v.slice(0, comp.start) + word + comp.v.slice(comp.end);
+    inp.selectionStart = inp.selectionEnd = comp.start + word.length;
+    return;
+  }
+  comp = null;
+  if (e.key === "ArrowUp" && hpos > 0) { e.preventDefault(); inp.value = hist[--hpos]; }
+  else if (e.key === "ArrowDown" && hpos < hist.length) { e.preventDefault(); inp.value = ++hpos === hist.length ? "" : hist[hpos]; }
+});
+$("#input").onsubmit = e => {
+  e.preventDefault();
+  const v = $("#line").value; if (!v) return;
+  if (hist[hist.length - 1] !== v) hist.push(v);
+  hpos = hist.length;
+  send({t: "input", buf: active, text: v});
+  $("#line").value = "";
+};
+document.addEventListener("keydown", e => {
+  if (!e.altKey) return;
+  const i = order.indexOf(active);
+  if (/^Digit\d$/.test(e.code)) { const n = (+e.code[5] || 10) - 1; if (order[n]) select(order[n]); }
+  else if (e.key === "ArrowRight") select(order[(i + 1) % order.length]);
+  else if (e.key === "ArrowLeft") select(order[(i - 1 + order.length) % order.length]);
+  else return;
+  e.preventDefault();
+});
+window.addEventListener("focus", () => { const b = bufs.get(active); if (b && b.act) { b.act = 0; send({t: "read", buf: active}); renderSide(); } });
+boot();
+</script>
+</body>
+</html>

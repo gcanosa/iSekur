@@ -1,0 +1,49 @@
+# iSekur config: copy to ~/.config/isekur/isekur.conf
+# Lines starting with # or ; are comments.
+
+[general]
+nick      = mynick
+altnick   = mynick_
+realname  = iSekur user
+theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes/)
+timestamp = %H:%M
+colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
+
+# One [server.<name>] section per network. All of them connect at startup
+# unless autoconnect = false.
+[server.sekurnet]
+host      = irc.sekurnet.org
+port      = 6697
+tls       = true
+tls_verify = true            ; false only for self-signed test servers
+autojoin  = #isekur-test
+; sasl_user = mynick
+; sasl_pass = secret
+; sasl_mech = PLAIN          ; PLAIN | SCRAM-SHA-256 | EXTERNAL (default: PLAIN, or EXTERNAL with cert)
+; cert      = /path/client.pem  ; client certificate for SASL EXTERNAL / CertFP
+; password  = server-password
+
+[server.local]
+host      = 127.0.0.1
+port      = 6667
+autoconnect = false
+
+# Built-in webchat: open the same session from a browser.
+# HTTPS is mandatory unless bound to localhost; without cert/key a self-signed
+# certificate is generated next to this file on first run.
+[web]
+enabled       = false
+bind          = 127.0.0.1
+port          = 8443
+user          = me
+password_hash =              ; run: isekur --hash-password
+; cert = /path/fullchain.pem
+; key  = /path/privkey.pem
+
+# Key bindings: <action> = <key> [key...]
+# Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
+# Actions: next_tab prev_tab next_active next_server close_tab scroll_up
+#          scroll_down toggle_nicklist tab_1 .. tab_10
+[keys]
+; next_tab = M-Right C-n
+; toggle_nicklist = F2
