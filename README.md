@@ -48,10 +48,17 @@ right away; server settings are used on the next `/connect`, `[web]` after `/web
 | PgUp / PgDn | scroll |
 | F2 | toggle nicklist |
 | F3 | toggle mouse (Shift+drag selects text while it's on) |
-| Tab | complete nick |
+| Tab | complete nick, or the key after `/set` (matching keys are listed as you type) |
+| Ctrl+A / E, Ctrl+U / K | start / end of line, delete to start / end |
+| Alt(Option)+Backspace | delete the previous word |
+| Cmd+Backspace, Cmd+←/→ | delete to start, start / end (when the terminal forwards Cmd) |
 | Ctrl+B / C / O / V / ] / _ | bold, color, reset, reverse, italic, underline |
 
-Rebind any of the actions in the `[keys]` section.
+Rebind any of the actions in the `[keys]` section (`D-` is Cmd, `M-` Alt, `C-` Ctrl).
+
+Keys sent in the extended formats (tmux `extended-keys`, iTerm2/kitty/Ghostty/WezTerm
+CSI u, xterm `modifyOtherKeys`) are decoded too, and unknown escape sequences are
+dropped instead of showing up as garbage.
 
 ## Commands
 

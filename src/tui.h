@@ -39,6 +39,7 @@ private:
     void mouse(int mod, int key, int x, int y);
     bool action(const std::string& a);
     void complete();
+    bool set_keys(std::vector<std::string>& out) const;
     void submit();
     int chat_height() const;
 };

@@ -11,3 +11,4 @@ web.sessions
 *.key
 logs/
 *.log
+.codegraph/
