@@ -1,4 +1,4 @@
-# iSekur
+# iSekur 0.1
 
 A small, very colorful terminal IRC client in C++17 with a built-in webchat
 that mirrors your live session in a browser, bouncer style.
@@ -19,7 +19,9 @@ Needs a C++17 compiler, GNU make and OpenSSL 1.1+/LibreSSL. termbox2 is vendored
     make test
     ./isekur        # or: ./isekur -c path/to/isekur.conf
 
-Copy `iSekur.conf.example` to `~/.config/isekur/isekur.conf`. Run
+Copy `iSekur.conf.example` to `~/.config/isekur/isekur.conf`, or change
+settings from inside the client with `/set theme neon`, `/set server.libera.autojoin #a,#b`
+and write them back with `/save` (comments in the file are kept). Run
 `./isekur --hash-password` to get the `[web] password_hash` value.
 
 ## Keys
@@ -42,5 +44,5 @@ Rebind any of the actions in the `[keys]` section.
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/close`, `/win N`, `/raw`, `/ctcp`,
-`/theme`, `/clear`, `/quit`. Any other command goes to the server unchanged
+`/theme`, `/set [section.]key [value]`, `/save`, `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

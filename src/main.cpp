@@ -15,7 +15,7 @@
 static volatile sig_atomic_t g_term = 0;
 
 static int usage() {
-    puts("usage: isekur [-c config] [-d|--daemon] [--hash-password]\n"
+    puts("usage: isekur [-c config] [-d|--daemon] [--hash-password] [-v|--version]\n"
          "  -c FILE          config file (default ~/.config/isekur/isekur.conf)\n"
          "  -d, --daemon     run headless in the background; use the webchat to attach\n"
          "  --hash-password  read a password and print a [web] password_hash value");
@@ -59,6 +59,7 @@ int main(int argc, char** argv) {
         if (a == "-c" && i + 1 < argc) c.cfg_path = argv[++i];
         else if (a == "-d" || a == "--daemon") daemon = true;
         else if (a == "--hash-password") return hash_pw_cmd();
+        else if (a == "-v" || a == "--version") { puts("iSekur " ISEKUR_VERSION); return 0; }
         else return usage();
     }
     if (daemon) {
