@@ -9,6 +9,8 @@ that mirrors your live session in a browser, bouncer style.
   server-time, echo-message, multi-prefix, away/account-notify, extended-join and more
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout
 - `--daemon` runs headless and keeps you on IRC; attach from the browser
+- Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist (F3 toggles)
+- Flood-safe sending (pastes are queued so servers don't kick you) and `/ignore`
 - Optional chat logs (`log = on`) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
 ## Build
@@ -18,6 +20,7 @@ Needs a C++17 compiler, GNU make and OpenSSL 1.1+/LibreSSL. termbox2 is vendored
     make            # gmake on *BSD
     make test
     ./isekur        # or: ./isekur -c path/to/isekur.conf
+    sudo make install            # /usr/local; PREFIX=... must match the build
 
 Copy `iSekur.conf.example` to `~/.config/isekur/isekur.conf`, or change
 settings from inside the client with `/set theme neon`, `/set server.libera.autojoin #a,#b`
@@ -35,6 +38,7 @@ and write them back with `/save` (comments in the file are kept). Run
 | Ctrl+W | close tab (parts the channel) |
 | PgUp / PgDn | scroll |
 | F2 | toggle nicklist |
+| F3 | toggle mouse (Shift+drag selects text while it's on) |
 | Tab | complete nick |
 | Ctrl+B / C / O / V / ] / _ | bold, color, reset, reverse, italic, underline |
 
@@ -44,5 +48,6 @@ Rebind any of the actions in the `[keys]` section.
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/close`, `/win N`, `/raw`, `/ctcp`,
-`/theme`, `/set [section.]key [value]`, `/save`, `/clear`, `/quit`. Any other command goes to the server unchanged
+`/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`,
+`/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

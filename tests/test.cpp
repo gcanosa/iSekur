@@ -79,5 +79,18 @@ int main() {
     assert(up == "# top\n[general]\ntheme = neon\nlog = on\n\n[server.x]\nhost = h\n\n[web]\nport = 9000\n");
     assert(ini_parse(up)["general"]["log"] == "on" && ini_parse(up)["server.x"]["host"] == "h");
 
+    Core core;
+    core.cfg["general"]["ignore"] = "spam*!*@* *!*@*.Evil.Host";
+    assert(core.ignored("SpamBot!u@h") && core.ignored("x!y@a.evil.host"));
+    assert(!core.ignored("friend!u@good.host") && !core.ignored("irc.server.net"));
+
+    Server sv;  // token bucket: 2 at once, then one per second
+    sv.flood_burst = 2, sv.flood_ms = 1000, sv.tokens = 2, sv.tokens_at = 0;
+    for (int i = 0; i < 4; i++) sv.sendq.push_back("L" + std::to_string(i) + "\r\n");
+    assert(sv.drain(0) == 1001 && sv.conn.out == "L0\r\nL1\r\n");
+    assert(sv.drain(500) > 0 && sv.sendq.size() == 2);
+    assert(sv.drain(1000) == 1001 && sv.sendq.size() == 1);
+    assert(sv.drain(2000) == -1 && sv.conn.out == "L0\r\nL1\r\nL2\r\nL3\r\n");
+
     puts("all tests passed");
 }

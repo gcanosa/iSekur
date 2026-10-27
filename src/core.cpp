@@ -102,7 +102,7 @@ void Core::close(Buffer* b) {
         if (!s) { print(b, LK::ERROR, "Can't close the main window; use /quit"); return; }
         if (s->state != SS::DISCONNECTED) {
             s->user_quit = true;
-            s->send("QUIT :" + quit_msg);
+            s->send_now("QUIT :" + quit_msg);
             if (s->conn.st == Conn::OPEN) s->conn.pump(0, s->inbuf);  // best-effort flush
             disconnect(s, "");
         }
@@ -296,7 +296,7 @@ static const char* HELP =
     "Commands: /server host [port] [-tls] [-noverify] · /connect [name] · /disconnect [msg] · "
     "/quit [msg] · /join #chan [key] · /part [#chan] [msg] · /msg target text · /query nick [text] · "
     "/me action · /notice target text · /nick new · /topic [text] · /close · /win N · "
-    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
+    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /ignore [mask] · /unignore mask · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
 
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
@@ -366,6 +366,26 @@ void Core::exec(Buffer* b, const std::string& input) {
                                "  (/save writes it to the config; servers, web and keys apply on restart)");
         return;
     }
+    if (cmd == "ignore" || cmd == "unignore") {  // masks: nick or nick!user@host globs
+        auto masks = split(ini_get(cfg, "general", "ignore"), ' ');
+        if (argv.empty()) {
+            print(b, LK::INFO, masks.empty() ? "Ignore list is empty" : "Ignoring: " + ini_get(cfg, "general", "ignore"));
+            return;
+        }
+        std::string mask = argv[0];
+        if (mask.find('!') == std::string::npos && mask.find('@') == std::string::npos) mask += "!*@*";
+        auto it = std::find(masks.begin(), masks.end(), mask);
+        if (cmd == "ignore" && it == masks.end()) masks.push_back(mask);
+        if (cmd == "unignore") {
+            if (it == masks.end()) { print(b, LK::ERROR, mask + " is not ignored"); return; }
+            masks.erase(it);
+        }
+        std::string joined;
+        for (auto& m : masks) joined += (joined.empty() ? "" : " ") + m;
+        cfg["general"]["ignore"] = unsaved["general"]["ignore"] = joined;
+        print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " (/save to keep)");
+        return;
+    }
     if (cmd == "save") {
         std::string err;
         if (unsaved.empty()) { print(b, LK::INFO, "Nothing to save"); return; }
@@ -377,7 +397,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "quit") {
         quit_msg = args.empty() ? quit_msg : args;
         for (auto& sv : servers)
-            if (sv->state != SS::DISCONNECTED) sv->user_quit = true, sv->send("QUIT :" + quit_msg);
+            if (sv->state != SS::DISCONNECTED) sv->user_quit = true, sv->send_now("QUIT :" + quit_msg);
         quit = true;
         return;
     }
@@ -398,6 +418,12 @@ void Core::exec(Buffer* b, const std::string& input) {
             else sc.port = atoi(argv[i].c_str());
         }
         if (sc.tls && sc.port == 6667) sc.port = 6697;
+        // remembered like /set, so /save keeps it for the next start
+        std::string sec = "server." + sc.name;
+        for (auto& [k, v] : std::map<std::string, std::string>{
+                 {"host", sc.host}, {"port", std::to_string(sc.port)},
+                 {"tls", sc.tls ? "true" : "false"}, {"tls_verify", sc.tls_verify ? "true" : "false"}})
+            cfg[sec][k] = unsaved[sec][k] = v;
         Server* ns = add_server(sc);
         select(ns->status);
         connect(ns);
@@ -414,7 +440,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "disconnect") {
         if (!s) return;
         s->user_quit = true;
-        s->send("QUIT :" + (args.empty() ? quit_msg : args));
+        s->send_now("QUIT :" + (args.empty() ? quit_msg : args));
         if (s->conn.st == Conn::OPEN) s->conn.pump(0, s->inbuf);
         disconnect(s, "");
         return;

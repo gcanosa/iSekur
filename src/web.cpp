@@ -28,6 +28,43 @@ static std::string random_hex(size_t n) {
     return o;
 }
 
+static std::string sha256_hex(const std::string& s) {
+    unsigned char h[32];
+    SHA256((const unsigned char*)s.data(), s.size(), h);
+    std::string o;
+    char b[3];
+    for (auto c : h) snprintf(b, sizeof b, "%02x", c), o += b;
+    return o;
+}
+
+// Sessions survive restarts. Only token hashes are stored, so the file can't
+// be replayed as a cookie.
+void Web::load_sessions() {
+    FILE* f = fopen(sessions_path.c_str(), "r");
+    if (!f) return;
+    char hash[80];
+    long long exp;
+    time_t now = time(nullptr);
+    while (fscanf(f, "%64s %lld", hash, &exp) == 2)
+        if (exp > now && strlen(hash) == 64) sessions[hash] = (time_t)exp;
+    fclose(f);
+}
+
+void Web::save_sessions() {
+    time_t now = time(nullptr);
+    std::string tmp = sessions_path + ".tmp";
+    mode_t old = umask(077);
+    FILE* f = fopen(tmp.c_str(), "w");
+    umask(old);
+    if (!f) return;
+    for (auto it = sessions.begin(); it != sessions.end();) {
+        if (it->second <= now) { it = sessions.erase(it); continue; }
+        fprintf(f, "%s %lld\n", it->first.c_str(), (long long)it->second);
+        ++it;
+    }
+    if (fclose(f) == 0) rename(tmp.c_str(), sessions_path.c_str());
+}
+
 // ---- passwords -------------------------------------------------------------
 std::string hash_password(const std::string& pw) {
     unsigned char salt[16], out[32];
@@ -234,6 +271,8 @@ bool Web::start(std::string& err) {
         }
         secure = true;
     }
+    sessions_path = c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "web.sessions";
+    load_sessions();
     lfd = listen_tcp(bind, port, err);
     if (lfd < 0) { err = "web listen " + bind + ":" + std::to_string(port) + ": " + err; return false; }
     c.print(c.bufs.front().get(), LK::INFO,
@@ -328,7 +367,7 @@ void Web::http(Client& cl) {
         std::string t = ck.substr(ck.find_first_not_of(' '));
         if (t.rfind("isekur_sid=", 0) == 0) token = t.substr(11);
     }
-    auto sit = sessions.find(token);
+    auto sit = sessions.find(sha256_hex(token));
     bool authed = !token.empty() && sit != sessions.end() && sit->second > now;
     // browsers send Origin on WebSocket and POST: it must be us (blocks CSRF / CSWSH)
     std::string origin = h["origin"];
@@ -356,7 +395,8 @@ void Web::http(Client& cl) {
         if (user_ok && pass_ok) {
             fails.erase(cl.conn.host);
             token = random_hex(32);
-            sessions[token] = now + SESSION_TTL;
+            sessions[sha256_hex(token)] = now + SESSION_TTL;
+            save_sessions();
             c.print(c.bufs.front().get(), LK::INFO, "Webchat login from " + cl.conn.host);
             respond(cl.conn, 200, "OK", "application/json", "{}",
                     "Set-Cookie: isekur_sid=" + token + "; Path=/; HttpOnly; SameSite=Strict" +
@@ -370,7 +410,7 @@ void Web::http(Client& cl) {
             for (auto it = fails.begin(); it != fails.end();)
                 it = it->second.second < now ? fails.erase(it) : std::next(it);
     } else if (method == "POST" && path == "/logout") {
-        if (same_origin) sessions.erase(token);
+        if (same_origin && sessions.erase(sha256_hex(token))) save_sessions();
         respond(cl.conn, 200, "OK", "application/json", "{}",
                 "Set-Cookie: isekur_sid=; Path=/; Max-Age=0\r\n");
     } else if (method == "GET" && path == "/ws") {

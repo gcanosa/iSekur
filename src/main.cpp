@@ -103,13 +103,14 @@ int main(int argc, char** argv) {
         size_t srv0 = daemon ? 0 : 2;
         web.add_fds(fds);
 
-        if (poll(fds.data(), (nfds_t)fds.size(), 1000) < 0 && errno != EINTR) break;
+        if (poll(fds.data(), (nfds_t)fds.size(), c.drain()) < 0 && errno != EINTR) break;
         // servers first: their handlers never delete servers, so `polled` stays valid
         for (size_t i = 0; i < polled.size(); i++)
             if (fds[srv0 + i].revents) c.on_readable(polled[i], fds[srv0 + i].revents);
         if (!daemon && (fds[0].revents || fds[1].revents)) tui.on_readable();
         web.process(fds);
         web.flush();
+        c.drain();
 
         time_t now = time(nullptr);
         c.tick(now);
@@ -119,7 +120,7 @@ int main(int argc, char** argv) {
 
     // flush QUITs for up to a second
     for (auto& s : c.servers)
-        if (s->state != SS::DISCONNECTED && !s->user_quit) s->send("QUIT :" + c.quit_msg);
+        if (s->state != SS::DISCONNECTED && !s->user_quit) s->send_now("QUIT :" + c.quit_msg);
     long long until = now_ms() + 1000;
     while (now_ms() < until) {
         fds.clear(), polled.clear();

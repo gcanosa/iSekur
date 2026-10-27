@@ -2,6 +2,8 @@
 #   make          build ./isekur
 #   make test     build + run tests
 #   make debug    ASan+UBSan build
+#   make install  PREFIX=/usr/local (default) DESTDIR= for staging; use the
+#                 same PREFIX for build and install: the themes path is compiled in
 #   make clean
 
 CXX      ?= c++
@@ -23,9 +25,11 @@ else
   endif
 endif
 
+PREFIX   ?= /usr/local
+DATADIR  ?= $(PREFIX)/share/isekur
 OPT      ?= -O2
 COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-strong \
-            -DTB_OPT_ATTR_W=32 -Ivendor -Isrc -Ibuild $(OPENSSL_CFLAGS)
+            -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Isrc -Ibuild $(OPENSSL_CFLAGS)
 CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS)
@@ -62,8 +66,18 @@ debug:
 	$(MAKE) clean
 	$(MAKE) OPT="-O0 -fsanitize=address,undefined" LDFLAGS="-fsanitize=address,undefined"
 
+install: isekur
+	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(DATADIR)/themes
+	install -m 755 isekur $(DESTDIR)$(PREFIX)/bin/isekur
+	install -m 644 themes/*.theme $(DESTDIR)$(DATADIR)/themes/
+	install -m 644 iSekur.conf.example README.md $(DESTDIR)$(DATADIR)/
+
+uninstall:
+	rm -f $(DESTDIR)$(PREFIX)/bin/isekur
+	rm -rf $(DESTDIR)$(DATADIR)
+
 clean:
 	rm -rf build isekur
 
 -include $(wildcard build/*.d)
-.PHONY: all test debug clean
+.PHONY: all test debug install uninstall clean
