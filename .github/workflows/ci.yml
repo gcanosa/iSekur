@@ -36,7 +36,6 @@ jobs:
 
   cygwin:
     runs-on: windows-latest
-    continue-on-error: true  # experimental target
     defaults:
       run:
         shell: C:\cygwin\bin\bash.exe --login -eo pipefail -o igncr '{0}'
