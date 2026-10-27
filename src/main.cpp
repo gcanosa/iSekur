@@ -122,7 +122,7 @@ int main(int argc, char** argv) {
     while (now_ms() < until) {
         fds.clear(), polled.clear();
         for (auto& s : c.servers)
-            if (s->conn.fd >= 0 && !s->conn.out.empty())
+            if (s->conn.st == Conn::OPEN && !s->conn.out.empty())
                 fds.push_back({s->conn.fd, POLLOUT, 0}), polled.push_back(s.get());
         if (fds.empty()) break;
         poll(fds.data(), (nfds_t)fds.size(), 100);

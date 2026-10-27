@@ -26,8 +26,8 @@ endif
 OPT      ?= -O2
 COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-strong \
             -DTB_OPT_ATTR_W=32 -Ivendor -Isrc -Ibuild $(OPENSSL_CFLAGS)
-CXXFLAGS += -std=c++17 $(COMMON)
-CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers
+CXXFLAGS += -std=c++17 -pthread $(COMMON)
+CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS)
 
 SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp
@@ -47,7 +47,7 @@ build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
 # the webchat page is compiled into the binary
 build/web.o: build/web_assets.h
 build/web_assets.h: web/index.html | build
-	cd web && xxd -i index.html > ../$@
+	{ printf 'static const char index_html[] = R"ISEKURHTML('; cat web/index.html; printf ')ISEKURHTML";\n'; } > $@
 
 build:
 	mkdir -p build

@@ -579,16 +579,33 @@ void Core::handle(Server* s, const Msg& m) {
                 kind = LK::ACTION;
                 text = arg;
             } else {
+                time_t now = time(nullptr);
+                std::string rep, note;
                 if (!notice && !self) {
-                    std::string rep = verb == "VERSION" ? "VERSION iSekur IRC client"
-                                    : verb == "PING"    ? "PING " + arg
-                                    : verb == "TIME"    ? "TIME " + fmt_time(time(nullptr), "%c")
-                                                        : "";
-                    if (!rep.empty()) s->send("NOTICE " + m.nick + " :\x01" + rep + "\x01");
+                    if (verb == "VERSION" && opt_on(s, "ctcp_version", true))
+                        rep = "VERSION " + opt(s, "ctcp_version_reply", "iSekur IRC client");
+                    else if (verb == "PING" && opt_on(s, "ctcp_ping", true))
+                        rep = "PING " + arg.substr(0, 64);
+                    else if (verb == "TIME" && opt_on(s, "ctcp_time", true))
+                        rep = "TIME " + fmt_time(now, "%a %b %d %H:%M:%S %Y %z");
+                    // one reply per 2s per server: a CTCP flood must not get us
+                    // killed for excess flood
+                    if (!rep.empty() && now - s->ctcp_at < 2) rep.clear(), note = " (ignored: flood)";
+                    else if (rep.empty()) note = " (no reply)";
+                    if (!rep.empty()) {
+                        s->ctcp_at = now;
+                        s->send("NOTICE " + m.nick + " :\x01" + rep + "\x01");
+                    }
+                }
+                if (notice && verb == "PING" && !arg.empty() &&
+                    arg.find_first_not_of("0123456789") == std::string::npos) {
+                    char rtt[48];
+                    snprintf(rtt, sizeof rtt, "%.3fs", (now_ms() - atoll(arg.c_str())) / 1000.0);
+                    arg = rtt;
                 }
                 print(reply_buf(), LK::INFO,
                       "CTCP " + verb + (notice ? " reply" : "") + " from " + m.nick +
-                          (arg.empty() ? "" : ": " + arg));
+                          (arg.empty() ? "" : ": " + arg) + note);
                 return;
             }
         }

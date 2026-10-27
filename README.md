@@ -9,6 +9,7 @@ that mirrors your live session in a browser, bouncer style.
   server-time, echo-message, multi-prefix, away/account-notify, extended-join and more
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout
 - `--daemon` runs headless and keeps you on IRC; attach from the browser
+- Optional chat logs (`log = on`) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
 ## Build
 
@@ -40,6 +41,6 @@ Rebind any of the actions in the `[keys]` section.
 ## Commands
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
-`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/close`, `/win N`, `/raw`,
+`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/close`, `/win N`, `/raw`, `/ctcp`,
 `/theme`, `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

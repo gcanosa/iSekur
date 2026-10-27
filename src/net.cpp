@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <thread>
 #include <unistd.h>
 #include <openssl/err.h>
 #include <openssl/ssl.h>
@@ -30,19 +31,35 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
     close();
     host = h, tls = t, cert = c, key = k, err.clear(), out.clear();
     addrs.clear(), ai = 0;
-    addrinfo hints{}, *res = nullptr;
-    hints.ai_socktype = SOCK_STREAM;
-    hints.ai_family = AF_UNSPEC;
-    // ponytail: blocking DNS; freezes the UI for a resolver timeout at worst.
-    int r = getaddrinfo(h.c_str(), std::to_string(port).c_str(), &hints, &res);
-    if (r) { err = gai_strerror(r); return false; }
-    for (addrinfo* a = res; a; a = a->ai_next) {
-        sockaddr_storage ss{};
-        memcpy(&ss, a->ai_addr, a->ai_addrlen);
-        addrs.push_back(ss);
-    }
-    freeaddrinfo(res);
-    return next_addr();
+    int p[2];
+    if (pipe(p)) { err = strerror(errno); return false; }
+    nonblock(p[0]);
+    fcntl(p[1], F_SETFD, FD_CLOEXEC);
+    auto r = std::make_shared<Resolve>();
+    std::string port_s = std::to_string(port);
+    // Detached: if we give up first (close()), the thread just finishes into
+    // its own copy of `r` and a pipe nobody reads.
+    std::thread([r, h, port_s, wfd = p[1]] {
+        addrinfo hints{}, *ai = nullptr;
+        hints.ai_socktype = SOCK_STREAM;
+        hints.ai_family = AF_UNSPEC;
+        int e = getaddrinfo(h.c_str(), port_s.c_str(), &hints, &ai);
+        if (e) r->err = gai_strerror(e);
+        for (addrinfo* a = ai; a; a = a->ai_next) {
+            sockaddr_storage ss{};
+            memcpy(&ss, a->ai_addr, a->ai_addrlen);
+            r->addrs.push_back(ss);
+        }
+        if (ai) freeaddrinfo(ai);
+        r->done.store(true, std::memory_order_release);
+        char one = 1;
+        if (write(wfd, &one, 1) < 0) {}  // reader may be gone; SIGPIPE is ignored
+        ::close(wfd);
+    }).detach();
+    res = r;
+    fd = p[0];
+    st = RESOLVING;
+    return true;
 }
 
 bool Conn::next_addr() {
@@ -111,6 +128,7 @@ bool Conn::accept_from(int lfd, SSL_CTX* sctx) {
 
 short Conn::events() const {
     switch (st) {
+    case RESOLVING: return POLLIN;
     case CONNECTING: return POLLOUT;
     case HANDSHAKE: return want_write ? POLLOUT : POLLIN;
     case OPEN: return POLLIN | (out.empty() && !want_write ? 0 : POLLOUT);
@@ -119,6 +137,14 @@ short Conn::events() const {
 }
 
 bool Conn::pump(short rev, std::string& in) {
+    if (st == RESOLVING) {
+        if (!res->done.load(std::memory_order_acquire)) return true;
+        ::close(fd), fd = -1;
+        addrs = res->addrs;
+        err = res->err;
+        res.reset();
+        return next_addr();  // never fall through: the new socket isn't connected yet
+    }
     if (st == CONNECTING) {
         int e = 0;
         socklen_t l = sizeof e;
@@ -194,6 +220,7 @@ void Conn::close() {
     if (ssl) SSL_free(ssl), ssl = nullptr;
     if (ctx && !server_side) SSL_CTX_free(ctx), ctx = nullptr;
     if (fd >= 0) ::close(fd), fd = -1;
+    res.reset();
     st = NONE;
     want_write = closing = false;
 }

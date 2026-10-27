@@ -336,7 +336,7 @@ void Web::http(Client& cl) {
 
     if (method == "GET" && (path == "/" || path == "/index.html")) {
         respond(cl.conn, 200, "OK", "text/html; charset=utf-8",
-                std::string((const char*)index_html, index_html_len));
+                std::string(index_html, sizeof index_html - 1));
     } else if (method == "GET" && path == "/session") {
         if (authed) respond(cl.conn, 200, "OK", "application/json", "{\"user\":" + json_str(user) + "}");
         else respond(cl.conn, 401, "Unauthorized", "application/json", "{}");

@@ -1,6 +1,7 @@
 // Core state shared by every frontend: servers, buffers, theme, commands.
 #pragma once
 #include <cstdint>
+#include <cstdio>
 #include <ctime>
 #include <deque>
 #include <functional>
@@ -78,6 +79,8 @@ struct Buffer {
     int activity = 0;                        // 0 none, 1 data, 2 msg, 3 hilight
     int scroll = 0;                          // rows scrolled back (tui)
     bool joined = false;
+    FILE* log = nullptr;                     // opened lazily when logging is on
+    ~Buffer() { if (log) fclose(log); }
 };
 
 // ---- servers ---------------------------------------------------------------
@@ -104,7 +107,7 @@ struct Server {
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
     int sasl_step = 0, nick_tries = 0, backoff = 0;
     bool cap_done = false;
-    time_t last_rx = 0, reconnect_at = 0, ping_at = 0;
+    time_t last_rx = 0, reconnect_at = 0, ping_at = 0, ctcp_at = 0;
     long long ping_sent_ms = 0;
     double lag = 0;
     bool user_quit = false;
@@ -131,6 +134,10 @@ struct Core {
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend
 
     void load_config();
+    // [server.<name>] key, falling back to [general], then `def`
+    std::string opt(const Server* s, const std::string& key, const std::string& def) const;
+    bool opt_on(const Server* s, const std::string& key, bool def) const;
+    void log_line(Buffer* b, const Line& l);
     Server* add_server(const ServerCfg& sc);
     void connect(Server* s);
     void disconnect(Server* s, const std::string& why);
@@ -157,3 +164,4 @@ std::string b64(const std::string& s);
 std::string unb64(const std::string& s);  // "" on bad input
 std::string fmt_time(time_t t, const std::string& fmt);
 std::vector<std::string> split(const std::string& s, char sep);
+std::string safe_name(const std::string& n);  // network name -> safe log file name

@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <pwd.h>
+#include <sys/stat.h>
 #include "core.h"
 
 static const size_t MAX_LINES = 2000;
@@ -101,7 +102,7 @@ void Core::close(Buffer* b) {
         if (s->state != SS::DISCONNECTED) {
             s->user_quit = true;
             s->send("QUIT :" + quit_msg);
-            s->conn.pump(0, s->inbuf);  // best-effort flush
+            if (s->conn.st == Conn::OPEN) s->conn.pump(0, s->inbuf);  // best-effort flush
             disconnect(s, "");
         }
         for (size_t i = bufs.size(); i-- > 0;)
@@ -141,7 +142,59 @@ void Core::add(Buffer* b, Line l) {
         if (lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }
     }
     dirty = true;
+    log_line(b, ln);
     notify(Ev::LINE, b, &ln);
+}
+
+std::string Core::opt(const Server* s, const std::string& key, const std::string& def) const {
+    std::string g = ini_get(cfg, "general", key, def);
+    return s ? ini_get(cfg, "server." + s->cfg.name, key, g) : g;
+}
+
+bool Core::opt_on(const Server* s, const std::string& key, bool def) const {
+    std::string v = opt(s, key, def ? "on" : "off");
+    return v == "on" || v == "true" || v == "yes" || v == "1";
+}
+
+static void mkdir_p(const std::string& path) {
+    for (size_t i = 1; i <= path.size(); i++)
+        if (i == path.size() || path[i] == '/') mkdir(path.substr(0, i).c_str(), 0700);
+}
+
+// Names come from the network (query nicks): keep them inside the log dir.
+std::string safe_name(const std::string& n) {
+    std::string o = irc_lower(n);
+    for (auto& ch : o)
+        if (ch == '/' || ch == '\\' || (unsigned char)ch < 0x20) ch = '_';
+    if (o.empty() || o[0] == '.') o.insert(0, "_");
+    return o;
+}
+
+// [general] log = on writes channels and queries to <log_dir>/<server>/<name>.log
+void Core::log_line(Buffer* b, const Line& l) {
+    if (!b->srv || b->type == BT::STATUS || !opt_on(b->srv, "log", false)) return;
+    if (!b->log) {
+        std::string dir = opt(b->srv, "log_dir", cfg_path.substr(0, cfg_path.rfind('/') + 1) + "logs");
+        if (dir.rfind("~/", 0) == 0)
+            if (const char* h = getenv("HOME")) dir = h + dir.substr(1);
+        dir += "/" + safe_name(b->srv->cfg.name);
+        mkdir_p(dir);
+        std::string path = dir + "/" + safe_name(b->name) + ".log";
+        mode_t old = umask(077);  // chat logs are private
+        b->log = fopen(path.c_str(), "a");
+        umask(old);
+        if (!b->log) return;
+        fprintf(b->log, "--- Log opened %s\n", fmt_time(time(nullptr), "%Y-%m-%d %H:%M:%S").c_str());
+    }
+    std::string txt = mirc_strip(l.text), who;
+    switch (l.kind) {
+    case LK::MSG: who = "<" + l.nick + "> "; break;
+    case LK::ACTION: who = "* " + l.nick + " "; break;
+    case LK::NOTICE: who = "-" + l.nick + "- "; break;
+    default: who = "-!- "; break;
+    }
+    fprintf(b->log, "%s %s%s\n", fmt_time(l.ts, "%Y-%m-%d %H:%M:%S").c_str(), who.c_str(), txt.c_str());
+    fflush(b->log);
 }
 
 void Core::print(Buffer* b, LK k, const std::string& text) {
@@ -184,7 +237,7 @@ static const char* HELP =
     "Commands: /server host [port] [-tls] [-noverify] · /connect [name] · /disconnect [msg] · "
     "/quit [msg] · /join #chan [key] · /part [#chan] [msg] · /msg target text · /query nick [text] · "
     "/me action · /notice target text · /nick new · /topic [text] · /close · /win N · "
-    "/raw line · /theme name · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
+    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
 
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
@@ -263,7 +316,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (!s) return;
         s->user_quit = true;
         s->send("QUIT :" + (args.empty() ? quit_msg : args));
-        s->conn.pump(0, s->inbuf);
+        if (s->conn.st == Conn::OPEN) s->conn.pump(0, s->inbuf);
         disconnect(s, "");
         return;
     }
@@ -329,6 +382,16 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "raw" || cmd == "quote") { s->send(args); return; }
+    if (cmd == "ctcp") {  // /ctcp nick VERSION|TIME|PING|...
+        if (argv.size() < 2) { print(b, LK::ERROR, "Usage: /ctcp target VERSION|TIME|PING [args]"); return; }
+        std::string verb = argv[1];
+        for (auto& ch : verb) ch = (char)toupper((unsigned char)ch);
+        std::string arg = rest(2);
+        if (verb == "PING" && arg.empty()) arg = std::to_string(now_ms());
+        s->send("PRIVMSG " + argv[0] + " :\x01" + verb + (arg.empty() ? "" : " " + arg) + "\x01");
+        print(b, LK::INFO, "CTCP " + verb + " sent to " + argv[0]);
+        return;
+    }
     // anything else goes to the server verbatim: /whois, /mode, /away, /kick...
     for (auto& ch : cmd) ch = (char)toupper((unsigned char)ch);
     s->send(cmd + (args.empty() ? "" : " " + args));
