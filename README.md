@@ -1,4 +1,4 @@
-# iSekur 0.1
+# iSekur 0.2
 
 A small, very colorful terminal IRC client in C++17 with a built-in webchat
 that mirrors your live session in a browser, bouncer style.
