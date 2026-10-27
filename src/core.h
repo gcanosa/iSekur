@@ -80,9 +80,11 @@ struct Buffer {
     std::string topic, modes;
     std::map<std::string, NickEntry> nicks;  // key: irc_lower(nick)
     int activity = 0;                        // 0 none, 1 data, 2 msg, 3 hilight
+    int unread = 0;                          // lines below the "new" marker
     int scroll = 0;                          // rows scrolled back (tui)
     bool joined = false;
     FILE* log = nullptr;                     // opened lazily when logging is on
+    std::string log_day;                     // YYYY-MM-DD the open log belongs to
     ~Buffer() { if (log) fclose(log); }
 };
 
@@ -140,7 +142,7 @@ struct Core {
     std::vector<std::unique_ptr<Buffer>> bufs;  // tab order
     Buffer* active = nullptr;
     int next_id = 1;
-    bool quit = false, dirty = true;
+    bool quit = false, dirty = true, keys_changed = false;
     std::string quit_msg = "iSekur IRC";
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend
 
@@ -151,7 +153,9 @@ struct Core {
     void log_line(Buffer* b, const Line& l);
     std::string log_path(Buffer* b) const;
     void load_history(Buffer* b);
+    ServerCfg server_cfg(const std::string& name) const;
     Server* add_server(const ServerCfg& sc);
+    void load_flood(Server* s);  // flood_burst / flood_interval_ms
     void connect(Server* s);
     void disconnect(Server* s, const std::string& why);
     void on_readable(Server* s, short revents);

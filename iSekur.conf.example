@@ -20,6 +20,7 @@ flood_interval_ms = 2000
 log       = off
 ; log_dir = ~/irclogs        ; default: "logs" next to this file
 log_history = 200            ; lines restored into a tab from its log (0 = off)
+log_rotate  = on             ; start a new file each day; old ones become <name>.YYYY-MM-DD.log
 
 # Copy highlights and private messages to window 1 ("what did I miss").
 hilight_window = on

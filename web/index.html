@@ -47,6 +47,9 @@ button, input { font: inherit; color: inherit; }
 #topic button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
 #menu { display: none; }
 #msgs { grid-area: msgs; overflow-y: auto; padding: 6px 0; overflow-wrap: anywhere; }
+.newmark { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: 11px; text-transform: uppercase;
+  letter-spacing: .1em; color: var(--marker-fg, #c2185b); }
+.newmark::before, .newmark::after { content: ""; flex: 1; border-top: 1px solid currentColor; }
 .l { display: grid; grid-template-columns: auto 13ch 1fr; gap: 0 10px; padding: 1px 14px; }
 .l:hover { background: #ffffff06; }
 .l .ts { color: var(--timestamp-fg, var(--muted)); }
@@ -256,12 +259,17 @@ function renderMsgs() {
   const m = $("#msgs"), b = bufs.get(active); m.textContent = "";
   if (!b) return;
   const frag = document.createDocumentFragment();
-  for (const l of b.lines) frag.append(lineEl(b, l));
+  const mark = b.unread > 0 && b.unread < b.lines.length ? b.lines.length - b.unread : -1;
+  b.lines.forEach((l, i) => {
+    if (i === mark) { const d = document.createElement("div"); d.className = "newmark"; d.textContent = "new"; frag.append(d); }
+    frag.append(lineEl(b, l));
+  });
   m.append(frag); m.scrollTop = m.scrollHeight;
 }
 
 function select(id) {
   if (!bufs.has(id)) return;
+  if (active !== id && bufs.has(active)) send({t: "seen", buf: active});
   active = id;
   const b = bufs.get(id);
   if (b.act) { b.act = 0; send({t: "read", buf: id}); }
@@ -298,7 +306,7 @@ function onMsg(ev) {
     if (m.buf === active) renderMsgs();
   } else if (m.t === "line") {
     const b = bufs.get(m.buf); if (!b) return;
-    b.lines.push(m.line); if (b.lines.length > 2000) b.lines.shift();
+    b.lines.push(m.line); b.unread = m.u; if (b.lines.length > 2000) b.lines.shift();
     if (m.buf === active) {
       const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       box.append(lineEl(b, m.line));

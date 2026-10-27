@@ -21,7 +21,8 @@ private:
     size_t cur = 0;
     std::vector<std::string> hist;
     size_t hpos = 0;
-    std::map<std::string, std::string> keymap;  // "M-Right" -> "next_tab"
+    std::map<std::string, std::string> keymap;
+    void load_keys();  // defaults + [keys]; again after /set keys.*  // "M-Right" -> "next_tab"
     bool nicklist = true, truecolor = true, mouse_on = true;
     // clickable regions from the last draw(): tabs, activity numbers, nicks
     struct Hit { int y, x0, x1; int tab; std::string nick; };

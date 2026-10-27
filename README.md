@@ -11,7 +11,8 @@ that mirrors your live session in a browser, bouncer style.
 - `--daemon` runs headless and keeps you on IRC; attach from the browser
 - Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist (F3 toggles)
 - Flood-safe sending (pastes are queued so servers don't kick you) and `/ignore`
-- Optional chat logs (`log = on`) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
+- A "new" marker above the first message you missed, shared by the terminal and the webchat
+- Optional chat logs (`log = on`, rotated daily) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
 ## Build
 
@@ -21,10 +22,12 @@ Needs a C++17 compiler, GNU make and OpenSSL 1.1+/LibreSSL. termbox2 is vendored
     make test
     ./isekur        # or: ./isekur -c path/to/isekur.conf
     sudo make install            # /usr/local; PREFIX=... must match the build
+    man isekur
 
 Copy `iSekur.conf.example` to `~/.config/isekur/isekur.conf`, or change
 settings from inside the client with `/set theme neon`, `/set server.libera.autojoin #a,#b`
-and write them back with `/save` (comments in the file are kept). Run
+and write them back with `/save` (comments in the file are kept). Changes apply
+right away; server settings are used on the next `/connect`, `[web]` on restart. Run
 `./isekur --hash-password` to get the `[web] password_hash` value.
 
 ## Keys

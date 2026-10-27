@@ -3,6 +3,7 @@
 #include <cstdlib>
 #include <unistd.h>
 #include <pwd.h>
+#include <glob.h>
 #include <sys/stat.h>
 #include "core.h"
 
@@ -27,31 +28,37 @@ void Core::load_config() {
                                   " - see iSekur.conf.example. Try /server irc.example.org 6697 -tls");
     print(home, LK::INFO, "Welcome to iSekur " ISEKUR_VERSION ". /help lists commands.");
 
-    const char* login = getenv("USER");
-    std::string gnick = ini_get(cfg, "general", "nick", login ? login : "isekur");
     for (auto& [sec, kv] : cfg) {
         if (sec.rfind("server.", 0) != 0) continue;
-        ServerCfg sc;
-        sc.name = sec.substr(7);
-        sc.host = ini_get(cfg, sec, "host", sc.name);
-        sc.tls = ini_get(cfg, sec, "tls", "false") == "true";
-        sc.port = atoi(ini_get(cfg, sec, "port", sc.tls ? "6697" : "6667").c_str());
-        sc.tls_verify = ini_get(cfg, sec, "tls_verify", "true") == "true";
-        sc.autoconnect = ini_get(cfg, sec, "autoconnect", "true") == "true";
-        sc.nick = ini_get(cfg, sec, "nick", gnick);
-        sc.altnick = ini_get(cfg, sec, "altnick", ini_get(cfg, "general", "altnick", sc.nick + "_"));
-        sc.user = ini_get(cfg, sec, "user", ini_get(cfg, "general", "user", sc.nick));
-        sc.realname = ini_get(cfg, sec, "realname", ini_get(cfg, "general", "realname", "iSekur user"));
-        sc.pass = ini_get(cfg, sec, "password");
-        sc.sasl_user = ini_get(cfg, sec, "sasl_user");
-        sc.sasl_pass = ini_get(cfg, sec, "sasl_pass");
-        sc.sasl_mech = ini_get(cfg, sec, "sasl_mech");
-        sc.cert = ini_get(cfg, sec, "cert");
-        sc.key = ini_get(cfg, sec, "key");
-        sc.autojoin = split(ini_get(cfg, sec, "autojoin"), ',');
-        Server* s = add_server(sc);
-        if (sc.autoconnect) connect(s);
+        Server* s = add_server(server_cfg(sec.substr(7)));
+        if (s->cfg.autoconnect) connect(s);
     }
+}
+
+// [server.<name>] with [general] fallbacks; also re-read by /set
+ServerCfg Core::server_cfg(const std::string& name) const {
+    const char* login = getenv("USER");
+    std::string gnick = ini_get(cfg, "general", "nick", login ? login : "isekur");
+    std::string sec = "server." + name;
+    ServerCfg sc;
+    sc.name = name;
+    sc.host = ini_get(cfg, sec, "host", sc.name);
+    sc.tls = ini_get(cfg, sec, "tls", "false") == "true";
+    sc.port = atoi(ini_get(cfg, sec, "port", sc.tls ? "6697" : "6667").c_str());
+    sc.tls_verify = ini_get(cfg, sec, "tls_verify", "true") == "true";
+    sc.autoconnect = ini_get(cfg, sec, "autoconnect", "true") == "true";
+    sc.nick = ini_get(cfg, sec, "nick", gnick);
+    sc.altnick = ini_get(cfg, sec, "altnick", ini_get(cfg, "general", "altnick", sc.nick + "_"));
+    sc.user = ini_get(cfg, sec, "user", ini_get(cfg, "general", "user", sc.nick));
+    sc.realname = ini_get(cfg, sec, "realname", ini_get(cfg, "general", "realname", "iSekur user"));
+    sc.pass = ini_get(cfg, sec, "password");
+    sc.sasl_user = ini_get(cfg, sec, "sasl_user");
+    sc.sasl_pass = ini_get(cfg, sec, "sasl_pass");
+    sc.sasl_mech = ini_get(cfg, sec, "sasl_mech");
+    sc.cert = ini_get(cfg, sec, "cert");
+    sc.key = ini_get(cfg, sec, "key");
+    sc.autojoin = split(ini_get(cfg, sec, "autojoin"), ',');
+    return sc;
 }
 
 Server* Core::add_server(const ServerCfg& sc) {
@@ -61,7 +68,13 @@ Server* Core::add_server(const ServerCfg& sc) {
     Server* sp = s.get();
     servers.push_back(std::move(s));
     sp->status = open(sp, BT::STATUS, sc.name);
+    load_flood(sp);
     return sp;
+}
+
+void Core::load_flood(Server* s) {
+    s->flood_burst = std::max(1, atoi(opt(s, "flood_burst", "5").c_str()));
+    s->flood_ms = atoi(opt(s, "flood_interval_ms", "2000").c_str());
 }
 
 // ---- buffers ---------------------------------------------------------------
@@ -126,6 +139,7 @@ void Core::close(Buffer* b) {
 
 void Core::select(Buffer* b) {
     if (!b) return;
+    if (active && active != b && active->unread) active->unread = 0, notify(Ev::BUFFER, active);
     active = b;
     b->activity = 0;
     dirty = true;
@@ -138,10 +152,10 @@ void Core::add(Buffer* b, Line l) {
     if (b->lines.size() > MAX_LINES) b->lines.pop_front();
     if (b->scroll) b->scroll++;  // keep the scrolled view still
     const Line& ln = b->lines.back();
-    if (b != active) {
-        int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : 1;
-        if (lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }
-    }
+    int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : 1;
+    // the "new" marker goes above the first message you missed, then counts everything after it
+    if (b->unread || (b != active && lvl >= 2)) b->unread++;
+    if (b != active && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }
     dirty = true;
     log_line(b, ln);
     notify(Ev::LINE, b, &ln);
@@ -189,9 +203,23 @@ std::string Core::log_path(Buffer* b) const {
 // [general] log = on writes channels and queries to <log_dir>/<server>/<name>.log
 void Core::log_line(Buffer* b, const Line& l) {
     if (!b->srv || b->type == BT::STATUS || !opt_on(b->srv, "log", false)) return;
+    // log_rotate (default on): yesterday's lines move to <name>.YYYY-MM-DD.log
+    bool rotate = opt_on(b->srv, "log_rotate", true);
+    std::string today = fmt_time(time(nullptr), "%Y-%m-%d");
+    if (b->log && rotate && b->log_day != today) {
+        fclose(b->log), b->log = nullptr;
+        std::string path = log_path(b);
+        rename(path.c_str(), (path.substr(0, path.size() - 4) + "." + b->log_day + ".log").c_str());
+    }
     if (!b->log) {
         std::string path = log_path(b);
         mkdir_p(path.substr(0, path.rfind('/')));
+        struct stat st;
+        if (rotate && stat(path.c_str(), &st) == 0) {  // left over from an earlier day
+            std::string day = fmt_time(st.st_mtime, "%Y-%m-%d");
+            if (day != today) rename(path.c_str(), (path.substr(0, path.size() - 4) + "." + day + ".log").c_str());
+        }
+        b->log_day = today;
         mode_t old = umask(077);  // chat logs are private
         b->log = fopen(path.c_str(), "a");
         umask(old);
@@ -232,16 +260,30 @@ bool parse_log_line(const std::string& s, Line& l) {
 void Core::load_history(Buffer* b) {
     int n = atoi(opt(b->srv, "log_history", "200").c_str());
     if (n <= 0 || !opt_on(b->srv, "log", false)) return;
-    FILE* f = fopen(log_path(b).c_str(), "r");
-    if (!f) return;
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f), from = std::max(0L, size - 512L * n);  // generous bytes/line guess
-    fseek(f, from, SEEK_SET);
-    std::string data((size_t)(size - from), '\0');
-    data.resize(fread(&data[0], 1, data.size(), f));
-    fclose(f);
-    auto rows = split(data, '\n');
-    if (from > 0 && !rows.empty()) rows.erase(rows.begin());  // partial first line
+    // the current log, preceded by the newest rotated one when it is short
+    std::string path = log_path(b);
+    auto tail = [&](const std::string& p) {
+        std::vector<std::string> rows;
+        FILE* f = fopen(p.c_str(), "r");
+        if (!f) return rows;
+        fseek(f, 0, SEEK_END);
+        long size = ftell(f), from = std::max(0L, size - 512L * n);  // generous bytes/line guess
+        fseek(f, from, SEEK_SET);
+        std::string data((size_t)(size - from), '\0');
+        data.resize(fread(&data[0], 1, data.size(), f));
+        fclose(f);
+        rows = split(data, '\n');
+        if (from > 0 && !rows.empty()) rows.erase(rows.begin());  // partial first line
+        return rows;
+    };
+    auto rows = tail(path);
+    glob_t g;
+    if (rows.size() < (size_t)n &&
+        glob((path.substr(0, path.size() - 4) + ".\?\?\?\?-\?\?-\?\?.log").c_str(), 0, nullptr, &g) == 0) {
+        auto old = tail(g.gl_pathv[g.gl_pathc - 1]);  // glob sorts: newest date last
+        rows.insert(rows.begin(), old.begin(), old.end());
+        globfree(&g);
+    }
     std::vector<Line> hist;
     for (auto& r : rows) {
         Line l;
@@ -361,9 +403,18 @@ void Core::exec(Buffer* b, const std::string& input) {
             if (load_theme(val, theme, err)) notify(Ev::THEME, nullptr);
             else print(b, LK::ERROR, err);
         }
+        // servers pick up host/port/sasl/... on their next connect; flood limits now
+        for (auto& sv : servers) {
+            sv->cfg = server_cfg(sv->cfg.name);
+            load_flood(sv.get());
+        }
+        if (sec == "keys") keys_changed = true;
         dirty = true;
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
-                               "  (/save writes it to the config; servers, web and keys apply on restart)");
+                               (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
+                                : sec == "web"              ? "  (web settings apply on restart)"
+                                                            : "") +
+                               "  - /save writes it to the config");
         return;
     }
     if (cmd == "ignore" || cmd == "unignore") {  // masks: nick or nick!user@host globs
@@ -405,25 +456,20 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify]"); return; }
         for (auto& sv : servers)
             if (sv->cfg.name == argv[0]) { connect(sv.get()); select(sv->status); return; }
-        ServerCfg sc;
-        sc.name = sc.host = argv[0];
-        const char* login = getenv("USER");
-        sc.nick = ini_get(cfg, "general", "nick", login ? login : "isekur");
-        sc.altnick = sc.nick + "_";
-        sc.user = ini_get(cfg, "general", "user", sc.nick);
-        sc.realname = ini_get(cfg, "general", "realname", "iSekur user");
+        std::string sec = "server." + argv[0], port;
+        bool tls = false, verify = true;
         for (size_t i = 1; i < argv.size(); i++) {
-            if (argv[i] == "-tls") sc.tls = true;
-            else if (argv[i] == "-noverify") sc.tls_verify = false;
-            else sc.port = atoi(argv[i].c_str());
+            if (argv[i] == "-tls") tls = true;
+            else if (argv[i] == "-noverify") verify = false;
+            else port = argv[i];
         }
-        if (sc.tls && sc.port == 6667) sc.port = 6697;
+        if (port.empty() || (tls && port == "6667")) port = tls ? "6697" : "6667";
         // remembered like /set, so /save keeps it for the next start
-        std::string sec = "server." + sc.name;
         for (auto& [k, v] : std::map<std::string, std::string>{
-                 {"host", sc.host}, {"port", std::to_string(sc.port)},
-                 {"tls", sc.tls ? "true" : "false"}, {"tls_verify", sc.tls_verify ? "true" : "false"}})
+                 {"host", argv[0]}, {"port", port},
+                 {"tls", tls ? "true" : "false"}, {"tls_verify", verify ? "true" : "false"}})
             cfg[sec][k] = unsaved[sec][k] = v;
+        ServerCfg sc = server_cfg(argv[0]);
         Server* ns = add_server(sc);
         select(ns->status);
         connect(ns);

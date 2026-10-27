@@ -8,27 +8,27 @@ jobs:
       matrix:
         cxx: [g++, clang++]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y libssl-dev
       - run: make CXX=${{ matrix.cxx }} && make test CXX=${{ matrix.cxx }}
 
   sanitizers:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: sudo apt-get update && sudo apt-get install -y libssl-dev
       - run: make test OPT="-O1 -fsanitize=address,undefined -fno-sanitize-recover=all" LDFLAGS="-fsanitize=address,undefined"
 
   macos:
     runs-on: macos-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - run: make && make test
 
   freebsd:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: vmactions/freebsd-vm@v1
         with:
           prepare: pkg install -y gmake
@@ -43,7 +43,7 @@ jobs:
     steps:
       - run: git config --global core.autocrlf input
         shell: cmd
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: cygwin/cygwin-install-action@v4
         with:
           packages: gcc-g++ make libssl-devel

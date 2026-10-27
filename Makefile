@@ -25,8 +25,14 @@ else
   endif
 endif
 
+# Cygwin's newlib hides strptime() unless asked
+ifneq ($(findstring CYGWIN,$(shell uname -s)),)
+  OPENSSL_CFLAGS += -D_GNU_SOURCE
+endif
+
 PREFIX   ?= /usr/local
 DATADIR  ?= $(PREFIX)/share/isekur
+MANDIR   ?= $(PREFIX)/share/man
 OPT      ?= -O2
 COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-strong \
             -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Isrc -Ibuild $(OPENSSL_CFLAGS)
@@ -67,13 +73,14 @@ debug:
 	$(MAKE) OPT="-O0 -fsanitize=address,undefined" LDFLAGS="-fsanitize=address,undefined"
 
 install: isekur
-	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(DATADIR)/themes
+	install -d $(DESTDIR)$(PREFIX)/bin $(DESTDIR)$(DATADIR)/themes $(DESTDIR)$(MANDIR)/man1
 	install -m 755 isekur $(DESTDIR)$(PREFIX)/bin/isekur
+	install -m 644 isekur.1 $(DESTDIR)$(MANDIR)/man1/isekur.1
 	install -m 644 themes/*.theme $(DESTDIR)$(DATADIR)/themes/
 	install -m 644 iSekur.conf.example README.md $(DESTDIR)$(DATADIR)/
 
 uninstall:
-	rm -f $(DESTDIR)$(PREFIX)/bin/isekur
+	rm -f $(DESTDIR)$(PREFIX)/bin/isekur $(DESTDIR)$(MANDIR)/man1/isekur.1
 	rm -rf $(DESTDIR)$(DATADIR)
 
 clean:
