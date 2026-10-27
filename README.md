@@ -3,6 +3,8 @@
 A small, very colorful terminal IRC client in C++17 with a built-in webchat
 that mirrors your live session in a browser, bouncer style.
 
+![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, a "new" marker above missed messages](docs/screenshot.png)
+
 - Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
 - 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme neon` switches live)
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
@@ -10,7 +12,10 @@ that mirrors your live session in a browser, bouncer style.
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout
 - `--daemon` runs headless and keeps you on IRC; attach from the browser
 - Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist (F3 toggles)
-- Flood-safe sending (pastes are queued so servers don't kick you) and `/ignore`
+- Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
+- `/grep [-all] text` searches the scrollback
+- Auto-away when nothing is attached, and catch-up from IRCv3 chathistory on join
+- Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - Optional chat logs (`log = on`, rotated daily) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
@@ -51,6 +56,6 @@ Rebind any of the actions in the `[keys]` section.
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/close`, `/win N`, `/raw`, `/ctcp`,
-`/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`,
+`/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

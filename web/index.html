@@ -104,7 +104,7 @@ button, input { font: inherit; color: inherit; }
 </div>
 <div id="app">
   <nav id="side"></nav>
-  <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="logout">logout</button></div>
+  <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout">logout</button></div>
   <main id="msgs" aria-live="polite"></main>
   <aside id="nicks"></aside>
   <div id="status"></div>
@@ -307,6 +307,7 @@ function onMsg(ev) {
   } else if (m.t === "line") {
     const b = bufs.get(m.buf); if (!b) return;
     b.lines.push(m.line); b.unread = m.u; if (b.lines.length > 2000) b.lines.shift();
+    alertFor(b, m.buf, m.line);
     if (m.buf === active) {
       const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       box.append(lineEl(b, m.line));
@@ -389,6 +390,34 @@ document.addEventListener("keydown", e => {
   else return;
   e.preventDefault();
 });
+// Highlights and private messages you're not looking at: a count in the tab
+// title, plus a desktop notification once the bell is switched on.
+let missed = 0, notifyOn = false;
+try { notifyOn = localStorage.getItem("notify") === "1"; } catch (e) {}
+const canNotify = () => notifyOn && "Notification" in window && Notification.permission === "granted";
+function bell() { $("#bell").textContent = canNotify() ? "🔔" : "🔕"; $("#bell").title = canNotify() ? "Notifications on" : "Notifications off"; }
+function alertFor(b, id, l) {
+  // status windows only hold copies (window 1) or server chatter: the original already alerted
+  const personal = b.type !== "status" && (l.h || (b.type === "query" && !l.s && (l.k === "msg" || l.k === "action")));
+  if (!personal || (!document.hidden && document.hasFocus() && id === active)) return;
+  document.title = "(" + ++missed + ") iSekur Webchat";
+  if (!canNotify()) return;
+  try {  // Android Chrome only allows notifications from a service worker: the title count still works
+    const n = new Notification(b.type === "query" ? l.n : l.n + " in " + b.name, {body: l.x.replace(/\x03\d{0,2}(,\d{1,2})?|\x04[0-9a-f]{6}(,[0-9a-f]{6})?|[\x00-\x1f]/gi, ""), tag: "isekur-" + id});
+    n.onclick = () => { window.focus(); select(id); n.close(); };
+  } catch (e) {}
+}
+function seen() { missed = 0; document.title = "iSekur Webchat"; }
+document.addEventListener("visibilitychange", () => { if (!document.hidden) seen(); });
+$("#bell").onclick = async () => {
+  if (!("Notification" in window)) { $("#bell").title = "This browser has no notifications"; return; }
+  notifyOn = !canNotify();
+  if (notifyOn && Notification.permission !== "granted") notifyOn = await Notification.requestPermission() === "granted";
+  try { localStorage.setItem("notify", notifyOn ? "1" : "0"); } catch (e) {}
+  bell();
+};
+bell();
+window.addEventListener("focus", seen);
 window.addEventListener("focus", () => { const b = bufs.get(active); if (b && b.act) { b.act = 0; send({t: "read", buf: active}); renderSide(); } });
 boot();
 </script>

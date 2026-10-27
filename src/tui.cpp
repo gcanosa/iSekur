@@ -333,6 +333,15 @@ void Tui::draw() {
     y = H - 1;
     Style is = T.get("input");
     fill(y, 0, W, is);
+    if (!paste.empty()) {
+        size_t n = 0;
+        for (auto& l : split(paste, '\n')) n += !l.empty();
+        int px = text(0, y, W, "Send " + std::to_string(n) + " lines to " + buf_label(b) + "? (y/n) ",
+                      T.get("hilight"), false);
+        tb_set_cursor(px, y);
+        tb_present();
+        return;
+    }
     int px = text(0, y, W, "[" + buf_label(b) + "] ", sty(T, "input_prompt", "input"), false);
     int avail = std::max(1, W - px - 1);
     int curw = 0;
@@ -345,7 +354,7 @@ void Tui::draw() {
             if (ch32 < 0x20) {  // formatting codes show as reverse letters, like irssi
                 Style r = is;
                 r.attr |= A_REV;
-                cell(px + col - off, y, '@' + ch32, r);
+                cell(px + col - off, y, ch32 == U'\n' ? U'↵' : '@' + ch32, r);
             } else cell(px + col - off, y, ch32, is);
         }
         col += w;
@@ -426,11 +435,18 @@ void Tui::fds(int& tty, int& resize) { tb_get_fds(&tty, &resize); }
 
 void Tui::on_readable() {
     tb_event ev;
+    // An Enter followed by more input in the same read is a paste: it becomes
+    // a newline in the input line instead of sending each line as it comes.
+    bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
+        if (enter) input.insert(cur++, 1, U'\n'), enter = false;
+        bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
+        if (nl && paste.empty()) { enter = true; continue; }
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
         else if (ev.type == TB_EVENT_MOUSE) mouse(ev.mod, ev.key, ev.x, ev.y);
         c.dirty = true;
     }
+    if (enter) submit(), c.dirty = true;
 }
 
 bool Tui::action(const std::string& a) {
@@ -464,6 +480,13 @@ bool Tui::action(const std::string& a) {
 
 void Tui::key(int mod, int k, uint32_t ch) {
     if (c.keys_changed) c.keys_changed = false, load_keys();
+    if (!paste.empty()) {  // "Send N lines?" - y sends, anything else puts it back to edit
+        std::string p;
+        p.swap(paste);
+        if (ch == 'y' || ch == 'Y') c.exec(c.active, p);
+        else input = from_utf8(p), cur = input.size();
+        return;
+    }
     auto it = keymap.find(keyspec(mod, k, ch));
     if (it != keymap.end() && action(it->second)) return;
     if (k != TB_KEY_TAB) completing = false;
@@ -523,6 +546,14 @@ void Tui::submit() {
     std::string line = to_utf8(input);
     input.clear(), cur = 0;
     if (line.empty()) return;
+    // paste_confirm = N (default 5, 0 = off): ask before sending more lines than that
+    size_t lines = 0;
+    for (auto& l : split(line, '\n')) lines += !l.empty();
+    int max = atoi(c.opt(c.active->srv, "paste_confirm", "5").c_str());
+    if (max > 0 && lines > (size_t)max) {
+        paste = line;
+        return;
+    }
     if (hist.empty() || hist.back() != line) hist.push_back(line);
     if (hist.size() > 500) hist.erase(hist.begin());
     hpos = hist.size();

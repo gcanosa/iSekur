@@ -25,6 +25,20 @@ log_rotate  = on             ; start a new file each day; old ones become <name>
 # Copy highlights and private messages to window 1 ("what did I miss").
 hilight_window = on
 
+# Ask before sending a paste longer than this many lines (0 = never ask).
+paste_confirm = 5
+
+# Mark yourself away when nobody is attached for 30s (--daemon with no browser
+# open), or after auto_away_idle minutes without typing (0 = only when detached).
+# Typing anything brings you back; a manual /away is left alone.
+auto_away      = on
+auto_away_idle = 0
+away_message   = Not here right now
+
+# On join, fetch what was said since the last line you have, from servers with
+# IRCv3 chathistory (max 500, 0 = off).
+history_fetch = 100
+
 # CTCP answers (at most one reply every 2s per server, against floods).
 ctcp_version = on
 ctcp_time    = on

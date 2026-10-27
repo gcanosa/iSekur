@@ -11,7 +11,7 @@
 static const char* WANT_CAPS[] = {
     "multi-prefix", "away-notify", "account-notify", "extended-join", "chghost",
     "echo-message", "batch", "server-time", "message-tags", "userhost-in-names",
-    "invite-notify", "setname", "cap-notify", "account-tag", "sasl"};
+    "invite-notify", "setname", "cap-notify", "account-tag", "sasl", "draft/chathistory"};
 
 // ---- parsing ---------------------------------------------------------------
 const std::string& Msg::p(size_t i) const {
@@ -222,6 +222,8 @@ void Core::connect(Server* s) {
     s->user_quit = false;
     s->caps.clear(), s->caps_ls.clear();
     s->sasl_step = 0, s->cap_done = false, s->nick_tries = 0;
+    s->away = s->auto_away = false;
+    s->hist_batches.clear();
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear();
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
     s->nick = s->cfg.nick;
@@ -290,11 +292,37 @@ void Core::tick(time_t now) {
             if (now - s->last_rx > 60) disconnect(s, "connection timed out");
         } else if (now - s->last_rx > 240) {
             disconnect(s, "ping timeout");
-        } else if (now >= s->ping_at) {
-            s->ping_sent_ms = now_ms();
-            s->send_now("PING :LAG" + std::to_string(s->ping_sent_ms));
-            s->ping_at = now + 30;
+        } else {
+            if (now >= s->ping_at) {
+                s->ping_sent_ms = now_ms();
+                s->send_now("PING :LAG" + std::to_string(s->ping_sent_ms));
+                s->ping_at = now + 30;
+            }
+            auto_away(s, now);
         }
+    }
+}
+
+void Core::set_attached(bool a) {
+    if (a == attached) return;
+    attached = a;
+    if (a) last_input = time(nullptr);  // coming back counts as activity
+    else detached_at = time(nullptr);
+}
+
+// auto_away (on): away when nobody has been attached for 30s (daemon mode,
+// no browser) or, with auto_away_idle = N, after N minutes without input.
+// A manual /away is left alone.
+void Core::auto_away(Server* s, time_t now) {
+    if (!opt_on(s, "auto_away", true)) return;
+    int idle = atoi(opt(s, "auto_away_idle", "0").c_str());
+    bool want = (!attached && now - detached_at >= 30) || (idle > 0 && now - last_input >= idle * 60);
+    if (want && !s->away && !s->auto_away) {
+        s->auto_away = true;
+        s->send("AWAY :" + opt(s, "away_message", "Not here right now"));
+    } else if (!want && s->auto_away && s->away) {
+        s->auto_away = false;
+        s->send("AWAY");
     }
 }
 
@@ -384,6 +412,8 @@ void Core::handle(Server* s, const Msg& m) {
         cap_end(s);
         return;
     }
+    if (cmd == "305") s->away = s->auto_away = false;  // then printed as usual
+    if (cmd == "306") s->away = true;
     if (cmd == "001") {
         s->state = SS::CONNECTED;
         s->nick = m.p(0);
@@ -467,6 +497,18 @@ void Core::handle(Server* s, const Msg& m) {
             Buffer* b = open(s, BT::CHANNEL, ch);
             b->joined = true;
             b->nicks.clear();
+            // catch up from the server: what was said since the last line we have
+            int fetch = atoi(opt(s, "history_fetch", "100").c_str());
+            if (fetch > 0 && s->caps.count("draft/chathistory")) {
+                time_t last = 0;
+                for (auto& l : b->lines)
+                    if (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) last = l.ts;
+                char when[40] = "*";
+                tm t{};
+                if (last && gmtime_r(&last, &t)) strftime(when, sizeof when, "timestamp=%Y-%m-%dT%H:%M:%S.000Z", &t);
+                s->send("CHATHISTORY " + std::string(last ? "AFTER " : "LATEST ") + ch + " " + when + " " +
+                        std::to_string(std::min(fetch, 500)));
+            }
             line(b, LK::JOIN, m.nick, "You have joined " + ch);
             s->send("MODE " + ch);
             if (fresh) select(b);
@@ -590,7 +632,15 @@ void Core::handle(Server* s, const Msg& m) {
         dirty = true;
         return;
     }
-    if (cmd == "ACCOUNT" || cmd == "CHGHOST" || cmd == "SETNAME" || cmd == "BATCH" ||
+    if (cmd == "BATCH") {  // remember chathistory batches: their lines are replays
+        const std::string& ref = m.p(0);
+        if (ref.size() > 1 && ref[0] == '+' && m.p(1).find("chathistory") != std::string::npos)
+            s->hist_batches.insert(ref.substr(1));
+        else if (ref.size() > 1 && ref[0] == '-')
+            s->hist_batches.erase(ref.substr(1));
+        return;
+    }
+    if (cmd == "ACCOUNT" || cmd == "CHGHOST" || cmd == "SETNAME" ||
         cmd == "TAGMSG")
         return;
     if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE") && !is_me(m.nick) && ignored(m.prefix))
@@ -607,6 +657,8 @@ void Core::handle(Server* s, const Msg& m) {
                s->is_chan(tgt.substr(1)))
             tgt.erase(0, 1);
         bool self = is_me(m.nick);
+        auto bt = m.tags.find("batch");
+        bool replay = bt != m.tags.end() && s->hist_batches.count(bt->second);
         bool server_msg = m.prefix.find('!') == std::string::npos && !m.prefix.empty();
         LK kind = notice ? LK::NOTICE : LK::MSG;
         if (text.size() > 1 && text[0] == '\x01') {
@@ -616,6 +668,8 @@ void Core::handle(Server* s, const Msg& m) {
             if (verb == "ACTION") {
                 kind = LK::ACTION;
                 text = arg;
+            } else if (replay) {
+                return;  // old CTCP requests: neither shown nor answered
             } else {
                 time_t now = time(nullptr);
                 std::string rep, note;
@@ -659,7 +713,15 @@ void Core::handle(Server* s, const Msg& m) {
             if (!b) b = notice ? reply_buf() : open(s, BT::QUERY, peer);
         }
         bool hl = !self && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick));
-        line(b, kind, m.nick.empty() ? s->cfg.host : m.nick, text, self, hl);
+        std::string who = m.nick.empty() ? s->cfg.host : m.nick;
+        if (replay) {
+            // the AFTER timestamp has 1s precision: skip what the log already showed
+            std::string plain = mirc_strip(text);
+            for (auto it = b->lines.rbegin(); it != b->lines.rend() && it->ts >= ts; ++it)  // newest first
+                if (it->ts == ts && it->nick == who && mirc_strip(it->text) == plain) return;
+            hl = false;  // old news: no alerts, no copies to window 1
+        }
+        line(b, kind, who, text, self, hl);
         return;
     }
     if (cmd == "ERROR") { print(s->status, LK::ERROR, m.p(0)); return; }

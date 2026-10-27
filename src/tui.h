@@ -19,6 +19,7 @@ struct Tui {
 private:
     std::u32string input;
     size_t cur = 0;
+    std::string paste;  // a multi-line paste waiting for y/n
     std::vector<std::string> hist;
     size_t hpos = 0;
     std::map<std::string, std::string> keymap;

@@ -539,6 +539,12 @@ void Web::snapshot(Client& cl) {
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
 }
 
+bool Web::attached() const {
+    for (auto& cl : clients)
+        if (cl->ws && !cl->conn.closing) return true;
+    return false;
+}
+
 void Web::broadcast(const std::string& json) {
     std::string f = ws_frame(json);
     for (auto& cl : clients) {

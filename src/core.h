@@ -66,6 +66,7 @@ struct Line {
     LK kind;
     std::string nick, text;
     bool self = false, hilight = false;
+    bool nolog = false;  // /grep results: shown, never written to the log
 };
 
 enum class BT { STATUS, CHANNEL, QUERY };
@@ -107,6 +108,7 @@ struct Server {
     std::string nick, umodes, network;
     std::string prefix_modes = "ov", prefix_chars = "@+", chantypes = "#&";
     std::set<std::string> caps, caps_ls;  // enabled / advertised
+    std::set<std::string> hist_batches;    // open chathistory BATCH ids
     std::string inbuf;
     std::string chanmodes = "beI,k,l,imnpst";
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
@@ -116,6 +118,7 @@ struct Server {
     long long ping_sent_ms = 0;
     double lag = 0;
     bool user_quit = false;
+    bool away = false, auto_away = false;  // 305/306 state; auto_away: we set it
     Buffer* status = nullptr;
 
     // Flood control: once registered, lines go through a token bucket
@@ -143,6 +146,10 @@ struct Core {
     Buffer* active = nullptr;
     int next_id = 1;
     bool quit = false, dirty = true, keys_changed = false;
+    // auto-away: nobody attached (daemon, no web client) or no input for a while
+    bool attached = true;
+    time_t detached_at = 0, last_input = time(nullptr);
+    void set_attached(bool a);
     std::string quit_msg = "iSekur IRC";
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend
 
@@ -159,7 +166,8 @@ struct Core {
     void connect(Server* s);
     void disconnect(Server* s, const std::string& why);
     void on_readable(Server* s, short revents);
-    void tick(time_t now);  // pings, timeouts, reconnects
+    void tick(time_t now);  // pings, timeouts, reconnects, auto-away
+    void auto_away(Server* s, time_t now);
     int drain();            // flush send queues; ms until the next one is due
     bool ignored(const std::string& prefix) const;
 

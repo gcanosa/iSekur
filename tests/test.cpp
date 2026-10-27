@@ -91,6 +91,15 @@ int main() {
     assert(core.ignored("SpamBot!u@h") && core.ignored("x!y@a.evil.host"));
     assert(!core.ignored("friend!u@good.host") && !core.ignored("irc.server.net"));
 
+    Buffer* home = core.open(nullptr, BT::STATUS, "isekur");  // /grep: case-insensitive, nick or text
+    core.add(home, Line{0, LK::MSG, "Bob", "Hello \x02World\x02"});
+    core.add(home, Line{0, LK::MSG, "eve", "unrelated"});
+    core.exec(home, "/grep bob");
+    assert(home->lines.size() == 4 && home->lines[2].text.find("1 match ") != std::string::npos);
+    assert(home->lines[3].nolog && home->lines[3].text.find("<Bob> Hello World") != std::string::npos);
+    core.exec(home, "/grep world");  // earlier results are not matched again
+    assert(home->lines.size() == 6);
+
     Server sv;  // token bucket: 2 at once, then one per second
     sv.flood_burst = 2, sv.flood_ms = 1000, sv.tokens = 2, sv.tokens_at = 0;
     for (int i = 0; i < 4; i++) sv.sendq.push_back("L" + std::to_string(i) + "\r\n");

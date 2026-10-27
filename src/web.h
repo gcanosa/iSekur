@@ -19,6 +19,7 @@ struct Web {
     void on_event(Ev e, Buffer* b, const Line* l);
     void flush();  // once per loop pass: send coalesced buffer updates
     bool running() const { return lfd >= 0; }
+    bool attached() const;  // a logged-in browser is connected
 
 private:
     struct Client {

@@ -113,6 +113,7 @@ int main(int argc, char** argv) {
         c.drain();
 
         time_t now = time(nullptr);
+        c.set_attached(!daemon || web.attached());
         c.tick(now);
         if (now / 60 != last_min) last_min = now / 60, c.dirty = true;  // status bar clock
         if (!daemon && c.dirty) tui.draw();
