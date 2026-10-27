@@ -202,7 +202,7 @@ std::string Core::log_path(Buffer* b) const {
 
 // [general] log = on writes channels and queries to <log_dir>/<server>/<name>.log
 void Core::log_line(Buffer* b, const Line& l) {
-    if (!b->srv || b->type == BT::STATUS || !opt_on(b->srv, "log", false)) return;
+    if (l.nolog || !b->srv || b->type == BT::STATUS || !opt_on(b->srv, "log", false)) return;
     // log_rotate (default on): yesterday's lines move to <name>.YYYY-MM-DD.log
     bool rotate = opt_on(b->srv, "log_rotate", true);
     std::string today = fmt_time(time(nullptr), "%Y-%m-%d");
@@ -338,7 +338,7 @@ static const char* HELP =
     "Commands: /server host [port] [-tls] [-noverify] · /connect [name] · /disconnect [msg] · "
     "/quit [msg] · /join #chan [key] · /part [#chan] [msg] · /msg target text · /query nick [text] · "
     "/me action · /notice target text · /nick new · /topic [text] · /close · /win N · "
-    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /ignore [mask] · /unignore mask · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
+    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /ignore [mask] · /unignore mask · /grep [-all] text · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
 
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
@@ -349,6 +349,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     std::string in = input;
     if (!in.empty() && in.back() == '\r') in.pop_back();
     if (in.empty()) return;
+    last_input = time(nullptr);
     if (in[0] != '/' || in.rfind("//", 0) == 0) {
         say(b, in[0] == '/' ? in.substr(1) : in);
         return;
@@ -497,6 +498,31 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "close" || cmd == "wc") { close(b); return; }
+    if (cmd == "away" && s) s->auto_away = false;  // yours now; falls through to the server
+    if (cmd == "grep") {  // /grep [-all] text: matching lines from scrollback, newest last
+        bool all = !argv.empty() && argv[0] == "-all";
+        std::string q = irc_lower(all ? rest(1) : args);
+        if (q.empty()) { print(b, LK::ERROR, "Usage: /grep [-all] text"); return; }
+        std::vector<Line> hits;
+        for (auto& bp : bufs) {
+            if (!all && bp.get() != b) continue;
+            for (auto& l : bp->lines) {
+                if (l.nolog || irc_lower(l.nick + " " + mirc_strip(l.text)).find(q) == std::string::npos) continue;
+                Line h{l.ts, LK::INFO, "", fmt_time(l.ts, "%Y-%m-%d %H:%M ") +
+                                              (all ? "[" + bp->name + "] " : "") +
+                                              (l.nick.empty() ? "" : "<" + l.nick + "> ") + mirc_strip(l.text)};
+                h.nolog = true;
+                hits.push_back(h);
+            }
+        }
+        size_t n = hits.size(), from = n > 50 ? n - 50 : 0;  // ponytail: last 50, in-memory scrollback only
+        Line head{time(nullptr), LK::INFO, "", "--- " + std::to_string(n) + " match" + (n == 1 ? "" : "es") +
+                                                  " for \"" + q + "\"" + (from ? ", last 50 shown" : "") + " ---"};
+        head.nolog = true;
+        add(b, head);
+        for (size_t i = from; i < n; i++) add(b, hits[i]);
+        return;
+    }
     if (cmd == "clear") { b->lines.clear(); b->scroll = 0; dirty = true; notify(Ev::BUFFER, b); return; }
     if (cmd == "theme") {
         std::string err;

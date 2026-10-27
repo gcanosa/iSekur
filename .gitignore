@@ -1,3 +1,13 @@
 build/
 isekur
 .playwright-mcp/
+
+# local, per-user files: only iSekur.conf.example belongs in the repo
+*.conf
+!iSekur.conf.example
+web.sessions
+*.pem
+*.crt
+*.key
+logs/
+*.log
