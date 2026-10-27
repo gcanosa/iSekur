@@ -4,6 +4,11 @@
 #include <fstream>
 #include <sstream>
 #include <sys/time.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#include <cerrno>
+#include <cstring>
+#include <set>
 #include <openssl/evp.h>
 #include "core.h"
 
@@ -40,6 +45,67 @@ bool ini_load(const std::string& path, Ini& out) {
     std::stringstream ss;
     ss << f.rdbuf();
     out = ini_parse(ss.str());
+    return true;
+}
+
+// Rewrite `text` with the values in `changes`, keeping comments and order:
+// existing keys are replaced in place, new ones go at the end of their section.
+std::string ini_update(const std::string& text, const Ini& changes) {
+    std::string out, sec, line;
+    std::set<std::pair<std::string, std::string>> done;
+    auto flush_sec = [&](const std::string& sname) {  // keys of sname not yet written
+        auto it = changes.find(sname);
+        if (it == changes.end()) return;
+        size_t blanks = 0;  // new keys go above the blank lines that end a section
+        while (out.size() > blanks + 1 && out[out.size() - blanks - 2] == '\n') blanks++;
+        out.resize(out.size() - blanks);
+        for (auto& [k, v] : it->second)
+            if (done.insert({sname, k}).second) out += k + " = " + v + "\n";
+        out.append(blanks, '\n');
+    };
+    std::set<std::string> seen;
+    std::istringstream in(text);
+    while (std::getline(in, line)) {
+        std::string t = trim(line);
+        if (!t.empty() && t[0] == '[' && t.back() == ']') {
+            flush_sec(sec);
+            sec = trim(t.substr(1, t.size() - 2));
+            seen.insert(sec);
+        } else if (!t.empty() && t[0] != '#' && t[0] != ';' && t.find('=') != std::string::npos) {
+            std::string k = trim(t.substr(0, t.find('=')));
+            auto it = changes.find(sec);
+            if (it != changes.end() && it->second.count(k)) {
+                if (done.insert({sec, k}).second) out += k + " = " + it->second.at(k) + "\n";
+                continue;  // duplicate keys collapse into the first one
+            }
+        }
+        out += line + "\n";
+    }
+    flush_sec(sec);
+    for (auto& [sname, kv] : changes)
+        if (!seen.count(sname) && !sname.empty()) {
+            out += "\n[" + sname + "]\n";
+            flush_sec(sname);
+        }
+    return out;
+}
+
+bool ini_save(const std::string& path, const Ini& changes, std::string& err) {
+    std::ifstream f(path);
+    std::stringstream ss;
+    if (f) ss << f.rdbuf();
+    std::string dir = path.substr(0, path.rfind('/') + 1), tmp = path + ".tmp";
+    if (!dir.empty()) mkdir(dir.c_str(), 0700);
+    mode_t old = umask(077);  // the config holds passwords
+    std::ofstream o(tmp, std::ios::trunc);
+    umask(old);
+    o << ini_update(ss.str(), changes);
+    o.close();
+    if (!o || rename(tmp.c_str(), path.c_str())) {
+        err = std::string("can't write ") + path + ": " + strerror(errno);
+        unlink(tmp.c_str());
+        return false;
+    }
     return true;
 }
 

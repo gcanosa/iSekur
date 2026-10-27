@@ -1,5 +1,6 @@
 // Core state shared by every frontend: servers, buffers, theme, commands.
 #pragma once
+#define ISEKUR_VERSION "0.1"
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
@@ -16,6 +17,8 @@
 using Ini = std::map<std::string, std::map<std::string, std::string>>;
 Ini ini_parse(const std::string& text);
 bool ini_load(const std::string& path, Ini& out);
+std::string ini_update(const std::string& text, const Ini& changes);
+bool ini_save(const std::string& path, const Ini& changes, std::string& err);
 std::string ini_get(const Ini& ini, const std::string& sec, const std::string& key,
                     const std::string& def = "");
 
@@ -122,7 +125,7 @@ struct Server {
 enum class Ev { LINE, BUFFER, CLOSE, THEME };
 
 struct Core {
-    Ini cfg;
+    Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
     std::string cfg_path;
     Theme theme;
     std::vector<std::unique_ptr<Server>> servers;

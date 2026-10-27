@@ -71,5 +71,13 @@ int main() {
     assert(parse_log_line("2026-10-27 19:09:42 -!- x joined", ll) && ll.kind == LK::INFO && ll.text == "x joined");
     assert(!parse_log_line("--- Log opened 2026-10-27 19:09:12", ll));
 
+    Ini ch;
+    ch["general"]["theme"] = "neon";
+    ch["general"]["log"] = "on";
+    ch["web"]["port"] = "9000";
+    std::string up = ini_update("# top\n[general]\ntheme = default ; old\n\n[server.x]\nhost = h\n", ch);
+    assert(up == "# top\n[general]\ntheme = neon\nlog = on\n\n[server.x]\nhost = h\n\n[web]\nport = 9000\n");
+    assert(ini_parse(up)["general"]["log"] == "on" && ini_parse(up)["server.x"]["host"] == "h");
+
     puts("all tests passed");
 }

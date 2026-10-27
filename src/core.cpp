@@ -25,7 +25,7 @@ void Core::load_config() {
     if (!found)
         print(home, LK::INFO, "No config at " + cfg_path +
                                   " - see iSekur.conf.example. Try /server irc.example.org 6697 -tls");
-    print(home, LK::INFO, "Welcome to iSekur. /help lists commands.");
+    print(home, LK::INFO, "Welcome to iSekur " ISEKUR_VERSION ". /help lists commands.");
 
     const char* login = getenv("USER");
     std::string gnick = ini_get(cfg, "general", "nick", login ? login : "isekur");
@@ -296,7 +296,7 @@ static const char* HELP =
     "Commands: /server host [port] [-tls] [-noverify] · /connect [name] · /disconnect [msg] · "
     "/quit [msg] · /join #chan [key] · /part [#chan] [msg] · /msg target text · /query nick [text] · "
     "/me action · /notice target text · /nick new · /topic [text] · /close · /win N · "
-    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
+    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
 
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
@@ -334,6 +334,46 @@ void Core::exec(Buffer* b, const std::string& input) {
     };
 
     if (cmd == "help") { print(b, LK::INFO, HELP); return; }
+    if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
+        auto secret = [](const std::string& k) {
+            return k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
+        };
+        if (argv.empty()) {
+            for (auto& [sec, kv] : cfg)
+                for (auto& [k, v] : kv)
+                    print(b, LK::INFO, (sec == "general" ? "" : sec + ".") + k + " = " +
+                                           (secret(k) ? "********" : v) +
+                                           (unsaved.count(sec) && unsaved[sec].count(k) ? "  (unsaved)" : ""));
+            return;
+        }
+        size_t dot = argv[0].rfind('.');
+        std::string sec = dot == std::string::npos ? "general" : argv[0].substr(0, dot);
+        std::string key = dot == std::string::npos ? argv[0] : argv[0].substr(dot + 1);
+        std::string val = rest(1);
+        if (key.empty() || sec.empty()) { print(b, LK::ERROR, "Usage: /set [section.]key value"); return; }
+        if (argv.size() == 1) {
+            print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : ini_get(cfg, sec, key, "(not set: default)")));
+            return;
+        }
+        cfg[sec][key] = unsaved[sec][key] = val;
+        std::string err;
+        if (sec == "general" && key == "theme") {
+            if (load_theme(val, theme, err)) notify(Ev::THEME, nullptr);
+            else print(b, LK::ERROR, err);
+        }
+        dirty = true;
+        print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
+                               "  (/save writes it to the config; servers, web and keys apply on restart)");
+        return;
+    }
+    if (cmd == "save") {
+        std::string err;
+        if (unsaved.empty()) { print(b, LK::INFO, "Nothing to save"); return; }
+        if (!ini_save(cfg_path, unsaved, err)) { print(b, LK::ERROR, err); return; }
+        unsaved.clear();
+        print(b, LK::INFO, "Saved " + cfg_path);
+        return;
+    }
     if (cmd == "quit") {
         quit_msg = args.empty() ? quit_msg : args;
         for (auto& sv : servers)
