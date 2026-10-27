@@ -9,7 +9,8 @@ that mirrors your live session in a browser, bouncer style.
 - 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme neon` switches live)
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join and more
-- Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout
+- Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout.
+  Off unless you ask: `[web] autostart = on`, `isekur --web`, or `/web start` / `/web stop` while running
 - `--daemon` runs headless and keeps you on IRC; attach from the browser
 - Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist (F3 toggles)
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
@@ -32,7 +33,7 @@ Needs a C++17 compiler, GNU make and OpenSSL 1.1+/LibreSSL. termbox2 is vendored
 Copy `iSekur.conf.example` to `~/.config/isekur/isekur.conf`, or change
 settings from inside the client with `/set theme neon`, `/set server.libera.autojoin #a,#b`
 and write them back with `/save` (comments in the file are kept). Changes apply
-right away; server settings are used on the next `/connect`, `[web]` on restart. Run
+right away; server settings are used on the next `/connect`, `[web]` after `/web stop` + `/web start`. Run
 `./isekur --hash-password` to get the `[web] password_hash` value.
 
 ## Keys
@@ -56,6 +57,6 @@ Rebind any of the actions in the `[keys]` section.
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/close`, `/win N`, `/raw`, `/ctcp`,
-`/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`,
+`/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

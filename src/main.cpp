@@ -15,9 +15,10 @@
 static volatile sig_atomic_t g_term = 0;
 
 static int usage() {
-    puts("usage: isekur [-c config] [-d|--daemon] [--hash-password] [-v|--version]\n"
+    puts("usage: isekur [-c config] [-d|--daemon] [--web|--no-web] [--hash-password] [-v|--version]\n"
          "  -c FILE          config file (default ~/.config/isekur/isekur.conf)\n"
          "  -d, --daemon     run headless in the background; use the webchat to attach\n"
+         "  --web, --no-web  start the webchat or not, whatever [web] autostart says\n"
          "  --hash-password  read a password and print a [web] password_hash value");
     return 1;
 }
@@ -53,11 +54,14 @@ int main(int argc, char** argv) {
     setlocale(LC_ALL, "");
     signal(SIGPIPE, SIG_IGN);
     bool daemon = false;
+    int web_flag = -1;  // --web / --no-web; -1 = [web] autostart decides
     Core c;
     for (int i = 1; i < argc; i++) {
         std::string a = argv[i];
         if (a == "-c" && i + 1 < argc) c.cfg_path = argv[++i];
         else if (a == "-d" || a == "--daemon") daemon = true;
+        else if (a == "--web") web_flag = 1;
+        else if (a == "--no-web") web_flag = 0;
         else if (a == "--hash-password") return hash_pw_cmd();
         else if (a == "-v" || a == "--version") { puts(version_string().c_str()); return 0; }
         else return usage();
@@ -74,15 +78,19 @@ int main(int argc, char** argv) {
         signal(SIGHUP, SIG_IGN);
     }
 
+    c.daemon = daemon;
     c.load_config();
     Web web(c);
     std::string err;
-    if (!web.start(err)) {
-        c.print(c.bufs.front().get(), LK::ERROR, "Webchat disabled: " + err);
-        if (daemon) { fprintf(stderr, "%s\n", err.c_str()); return 1; }
+    // the daemon has no other way in, so it always starts the webchat
+    if (daemon || (web_flag < 0 ? Web::autostart(c.cfg) : web_flag == 1)) {
+        if (!web.start(err)) {
+            c.print(c.bufs.front().get(), LK::ERROR, "Webchat not started: " + err);
+            if (daemon) { fprintf(stderr, "daemon mode needs the webchat: %s\n", err.c_str()); return 1; }
+        } else c.print(c.bufs.front().get(), LK::INFO, "Webchat on " + web.url);
     }
+    c.web_url = web.url;
     c.listener = [&](Ev e, Buffer* b, const Line* l) { web.on_event(e, b, l); };
-    if (daemon && !web.running()) { fprintf(stderr, "daemon mode needs [web] enabled\n"); return 1; }
 
     Tui tui(c);
     if (!daemon && !tui.init(err)) { fprintf(stderr, "terminal: %s\n", err.c_str()); return 1; }
@@ -110,6 +118,22 @@ int main(int argc, char** argv) {
         if (!daemon && (fds[0].revents || fds[1].revents)) tui.on_readable();
         web.process(fds);
         web.flush();
+        if (c.web_req != Core::WebReq::NONE) {
+            Buffer* home = c.index_of(c.web_req_buf) >= 0 ? c.web_req_buf : c.bufs.front().get();
+            if (c.web_req == Core::WebReq::STOP && web.running()) {
+                web.stop();
+                c.print(home, LK::INFO, "Webchat stopped");
+            } else if (c.web_req == Core::WebReq::STOP) {
+                c.print(home, LK::INFO, "Webchat is not running");
+            } else if (web.running()) {
+                c.print(home, LK::INFO, "Webchat already on " + web.url);
+            } else if (!web.start(err)) {
+                c.print(home, LK::ERROR, "Webchat not started: " + err);
+            } else {
+                c.print(home, LK::INFO, "Webchat on " + web.url);
+            }
+            c.web_req = Core::WebReq::NONE, c.web_url = web.url;
+        }
         c.drain();
 
         time_t now = time(nullptr);

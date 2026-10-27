@@ -6,6 +6,7 @@ isekur \- colorful terminal IRC client with a built-in webchat
 .RB [ \-c
 .IR config ]
 .RB [ \-d | \-\-daemon ]
+.RB [ \-\-web | \-\-no\-web ]
 .RB [ \-\-hash\-password ]
 .RB [ \-v | \-\-version ]
 .SH DESCRIPTION
@@ -22,10 +23,22 @@ instead of
 .IR ~/.config/isekur/isekur.conf .
 .TP
 .BR \-d ", " \-\-daemon
-Run in the background without a terminal; attach with the webchat, which must
-be enabled. Output goes to
+Run in the background without a terminal; attach with the webchat, which is
+always started in this mode (it needs
+.B [web] user
+and
+.BR password_hash ). Output goes to
 .I isekur.log
 next to the config file.
+.TP
+.BR \-\-web ", " \-\-no\-web
+Start the webchat, or don't, regardless of
+.B [web] autostart
+(off by default). While running,
+.B /web start
+and
+.B /web stop
+do the same.
 .TP
 .B \-\-hash\-password
 Read a password and print a
