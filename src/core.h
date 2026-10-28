@@ -134,6 +134,15 @@ struct Server {
     int prefix_rank(const std::string& pfx) const;  // lower = higher rank
 };
 
+// ---- command help (/help, Tab completion, webchat completion) ---------------
+struct CmdInfo {
+    const char *name, *group, *usage, *summary, *details;
+    std::vector<const char*> examples;
+    const char* aliases = "";  // space separated, e.g. "j"
+};
+const std::vector<CmdInfo>& commands();
+const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
+
 // ---- core ------------------------------------------------------------------
 enum class Ev { LINE, BUFFER, CLOSE, THEME };
 
@@ -188,6 +197,7 @@ struct Core {
 
     void exec(Buffer* b, const std::string& input);  // "/cmd" or text
     void say(Buffer* b, const std::string& text, bool action = false);
+    void help(Buffer* b, const std::string& topic);  // help.cpp
 
     void handle(Server* s, const Msg& m);  // irc.cpp
 };

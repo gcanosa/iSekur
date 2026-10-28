@@ -71,7 +71,7 @@ Scroll.
 Toggle the nicklist / mouse.
 .TP
 .B Tab
-Complete a nick, or the config key after \fB/set\fR (matching keys are listed as you type).
+Complete a command after \fB/\fR or \fB/help\fR, the config key after \fB/set\fR, or a nick (matches are listed as you type).
 .TP
 .B Ctrl+A / Ctrl+E / Ctrl+U / Ctrl+K
 Start / end of line, delete to start / end.
@@ -95,7 +95,9 @@ section, also live with
 .BR /ignore " [mask], " /unignore " mask, " /grep " [-all] text, " /clear ", " /quit .
 Other commands are sent to the server unchanged.
 .B /help
-lists them in the client.
+lists them in the client;
+.BI /help " command"
+explains one, with examples.
 .SH FILES
 .TP
 .I ~/.config/isekur/isekur.conf

@@ -1,0 +1,184 @@
+// Command reference: /help, /help <command>, and the list Tab completes from.
+#include "core.h"
+
+// mIRC colors, so the terminal and the webchat both show them
+#define BOLD "\x02"
+#define RESET "\x0f"
+#define C_GROUP "\x02\x03" "08"  // bold yellow
+#define C_CMD "\x03" "11"        // light cyan
+#define C_ARGS "\x03" "15"       // light grey
+#define C_EX "\x03" "09"         // light green
+#define C_DIM "\x03" "14"        // grey
+
+static const std::vector<CmdInfo> CMDS = {
+    // ---- Connection
+    {"server", "Connection", "host [port] [-tls] [-noverify]", "Connect to a new server",
+     "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
+     "-noverify skips the certificate check (self-signed servers). The server is remembered "
+     "like /set does, so /save keeps it for the next start. Naming a server you already have "
+     "reconnects it.",
+     {"/server irc.libera.chat 6697 -tls", "/server irc.example.org", "/server 10.0.0.5 6697 -tls -noverify"}},
+    {"connect", "Connection", "[name]", "Reconnect a configured server",
+     "Connects the server of the current tab, or the [server.<name>] you give.",
+     {"/connect", "/connect libera"}},
+    {"disconnect", "Connection", "[message]", "Quit this server, keep the tabs",
+     "Sends QUIT to the server of the current tab and does not reconnect. Its tabs stay open; "
+     "/connect brings it back and rejoins the channels.",
+     {"/disconnect", "/disconnect brb, rebooting"}},
+    {"quit", "Connection", "[message]", "Quit every server and exit iSekur",
+     "Sends QUIT everywhere and exits.",
+     {"/quit", "/quit see you tomorrow"}},
+    {"nick", "Connection", "newnick", "Change your nickname",
+     "Changes your nick on the server of the current tab. When disconnected, it is used on the next connect.",
+     {"/nick ethernet", "/nick ethernet_away"}},
+
+    // ---- Chat
+    {"join", "Chat", "#channel [key]", "Join a channel",
+     "The # is added when you leave it out. Give the key for channels with +k.",
+     {"/join #sekurnet", "/j linux", "/join #private s3cret"}, "j"},
+    {"part", "Chat", "[#channel] [message]", "Leave a channel",
+     "Leaves the current channel, or the one you name. The tab stays open with the history; "
+     "/close (or Ctrl+W) closes it.",
+     {"/part", "/part #linux off to bed"}},
+    {"msg", "Chat", "target text", "Send a private message",
+     "Sends text to a nick or channel without opening a tab. If a tab for the target is "
+     "already open the message shows there.",
+     {"/msg NickServ IDENTIFY password", "/msg alice are you around?"}},
+    {"query", "Chat", "nick [text]", "Open a private chat tab",
+     "Opens (or switches to) a query tab with nick, and sends text if you give it.",
+     {"/query alice", "/query bob hey, got a minute?"}},
+    {"me", "Chat", "action", "Send an action (/me waves)",
+     "Shows as \"* yournick action\" in the channel or query.",
+     {"/me waves", "/me is grabbing coffee"}},
+    {"notice", "Chat", "target text", "Send a notice",
+     "Notices never trigger automatic replies, which is why bots use them.",
+     {"/notice alice the build is green"}},
+    {"topic", "Chat", "[text]", "Show or set the channel topic",
+     "Without text, shows the topic. With text, sets it (channels with +t need ops).",
+     {"/topic", "/topic Welcome! Rules: be nice | https://example.org"}},
+    {"ctcp", "Chat", "target VERSION|TIME|PING", "Send a CTCP request",
+     "PING shows the round trip time when the reply arrives.",
+     {"/ctcp alice VERSION", "/ctcp alice PING"}},
+    {"raw", "Chat", "line", "Send a raw IRC line",
+     "Sends the line to the server exactly as typed. Unknown commands do this too.",
+     {"/raw PRIVMSG #chan :hello", "/quote WHO #sekurnet"}, "quote"},
+
+    // ---- Windows
+    {"win", "Windows", "N", "Go to tab N",
+     "Same as Alt+1..9 / Alt+0, but works for tabs past 10.",
+     {"/win 3", "/win 12"}, "window"},
+    {"close", "Windows", "", "Close the current tab",
+     "Parts the channel first. On a server tab it disconnects and closes all of the server's tabs.",
+     {"/close"}, "wc"},
+    {"clear", "Windows", "", "Clear the current tab's scrollback",
+     "Only clears what is on screen; logs are untouched.",
+     {"/clear"}},
+    {"grep", "Windows", "[-all] text", "Search the scrollback",
+     "Shows the lines of the current tab that contain text (nick or message, case insensitive), "
+     "the last 50 at most. -all searches every tab.",
+     {"/grep http", "/grep -all alice"}},
+    {"theme", "Windows", "[name]", "Show or switch the color theme",
+     "Themes are files in themes/*.theme. The switch is live; /set theme name + /save keeps it.",
+     {"/theme", "/theme neon", "/theme solarized"}},
+
+    // ---- Settings
+    {"set", "Settings", "[section.]key [value]", "Show or change a setting",
+     "Without arguments lists everything; with a key shows it; with a value changes it right away. "
+     "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them.",
+     {"/set", "/set theme neon", "/set server.libera.autojoin #a,#b", "/set log on"}},
+    {"save", "Settings", "", "Write changed settings to the config file",
+     "Saves what /set, /server and /ignore changed. Comments in the file are kept.",
+     {"/save"}},
+    {"ignore", "Settings", "[mask]", "Ignore a nick or mask, or list ignores",
+     "A bare nick becomes nick!*@*. Ignored users' messages, notices, invites and CTCPs are dropped. "
+     "/save keeps the list.",
+     {"/ignore", "/ignore spammer", "/ignore *!*@*.evil.host"}},
+    {"unignore", "Settings", "mask", "Stop ignoring a mask",
+     "Use the mask exactly as /ignore lists it.",
+     {"/unignore spammer!*@*"}},
+
+    // ---- Session
+    {"web", "Session", "[start|stop|status]", "Control the built-in webchat",
+     "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
+     "(isekur --hash-password prints one).",
+     {"/web", "/web start", "/web stop"}},
+    {"help", "Session", "[command]", "This help",
+     "Without arguments lists every command. With a command name shows details and examples. "
+     "Tab completes command names here and after \"/\".",
+     {"/help", "/help join", "/help set"}},
+
+    // ---- Server (sent as typed)
+    {"whois", "Server", "nick", "Who is this user",
+     "Unknown commands are sent to the server as typed, so everything your server supports works.",
+     {"/whois alice"}},
+    {"away", "Server", "[message]", "Set or clear away",
+     "With a message marks you away, without one clears it. A manual /away turns off auto-away until you come back.",
+     {"/away lunch", "/away"}},
+    {"mode", "Server", "target modes [args]", "Change channel or user modes",
+     "Sent as typed.", {"/mode #chan +o alice", "/mode #chan +b *!*@bad.host"}},
+    {"kick", "Server", "#channel nick [reason]", "Kick a user",
+     "Sent as typed. /kickban kicks and bans in one go.", {"/kick #chan troll bye"}},
+    {"invite", "Server", "nick #channel", "Invite a user to a channel",
+     "Sent as typed.", {"/invite alice #private"}},
+    {"list", "Server", "[pattern]", "List channels",
+     "Sent as typed.", {"/list", "/list *linux*"}},
+};
+
+const std::vector<CmdInfo>& commands() { return CMDS; }
+
+const CmdInfo* find_command(const std::string& name) {
+    std::string n = irc_lower(name);
+    for (auto& c : CMDS) {
+        if (n == c.name) return &c;
+        for (auto& a : split(c.aliases, ' '))
+            if (n == a) return &c;
+    }
+    return nullptr;
+}
+
+static std::string usage(const CmdInfo& c) {
+    return C_CMD BOLD "/" + std::string(c.name) + RESET + (*c.usage ? " " C_ARGS + std::string(c.usage) + RESET : "");
+}
+
+void Core::help(Buffer* b, const std::string& topic) {
+    auto out = [&](const std::string& t) {
+        Line l{time(nullptr), LK::INFO, "", t};
+        l.nolog = true;
+        add(b, l);
+    };
+    std::string q = topic;
+    if (!q.empty() && q[0] == '/') q.erase(0, 1);
+    if (q.empty()) {
+        out(BOLD "iSekur commands" RESET C_DIM "  -  /help <command> for details and examples, Tab completes" RESET);
+        const char* group = "";
+        for (auto& c : CMDS) {
+            if (std::string(group) != c.group) {
+                group = c.group;
+                out(C_GROUP + std::string(group) + (std::string(group) == "Server" ? RESET C_DIM " (sent to the server as typed)" : "") + RESET);
+            }
+            std::string plain = "/" + std::string(c.name) + (*c.usage ? " " + std::string(c.usage) : "");
+            std::string pad(plain.size() < 34 ? 34 - plain.size() : 2, ' ');
+            out("  " + usage(c) + pad + c.summary);
+        }
+        out(C_DIM "Anything else starting with / goes to the server unchanged. Type // to send a line that starts with /." RESET);
+        return;
+    }
+    const CmdInfo* c = find_command(q);
+    if (!c) {
+        std::string near;
+        for (auto& k : CMDS)
+            if (std::string(k.name).find(irc_lower(q)) != std::string::npos) near += " /" + std::string(k.name);
+        out("\x03" "04No such command: /" + q + RESET +
+            (near.empty() ? " - /help lists them all. Unknown commands go to the server as typed." : ". Did you mean:" C_CMD + near + RESET "?"));
+        return;
+    }
+    out(usage(*c) + C_DIM "  -  " RESET + c->summary);
+    if (*c->aliases) {
+        std::string al;
+        for (auto& a : split(c->aliases, ' ')) al += (al.empty() ? "/" : ", /") + a;
+        out("  " C_DIM "Also: " RESET C_CMD + al + RESET);
+    }
+    out("  " + std::string(c->details));
+    out("  " C_GROUP "Examples" RESET);
+    for (auto& e : c->examples) out("    " C_EX + std::string(e) + RESET);
+}
