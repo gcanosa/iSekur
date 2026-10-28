@@ -226,7 +226,7 @@ void Core::connect(Server* s) {
     s->hist_batches.clear();
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
-    s->nick = s->cfg.nick;
+    s->nick = s->last_nick.empty() ? s->cfg.nick : s->last_nick;
     s->last_rx = time(nullptr);
     s->reconnect_at = 0;
     print(s->status, LK::INFO,
@@ -594,7 +594,7 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "NICK") {
         const std::string& nn = m.p(0);
         bool me = is_me(m.nick);
-        if (me) s->nick = nn;
+        if (me) s->nick = s->last_nick = nn;
         auto e = s->e2e.find(irc_lower(m.nick));  // the session follows the nick
         if (e != s->e2e.end() && !me) {
             E2E moved = e->second;

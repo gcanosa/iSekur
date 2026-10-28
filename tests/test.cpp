@@ -160,6 +160,9 @@ int main() {
     chb->joined = true;
     auto feed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(ts, mm); };
     auto sent = [&]() { std::string o = ts->conn.out; ts->conn.out.clear(); return o; };
+    feed(":me!u@h NICK XXX");  // a reconnect keeps the nick we had, not cfg.nick
+    assert(ts->nick == "XXX" && ts->last_nick == "XXX");
+    feed(":XXX!u@h NICK me");
     feed(":srv 005 me MODES :are supported");  // no value: unlimited
     assert(ts->max_modes == 12);
     feed(":srv 005 me MODES=3 :are supported");

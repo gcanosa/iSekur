@@ -141,6 +141,7 @@ struct Server {
     Conn conn;
     SS state = SS::DISCONNECTED;
     std::string nick, umodes, network;
+    std::string last_nick;  // set by a /nick of ours, used again on reconnect instead of cfg.nick
     std::string prefix_modes = "ov", prefix_chars = "@+", chantypes = "#&";
     std::set<std::string> caps, caps_ls;  // enabled / advertised
     std::set<std::string> hist_batches;    // open chathistory BATCH ids
