@@ -24,6 +24,14 @@ log_rotate  = on             ; start a new file each day; old ones become <name>
 
 # Copy highlights and private messages to window 1 ("what did I miss").
 hilight_window = on
+# Highlight these words too, besides your nick: whole words, any case, * matches
+# anything, e.g. isekur ger* (or /hilight add word and /save).
+hilight_words  =
+
+# What you leave with (/quit and /part without text). Empty: "iSekur <version> ::
+# colorful terminal IRC client :: <github link>". Can be set per server too.
+quit_message =
+part_message =
 
 # The iSekur banner at startup: in the theme's colors, or white and gray.
 banner_mono = off
@@ -52,7 +60,7 @@ away_message   = Not here right now
 history_fetch = 100
 
 # CTCP answers (at most one reply every 2s per server, against floods).
-# VERSION says e.g. "iSekur 0.2 :: Linux 6.8.0/x86_64 :: ... :: <github link>".
+# VERSION says e.g. "iSekur 0.3 :: Linux 6.8.0/x86_64 :: ... :: <github link>".
 ctcp_version = on
 ctcp_time    = on
 ctcp_ping    = on

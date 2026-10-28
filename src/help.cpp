@@ -157,6 +157,10 @@ static const std::vector<CmdInfo> CMDS = {
     {"save", "Settings", "", "Write changed settings to the config file",
      "Saves what /set, /server, /autojoin and /ignore changed. Comments in the file are kept.",
      {"/save"}},
+    {"hilight", "Settings", "[add|del] word", "Words highlighted besides your nick",
+     "Without arguments, lists them. Matching ignores case and takes whole words; * matches anything "
+     "(isekur*). They're hilight_words in the config, per server too. /save keeps the list.",
+     {"/hilight", "/hilight add isekur", "/hilight add ger*", "/hilight del isekur"}},
     {"ignore", "Settings", "[mask]", "Ignore a nick or mask, or list ignores",
      "A bare nick becomes nick!*@*. Ignored users' messages, notices, invites and CTCPs are dropped. "
      "/save keeps the list.",

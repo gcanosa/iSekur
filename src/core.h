@@ -204,7 +204,8 @@ struct Core {
     time_t detached_at = 0, last_input = time(nullptr);
     const time_t started = time(nullptr);  // uptime in the nick list
     void set_attached(bool a);
-    std::string quit_msg = "iSekur IRC";
+    std::string quit_msg;  // from /quit text; else quit_message
+    std::string bye(const Server* s, const std::string& key) const;  // quit_message / part_message
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend
     // /web start|stop: done by main() after the event pass, since a stop asked
     // from the browser must not tear down the connection it is still reading
