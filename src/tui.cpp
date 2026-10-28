@@ -403,6 +403,29 @@ void Tui::draw() {
         if (ux > x) text(ux, y, W, u, sh, false);
     }
 
+    // nick menu, over everything but the input line
+    if (!menu.items.empty()) {
+        Style ms = sty(T, "menu", "nicklist"), ss2 = sty(T, "menu_sel", "tab_active"), sep = sty(T, "menu_border", "separator");
+        if (sep.bg < 0) sep.bg = ms.bg;
+        int mw = 0;
+        for (auto& it : menu.items) mw = std::max(mw, (int)it.first.size() + 2);
+        mw = std::max(mw, (int)menu.nick.size() + 2);
+        int mh = (int)menu.items.size() + 1;
+        menu.x = std::max(0, std::min(menu.x, W - mw)), menu.y = std::max(0, std::min(menu.y, H - 2 - mh));
+        Style hs = ms;
+        hs.attr |= A_BOLD;
+        fill(menu.y, menu.x, menu.x + mw, hs);
+        text(menu.x + 1, menu.y, menu.x + mw, menu.nick, hs, false);
+        for (int i = 0; i < (int)menu.items.size(); i++) {
+            int yy = menu.y + 1 + i;
+            auto& it = menu.items[(size_t)i];
+            Style st = i == menu.sel ? ss2 : ms;
+            fill(yy, menu.x, menu.x + mw, st);
+            if (it.first.empty()) for (int xx = menu.x; xx < menu.x + mw; xx++) cell(xx, yy, U'─', sep);
+            else text(menu.x + 1, yy, menu.x + mw, it.first, st, false);
+        }
+    }
+
     // input line
     y = H - 1;
     Style is = T.get("input");
@@ -501,7 +524,7 @@ void Tui::load_keys() {
     keymap["C-w"] = "close_tab";
     keymap["PgUp"] = "scroll_up";
     keymap["PgDn"] = "scroll_down";
-    keymap["C-u"] = keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
+    keymap["C-l"] = keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
     keymap["C-t"] = keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
     keymap["F3"] = "toggle_mouse";
     keymap["M-d"] = keymap["∂"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"
@@ -524,7 +547,7 @@ void Tui::on_readable() {
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
-        if (nl && paste.empty()) { enter = true; continue; }
+        if (nl && paste.empty() && menu.items.empty()) { enter = true; continue; }
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
         else if (ev.type == TB_EVENT_MOUSE) mouse(ev.mod, ev.key, ev.x, ev.y);
         c.dirty = true;
@@ -565,6 +588,19 @@ bool Tui::action(const std::string& a) {
 
 void Tui::key(int mod, int k, uint32_t ch) {
     if (c.keys_changed) c.keys_changed = false, load_keys();
+    if (!menu.items.empty()) {  // the nick menu has the keys until it closes
+        int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
+        if (d) {
+            do menu.sel = (menu.sel + d + n) % n;
+            while (menu.items[(size_t)menu.sel].first.empty());
+            return;
+        }
+        std::string cmd = k == TB_KEY_ENTER ? menu.items[(size_t)menu.sel].second : "";  // other keys close it
+        menu.items.clear();
+        if (!cmd.empty() && (cmd.back() == ' ' || cmd.back() == ':')) input = from_utf8(cmd), cur = input.size();  // ends in a space: you finish it
+        else if (!cmd.empty()) c.exec(c.active, cmd);
+        return;
+    }
     sel_x0 = -1;  // typing drops the highlight of a copied selection
     if (!paste.empty()) {  // "Send N lines?" - y sends, anything else puts it back to edit
         std::string p;
@@ -598,7 +634,9 @@ void Tui::key(int mod, int k, uint32_t ch) {
     case TB_KEY_DELETE: if (cur < input.size()) input.erase(cur, 1); break;
     case TB_KEY_ARROW_LEFT: if (cur) cur--; break;
     case TB_KEY_ARROW_RIGHT: if (cur < input.size()) cur++; break;
-    case TB_KEY_HOME: cur = 0; break;  // Ctrl+A and Ctrl+U are next_active, toggle_nicklist
+    case TB_KEY_HOME: cur = 0; break;  // Ctrl+A is next_active
+    // Ctrl+U, and Cmd+Backspace (Ghostty and others send it as ^U)
+    case TB_KEY_CTRL_U: input.erase(0, cur); cur = 0; break;
     case TB_KEY_END: case TB_KEY_CTRL_E: cur = input.size(); break;
     case TB_KEY_CTRL_K: input.erase(cur); break;
     case TB_KEY_ARROW_UP:
@@ -663,6 +701,22 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (mod & TB_MOD_MOTION) return;
+    if (!menu.items.empty() && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RIGHT)) {  // pick, or close it
+        int i = y - menu.y - 1;
+        int mw = 0;
+        for (auto& it : menu.items) mw = std::max(mw, (int)it.first.size() + 2);
+        mw = std::max(mw, (int)menu.nick.size() + 2);
+        bool in = x >= menu.x && x < menu.x + mw && i >= 0 && i < (int)menu.items.size() && !menu.items[(size_t)i].first.empty();
+        if (in) menu.sel = i, key(0, TB_KEY_ENTER, 0);
+        else menu.items.clear();
+        c.dirty = true;
+        return;
+    }
+    if (k == TB_KEY_MOUSE_RIGHT) {
+        for (auto& h : hits)
+            if (h.y == y && x >= h.x0 && x < h.x1 && !h.nick.empty()) open_menu(h.nick, x, y);
+        return;
+    }
     if (over_topic && k >= TB_KEY_MOUSE_WHEEL_RIGHT && k <= TB_KEY_MOUSE_WHEEL_UP) {
         bool back = k == TB_KEY_MOUSE_WHEEL_LEFT || k == TB_KEY_MOUSE_WHEEL_UP;
         topic_off = std::max(0, topic_off + (back ? -8 : 8));
@@ -704,6 +758,48 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (over_chat) selecting = true, sel_x0 = sel_x1 = x, sel_y0 = sel_y1 = y;
+}
+
+// What you can do to a nick: the usual for anyone, channel ops by your own rank
+// (halfops kick and voice, ops the rest).
+void Tui::open_menu(const std::string& nick, int x, int y) {
+    Buffer* b = c.active;
+    Server* s = b->srv;
+    if (!s) return;
+    auto& m = menu;
+    m = Menu{x, y, 0, nick, {}};
+    auto add = [&](const std::string& l, const std::string& cmd) { m.items.push_back({l, cmd}); };
+    add("Query", "/query " + nick);
+    add("Whois", "/whois " + nick);
+    add("Mention", nick + ": ");  // ends in a space: goes to the input line
+    add("", "");
+    add("CTCP Version", "/ctcp " + nick + " VERSION");
+    add("CTCP Ping", "/ctcp " + nick + " PING");
+    add("CTCP Time", "/ctcp " + nick + " TIME");
+    auto masks = split(ini_get(c.cfg, "general", "ignore"), ' ');
+    bool ign = std::find(masks.begin(), masks.end(), nick + "!*@*") != masks.end();
+    add("", "");
+    add(ign ? "Unignore" : "Ignore", (ign ? "/unignore " : "/ignore ") + nick);
+    if (b->type == BT::CHANNEL && b->joined) {
+        auto me = b->nicks.find(irc_lower(s->nick)), them = b->nicks.find(irc_lower(nick));
+        std::string my = me == b->nicks.end() ? "" : me->second.prefix;
+        std::string their = them == b->nicks.end() ? "" : them->second.prefix;
+        bool op = rank_ok(s, my, '@'), half = rank_ok(s, my, '%');
+        if (half) {
+            add("", "");
+            if (op) add(their.find('@') != std::string::npos ? "Deop" : "Op",
+                        "/mode " + b->name + (their.find('@') != std::string::npos ? " -o " : " +o ") + nick);
+            add(their.find('+') != std::string::npos ? "Devoice" : "Voice",
+                "/mode " + b->name + (their.find('+') != std::string::npos ? " -v " : " +v ") + nick);
+            add("Kick", "/kick " + b->name + " " + nick);
+            add("Kick with reason...", "/kick " + b->name + " " + nick + " :");
+        }
+        if (op) {
+            add("Kickban", "/kb " + nick);
+            add("Ban 10 minutes", "/tempban " + nick + " 10");
+        }
+    }
+    c.dirty = true;
 }
 
 void Tui::submit() {

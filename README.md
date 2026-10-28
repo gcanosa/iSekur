@@ -69,11 +69,12 @@ Not available on Cygwin.
 | Ctrl+X | next server |
 | Ctrl+W | close tab (parts the channel) |
 | PgUp / PgDn | scroll |
-| Ctrl+U, Alt+L (Option+L on a Mac), F2 | show / hide the nicklist |
+| Ctrl+L, Alt+L (Option+L on a Mac), F2 | show / hide the nicklist |
 | Ctrl+T, Alt+T (Option+T on a Mac) | show / hide the topic bar |
 | F3 | toggle mouse (drag copies; Shift+drag is the terminal's own selection) |
+| right click on a nick | menu: query, whois, CTCPs, ignore, and op / voice / kick / ban when your rank allows (Up/Down/Enter or click) |
 | Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
-| Home / End, Ctrl+E, Ctrl+K | start / end of line, end of line, delete to end |
+| Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
 | Cmd+Backspace, Cmd+←/→ | delete to start, start / end (when the terminal forwards Cmd) |
 | Ctrl+B / C / O / V / ] / _ | bold, color, reset, reverse, italic, underline |
