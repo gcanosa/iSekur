@@ -578,6 +578,13 @@ void Core::handle(Server* s, const Msg& m) {
         const std::string& nn = m.p(0);
         bool me = is_me(m.nick);
         if (me) s->nick = nn;
+        auto e = s->e2e.find(irc_lower(m.nick));  // the session follows the nick
+        if (e != s->e2e.end() && !me) {
+            E2E moved = e->second;
+            moved.nick = nn;
+            s->e2e.erase(e);
+            s->e2e[irc_lower(nn)] = moved;
+        }
         for (auto& bp : bufs) {
             Buffer* b = bp.get();
             if (b->srv != s) continue;
@@ -708,6 +715,14 @@ void Core::handle(Server* s, const Msg& m) {
         bool replay = bt != m.tags.end() && s->hist_batches.count(bt->second);
         bool server_msg = m.prefix.find('!') == std::string::npos && !m.prefix.empty();
         LK kind = notice ? LK::NOTICE : LK::MSG;
+        bool locked = false;  // /e2e: decrypted
+        if (!notice && text.rfind("+iSE ", 0) == 0 && !s->is_chan(tgt)) {
+            auto e = s->e2e.find(irc_lower(self ? tgt : m.nick));
+            std::string plain;
+            if (e != s->e2e.end() && e2e_open(e->second.key, text.substr(5), plain)) text = plain, locked = true;
+            else text = std::string("[\xf0\x9f\x94\x92 encrypted message: can't decrypt, ") +
+                        (e == s->e2e.end() ? "no /e2e session" : "wrong password?") + "]";
+        }
         if (text.size() > 1 && text[0] == '\x01') {
             std::string ctcp = text.substr(1, text.find('\x01', 1) - 1);
             std::string verb = ctcp.substr(0, ctcp.find(' '));
@@ -717,6 +732,9 @@ void Core::handle(Server* s, const Msg& m) {
                 text = arg;
             } else if (replay) {
                 return;  // old CTCP requests: neither shown nor answered
+            } else if (verb.rfind("ISEKUR-E2E", 0) == 0) {
+                if (!notice && !self && !locked) e2e_ctcp(s, m.nick, verb, arg);
+                return;
             } else {
                 time_t now = time(nullptr);
                 std::string rep, note;
@@ -768,7 +786,7 @@ void Core::handle(Server* s, const Msg& m) {
                 if (it->ts == ts && it->nick == who && mirc_strip(it->text) == plain) return;
             hl = false;  // old news: no alerts, no copies to window 1
         }
-        line(b, kind, who, text, self, hl);
+        line(b, kind, who, locked ? "\xf0\x9f\x94\x92 " + text : text, self, hl);
         return;
     }
     if (cmd == "ERROR") { print(s->status, LK::ERROR, m.p(0)); return; }

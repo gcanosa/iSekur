@@ -108,6 +108,12 @@ section, also live with
 .BR /me ", " /notice ", " /nick ", " /topic ", " /quiet ", " /close ", " /win " N, " /raw ,
 .BR /ctcp ", " /theme ", " /set " [section.]key [value], " /save ,
 .BR /ignore " [mask], " /unignore " mask, " /grep " [-all] text, " /clear ", " /quit .
+.B /e2e nick
+asks for a password and starts an encrypted query with another iSekur user, who accepts with
+.B /e2e
+and your nick and the same password (AES-256-GCM, key from scrypt, kept in memory only);
+.B /e2e off
+ends it.
 Channel operators also get
 .BR /massop ", " /massdeop ", " /massvoice ", " /massdevoice ", " /masskick ,
 .BR /lockdown ", " /unlock ", " /kickban " (" /kb "), " /tempban ", " /chanstats

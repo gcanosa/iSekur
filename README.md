@@ -98,5 +98,12 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
 
+Encrypted queries between two iSekur users: `/e2e nick` (alias `/sq`) asks for a password
+(typed hidden) and invites nick, who accepts with `/e2e yournick` and the same password. A
+matching password turns on AES-256-GCM (key = scrypt of the password) for that query and both
+sides see 🔒; a wrong one is reported to both and nothing is encrypted. Keys are kept in memory
+only. `/e2e off` ends it. With `--daemon` the decryption happens in the daemon, so the webchat
+shows plain text (and the browser input does not hide the password).
+
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.

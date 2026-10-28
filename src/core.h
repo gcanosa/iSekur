@@ -113,6 +113,13 @@ enum class SS { DISCONNECTED, CONNECTING, REGISTERING, CONNECTED };
 struct KickBan { std::string chan, nick, reason; int minutes = 0; };
 struct TempBan { std::string chan, mask; time_t until; };
 
+// /e2e session with one nick (e2e.cpp); keys live in memory only
+struct E2E {
+    std::string nick, salt, key;  // key = scrypt(password, salt), "" until the password is typed
+    bool mine = false;            // we sent the invite (salt)
+    bool ok = false;              // both sides proved the same key: messages are encrypted
+};
+
 struct Core;
 struct Server {
     ServerCfg cfg;
@@ -131,6 +138,7 @@ struct Server {
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
     int sasl_step = 0, nick_tries = 0, backoff = 0;
     bool cap_done = false, sasl_ok = false;
+    std::map<std::string, E2E> e2e;  // irc_lower(nick) -> session
     std::map<std::string, std::string> chan_keys;  // irc_lower(chan) -> key from /join or autojoin, for rejoins
     time_t last_rx = 0, reconnect_at = 0, ping_at = 0, ctcp_at = 0;
     long long ping_sent_ms = 0;
@@ -188,6 +196,7 @@ struct Core {
     bool daemon = false;      // the webchat is the only way in: /web stop is refused
     bool tty = false;         // a terminal is attached (the TUI is drawing)
     bool detach_req = false;  // /detach or Alt+D: main() lets go of the terminal
+    Buffer* pass_buf = nullptr;  // /e2e: the next line typed here is the password
 
     void load_config();
     // [server.<name>] key, falling back to [general], then `def`
@@ -224,12 +233,19 @@ struct Core {
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
 
     void handle(Server* s, const Msg& m);  // irc.cpp
+    void e2e_cmd(Buffer* b, const std::string& args);  // e2e.cpp
+    void e2e_pass(Buffer* q, const std::string& pass);
+    void e2e_ctcp(Server* s, const std::string& nick, const std::string& verb, const std::string& arg);
+    void e2e_note(Server* s, const std::string& nick, LK k, const std::string& text);
 };
 
 long long now_ms();
 std::string b64(const std::string& s);
 bool rank_ok(const Server* s, const std::string& pfx, char need);  // chanops.cpp
 std::string unb64(const std::string& s);  // "" on bad input
+std::string e2e_key(const std::string& pass, const std::string& salt);  // e2e.cpp
+std::string e2e_seal(const std::string& key, const std::string& plain);  // b64(nonce|ct|tag)
+bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain);
 std::string fmt_time(time_t t, const std::string& fmt);
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS

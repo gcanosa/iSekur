@@ -439,13 +439,16 @@ void Tui::draw() {
         tb_present();
         return;
     }
-    int px = text(0, y, W, "[" + buf_label(b) + "] ", sty(T, "input_prompt", "input"), false);
+    bool masked = c.pass_buf == b;  // /e2e password
+    int px = text(0, y, W, masked ? "[Password for " + b->name + "] " : "[" + buf_label(b) + "] ",
+                  masked ? T.get("hilight") : sty(T, "input_prompt", "input"), false);
     int avail = std::max(1, W - px - 1);
     int curw = 0;
-    for (size_t i = 0; i < cur; i++) curw += cwidth(input[i]);
+    for (size_t i = 0; i < cur; i++) curw += masked ? 1 : cwidth(input[i]);
     int off = std::max(0, curw - avail);
     int col = 0;
     for (char32_t ch32 : input) {
+        if (masked) ch32 = U'*';
         int w = cwidth(ch32);
         if (col >= off && col - off + w <= avail) {
             if (ch32 < 0x20) {  // formatting codes show as reverse letters, like irssi
@@ -805,6 +808,7 @@ void Tui::open_menu(const std::string& nick, int x, int y) {
 void Tui::submit() {
     std::string line = to_utf8(input);
     input.clear(), cur = 0;
+    if (c.pass_buf == c.active) { c.exec(c.active, line); return; }  // /e2e password: no history
     if (line.empty()) return;
     // paste_confirm = N (default 5, 0 = off): ask before sending more lines than that
     size_t lines = 0;

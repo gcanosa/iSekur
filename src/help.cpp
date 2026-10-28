@@ -52,6 +52,13 @@ static const std::vector<CmdInfo> CMDS = {
     {"query", "Chat", "nick [text]", "Open a private chat tab",
      "Opens (or switches to) a query tab with nick, and sends text if you give it.",
      {"/query alice", "/query bob hey, got a minute?"}},
+    {"e2e", "Chat", "nick | off [nick]", "Encrypted private chat with another iSekur user",
+     "Asks for a password (typed hidden; an empty line cancels) and invites nick. They get a notice and "
+     "accept with /e2e yournick and the same password. If the passwords match, both sides see "
+     "\"Encrypted chat is on\" and the query is AES-256-GCM encrypted from then on; if not, "
+     "both are told and nothing is encrypted. Keys live in memory only: after a restart, start "
+     "again. /e2e off ends it, /e2e alone lists sessions. Other clients see +iSE lines.",
+     {"/e2e alice", "/e2e off", "/e2e"}, "sq"},
     {"me", "Chat", "action", "Send an action (/me waves)",
      "Shows as \"* yournick action\" in the channel or query.",
      {"/me waves", "/me is grabbing coffee"}},
