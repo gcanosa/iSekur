@@ -101,7 +101,7 @@ static Style nick_style(const Theme& t, const std::string& nick) {
     unsigned h = 5381;
     for (char ch : irc_lower(nick)) h = h * 33 + (unsigned char)ch;
     Style s = t.get("default");
-    s.fg = t.nicks[h % t.nicks.size()];
+    if (!t.nicks.empty()) s.fg = t.nicks[h % t.nicks.size()];  // no theme file found: no nick colors
     return s;
 }
 
