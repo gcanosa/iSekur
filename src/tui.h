@@ -58,6 +58,7 @@ private:
     // typing the first word or after "/help ", the usage of a typed command
     struct Sugg { std::string word, sep, val; };
     int suggest(std::vector<Sugg>& out) const;  // where Tab replaces from; -1 none, -2 shown only
+    int sugg_sel = -1;  // Up/Down highlight in that list, -1 = none; Enter or Tab puts it in the input line
     void submit();
     int chat_height() const;
 };
