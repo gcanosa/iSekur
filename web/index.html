@@ -36,6 +36,11 @@ button, input { font: inherit; color: inherit; }
 #side .tab { display: flex; gap: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
 #side .tab .n { color: var(--muted); min-width: 1.6em; text-align: right; }
 #side .tab:hover { background: #ffffff08; }
+#side .srv[data-id] { cursor: pointer; user-select: none; }
+#side .srv[data-id]:hover { color: var(--fg); }
+#side .tab.home { color: var(--tab_home-fg, var(--info)); }
+#side .tab.server { color: var(--tab_server-fg, inherit); }
+#side .tab .more { color: var(--muted); }
 #side .tab.active { background: var(--tab_active-bg, #ffffff12); color: var(--tab_active-fg, inherit); border-left-color: var(--accent); }
 #side .tab.a1 { color: var(--tab_data-fg, #9aa0c0); }
 #side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
@@ -46,6 +51,12 @@ button, input { font: inherit; color: inherit; }
 #topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #topic button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
 #menu { display: none; }
+#ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg));
+  border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
+#ctx .hd { padding: 4px 12px; font-weight: 700; }
+#ctx .it { padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+#ctx .it:hover { background: var(--menu_sel-bg, var(--accent)); color: var(--menu_sel-fg, #111); }
+#ctx hr { border: 0; border-top: 1px solid var(--menu_border-fg, var(--line)); margin: 4px 0; }
 #msgs { grid-area: msgs; overflow-y: auto; padding: 6px 0; overflow-wrap: anywhere; }
 .newmark { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: 11px; text-transform: uppercase;
   letter-spacing: .1em; color: var(--marker-fg, #c2185b); }
@@ -197,26 +208,39 @@ function lineEl(b, l) {
   else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, l.x); }
   else { nk.textContent = MARK[l.k] || "--"; mirc(tx, l.x); }
   nk.title = l.n;
+  if (l.n && !l.s && b.type !== "status" && (l.k === "msg" || l.k === "action" || l.k === "notice")) nk.oncontextmenu = e => askMenu(e, l.n);
   d.append(ts, nk, tx);
   return d;
 }
 
 function label(b) { return b.type === "status" ? b.srv : b.name; }
 
+// a folded network (click its name here, or right click its tab in the terminal) lists only its
+// server tab with "+N" in the color of their activity; Alt+arrows and Alt+A still go through them
 function renderSide() {
   const side = $("#side"); side.textContent = "";
-  let lastSrv = null;
+  let lastSrv = null, st = null;
   order.forEach((id, i) => {
     const b = bufs.get(id); if (!b) return;
     if (b.srv !== lastSrv) {
-      const h = document.createElement("div"); h.className = "srv"; h.textContent = b.srv; side.append(h); lastSrv = b.srv;
+      const h = document.createElement("div"); h.className = "srv"; lastSrv = b.srv;
+      st = b.type === "status" && !b.home ? b : null;
+      h.textContent = b.srv + (st ? (st.fold ? " ▸" : " ▾") : "");
+      if (st) { h.dataset.id = id; h.title = st.fold ? "Show its channels" : "Hide its channels"; h.onclick = () => send({t: "fold", buf: id}); }
+      side.append(h);
     }
+    if (st && st.fold && b !== st && id !== active) return;
+    let act = b.act, hid = 0;
+    if (b === st && st.fold)
+      for (const x of order) { const o = bufs.get(x); if (o && o !== b && o.srv === b.srv && x !== active) hid++, act = Math.max(act, o.act); }
     const t = document.createElement("div");
-    t.className = "tab" + (id === active ? " active" : "") + (b.act ? " a" + b.act : "") +
+    t.className = "tab" + (id === active ? " active" : "") + (act ? " a" + act : "") +
+      (b.home ? " home" : b.type === "status" ? " server" : "") +
       ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
     const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
     const nm = document.createElement("span"); nm.textContent = b.type === "status" ? "status" : b.name;
     t.append(n, nm);
+    if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
     t.onclick = () => { select(id); side.classList.remove("open"); };
     side.append(t);
   });
@@ -251,6 +275,7 @@ function renderNicks() {
     d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "");
     d.textContent = (p ? p[0] : " ") + n;
     d.onclick = () => send({t: "input", buf: active, text: "/query " + n});
+    d.oncontextmenu = e => askMenu(e, n);
     el.append(d);
   }
 }
@@ -324,6 +349,8 @@ function onMsg(ev) {
     select(m.buf);
   } else if (m.t === "cmds") {
     cmds = m.list;
+  } else if (m.t === "menu") {
+    showMenu(m);
   }
 }
 
@@ -394,6 +421,11 @@ document.addEventListener("keydown", e => {
   if (/^Digit\d$/.test(e.code)) { const n = (+e.code[5] || 10) - 1; if (order[n]) select(order[n]); }
   else if (e.key === "ArrowRight") select(order[(i + 1) % order.length]);
   else if (e.key === "ArrowLeft") select(order[(i - 1 + order.length) % order.length]);
+  else if (e.code === "KeyA") {  // next tab with activity, highlights first, like Ctrl+A in the terminal
+    const rest = order.slice(i + 1).concat(order.slice(0, i + 1)).filter(x => bufs.get(x) && bufs.get(x).act);
+    const best = Math.max(0, ...rest.map(x => bufs.get(x).act));
+    if (best) select(rest.find(x => bufs.get(x).act === best));
+  }
   else return;
   e.preventDefault();
 });
@@ -426,6 +458,31 @@ $("#bell").onclick = async () => {
 bell();
 window.addEventListener("focus", seen);
 window.addEventListener("focus", () => { const b = bufs.get(active); if (b && b.act) { b.act = 0; send({t: "read", buf: active}); renderSide(); } });
+// right click (long press on phones) on a nick: the same menu as the terminal's, built by iSekur
+let menuAt = [0, 0];
+function askMenu(e, nick) { e.preventDefault(); menuAt = [e.clientX, e.clientY]; send({t: "menu", buf: active, nick}); }
+function closeMenu() { const o = $("#ctx"); if (o) o.remove(); }
+function showMenu(m) {
+  closeMenu();
+  if (!m.items.length) return;
+  const box = document.createElement("div"); box.id = "ctx";
+  const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = m.nick; box.append(hd);
+  for (const [label, cmd] of m.items) {
+    if (!label) { box.append(document.createElement("hr")); continue; }
+    const it = document.createElement("div"); it.className = "it"; it.textContent = label;
+    it.onclick = () => {
+      closeMenu();
+      if (/[ :]$/.test(cmd)) { $("#line").value = cmd; $("#line").focus(); }  // you finish it
+      else send({t: "input", buf: active, text: cmd});
+    };
+    box.append(it);
+  }
+  document.body.append(box);
+  box.style.left = Math.max(0, Math.min(menuAt[0], innerWidth - box.offsetWidth - 4)) + "px";
+  box.style.top = Math.max(0, Math.min(menuAt[1], innerHeight - box.offsetHeight - 4)) + "px";
+}
+document.addEventListener("click", e => { if (!e.target.closest("#ctx")) closeMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
 boot();
 </script>
 </body>

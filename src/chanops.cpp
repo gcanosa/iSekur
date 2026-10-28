@@ -209,3 +209,53 @@ void Core::chan_timers(Server* s, time_t now) {
         b->rot_at = now + b->rot_min * 60;
     }
 }
+
+// What you can do to a nick: the usual for anyone, channel ops by your own rank
+// (halfops kick and voice, ops the rest).
+// (the terminal's right click and the webchat's both use it; "" label = separator, a command
+// ending in ' ' or ':' goes to the input line to be finished)
+std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, const std::string& nick) const {
+    std::vector<std::pair<std::string, std::string>> m;
+    Server* s = b->srv;
+    if (!s) return m;
+    auto add = [&](const std::string& l, const std::string& cmd) { m.push_back({l, cmd}); };
+    add("Query", "/query " + nick);
+    add("Whois", "/whois " + nick);
+    add("Mention", nick + ": ");  // ends in a space: goes to the input line
+    add("", "");
+    add("CTCP Version", "/ctcp " + nick + " VERSION");
+    add("CTCP Ping", "/ctcp " + nick + " PING");
+    add("CTCP Time", "/ctcp " + nick + " TIME");
+    auto masks = split(ini_get(cfg, "general", "ignore"), ' ');
+    bool ign = std::find(masks.begin(), masks.end(), nick + "!*@*") != masks.end();
+    add("", "");
+    add(ign ? "Unignore" : "Ignore", (ign ? "/unignore " : "/ignore ") + nick);
+    if (b->type == BT::CHANNEL && b->joined) {
+        auto me = b->nicks.find(irc_lower(s->nick)), them = b->nicks.find(irc_lower(nick));
+        std::string my = me == b->nicks.end() ? "" : me->second.prefix;
+        std::string their = them == b->nicks.end() ? "" : them->second.prefix;
+        bool op = rank_ok(s, my, '@'), half = rank_ok(s, my, '%');
+        if (half) {
+            add("", "");
+            if (op) add(their.find('@') != std::string::npos ? "Deop" : "Op",
+                        "/mode " + b->name + (their.find('@') != std::string::npos ? " -o " : " +o ") + nick);
+            add(their.find('+') != std::string::npos ? "Devoice" : "Voice",
+                "/mode " + b->name + (their.find('+') != std::string::npos ? " -v " : " +v ") + nick);
+            add("Kick", "/kick " + b->name + " " + nick);
+            add("Kick with reason...", "/kick " + b->name + " " + nick + " :");
+        }
+        if (op) {
+            add("Kickban", "/kb " + nick);
+            add("Ban 10 minutes", "/tempban " + nick + " 10");
+        }
+    }
+    if (s->umodes.find('o') != std::string::npos) {  // IRC operator
+        add("", "");
+        add("Kill...", "/kill " + nick + " :");
+        auto them = b->nicks.find(irc_lower(nick));
+        std::string host = them == b->nicks.end() ? "" : them->second.host;
+        if (host.find('@') != std::string::npos)
+            add("G-line 1 day...", "/gline *@" + host.substr(host.find('@') + 1) + " 1d :");
+    }
+    return m;
+}

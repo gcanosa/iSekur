@@ -481,6 +481,12 @@ void Web::ws_frames(Client& cl) {
         if (m["t"] == "input") c.from_web = true, c.exec(b, m["text"]), c.from_web = false;
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
+        else if (m["t"] == "fold") c.fold(b);
+        else if (m["t"] == "menu") {  // the right-click nick menu, for this browser only
+            std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(m["nick"]) + ",\"items\":[";
+            for (auto& [l, cmd] : c.nick_menu(b, m["nick"])) o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(l) + "," + json_str(cmd) + "]";
+            cl.conn.out += ws_frame(o + "]}");
+        }
         if (cl.conn.closing) return;
     }
 }
@@ -511,6 +517,7 @@ std::string Web::buf_json(Buffer* b) {
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
+           ",\"home\":" + (s ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") +
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
            ",\"me\":" + json_str(s ? s->nick : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +

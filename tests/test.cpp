@@ -207,6 +207,22 @@ int main() {
     core.exec(chb, "/lockdown");
     assert(sent() == "MODE #c +mntsi\r\n");
 
+    // the nick menu (terminal right click and webchat): op items only for ops; folding a server tab
+    auto has_item = [&](const std::string& l) {
+        for (auto& [lab, cmd] : core.nick_menu(chb, "bob")) if (lab == l) return true;
+        return false;
+    };
+    assert(has_item("Whois") && has_item("Kickban"));
+    chb->nicks["me"].prefix = "";
+    assert(has_item("Whois") && !has_item("Kick") && !has_item("Kickban"));
+    chb->nicks["me"].prefix = "@";
+    core.fold(ts->status);
+    assert(ts->status->collapsed);
+    core.fold(chb);  // only server tabs fold
+    assert(!chb->collapsed);
+    core.fold(ts->status);
+    assert(!ts->status->collapsed);
+
     // highlights: the nick and hilight_words, whole words, * globs; the default part/quit message
     auto hl = [&](const std::string& t) { feed(":bob!u@h PRIVMSG #c :" + t); return chb->lines.back().hilight; };
     assert(hl("hey ME!") && !hl("isekur rocks"));
