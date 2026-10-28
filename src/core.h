@@ -198,7 +198,11 @@ struct Core {
     bool detach_req = false;  // /detach or Alt+D: main() lets go of the terminal
     bool bell = false;  // the TUI rings the terminal bell on its next draw
     void ring(Server* s);  // private message, mention or invite, if bell_notifications
-    Buffer* pass_buf = nullptr;  // /e2e: the next line typed here is the password
+    // /e2e, /oper: the next line typed in pass_buf is a password, handed to pass_done
+    Buffer* pass_buf = nullptr;
+    std::string pass_label;  // the TUI's prompt, e.g. "Password for bob"
+    std::function<void(const std::string&)> pass_done;
+    void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done);
 
     void load_config();
     // [server.<name>] key, falling back to [general], then `def`

@@ -143,7 +143,7 @@ void Core::close(Buffer* b) {
     } else if (b->type == BT::CHANNEL && b->joined && s) {
         s->send("PART " + b->name);
     }
-    if (pass_buf == b) pass_buf = nullptr;
+    if (pass_buf == b) pass_buf = nullptr, pass_done = nullptr;
     bool drop_server = s && b->type == BT::STATUS;
     int i = index_of(b);
     notify(Ev::CLOSE, b);
@@ -192,6 +192,11 @@ void Core::add(Buffer* b, Line l) {
 std::string Core::opt(const Server* s, const std::string& key, const std::string& def) const {
     std::string g = ini_get(cfg, "general", key, def);
     return s ? ini_get(cfg, "server." + s->cfg.name, key, g) : g;
+}
+
+void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done) {
+    pass_buf = b, pass_label = label, pass_done = std::move(done);
+    print(b, LK::INFO, "Type the " + label + " (hidden; an empty line cancels)");
 }
 
 void Core::ring(Server* s) {
@@ -349,7 +354,7 @@ static std::vector<std::string> chunk(const std::string& t, size_t max) {
 
 void Core::say(Buffer* b, const std::string& text, bool action) {
     Server* s = b->srv;
-    if (!s || b->type == BT::STATUS) { print(b, LK::ERROR, "Not a channel or query window"); return; }
+    if (!s || b->type == BT::STATUS || b->name[0] == '*') { print(b, LK::ERROR, "Not a channel or query window"); return; }
     if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
     // /e2e: "+iSE " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes
     auto e = b->type == BT::QUERY ? s->e2e.find(irc_lower(b->name)) : s->e2e.end();
@@ -382,10 +387,11 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     std::string in = input;
     if (!in.empty() && in.back() == '\r') in.pop_back();
-    if (b == pass_buf) {  // /e2e asked for a password: this line is it, never sent or shown
-        pass_buf = nullptr;
+    if (b == pass_buf) {  // a password prompt: this line is it, never sent or shown
+        auto done = std::move(pass_done);
+        pass_buf = nullptr, pass_done = nullptr;
         if (in.empty()) print(b, LK::INFO, "Cancelled");
-        else e2e_pass(b, in);
+        else done(in);
         return;
     }
     if (in.empty()) return;
@@ -672,7 +678,29 @@ void Core::exec(Buffer* b, const std::string& input) {
         print(b, LK::INFO, "CTCP " + verb + " sent to " + argv[0]);
         return;
     }
+    if (cmd == "oper" && argv.size() == 1) {  // no password typed: ask for it, hidden
+        if (!need()) return;
+        std::string user = argv[0];
+        ask_pass(b, "oper password for " + user, [s, user](const std::string& p) { s->send("OPER " + user + " :" + p); });
+        return;
+    }
     // anything else goes to the server verbatim: /whois, /mode, /away, /kick...
     for (auto& ch : cmd) ch = (char)toupper((unsigned char)ch);
+    // ...but the free text at the end needs a ':', or the server keeps only its first word
+    static const std::map<std::string, int> trail = {
+        {"AWAY", 0}, {"WALLOPS", 0}, {"GLOBOPS", 0}, {"LOCOPS", 0}, {"OPERWALL", 0},
+        {"KILL", 1}, {"SQUIT", 1}, {"KICK", 2},
+        {"KLINE", -1}, {"GLINE", -1}, {"ZLINE", -1}, {"DLINE", -1}, {"SHUN", -1}, {"ELINE", -1}};  // -1: mask [duration]
+    auto t = trail.find(cmd);
+    if (t != trail.end()) {
+        auto dur = [](const std::string& w) {  // 0, 3600, 1d, 1h30m
+            return !w.empty() && isdigit((unsigned char)w[0]) && w.find_first_not_of("0123456789smhdwy") == std::string::npos;
+        };
+        // a duration may come after the mask (Unreal, InspIRCd, sekurircd) or before it (charybdis)
+        size_t n = t->second >= 0 ? (size_t)t->second : 1 + ((argv.size() > 2 && dur(argv[1])) || (argv.size() > 1 && dur(argv[0])));
+        std::string tail = rest(n);
+        if (!tail.empty() && tail[0] != ':')
+            args = args.substr(0, args.size() - tail.size()) + ":" + tail;
+    }
     s->send(cmd + (args.empty() ? "" : " " + args));
 }

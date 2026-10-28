@@ -90,9 +90,8 @@ void Core::e2e_cmd(Buffer* b, const std::string& args) {
     Buffer* q = open(s, BT::QUERY, nick);
     select(q);
     std::string pass = after_words(args, 1);
-    if (pass.empty()) {  // the next line typed in this tab is the password (masked in the TUI)
-        pass_buf = q;
-        print(q, LK::INFO, "Type the password for the encrypted chat with " + nick + " (an empty line cancels)");
+    if (pass.empty()) {
+        ask_pass(q, "password for " + nick, [this, q](const std::string& p) { e2e_pass(q, p); });
         return;
     }
     e2e_pass(q, pass);

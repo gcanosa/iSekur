@@ -187,6 +187,32 @@ static const std::vector<CmdInfo> CMDS = {
      "Sent as typed.", {"/invite alice #private"}},
     {"list", "Server", "[pattern]", "List channels",
      "Sent as typed.", {"/list", "/list *linux*"}},
+
+    // ---- IRC operator (sent to the server; the reason/message needs no ':')
+    {"oper", "IRC operator", "user [password]", "Log in as an IRC operator",
+     "Without the password you are asked for it, hidden and kept out of the input history. "
+     "While you are +o or +s, server notices (\"*** ...\") and WALLOPS go to a *snotices tab, "
+     "and the nick menu gets Kill and G-line.",
+     {"/oper gera", "/oper gera s3cret"}},
+    {"kill", "IRC operator", "nick reason", "Disconnect a user from the network",
+     "The user sees \"Killed (yournick (reason))\" and may reconnect; /gline keeps them out.", {"/kill troll flooding #help"}},
+    {"wallops", "IRC operator", "message", "Message every user with +w (and the opers)",
+     "/globops and /locops (opers only, network or this server) work the same way.",
+     {"/wallops services restart in 5 minutes", "/globops checking the spam wave"}},
+    {"gline", "IRC operator", "mask [duration] reason", "Ban a user@host from the whole network",
+     "/kline (this server), /zline (an IP, before the connection registers) and /shun (connected "
+     "but silenced) take the same arguments; /ungline, /unkline, /unzline and /unshun lift them. "
+     "Durations: 0 (permanent), 3600, 30m, 1d, 1w. Without arguments lists the active lines.",
+     {"/gline *@1.2.3.4 1d spam bots", "/kline *@bad.isp 0 abuse", "/ungline *@1.2.3.4", "/gline"}},
+    {"sajoin", "IRC operator", "nick #channel", "Force a user into (or /sapart out of) a channel",
+     "/sanick nick newnick and /samode #channel modes work the same way, ignoring channel rules.",
+     {"/sajoin alice #help", "/sapart troll #help", "/samode #chan +o alice"}},
+    {"chghost", "IRC operator", "nick host", "Change a user's host (/chgident: the ident)",
+     "/sethost host changes your own.", {"/chghost alice staff.sekurnet.org"}},
+    {"rehash", "IRC operator", "", "Reload the server configuration",
+     "/die and /restart stop or restart the server. Server linking: /squit server reason, and "
+     "/quote CONNECT server (iSekur's own /connect reconnects you).",
+     {"/rehash", "/squit hub.example.org maintenance"}},
 };
 
 const std::vector<CmdInfo>& commands() { return CMDS; }
