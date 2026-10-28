@@ -10,7 +10,7 @@ struct Buffer;
 struct Tui {
     Core& c;
     explicit Tui(Core& core) : c(core) {}
-    bool init(std::string& err);
+    bool init(std::string& err, int fd = -1);  // fd: a terminal from isekur --attach
     void shutdown();
     void fds(int& tty, int& resize);
     void on_readable();  // drain pending terminal events

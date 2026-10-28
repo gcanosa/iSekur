@@ -6,6 +6,7 @@ isekur \- colorful terminal IRC client with a built-in webchat
 .RB [ \-c
 .IR config ]
 .RB [ \-d | \-\-daemon ]
+.RB [ \-a | \-\-attach ]
 .RB [ \-\-web | \-\-no\-web ]
 .RB [ \-\-hash\-password ]
 .RB [ \-v | \-\-version ]
@@ -23,13 +24,19 @@ instead of
 .IR ~/.config/isekur/isekur.conf .
 .TP
 .BR \-d ", " \-\-daemon
-Run in the background without a terminal; attach with the webchat, which is
-always started in this mode (it needs
+Start in the background without a terminal; attach with
+.B \-\-attach
+or the webchat, which this mode always tries to start (it needs
 .B [web] user
 and
-.BR password_hash ). Output goes to
+.BR password_hash "). Output goes to"
 .I isekur.log
 next to the config file.
+.TP
+.BR \-a ", " \-\-attach
+Bring a detached iSekur back to this terminal. Starting
+.B isekur
+while one is running with the same config does the same.
 .TP
 .BR \-\-web ", " \-\-no\-web
 Start the webchat, or don't, regardless of
@@ -57,6 +64,11 @@ Previous / next tab.
 .TP
 .B Alt+A
 Next tab with activity.
+.TP
+.B Alt+D
+Detach (Option+D on a Mac): iSekur keeps running in the background, and
+.B isekur \-\-attach
+brings it back. Closing the terminal or a dropped SSH connection detaches too.
 .TP
 .B Ctrl+X
 Next server.
@@ -120,6 +132,13 @@ Chat logs when
 .B log = on
 is set; earlier days are kept as
 .IR <name>.YYYY\-MM\-DD.log .
+.TP
+.I ~/.config/isekur/isekur.sock
+The socket
+.B \-\-attach
+uses, only for your user. Its output in the background goes to
+.I isekur.log
+in the same directory.
 .TP
 .I ~/.config/isekur/web.sessions
 Hashed webchat login sessions.

@@ -1,7 +1,9 @@
 // Self-checks for the parsing code: run with `make test`.
 #include <cassert>
 #include <cstdio>
+#include <unistd.h>
 #include "core.h"
+#include "session.h"
 #include "web.h"
 
 static std::string client_frame(const std::string& p) {  // masked, like a browser
@@ -167,6 +169,21 @@ int main() {
     chb->nicks["me"].prefix = "@";
     core.exec(chb, "/lockdown");
     assert(sent() == "MODE #c +mntsi\r\n");
+
+    core.exec(home, "/detach");  // nothing attached (the webchat typed it)
+    assert(!core.detach_req && home->lines.back().kind == LK::ERROR);
+    core.tty = true;
+    core.exec(home, "/detach");
+    assert(core.detach_req);
+
+    // one iSekur per config: the second listener finds the first; close() removes the socket
+    std::string serr, sp = sock_path_for("build/isekur-test.conf");
+    Session s1, s2;
+    assert(sp == "build/isekur.sock" && s1.listen(sp, serr) == 1 && s2.listen(sp, serr) == -1);
+    s1.close();
+    assert(access(sp.c_str(), F_OK) != 0 && s2.listen(sp, serr) == 1);
+    s2.close();
+    assert(Session().listen(std::string(200, 'x'), serr) == 0 && serr.find("too long") != std::string::npos);
 
     assert(ctcp_version().rfind(version_string() + " :: ", 0) == 0 && version_string().find(ISEKUR_VERSION) != std::string::npos);
 

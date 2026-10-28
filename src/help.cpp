@@ -26,7 +26,8 @@ static const std::vector<CmdInfo> CMDS = {
      "/connect brings it back and rejoins the channels.",
      {"/disconnect", "/disconnect brb, rebooting"}},
     {"quit", "Connection", "[message]", "Quit every server and exit iSekur",
-     "Sends QUIT everywhere and exits.",
+     "Sends QUIT everywhere and exits. To keep iSekur running in the background instead, use "
+     "/detach or Alt+D (Option+D on a Mac).",
      {"/quit", "/quit see you tomorrow"}},
     {"nick", "Connection", "newnick", "Change your nickname",
      "Changes your nick on the server of the current tab. When disconnected, it is used on the next connect.",
@@ -146,6 +147,11 @@ static const std::vector<CmdInfo> CMDS = {
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one).",
      {"/web", "/web start", "/web stop"}},
+    {"detach", "Session", "", "Leave iSekur running in the background",
+     "Gives the terminal back; iSekur stays connected, in the channels, logging. isekur --attach "
+     "(or just isekur) brings it back, from any terminal or SSH session. Alt+D does the same "
+     "(Option+D on a Mac). Closing the terminal or losing SSH detaches too, instead of quitting.",
+     {"/detach", "isekur --attach  (from your shell, later)"}},
     {"help", "Session", "[command]", "This help",
      "Without arguments lists every command. With a command name shows details and examples. "
      "Tab completes command names here and after \"/\".",
