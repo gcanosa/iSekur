@@ -11,7 +11,7 @@
 
 static const size_t MAX_LINES = 2000;
 
-static std::string default_config_path() {
+std::string default_config_path() {
     if (const char* x = getenv("XDG_CONFIG_HOME")) return std::string(x) + "/isekur/isekur.conf";
     const char* h = getenv("HOME");
     return std::string(h ? h : ".") + "/.config/isekur/isekur.conf";
@@ -196,7 +196,7 @@ bool Core::opt_on(const Server* s, const std::string& key, bool def) const {
     return v == "on" || v == "true" || v == "yes" || v == "1";
 }
 
-static void mkdir_p(const std::string& path) {
+void mkdir_p(const std::string& path) {
     for (size_t i = 1; i <= path.size(); i++)
         if (i == path.size() || path[i] == '/') mkdir(path.substr(0, i).c_str(), 0700);
 }
@@ -512,11 +512,16 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "close" || cmd == "wc") { close(b); return; }
+    if (cmd == "detach") {
+        if (tty) detach_req = true;
+        else print(b, LK::ERROR, "No terminal is attached; isekur --attach brings one");
+        return;
+    }
     if (cmd == "web") {  // /web [start|stop|status]
         std::string a = argv.empty() ? "status" : argv[0];
         web_req_buf = b;
         if (a == "start") web_req = WebReq::START;
-        else if (a == "stop" && daemon) print(b, LK::ERROR, "The daemon is only reachable through the webchat; not stopping it");
+        else if (a == "stop" && daemon) print(b, LK::ERROR, "The webchat is the only way into this iSekur; not stopping it");
         else if (a == "stop") web_req = WebReq::STOP;
         else if (a == "status") print(b, LK::INFO, web_url.empty() ? "Webchat is stopped (/web start)" : "Webchat on " + web_url);
         else print(b, LK::ERROR, "Usage: /web [start|stop|status]");

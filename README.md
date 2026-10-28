@@ -11,7 +11,9 @@ that mirrors your live session in a browser, bouncer style.
   server-time, echo-message, multi-prefix, away/account-notify, extended-join and more
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout.
   Off unless you ask: `[web] autostart = on`, `isekur --web`, or `/web start` / `/web stop` while running
-- `--daemon` runs headless and keeps you on IRC; attach from the browser
+- Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
+  brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
+- `--daemon` starts it headless; attach from a terminal or the browser
 - Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist (F3 toggles)
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
 - `/grep [-all] text` searches the scrollback
@@ -38,6 +40,22 @@ and write them back with `/save` (comments in the file are kept). Changes apply
 right away; server settings are used on the next `/connect`, `[web]` after `/web stop` + `/web start`. Run
 `./isekur --hash-password` to get the `[web] password_hash` value.
 
+## Detach and attach
+
+iSekur runs like a tmux session: the IRC side lives in a background process and the terminal is
+only attached to it.
+
+    isekur              # start (or, if it's already running, attach to it)
+    Alt+D / /detach     # back to the shell; still connected, still in the channels, still logging
+    isekur --attach     # back again, from this or any other terminal or SSH login
+    isekur --daemon     # start in the background without attaching
+
+Closing the terminal or losing the SSH connection detaches too. One terminal is attached at a time;
+`/quit` ends it for real. It works through a socket next to the config (`isekur.sock`, only for your
+user); output from the background goes to `isekur.log` there. On Linux servers where systemd kills
+your processes at logout (`KillUserProcesses=yes`), run `loginctl enable-linger $USER` once.
+Not available on Cygwin.
+
 ## Keys
 
 | Key | Action |
@@ -45,6 +63,7 @@ right away; server settings are used on the next `/connect`, `[web]` after `/web
 | Alt+1..9, Alt+0 | go to tab N |
 | Alt+←/→, Ctrl+P/N | previous / next tab |
 | Alt+A | next tab with activity |
+| Alt+D (Option+D on a Mac) | detach: iSekur keeps running in the background |
 | Ctrl+X | next server |
 | Ctrl+W | close tab (parts the channel) |
 | PgUp / PgDn | scroll |

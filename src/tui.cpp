@@ -420,9 +420,9 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
     return s + "?";
 }
 
-bool Tui::init(std::string& err) {
-    int r = tb_init();
-    if (r != TB_OK) { err = tb_strerror(r); return false; }
+bool Tui::init(std::string& err, int fd) {
+    int r = fd < 0 ? tb_init() : tb_init_fd(fd);
+    if (r != TB_OK) { err = tb_strerror(r) + std::string(" (") + std::to_string(r) + ")"; return false; }
     mouse_on = ini_get(c.cfg, "general", "mouse", "on") != "off";
     tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
     tb_set_func(TB_FUNC_EXTRACT_PRE, isekur_extract_pre);
@@ -451,6 +451,7 @@ void Tui::load_keys() {
     keymap["PgDn"] = "scroll_down";
     keymap["F2"] = "toggle_nicklist";
     keymap["F3"] = "toggle_mouse";
+    keymap["M-d"] = keymap["∂"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
     if (ks != c.cfg.end())
@@ -498,6 +499,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "scroll_up") c.active->scroll += chat_height() / 2;
     else if (a == "scroll_down") c.active->scroll = std::max(0, c.active->scroll - chat_height() / 2);
     else if (a == "toggle_nicklist") nicklist = !nicklist;
+    else if (a == "detach") c.detach_req = true;
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
         tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
