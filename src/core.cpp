@@ -59,7 +59,9 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.sasl_mech = ini_get(cfg, sec, "sasl_mech");
     sc.cert = ini_get(cfg, sec, "cert");
     sc.key = ini_get(cfg, sec, "key");
-    sc.autojoin = split(ini_get(cfg, sec, "autojoin"), ',');
+    sc.nickserv_pass = ini_get(cfg, sec, "nickserv_pass");
+    for (auto& e : split(ini_get(cfg, sec, "autojoin"), ','))
+        if (auto w = split(e, ' '); !w.empty()) sc.autojoin.push_back(w[0] + (w.size() > 1 ? " " + w[1] : ""));
     return sc;
 }
 
@@ -578,6 +580,35 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (argv.empty()) return;
         std::string ch = s->is_chan(argv[0]) ? argv[0] : "#" + argv[0];
         s->send("JOIN " + ch + (argv.size() > 1 ? " " + argv[1] : ""));
+        if (argv.size() > 1) s->chan_keys[irc_lower(ch)] = argv[1];
+        return;
+    }
+    if (cmd == "autojoin") {  // /autojoin [add|del] [#chan [key]]: the server's autojoin list
+        std::string sec = "server." + s->cfg.name;
+        auto& aj = s->cfg.autojoin;
+        if (argv.empty()) {
+            std::string l;
+            for (auto& e : aj) l += (l.empty() ? "" : ", ") + split(e, ' ')[0] + (e.find(' ') != std::string::npos ? " (key)" : "");
+            print(b, LK::INFO, aj.empty() ? "No autojoin channels on " + s->cfg.name : "Autojoin on " + s->cfg.name + ": " + l);
+            return;
+        }
+        if (argv[0] != "add" && argv[0] != "del") { print(b, LK::ERROR, "Usage: /autojoin [add|del] [#channel [key]]"); return; }
+        std::string ch = argv.size() > 1 ? (s->is_chan(argv[1]) ? argv[1] : "#" + argv[1]) : b->name;
+        if (!s->is_chan(ch)) { print(b, LK::ERROR, "Not a channel: name one, or run it in the channel's tab"); return; }
+        auto it = std::find_if(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(ch); });
+        if (argv[0] == "del") {
+            if (it == aj.end()) { print(b, LK::ERROR, ch + " is not in autojoin"); return; }
+            aj.erase(it);
+        } else {
+            std::string key = argv.size() > 2 ? argv[2] : s->chan_keys.count(irc_lower(ch)) ? s->chan_keys[irc_lower(ch)] : "";
+            std::string e = ch + (key.empty() ? "" : " " + key);
+            if (it != aj.end()) *it = e;
+            else aj.push_back(e);
+        }
+        std::string v;
+        for (auto& e : aj) v += (v.empty() ? "" : ",") + e;
+        cfg[sec]["autojoin"] = unsaved[sec]["autojoin"] = v;
+        print(b, LK::INFO, (argv[0] == "add" ? "Added " + ch + " to" : "Removed " + ch + " from") + " autojoin on " + s->cfg.name + " (/save to keep)");
         return;
     }
     if (cmd == "part") {

@@ -174,6 +174,23 @@ int main() {
     core.exec(chb, "/lockdown");
     assert(sent() == "MODE #c +mntsi\r\n");
 
+    // autojoin with keys, NickServ when SASL didn't log in, rejoin of open tabs with their key
+    core.exec(chb, "/autojoin add");
+    core.exec(chb, "/join #k s3cret");
+    sent();
+    core.exec(chb, "/autojoin add #K");  // keeps the /join key
+    core.exec(chb, "/autojoin add #x");
+    core.exec(chb, "/autojoin del #X");
+    assert(core.cfg["server.t"]["autojoin"] == "#c,#K s3cret" && core.unsaved["server.t"].count("autojoin"));
+    core.open(ts, BT::CHANNEL, "#open");
+    ts->cfg.nickserv_pass = "pw";
+    feed(":srv 001 me :Welcome");
+    assert(sent() == "CAP END\r\nPRIVMSG NickServ :IDENTIFY pw\r\nJOIN #c\r\nJOIN #K s3cret\r\nJOIN #open\r\n");
+    ts->sasl_ok = true;
+    feed(":srv 001 me :Welcome");
+    assert(sent().find("NickServ") == std::string::npos);
+    core.exec(home, "/autojoin");  // no server in the cmd tab
+
     core.exec(home, "/detach");  // nothing attached (the webchat typed it)
     assert(!core.detach_req && home->lines.back().kind == LK::ERROR);
     core.tty = true;

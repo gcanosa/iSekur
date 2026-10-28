@@ -105,8 +105,8 @@ struct ServerCfg {
     int port = 6667;
     bool tls = false, tls_verify = true, autoconnect = true;
     std::string nick, altnick, user, realname, pass;
-    std::string sasl_user, sasl_pass, sasl_mech, cert, key;
-    std::vector<std::string> autojoin;
+    std::string sasl_user, sasl_pass, sasl_mech, cert, key, nickserv_pass;
+    std::vector<std::string> autojoin;  // "#chan" or "#chan key"
 };
 enum class SS { DISCONNECTED, CONNECTING, REGISTERING, CONNECTED };
 // /kickban and /tempban; waits in kb_wait while USERHOST looks the host up
@@ -129,7 +129,8 @@ struct Server {
     std::vector<TempBan> tempbans;          // lifted by Core::chan_timers
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
     int sasl_step = 0, nick_tries = 0, backoff = 0;
-    bool cap_done = false;
+    bool cap_done = false, sasl_ok = false;
+    std::map<std::string, std::string> chan_keys;  // irc_lower(chan) -> key from /join or autojoin, for rejoins
     time_t last_rx = 0, reconnect_at = 0, ping_at = 0, ctcp_at = 0;
     long long ping_sent_ms = 0;
     double lag = 0;

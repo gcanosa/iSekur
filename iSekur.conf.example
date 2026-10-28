@@ -52,12 +52,13 @@ host      = irc.sekurnet.org
 port      = 6697
 tls       = true
 tls_verify = true            ; false only for self-signed test servers
-autojoin  = #isekur-test
+autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
 ; sasl_user = mynick
 ; sasl_pass = secret
 ; sasl_mech = PLAIN          ; PLAIN | SCRAM-SHA-256 | EXTERNAL (default: PLAIN, or EXTERNAL with cert)
 ; cert      = /path/client.pem  ; client certificate for SASL EXTERNAL / CertFP
 ; password  = server-password
+; nickserv_pass = secret     ; /msg NickServ IDENTIFY on connect, for networks without SASL
 
 [server.local]
 host      = 127.0.0.1
