@@ -452,7 +452,7 @@ void Tui::load_keys() {
     keymap["C-w"] = "close_tab";
     keymap["PgUp"] = "scroll_up";
     keymap["PgDn"] = "scroll_down";
-    keymap["M-u"] = keymap["F2"] = "toggle_nicklist";
+    keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
     keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
     keymap["F3"] = "toggle_mouse";
     keymap["M-d"] = keymap["∂"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"
