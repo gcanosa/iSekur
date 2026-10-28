@@ -194,6 +194,10 @@ std::string Core::opt(const Server* s, const std::string& key, const std::string
     return s ? ini_get(cfg, "server." + s->cfg.name, key, g) : g;
 }
 
+void Core::ring(Server* s) {
+    if (opt_on(s, "bell_notifications", true)) bell = dirty = true;
+}
+
 bool Core::opt_on(const Server* s, const std::string& key, bool def) const {
     std::string v = opt(s, key, def ? "on" : "off");
     return v == "on" || v == "true" || v == "yes" || v == "1";

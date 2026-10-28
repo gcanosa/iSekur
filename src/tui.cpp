@@ -182,6 +182,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
 int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); }
 
 void Tui::draw() {
+    if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
     tb_set_clear_attrs(tbc(def.fg), tbc(def.bg));

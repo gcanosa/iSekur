@@ -701,6 +701,7 @@ void Core::handle(Server* s, const Msg& m) {
         return;  // includes CTCP: ignored users get no replies either
     if (cmd == "INVITE") {
         print(reply_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));
+        if (is_me(m.p(0))) ring(s);
         return;
     }
     if (cmd == "PRIVMSG" || cmd == "NOTICE") {
@@ -787,6 +788,7 @@ void Core::handle(Server* s, const Msg& m) {
             hl = false;  // old news: no alerts, no copies to window 1
         }
         line(b, kind, who, locked ? "\xf0\x9f\x94\x92 " + text : text, self, hl);
+        if (hl) ring(s);
         return;
     }
     if (cmd == "ERROR") { print(s->status, LK::ERROR, m.p(0)); return; }

@@ -25,6 +25,10 @@ log_rotate  = on             ; start a new file each day; old ones become <name>
 # Copy highlights and private messages to window 1 ("what did I miss").
 hilight_window = on
 
+# Ring the terminal bell for private messages, mentions of your nick and
+# invites (most terminals then flash, bounce the dock icon or play a sound).
+bell_notifications = on
+
 # Ask before sending a paste longer than this many lines (0 = never ask).
 paste_confirm = 5
 
