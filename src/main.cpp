@@ -155,7 +155,7 @@ int main(int argc, char** argv) {
     c.tty = local;
     bool hinted = false;
 
-    time_t last_min = 0;
+    time_t last_sec = 0;
     std::vector<pollfd> fds;
     std::vector<Server*> polled;
     while (!c.quit && !g_term) {
@@ -221,7 +221,7 @@ int main(int argc, char** argv) {
         time_t now = time(nullptr);
         c.set_attached(c.tty || web.attached());
         c.tick(now);
-        if (now / 60 != last_min) last_min = now / 60, c.dirty = true;  // status bar clock
+        if (now != last_sec) last_sec = now, c.dirty = true;  // status bar clock, uptime seconds
         if (c.tty && c.dirty) tui.draw();
     }
 

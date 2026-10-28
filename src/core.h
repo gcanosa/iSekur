@@ -174,6 +174,7 @@ struct Core {
     // auto-away: nobody attached (daemon, no web client) or no input for a while
     bool attached = true;
     time_t detached_at = 0, last_input = time(nullptr);
+    const time_t started = time(nullptr);  // uptime in the nick list
     void set_attached(bool a);
     std::string quit_msg = "iSekur IRC";
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend

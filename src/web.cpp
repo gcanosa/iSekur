@@ -499,7 +499,7 @@ std::string Web::buf_json(Buffer* b) {
     static const char* TYPE[] = {"status", "channel", "query"};
     static const char* STATE[] = {"disconnected", "connecting", "registering", "connected"};
     Server* s = b->srv;
-    std::string srv = s ? s->cfg.name : "isekur";  // same label as the console tabs
+    std::string srv = !s ? "cmd" : s->network.empty() ? s->cfg.name : s->network;  // same label as the console tabs
     // ponytail: whole nicklist per update (coalesced in flush()); diff it if huge channels lag
     std::string nicks = "[";
     for (auto& kv : b->nicks) {
