@@ -717,6 +717,39 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "me") { if (!args.empty()) say(b, args, true); return; }
+    if (cmd == "autojoin" && !argv.empty() && argv[0] == "snap") {
+        // autojoin = the open channel tabs (with their keys), every server or "here"; written now
+        bool here = argv.size() > 1 && argv[1] == "here";
+        if (here && !s) { print(b, LK::ERROR, "No server in this tab: /autojoin snap (all servers) or run it in a server's tab"); return; }
+        Ini part;
+        std::string done;
+        for (auto& sv : servers) {
+            if (here && sv.get() != s) continue;
+            std::vector<std::string> aj;
+            std::string v;
+            for (auto& bp : bufs) {
+                if (bp->srv != sv.get() || bp->type != BT::CHANNEL) continue;
+                auto k = sv->chan_keys.find(irc_lower(bp->name));
+                aj.push_back(bp->name + (k == sv->chan_keys.end() ? "" : " " + k->second));
+                v += (v.empty() ? "" : ",") + aj.back();
+            }
+            std::string sec = "server." + sv->cfg.name;
+            sv->cfg.autojoin = aj;
+            cfg[sec]["autojoin"] = unsaved[sec]["autojoin"] = v;
+            part[sec] = unsaved[sec];  // the whole section: a /server one isn't in the file yet
+            unsaved.erase(sec);
+            done += (done.empty() ? "" : "; ") + sv->cfg.name + ": " + std::to_string(aj.size()) + " channel" + (aj.size() == 1 ? "" : "s");
+        }
+        if (part.empty()) { print(b, LK::INFO, "No servers"); return; }
+        std::string err;
+        if (!ini_save(cfg_path, part, err)) {
+            for (auto& [sec, kv] : part) unsaved[sec].insert(kv.begin(), kv.end());
+            print(b, LK::ERROR, err);
+            return;
+        }
+        print(b, LK::INFO, "Autojoin saved (" + done + ")");
+        return;
+    }
     if (!need()) return;
     if (cmd == "join" || cmd == "j") {
         if (argv.empty()) return;
@@ -734,7 +767,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             print(b, LK::INFO, aj.empty() ? "No autojoin channels on " + s->cfg.name : "Autojoin on " + s->cfg.name + ": " + l);
             return;
         }
-        if (argv[0] != "add" && argv[0] != "del") { print(b, LK::ERROR, "Usage: /autojoin [add|del] [#channel [key]]"); return; }
+        if (argv[0] != "add" && argv[0] != "del") { print(b, LK::ERROR, "Usage: /autojoin [add|del] [#channel [key]] or /autojoin snap [here]"); return; }
         std::string ch = argv.size() > 1 ? (s->is_chan(argv[1]) ? argv[1] : "#" + argv[1]) : b->name;
         if (!s->is_chan(ch)) { print(b, LK::ERROR, "Not a channel: name one, or run it in the channel's tab"); return; }
         auto it = std::find_if(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(ch); });

@@ -222,6 +222,18 @@ int main() {
     feed(":srv 001 me :Welcome");
     assert(sent().find("NickServ") == std::string::npos);
     core.exec(home, "/autojoin");  // no server in the cmd tab
+    {  // snap: the open channel tabs, with keys, written to the config right away
+        std::string path = "build/test-snap.conf";
+        remove(path.c_str());
+        std::swap(core.cfg_path, path);
+        core.open(ts, BT::CHANNEL, "#k");
+        core.exec(home, "/autojoin snap");
+        Ini f;
+        assert(ini_load(core.cfg_path, f) && f["server.t"]["autojoin"].find("#k s3cret") != std::string::npos &&
+               f["server.t"]["autojoin"].find("#open") != std::string::npos && !core.unsaved.count("server.t"));
+        assert(ts->cfg.autojoin.size() == (size_t)std::count(f["server.t"]["autojoin"].begin(), f["server.t"]["autojoin"].end(), ',') + 1);
+        std::swap(core.cfg_path, path);
+    }
 
     // whois: framed, in the active tab
     core.select(chb);

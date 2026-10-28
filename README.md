@@ -9,7 +9,7 @@ that mirrors your live session in a browser, bouncer style.
 - 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme neon` switches live)
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join and more
-- Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel), SASL or
+- Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel, `/autojoin snap` saves every open channel), SASL or
   `nickserv_pass` to identify on connect
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout.
   Off unless you ask: `[web] autostart = on`, `isekur --web`, or `/web start` / `/web stop` while running
