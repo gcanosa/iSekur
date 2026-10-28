@@ -68,6 +68,10 @@ struct Line {
     bool self = false, hilight = false;
     bool nolog = false;  // /grep results: shown, never written to the log
 };
+// what /quiet hides: other people coming, going and renaming
+inline bool noise(const Line& l) {
+    return !l.self && (l.kind == LK::JOIN || l.kind == LK::PART || l.kind == LK::QUIT || l.kind == LK::NICK);
+}
 
 enum class BT { STATUS, CHANNEL, QUERY };
 struct Server;
@@ -84,6 +88,7 @@ struct Buffer {
     int unread = 0;                          // lines below the "new" marker
     int scroll = 0;                          // rows scrolled back (tui)
     bool joined = false;
+    bool quiet = false;                      // /quiet: hide joins, parts, quits, nick changes
     FILE* log = nullptr;                     // opened lazily when logging is on
     std::string log_day;                     // YYYY-MM-DD the open log belongs to
     // /topicrotate: topics set in turn every rot_min minutes
@@ -220,6 +225,7 @@ struct Core {
 
 long long now_ms();
 std::string b64(const std::string& s);
+bool rank_ok(const Server* s, const std::string& pfx, char need);  // chanops.cpp
 std::string unb64(const std::string& s);  // "" on bad input
 std::string fmt_time(time_t t, const std::string& fmt);
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"

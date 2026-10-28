@@ -57,6 +57,10 @@ static const std::vector<CmdInfo> CMDS = {
     {"topic", "Chat", "[text]", "Show or set the channel topic",
      "Without text, shows the topic. With text, sets it (channels with +t need ops).",
      {"/topic", "/topic Welcome! Rules: be nice | https://example.org"}},
+    {"quiet", "Chat", "[on|off]", "Hide joins, parts, quits and nick changes in this tab",
+     "Toggles for the current tab only. Hidden lines are still logged and come back with /quiet off. "
+     "Your own joins and parts stay visible.",
+     {"/quiet", "/quiet off"}},
     {"ctcp", "Chat", "target VERSION|TIME|PING", "Send a CTCP request",
      "PING shows the round trip time when the reply arrives.",
      {"/ctcp alice VERSION", "/ctcp alice PING"}},

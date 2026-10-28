@@ -169,7 +169,7 @@ void Core::add(Buffer* b, Line l) {
     if (b->lines.size() > MAX_LINES) b->lines.pop_front();
     if (b->scroll) b->scroll++;  // keep the scrolled view still
     const Line& ln = b->lines.back();
-    int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : 1;
+    int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : b->quiet && noise(ln) ? 0 : 1;
     // the "new" marker goes above the first message you missed, then counts everything after it
     if (b->unread || (b != active && lvl >= 2)) b->unread++;
     if (b != active && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }
@@ -512,6 +512,12 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "close" || cmd == "wc") { close(b); return; }
+    if (cmd == "quiet") {  // per tab, until restart
+        b->quiet = args == "on" || (args != "off" && !b->quiet);
+        print(b, LK::INFO, std::string("Quiet mode ") + (b->quiet ? "on: joins, parts, quits and nick changes are hidden here"
+                                                                  : "off: showing joins, parts, quits and nick changes"));
+        return;
+    }
     if (cmd == "detach") {
         if (tty) detach_req = true;
         else print(b, LK::ERROR, "No terminal is attached; isekur --attach brings one");
