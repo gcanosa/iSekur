@@ -224,7 +224,7 @@ void Core::connect(Server* s) {
     s->sasl_step = 0, s->cap_done = false, s->nick_tries = 0;
     s->away = s->auto_away = false;
     s->hist_batches.clear();
-    s->inbuf.clear(), s->umodes.clear(), s->sendq.clear();
+    s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
     s->nick = s->cfg.nick;
     s->last_rx = time(nullptr);
@@ -299,6 +299,7 @@ void Core::tick(time_t now) {
                 s->ping_at = now + 30;
             }
             auto_away(s, now);
+            chan_timers(s, now);
         }
     }
 }
@@ -337,8 +338,17 @@ static bool hilights(const std::string& text, const std::string& nick) {
     return false;
 }
 
-static void add_nick(Buffer* b, const std::string& nick, const std::string& prefix) {
-    b->nicks[irc_lower(nick)] = NickEntry{nick, prefix, false};
+static void add_nick(Buffer* b, const std::string& nick, const std::string& prefix, const std::string& host) {
+    b->nicks[irc_lower(nick)] = NickEntry{nick, prefix, false, host};
+}
+
+// user@host for every channel entry of nick (WHO replies, CHGHOST)
+static void set_host(Core& c, Server* s, const std::string& nick, const std::string& host) {
+    for (auto& b : c.bufs) {
+        if (b->srv != s) continue;
+        auto it = b->nicks.find(irc_lower(nick));
+        if (it != b->nicks.end()) it->second.host = host;
+    }
 }
 
 static std::string host_of(const Msg& m) {
@@ -443,6 +453,8 @@ void Core::handle(Server* s, const Msg& m) {
                 s->chantypes = t.substr(10);
             } else if (t.rfind("CHANMODES=", 0) == 0) {
                 s->chanmodes = t.substr(10);
+            } else if (t.rfind("MODES=", 0) == 0) {
+                s->max_modes = std::max(1, std::min(atoi(t.c_str() + 6), 12));
             } else if (t.rfind("NETWORK=", 0) == 0) {
                 s->network = t.substr(8);
                 notify(Ev::BUFFER, s->status);
@@ -464,8 +476,9 @@ void Core::handle(Server* s, const Msg& m) {
         for (auto& n : split(m.p(3), ' ')) {
             size_t k = 0;
             while (k < n.size() && s->prefix_chars.find(n[k]) != std::string::npos) k++;
-            std::string nick = n.substr(k);
-            add_nick(b, nick.substr(0, nick.find('!')), n.substr(0, k));
+            std::string nick = n.substr(k);  // userhost-in-names: nick!user@host
+            size_t bang = nick.find('!');
+            add_nick(b, nick.substr(0, bang), n.substr(0, k), bang == std::string::npos ? "" : nick.substr(bang + 1));
         }
         return;
     }
@@ -516,7 +529,7 @@ void Core::handle(Server* s, const Msg& m) {
         }
         Buffer* b = find(s, ch);
         if (!b) return;
-        add_nick(b, m.nick, "");
+        add_nick(b, m.nick, "", host_of(m));
         std::string acct = s->caps.count("extended-join") && m.p(1) != "*" && !m.p(1).empty()
                                ? " [" + m.p(1) + "]" : "";
         line(b, LK::JOIN, m.nick, m.nick + " (" + host_of(m) + ")" + acct + " has joined " + ch);
@@ -640,7 +653,26 @@ void Core::handle(Server* s, const Msg& m) {
             s->hist_batches.erase(ref.substr(1));
         return;
     }
-    if (cmd == "ACCOUNT" || cmd == "CHGHOST" || cmd == "SETNAME" ||
+    if (cmd == "CHGHOST") { set_host(*this, s, m.nick, m.p(0) + "@" + m.p(1)); return; }
+    if (cmd == "352") set_host(*this, s, m.p(5), m.p(2) + "@" + m.p(3));  // WHO; then printed as usual
+    if (cmd == "302" && !s->kb_wait.empty()) {  // USERHOST for a /kickban: "nick*=+user@host"
+        KickBan kb = s->kb_wait.front();
+        s->kb_wait.pop_front();
+        std::string uh;
+        for (auto& e : split(m.p(1), ' ')) {
+            size_t eq = e.find('=');
+            if (eq == std::string::npos || e.size() < eq + 3) continue;
+            std::string n = e.substr(0, eq);
+            if (!n.empty() && n.back() == '*') n.pop_back();
+            if (irc_lower(n) == irc_lower(kb.nick)) uh = e.substr(eq + 2);
+        }
+        Buffer* b = find(s, kb.chan);
+        if (!b) return;
+        if (uh.empty()) print(b, LK::ERROR, kb.nick + " is no longer on IRC");
+        else kickban(s, b, kb, uh);
+        return;
+    }
+    if (cmd == "ACCOUNT" || cmd == "SETNAME" ||
         cmd == "TAGMSG")
         return;
     if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE") && !is_me(m.nick) && ignored(m.prefix))

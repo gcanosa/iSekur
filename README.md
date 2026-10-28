@@ -15,6 +15,8 @@ that mirrors your live session in a browser, bouncer style.
 - Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist (F3 toggles)
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
 - `/grep [-all] text` searches the scrollback
+- Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`
+- `/help` with colors, details and examples; commands complete with Tab as you type
 - Auto-away when nothing is attached, and catch-up from IRCv3 chathistory on join
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
@@ -67,6 +69,11 @@ dropped instead of showing up as garbage.
 `/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
+
+Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
+`/masskick [-yes] [reason]` (asks first), `/lockdown` (+mntsi) and `/unlock` (-msi),
+`/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
+the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
 
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
