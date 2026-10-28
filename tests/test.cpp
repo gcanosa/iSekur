@@ -127,6 +127,8 @@ int main() {
     chb->joined = true;
     auto feed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(ts, mm); };
     auto sent = [&]() { std::string o = ts->conn.out; ts->conn.out.clear(); return o; };
+    feed(":srv 005 me MODES :are supported");  // no value: unlimited
+    assert(ts->max_modes == 12);
     feed(":srv 005 me MODES=3 :are supported");
     feed(":srv 353 me = #c :@me!u@me.host +v1!u@h1 r1!u@h2 %hop!u@h3 @op2!x@h4 r2");
     sent();
@@ -144,6 +146,8 @@ int main() {
     assert(sent() == "MODE #c +b *!*@h2\r\nKICK #c r1 :go away\r\n");
     core.exec(chb, "/tempban r2 5");  // host unknown: USERHOST first, the 302 finishes it
     assert(sent() == "USERHOST r2\r\n");
+    feed(":srv 302 me :zz=+a@b");  // someone else's (/quote USERHOST zz): not the kickban's answer
+    assert(sent().empty() && ts->kb_wait.size() == 1);
     feed(":srv 302 me :r2=+u@h9");
     assert(sent() == "MODE #c +b *!*@h9\r\nKICK #c r2 :Banned for 5 minutes\r\n" && ts->tempbans.size() == 1);
     time_t t0 = time(nullptr);

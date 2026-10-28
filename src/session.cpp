@@ -10,6 +10,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <termios.h>
 #include <unistd.h>
 #include "core.h"
 
@@ -60,7 +61,7 @@ int Session::listen(const std::string& p, std::string& err) {
     if (connect(s, (sockaddr*)&a, sizeof a) == 0) { ::close(s); return -1; }  // someone answers
     ::close(s);
     unlink(p.c_str());  // left over from a crash
-    mkdir_p(p.substr(0, p.rfind('/')));
+    if (p.find('/') != std::string::npos) mkdir_p(p.substr(0, p.rfind('/')));  // "isekur.sock": the current dir
     if ((s = socket(AF_UNIX, SOCK_STREAM, 0)) < 0) { err = strerror(errno); return 0; }
     mode_t old = umask(077);
     int r = bind(s, (sockaddr*)&a, sizeof a);
@@ -191,8 +192,15 @@ int attach_main(const std::string& path, const std::string& how) {
     cmsghdr* c = CMSG_FIRSTHDR(&m);
     c->cmsg_level = SOL_SOCKET, c->cmsg_type = SCM_RIGHTS, c->cmsg_len = CMSG_LEN(sizeof(int));
     memcpy(CMSG_DATA(c), &tty, sizeof tty);
+    // iSekur puts the terminal in raw mode; if it dies without undoing that, we do
+    termios saved{};
+    bool have = tcgetattr(tty, &saved) == 0;
+    auto restore = [&]() {
+        if (have) tcsetattr(tty, TCSANOW, &saved);
+        static const char reset[] = "\x1b[?1006l\x1b[?1015l\x1b[?1002l\x1b[?1000l\x1b[0m\x1b[?25h\x1b[?1049l";
+        if (write(tty, reset, sizeof reset - 1) < 0) {}
+    };
     if (sendmsg(s, &m, 0) < 0) { perror("isekur --attach"); return 1; }
-    close(tty);  // iSekur has its own copy now
 
     // resizes reach us (the terminal's foreground process); pass them on
     if (pipe(g_winch) == 0) {
@@ -217,10 +225,12 @@ int attach_main(const std::string& path, const std::string& how) {
         if (ch == 'D') { printf("Detached; iSekur keeps running. Back with: %s\n", how.c_str()); return 0; }
         if (ch == 'Q') { puts("iSekur quit."); return 0; }
         if (ch == 'F') {
+            restore();
             fprintf(stderr, "iSekur couldn't use this terminal; it is still running (its first window says why)\n");
             return 1;
         }
     }
+    restore();
     fprintf(stderr, "Lost the connection to iSekur\n");
     return 1;
 }

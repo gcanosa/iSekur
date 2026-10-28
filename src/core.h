@@ -225,8 +225,8 @@ std::string fmt_time(time_t t, const std::string& fmt);
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
-std::string after_words(const std::string& s, size_t n);
+std::string after_words(const std::string& s, size_t n);  // the text after the first n words
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
-void mkdir_p(const std::string& path);  // 0700  // the text after the first n words
+void mkdir_p(const std::string& path);  // 0700
 std::string safe_name(const std::string& n);  // network name -> safe log file name
 bool parse_log_line(const std::string& s, Line& l);
