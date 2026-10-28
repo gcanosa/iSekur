@@ -552,6 +552,9 @@ void Web::snapshot(Client& cl) {
         known.insert(b->id);
     }
     send(order_json());
+    std::string cm = "{\"t\":\"cmds\",\"list\":[";  // for Tab completion
+    for (auto& k : commands()) cm += std::string(cm.back() == '[' ? "" : ",") + json_str(k.name);
+    send(cm + "]}");
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
 }
 

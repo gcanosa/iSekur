@@ -322,6 +322,8 @@ function onMsg(ev) {
     if (!bufs.has(active)) { active = order[0]; select(active); } else renderSide();
   } else if (m.t === "active") {
     select(m.buf);
+  } else if (m.t === "cmds") {
+    cmds = m.list;
   }
 }
 
@@ -350,7 +352,7 @@ $("#logout").onclick = async () => { await fetch("/logout", {method: "POST", cre
 $("#menu").onclick = () => $("#side").classList.toggle("open");
 $("#nickbtn").onclick = () => $("#nicks").classList.toggle("open");
 
-let comp = null;
+let comp = null, cmds = [];
 $("#line").addEventListener("keydown", e => {
   const inp = e.target;
   if (e.key === "Tab") {
@@ -358,13 +360,18 @@ $("#line").addEventListener("keydown", e => {
     const b = bufs.get(active); if (!b) return;
     if (!comp) {
       const v = inp.value, end = inp.selectionStart, start = v.lastIndexOf(" ", end - 1) + 1, pfx = ircLower(v.slice(start, end));
-      if (!pfx) return;
-      const list = b.nicks.map(n => n[1]).filter(n => ircLower(n).startsWith(pfx)).sort((x, y) => ircLower(x).localeCompare(ircLower(y)));
+      // command names in the first word ("/jo") and after "/help ", nicks elsewhere
+      const help = /^\/help \S*$/i.test(v.slice(0, end)), cmd = start === 0 && v[0] === "/" && v[1] !== "/";
+      if (!pfx && !help && !cmd) return;
+      const list = cmd ? cmds.filter(c => c.startsWith(pfx.slice(1))).map(c => "/" + c + " ")
+        : help ? cmds.filter(c => c.startsWith(pfx)).map(c => c + " ")
+        : b.nicks.map(n => n[1]).filter(n => ircLower(n).startsWith(pfx)).sort((x, y) => ircLower(x).localeCompare(ircLower(y)))
+            .map(n => n + (start === 0 ? ": " : " "));
       if (!list.length) return;
       comp = {list, i: -1, start, end, v};
     }
     comp.i = (comp.i + 1) % comp.list.length;
-    const word = comp.list[comp.i] + (comp.start === 0 ? ": " : " ");
+    const word = comp.list[comp.i];
     inp.value = comp.v.slice(0, comp.start) + word + comp.v.slice(comp.end);
     inp.selectionStart = inp.selectionEnd = comp.start + word.length;
     return;

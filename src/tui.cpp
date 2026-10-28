@@ -288,9 +288,10 @@ void Tui::draw() {
         draw_row(0, top + ch - 1 - k, cw, rows[idx]);
     }
 
-    // "/set key": live list of the config keys it matches, Tab completes
-    std::vector<std::string> sk;
-    if (set_keys(sk) && !sk.empty()) {
+    // live suggestions ("/set key", "/jo", "/help k"), Tab completes
+    std::vector<Sugg> sk;
+    suggest(sk);
+    if (!sk.empty()) {
         int n = std::min((int)sk.size(), std::max(1, ch / 2));
         Style ks = T.get("input"), kk = sty(T, "set_key", "info"), kv = sty(T, "set_value", "input"), ke = T.get("separator");
         for (Style* st : {&kk, &kv, &ke})
@@ -302,13 +303,10 @@ void Tui::draw() {
                 text(1, yy, W, "... " + std::to_string(sk.size() - (size_t)n + 1) + " more", ks, false);
                 break;
             }
-            size_t dot = sk[(size_t)i].rfind('.');
-            std::string sec = dot == std::string::npos ? "general" : sk[(size_t)i].substr(0, dot);
-            std::string key = dot == std::string::npos ? sk[(size_t)i] : sk[(size_t)i].substr(dot + 1);
-            bool secret = key.find("pass") != std::string::npos || key.find("hash") != std::string::npos;
-            int x2 = text(1, yy, W, sk[(size_t)i], kk, false);
-            x2 = text(x2, yy, W, " = ", ke, false);
-            text(x2, yy, W, secret ? "********" : ini_get(c.cfg, sec, key), kv, false);
+            const Sugg& g = sk[(size_t)i];
+            int x2 = text(1, yy, W, g.word, kk, false);
+            x2 = text(x2, yy, W, g.sep, ke, false);
+            text(x2, yy, W, g.val, kv, false);
         }
     }
 
@@ -606,17 +604,35 @@ void Tui::submit() {
     c.exec(c.active, line);
 }
 
-// While the cursor is in the key of "/set <key>": config keys containing what's typed
-bool Tui::set_keys(std::vector<std::string>& out) const {
+int Tui::suggest(std::vector<Sugg>& out) const {
     std::string s = to_utf8(input.substr(0, cur));
-    if (s.rfind("/set ", 0) != 0 || s.find(' ', 5) != std::string::npos) return false;
-    std::string q = irc_lower(s.substr(5));
-    for (auto& [sec, kv] : c.cfg)
-        for (auto& [k, v] : kv) {
-            std::string full = (sec == "general" ? "" : sec + ".") + k;
-            if (irc_lower(full).find(q) != std::string::npos) out.push_back(full);
+    if (s.empty() || s[0] != '/' || s.rfind("//", 0) == 0) return -1;
+    size_t sp = s.find(' ');
+    auto cmds = [&](const std::string& pfx, bool slash) {
+        for (auto& k : commands())
+            if (std::string(k.name).rfind(irc_lower(pfx), 0) == 0)
+                out.push_back({(slash ? "/" : "") + std::string(k.name), (*k.usage ? " " + std::string(k.usage) : "") + "  ", k.summary});
+    };
+    if (sp == std::string::npos) { cmds(s.substr(1), true); return 0; }  // "/jo"
+    std::string cmd = irc_lower(s.substr(1, sp - 1)), arg = s.substr(sp + 1);
+    if (arg.find(' ') == std::string::npos) {
+        if (cmd == "set") {  // config keys containing what's typed
+            for (auto& [sec, kv] : c.cfg)
+                for (auto& [k, v] : kv) {
+                    std::string full = (sec == "general" ? "" : sec + ".") + k;
+                    bool secret = k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
+                    if (irc_lower(full).find(irc_lower(arg)) != std::string::npos)
+                        out.push_back({full, " = ", secret ? "********" : v});
+                }
+            return (int)sp + 1;
         }
-    return true;
+        if (cmd == "help") { cmds(arg, false); return (int)sp + 1; }
+        if (const CmdInfo* k = find_command(cmd)) {  // "/kickban al": the arguments, until the 2nd word
+            out.push_back({"/" + std::string(k->name), (*k->usage ? " " + std::string(k->usage) : "") + "  ", k->summary});
+            return -2;
+        }
+    }
+    return -1;
 }
 
 void Tui::complete() {
@@ -625,8 +641,12 @@ void Tui::complete() {
         size_t st = cur;
         while (st > 0 && input[st - 1] != U' ') st--;
         comp.clear();
-        if (set_keys(comp)) st = 5;  // after "/set "
-        else {
+        std::vector<Sugg> sg;
+        int from = suggest(sg);
+        if (from >= 0) {  // a command or config key, counted in UTF-8 bytes: these are ASCII
+            st = (size_t)from;
+            for (auto& g : sg) comp.push_back(g.word + " ");
+        } else {
             std::string pfx = irc_lower(to_utf8(input.substr(st, cur - st)));
             if (pfx.empty()) return;
             for (auto& kv : b->nicks)
@@ -634,13 +654,14 @@ void Tui::complete() {
             if (b->type == BT::QUERY && irc_lower(b->name).rfind(pfx, 0) == 0) comp.push_back(b->name);
             std::sort(comp.begin(), comp.end(),
                       [](auto& x, auto& y) { return irc_lower(x) < irc_lower(y); });
+            for (auto& n : comp) n += st == 0 ? ": " : " ";
         }
         if (comp.empty()) return;
         completing = true, comp_i = 0, comp_start = st;
     } else {
         comp_i = (comp_i + 1) % comp.size();
     }
-    std::u32string w = from_utf8(comp[comp_i] + (comp_start == 0 ? ": " : " "));
+    std::u32string w = from_utf8(comp[comp_i]);
     input.replace(comp_start, cur - comp_start, w);
     cur = comp_start + w.size();
 }

@@ -39,7 +39,10 @@ private:
     void mouse(int mod, int key, int x, int y);
     bool action(const std::string& a);
     void complete();
-    bool set_keys(std::vector<std::string>& out) const;
+    // live list under the input line: config keys after "/set ", commands while
+    // typing the first word or after "/help ", the usage of a typed command
+    struct Sugg { std::string word, sep, val; };
+    int suggest(std::vector<Sugg>& out) const;  // where Tab replaces from; -1 none, -2 shown only
     void submit();
     int chat_height() const;
 };

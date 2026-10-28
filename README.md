@@ -48,7 +48,7 @@ right away; server settings are used on the next `/connect`, `[web]` after `/web
 | PgUp / PgDn | scroll |
 | F2 | toggle nicklist |
 | F3 | toggle mouse (Shift+drag selects text while it's on) |
-| Tab | complete nick, or the key after `/set` (matching keys are listed as you type) |
+| Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
 | Ctrl+A / E, Ctrl+U / K | start / end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
 | Cmd+Backspace, Cmd+←/→ | delete to start, start / end (when the terminal forwards Cmd) |
@@ -67,3 +67,6 @@ dropped instead of showing up as garbage.
 `/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
+
+`/help` lists every command by group, in color; `/help <command>` explains it with examples.
+Type `/` and the matching commands show up above the input line; Tab completes them.

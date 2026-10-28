@@ -351,12 +351,6 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
     }
 }
 
-static const char* HELP =
-    "Commands: /server host [port] [-tls] [-noverify] · /connect [name] · /disconnect [msg] · "
-    "/quit [msg] · /join #chan [key] · /part [#chan] [msg] · /msg target text · /query nick [text] · "
-    "/me action · /notice target text · /nick new · /topic [text] · /close · /win N · "
-    "/raw line · /ctcp target VERSION|TIME|PING · /theme name · /set [section.]key [value] · /save · /ignore [mask] · /unignore mask · /grep [-all] text · /web [start|stop|status] · /clear. Unknown commands go to the server as-is (/whois, /mode, /away...).";
-
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
     if (input.find('\n') != std::string::npos) {
@@ -393,7 +387,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return false;
     };
 
-    if (cmd == "help") { print(b, LK::INFO, HELP); return; }
+    if (cmd == "help") { help(b, args); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = [](const std::string& k) {
             return k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;

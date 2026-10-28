@@ -100,6 +100,21 @@ int main() {
     core.exec(home, "/grep world");  // earlier results are not matched again
     assert(home->lines.size() == 6);
 
+    // command reference: unique names, every one with examples, groups listed in one run each
+    std::set<std::string> names, groups;
+    std::string last_group;
+    for (auto& k : commands()) {
+        assert(names.insert(k.name).second && !k.examples.empty() && *k.summary && *k.details);
+        if (last_group != k.group) assert(groups.insert(k.group).second), last_group = k.group;
+    }
+    assert(find_command("J") && std::string(find_command("j")->name) == "join" && !find_command("nope"));
+    size_t before = home->lines.size();
+    core.exec(home, "/help /join");  // usage, aliases, details, "Examples", 3 examples
+    assert(home->lines.size() == before + 7 && home->lines.back().nolog);
+    assert(mirc_strip(home->lines[before].text).rfind("/join #channel [key]", 0) == 0);
+    core.exec(home, "/help ban");
+    assert(mirc_strip(home->lines.back().text).find("No such command: /ban") == 0);
+
     assert(ctcp_version().rfind(version_string() + " :: ", 0) == 0 && version_string().find(ISEKUR_VERSION) != std::string::npos);
 
     Server sv;  // token bucket: 2 at once, then one per second

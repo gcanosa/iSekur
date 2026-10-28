@@ -40,7 +40,7 @@ CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS)
 
-SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp
+SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp
 OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o
 
 all: isekur
@@ -73,7 +73,7 @@ build:
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/net.o build/web.o build/termbox2.o
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/net.o build/web.o build/termbox2.o
 	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:
