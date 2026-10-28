@@ -716,6 +716,9 @@ void Core::handle(Server* s, const Msg& m) {
         bool replay = bt != m.tags.end() && s->hist_batches.count(bt->second);
         bool server_msg = m.prefix.find('!') == std::string::npos && !m.prefix.empty();
         LK kind = notice ? LK::NOTICE : LK::MSG;
+        // "*** Notice -- ..." while you are +o/+s: the *snotices tab, not your server tab
+        bool snote = notice && server_msg && s->state == SS::CONNECTED && text.rfind("*** ", 0) == 0 &&
+                     s->umodes.find_first_of("os") != std::string::npos;
         bool locked = false;  // /e2e: decrypted
         if (!notice && text.rfind("+iSE ", 0) == 0 && !s->is_chan(tgt)) {
             auto e = s->e2e.find(irc_lower(self ? tgt : m.nick));
@@ -772,13 +775,13 @@ void Core::handle(Server* s, const Msg& m) {
             b = find(s, tgt);
             if (!b) b = s->status;
         } else if (notice && (server_msg || s->state != SS::CONNECTED || m.nick.empty())) {
-            b = s->status;
+            b = snote ? open(s, BT::QUERY, "*snotices") : s->status;
         } else {
             std::string peer = self ? tgt : m.nick;
             b = find(s, peer);
             if (!b) b = notice ? reply_buf() : open(s, BT::QUERY, peer);
         }
-        bool hl = !self && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick));
+        bool hl = !self && !snote && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick));
         std::string who = m.nick.empty() ? s->cfg.host : m.nick;
         if (replay) {
             // the AFTER timestamp has 1s precision: skip what the log already showed
@@ -792,6 +795,10 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "ERROR") { print(s->status, LK::ERROR, m.p(0)); return; }
+    if (cmd == "WALLOPS") {  // with the server notices: oper chatter in one place
+        line(open(s, BT::QUERY, "*snotices"), LK::INFO, "", "\x02!" + (m.nick.empty() ? m.prefix : m.nick) + "!\x02 " + m.p(0));
+        return;
+    }
 
     // whois: a framed block in the tab you asked from
     static const std::set<std::string> whois_lines = {"301", "307", "310", "312", "313", "317", "319", "320",

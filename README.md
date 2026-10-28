@@ -72,8 +72,9 @@ Not available on Cygwin.
 | Ctrl+L, Alt+L (Option+L on a Mac), F2 | show / hide the nicklist |
 | Ctrl+T, Alt+T (Option+T on a Mac) | show / hide the topic bar |
 | F3 | toggle mouse (drag copies; Shift+drag is the terminal's own selection) |
-| right click on a nick | menu: query, whois, CTCPs, ignore, and op / voice / kick / ban when your rank allows (Up/Down/Enter or click) |
+| right click on a nick | menu: query, whois, CTCPs, ignore, op / voice / kick / ban when your rank allows, kill / G-line when you are an IRC operator (Up/Down/Enter or click) |
 | Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
+| Up / Down while matches are listed | move through them; Enter or Tab puts the highlighted one in the input line without sending |
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
 | Cmd+Backspace, Cmd+←/→ | delete to start, start / end (when the terminal forwards Cmd) |
@@ -97,6 +98,11 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/masskick [-yes] [reason]` (asks first), `/lockdown` (+mntsi) and `/unlock` (-msi),
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
+
+IRC operators: `/oper user` asks for the password (hidden). While you are +o or +s, server
+notices (`*** ...`) and WALLOPS go to a `*snotices` tab. `/kill`, `/gline`, `/kline`, `/zline`,
+`/shun`, `/wallops`, `/away`, `/kick` and friends take the reason as plain words (iSekur adds the
+`:`); `/help` has an "IRC operator" section.
 
 Encrypted queries between two iSekur users: `/e2e nick` (alias `/sq`) asks for a password
 (typed hidden) and invites nick, who accepts with `/e2e yournick` and the same password. A

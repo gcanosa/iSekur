@@ -440,8 +440,8 @@ void Tui::draw() {
         tb_present();
         return;
     }
-    bool masked = c.pass_buf == b;  // /e2e password
-    int px = text(0, y, W, masked ? "[Password for " + b->name + "] " : "[" + buf_label(b) + "] ",
+    bool masked = c.pass_buf == b;  // /e2e, /oper password
+    int px = text(0, y, W, masked ? "[" + c.pass_label + "] " : "[" + buf_label(b) + "] ",
                   masked ? T.get("hilight") : sty(T, "input_prompt", "input"), false);
     int avail = std::max(1, W - px - 1);
     int curw = 0;
@@ -803,13 +803,21 @@ void Tui::open_menu(const std::string& nick, int x, int y) {
             add("Ban 10 minutes", "/tempban " + nick + " 10");
         }
     }
+    if (s->umodes.find('o') != std::string::npos) {  // IRC operator
+        add("", "");
+        add("Kill...", "/kill " + nick + " :");
+        auto them = b->nicks.find(irc_lower(nick));
+        std::string host = them == b->nicks.end() ? "" : them->second.host;
+        if (host.find('@') != std::string::npos)
+            add("G-line 1 day...", "/gline *@" + host.substr(host.find('@') + 1) + " 1d :");
+    }
     c.dirty = true;
 }
 
 void Tui::submit() {
     std::string line = to_utf8(input);
     input.clear(), cur = 0;
-    if (c.pass_buf == c.active) { c.exec(c.active, line); return; }  // /e2e password: no history
+    if (c.pass_buf == c.active) { c.exec(c.active, line); return; }  // a password: no history
     if (line.empty()) return;
     // paste_confirm = N (default 5, 0 = off): ask before sending more lines than that
     size_t lines = 0;
