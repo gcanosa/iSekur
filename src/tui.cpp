@@ -205,8 +205,34 @@ void Tui::draw() {
             topic = b->srv->cfg.host + ":" + std::to_string(b->srv->cfg.port) +
                     (b->srv->cfg.tls ? " (TLS)" : "") + " - " + st[(int)b->srv->state];
         } else topic = "iSekur - multi-server IRC with a built-in webchat";
-        text(1, 0, W - 1, topic, ts);
-    }
+        if (topic_buf != b) topic_buf = b, topic_off = 0, topic_open = false;
+        Row r;
+        cells(r, topic, ts);
+        int tw = W - 2, maxh = std::max(1, (H - 4) / 2);
+        if (topic_open && width(r) > tw) {  // unfolded: wrapped over as many rows as it needs
+            std::vector<Row> rows(1);
+            for (auto& cl : r) {
+                if (width(rows.back()) + cl.w > tw) {
+                    if ((int)rows.size() == maxh) break;
+                    rows.emplace_back();
+                }
+                rows.back().push_back(cl);
+            }
+            topic_h = (int)rows.size();
+            for (int i = 0; i < topic_h; i++) fill(i, 0, W, ts), draw_row(1, i, W - 1, rows[(size_t)i]);
+        } else {
+            topic_h = 1, topic_open = false;
+            topic_off = std::max(0, std::min(topic_off, width(r) - tw));
+            int skip = topic_off;
+            size_t i = 0;
+            while (i < r.size() && skip > 0) skip -= r[i++].w;
+            r.erase(r.begin(), r.begin() + (long)i);
+            fill(0, 0, W, ts);
+            draw_row(1, 0, W - 1, r);
+            if (topic_off) cell(0, 0, U'‹', ts);
+            if (width(r) > tw) cell(W - 1, 0, U'›', ts);
+        }
+    } else topic_h = 1;
 
     // tab bar
     Style tbs = T.get("tabbar");
@@ -216,10 +242,11 @@ void Tui::draw() {
     int ai = c.index_of(b);
     for (size_t i = 0; i < c.bufs.size(); i++) {
         Buffer* t = c.bufs[i].get();
-        Style s = t == b ? T.get("tab_active")
+        Style s = t == b ? (t->quiet ? sty(T, "tab_quiet_act", "tab_active") : T.get("tab_active"))
                 : t->activity == 3 ? T.get("tab_hilight")
                 : t->activity == 2 ? T.get("tab_msg")
                 : t->activity == 1 ? T.get("tab_data")
+                : t->quiet ? sty(T, "tab_quiet", "tabbar")
                 : t->type == BT::STATUS ? sty(T, "tab_server", "tabbar") : tbs;
         Row r;
         cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + " ", s, false);
@@ -281,6 +308,7 @@ void Tui::draw() {
             cells(mk, bar, sty(T, "marker", "separator"), false);
             rows.push_back(mk);
         }
+        if (b->quiet && noise(*it)) continue;
         auto r = wrap(c, *it, b, cw);
         rows.insert(rows.end(), r.rbegin(), r.rend());
     }
@@ -289,6 +317,14 @@ void Tui::draw() {
         size_t idx = (size_t)(b->scroll + k);
         if (idx >= rows.size()) break;
         draw_row(0, top + ch - 1 - k, cw, rows[idx]);
+    }
+    if (sel_x0 >= 0) {  // the selection, reversed in place
+        tb_cell* cb = tb_cell_buffer();
+        for (int yy = top; yy < top + ch; yy++)
+            for (int xx = 0; xx < cw; xx++) {
+                tb_cell& cl = cb[yy * W + xx];
+                if (cl.ch && in_sel(xx, yy)) tb_set_cell(xx, yy, cl.ch, cl.fg | TB_REVERSE, cl.bg);
+            }
     }
 
     // live suggestions ("/set key", "/jo", "/help k"), Tab completes
@@ -508,7 +544,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
         tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
-        c.print(c.active, LK::INFO, std::string("Mouse ") + (mouse_on ? "on (Shift+drag selects text)" : "off"));
+        c.print(c.active, LK::INFO, std::string("Mouse ") + (mouse_on ? "on (drag copies, Shift+drag is the terminal's selection)" : "off"));
     }
     else return false;
     return true;
@@ -516,6 +552,7 @@ bool Tui::action(const std::string& a) {
 
 void Tui::key(int mod, int k, uint32_t ch) {
     if (c.keys_changed) c.keys_changed = false, load_keys();
+    sel_x0 = -1;  // typing drops the highlight of a copied selection
     if (!paste.empty()) {  // "Send N lines?" - y sends, anything else puts it back to edit
         std::string p;
         p.swap(paste);
@@ -571,10 +608,55 @@ void Tui::key(int mod, int k, uint32_t ch) {
     }
 }
 
-// Wheel scrolls the chat (or the nicklist under the pointer); left click picks
-// a tab or an activity number, or opens a query with a nick.
+// vendor/termbox2.c: horizontal wheel
+static const int TB_KEY_MOUSE_WHEEL_LEFT = 0xffff - 29, TB_KEY_MOUSE_WHEEL_RIGHT = 0xffff - 30;
+
+bool Tui::in_sel(int x, int y) const {
+    int a = sel_y0 * 10000 + sel_x0, z = sel_y1 * 10000 + sel_x1, p = y * 10000 + x;
+    return p >= std::min(a, z) && p <= std::max(a, z);
+}
+
+// the selected cells as text, one line per row, to the terminal's clipboard
+void Tui::copy_sel() {
+    tb_cell* cb = tb_cell_buffer();
+    int W = tb_width(), cw = nl_x >= 0 ? nl_x : W;
+    std::string out;
+    for (int y = std::min(sel_y0, sel_y1); y <= std::max(sel_y0, sel_y1); y++) {
+        std::string row;
+        for (int x = 0; x < cw; x++)
+            if (cb[y * W + x].ch && in_sel(x, y)) utf8_put(row, cb[y * W + x].ch);
+        while (!row.empty() && row.back() == ' ') row.pop_back();
+        out += (out.empty() && y == std::min(sel_y0, sel_y1) ? "" : "\n") + row;
+    }
+    if (out.empty()) return;
+    std::string osc = "\x1b]52;c;" + b64(out) + "\x07";
+    tb_send(osc.data(), osc.size());
+}
+
+// Wheel scrolls the chat (or the nicklist, or the topic, under the pointer);
+// left click picks a tab or an activity number, opens a query with a nick, or
+// unfolds the topic (double click: edit it); a drag in the chat copies text.
 void Tui::mouse(int mod, int k, int x, int y) {
+    int top = top_row(), ch = chat_height();
+    bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && (nl_x < 0 || x < nl_x);
+    if (selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {
+        sel_x1 = std::max(0, std::min(x, (nl_x >= 0 ? nl_x : tb_width()) - 1));
+        sel_y1 = std::max(top, std::min(y, top + ch - 1));
+        if (k == TB_KEY_MOUSE_RELEASE) {
+            selecting = false;
+            if (sel_x1 == sel_x0 && sel_y1 == sel_y0) sel_x0 = -1;  // a plain click
+            else copy_sel();
+        }
+        c.dirty = true;
+        return;
+    }
     if (mod & TB_MOD_MOTION) return;
+    if (over_topic && k >= TB_KEY_MOUSE_WHEEL_RIGHT && k <= TB_KEY_MOUSE_WHEEL_UP) {
+        bool back = k == TB_KEY_MOUSE_WHEEL_LEFT || k == TB_KEY_MOUSE_WHEEL_UP;
+        topic_off = std::max(0, topic_off + (back ? -8 : 8));
+        c.dirty = true;
+        return;
+    }
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) {
         int d = k == TB_KEY_MOUSE_WHEEL_UP ? 3 : -3;
         bool over_nicks = nl_x >= 0 && x > nl_x && y >= top_row() && y < top_row() + chat_height();
@@ -584,12 +666,32 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (k != TB_KEY_MOUSE_LEFT) return;
+    if (sel_x0 >= 0) sel_x0 = -1, c.dirty = true;
+    if (over_topic) {
+        Buffer* b = c.active;
+        long long now = now_ms();
+        bool dbl = now - click_ms < 400;
+        click_ms = dbl ? 0 : now;
+        if (!dbl) { topic_open = !topic_open; return; }
+        // double click: the topic into the input line, if we may set it (+t needs ops)
+        topic_open = false;
+        if (b->type != BT::CHANNEL || !b->srv) return;
+        auto me = b->nicks.find(irc_lower(b->srv->nick));
+        std::string my = me == b->nicks.end() ? "" : me->second.prefix;
+        if (b->modes.find('t') != std::string::npos && !rank_ok(b->srv, my, '%')) {
+            c.print(b, LK::ERROR, b->name + " is +t: only channel operators can change the topic");
+            return;
+        }
+        input = from_utf8("/topic " + b->topic), cur = input.size(), completing = false;
+        return;
+    }
     for (auto& h : hits) {
         if (h.y != y || x < h.x0 || x >= h.x1) continue;
         if (h.tab >= 0 && h.tab < (int)c.bufs.size()) c.select(c.bufs[(size_t)h.tab].get());
         else if (!h.nick.empty()) c.exec(c.active, "/query " + h.nick);
         return;
     }
+    if (over_chat) selecting = true, sel_x0 = sel_x1 = x, sel_y0 = sel_y1 = y;
 }
 
 void Tui::submit() {

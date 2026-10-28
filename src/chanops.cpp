@@ -6,7 +6,7 @@
 
 // pfx ranks at least as high as `need` ('@' op, '%' halfop; '%' means '@'
 // on servers without halfops)
-static bool rank_ok(const Server* s, const std::string& pfx, char need) {
+bool rank_ok(const Server* s, const std::string& pfx, char need) {
     size_t r = s->prefix_chars.find(need);
     if (r == std::string::npos) r = s->prefix_chars.find('@');
     return !pfx.empty() && r != std::string::npos && s->prefix_rank(pfx) <= (int)r;

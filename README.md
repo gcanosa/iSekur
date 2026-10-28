@@ -14,7 +14,7 @@ that mirrors your live session in a browser, bouncer style.
 - Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
 - `--daemon` starts it headless; attach from a terminal or the browser
-- Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist (F3 toggles)
+- Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click edits it
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
 - `/grep [-all] text` searches the scrollback
 - Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`
@@ -69,7 +69,7 @@ Not available on Cygwin.
 | PgUp / PgDn | scroll |
 | Alt+L (Option+L on a Mac), F2 | show / hide the nicklist |
 | Alt+T (Option+T on a Mac) | show / hide the topic bar |
-| F3 | toggle mouse (Shift+drag selects text while it's on) |
+| F3 | toggle mouse (drag copies; Shift+drag is the terminal's own selection) |
 | Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
 | Ctrl+A / E, Ctrl+U / K | start / end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
@@ -85,7 +85,7 @@ dropped instead of showing up as garbage.
 ## Commands
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
-`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/close`, `/win N`, `/raw`, `/ctcp`,
+`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/ctcp`,
 `/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

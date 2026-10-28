@@ -8,7 +8,7 @@ realname  = iSekur user
 theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes/)
 timestamp = %H:%M
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
-mouse     = on               ; click tabs/nicks, wheel scrolls; F3 toggles, Shift+drag selects text
+mouse     = on               ; click tabs/nicks, wheel scrolls, drag copies; F3 toggles
 ; ignore  = spammer!*@* *!*@*.bad.host   ; or use /ignore and /save
 
 # Flood control: lines sent at once, then one every N ms (0 = no limit).

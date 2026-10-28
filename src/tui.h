@@ -25,7 +25,17 @@ private:
     std::map<std::string, std::string> keymap;
     void load_keys();  // defaults + [keys]; again after /set keys.*  // "M-Right" -> "next_tab"
     bool nicklist = true, topicbar = true, truecolor = true, mouse_on = true;
-    int top_row() const { return topicbar ? 2 : 1; }  // first chat row, under the topic and tab bars
+    int top_row() const { return topicbar ? topic_h + 1 : 1; }  // first chat row, under the topic and tab bars
+    // topic bar: wheel scrolls it sideways, a click unfolds it, a double click edits it
+    int topic_h = 1, topic_off = 0;
+    bool topic_open = false;
+    const Buffer* topic_buf = nullptr;
+    long long click_ms = 0;
+    // drag in the chat selects text, copied on release (OSC 52)
+    int sel_x0 = -1, sel_y0 = 0, sel_x1 = 0, sel_y1 = 0;
+    bool selecting = false;
+    bool in_sel(int x, int y) const;
+    void copy_sel();
     // clickable regions from the last draw(): tabs, activity numbers, nicks
     struct Hit { int y, x0, x1; int tab; std::string nick; };
     std::vector<Hit> hits;

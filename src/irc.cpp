@@ -522,7 +522,7 @@ void Core::handle(Server* s, const Msg& m) {
                 s->send("CHATHISTORY " + std::string(last ? "AFTER " : "LATEST ") + ch + " " + when + " " +
                         std::to_string(std::min(fetch, 500)));
             }
-            line(b, LK::JOIN, m.nick, "You have joined " + ch);
+            line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
             s->send("MODE " + ch);
             if (fresh) select(b);
             return;
@@ -546,7 +546,7 @@ void Core::handle(Server* s, const Msg& m) {
                                : who + " (" + host_of(m) + ") has left " + b->name;
         if (!why.empty()) txt += " (" + why + ")";
         if (is_me(who)) b->joined = false, b->nicks.clear();
-        line(b, LK::PART, who, txt);
+        line(b, LK::PART, who, txt, is_me(who));
         notify(Ev::BUFFER, b);
         return;
     }
@@ -580,7 +580,7 @@ void Core::handle(Server* s, const Msg& m) {
             }
             if (query) b->name = nn;
             line(b, LK::NICK, m.nick,
-                 me ? "You are now known as " + nn : m.nick + " is now known as " + nn);
+                 me ? "You are now known as " + nn : m.nick + " is now known as " + nn, me);
             notify(Ev::BUFFER, b);
         }
         return;
