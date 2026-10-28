@@ -496,13 +496,13 @@ void Tui::load_keys() {
     for (int i = 1; i <= 10; i++) keymap["M-" + std::to_string(i % 10)] = "tab_" + std::to_string(i);
     keymap["M-Right"] = keymap["C-n"] = "next_tab";
     keymap["M-Left"] = keymap["C-p"] = "prev_tab";
-    keymap["M-a"] = "next_active";
+    keymap["C-a"] = keymap["M-a"] = "next_active";
     keymap["C-x"] = "next_server";
     keymap["C-w"] = "close_tab";
     keymap["PgUp"] = "scroll_up";
     keymap["PgDn"] = "scroll_down";
-    keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
-    keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
+    keymap["C-u"] = keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
+    keymap["C-t"] = keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
     keymap["F3"] = "toggle_mouse";
     keymap["M-d"] = keymap["∂"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"
     // [keys] action = spec [spec...]
@@ -598,9 +598,8 @@ void Tui::key(int mod, int k, uint32_t ch) {
     case TB_KEY_DELETE: if (cur < input.size()) input.erase(cur, 1); break;
     case TB_KEY_ARROW_LEFT: if (cur) cur--; break;
     case TB_KEY_ARROW_RIGHT: if (cur < input.size()) cur++; break;
-    case TB_KEY_HOME: case TB_KEY_CTRL_A: cur = 0; break;
+    case TB_KEY_HOME: cur = 0; break;  // Ctrl+A and Ctrl+U are next_active, toggle_nicklist
     case TB_KEY_END: case TB_KEY_CTRL_E: cur = input.size(); break;
-    case TB_KEY_CTRL_U: input.erase(0, cur); cur = 0; break;
     case TB_KEY_CTRL_K: input.erase(cur); break;
     case TB_KEY_ARROW_UP:
         if (hpos > 0) input = from_utf8(hist[--hpos]), cur = input.size();
