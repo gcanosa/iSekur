@@ -282,6 +282,12 @@ void Core::add(Buffer* b, Line l) {
     }
 }
 
+void Core::fold(Buffer* st) {
+    if (st->type != BT::STATUS || !st->srv) return;
+    st->collapsed = !st->collapsed, dirty = true;
+    notify(Ev::BUFFER, st);
+}
+
 // what you leave with: the config's quit_message / part_message, else what iSekur is
 std::string Core::bye(const Server* s, const std::string& key) const {
     return opt(s, key, "iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur");

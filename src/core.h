@@ -258,6 +258,8 @@ struct Core {
     bool chanop(Buffer* b, const std::string& cmd, const std::string& args);  // false: not one
     void kickban(Server* s, Buffer* b, const KickBan& kb, const std::string& userhost);
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
+    std::vector<std::pair<std::string, std::string>> nick_menu(Buffer* b, const std::string& nick) const;  // label, command
+    void fold(Buffer* status);  // a server tab: hide or show its channels in the tab bar and the webchat list
 
     void handle(Server* s, const Msg& m);  // irc.cpp
     std::vector<Job> jobs;  // /exec, exec.cpp
