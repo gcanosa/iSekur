@@ -30,7 +30,8 @@ that mirrors your live session in a browser, bouncer style.
 
 Prebuilt packages of the latest release (the links always point at the newest one):
 [macOS, Apple silicon](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz),
-[Linux x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-x86_64.tar.gz) (needs libssl3),
+[Linux x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-x86_64.tar.gz),
+[Linux arm64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-arm64.tar.gz) (both need libssl3),
 [source](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-src.tar.gz).
 
     curl -L https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz | tar xz
