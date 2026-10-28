@@ -227,14 +227,14 @@ void Core::close(Buffer* b) {
         if (!s) { print(b, LK::ERROR, "Can't close the main window; use /quit"); return; }
         if (s->state != SS::DISCONNECTED) {
             s->user_quit = true;
-            s->send_now("QUIT :" + quit_msg);
+            s->send_now("QUIT :" + bye(s, "quit_message"));
             if (s->conn.st == Conn::OPEN) s->conn.pump(0, s->inbuf);  // best-effort flush
             disconnect(s, "");
         }
         for (size_t i = bufs.size(); i-- > 0;)
             if (bufs[i]->srv == s && bufs[i].get() != b) close(bufs[i].get());
     } else if (b->type == BT::CHANNEL && b->joined && s) {
-        s->send("PART " + b->name);
+        s->send("PART " + b->name + " :" + bye(s, "part_message"));
     }
     if (pass_buf == b) pass_buf = nullptr, pass_done = nullptr;
     bool drop_server = s && b->type == BT::STATUS;
@@ -280,6 +280,11 @@ void Core::add(Buffer* b, Line l) {
         copy.text = "\x02[" + b->srv->cfg.name + "/" + b->name + "]\x02 " + ln.text;
         add(home, copy);
     }
+}
+
+// what you leave with: the config's quit_message / part_message, else what iSekur is
+std::string Core::bye(const Server* s, const std::string& key) const {
+    return opt(s, key, "iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur");
 }
 
 std::string Core::opt(const Server* s, const std::string& key, const std::string& def) const {
@@ -595,6 +600,26 @@ void Core::exec(Buffer* b, const std::string& input) {
         print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " (/save to keep)");
         return;
     }
+    if (cmd == "hilight") {  // /hilight [add|del] word: words highlighted besides your nick, * matches anything
+        auto words = split(ini_get(cfg, "general", "hilight_words"), ' ');
+        if (argv.size() < 2 || (argv[0] != "add" && argv[0] != "del")) {
+            if (!argv.empty()) { print(b, LK::ERROR, "Usage: /hilight [add|del] word"); return; }
+            print(b, LK::INFO, words.empty() ? "Highlighting only your nick (/hilight add word)" : "Highlighting your nick and: " + ini_get(cfg, "general", "hilight_words"));
+            return;
+        }
+        std::string w = irc_lower(argv[1]);
+        auto it = std::find(words.begin(), words.end(), w);
+        if (argv[0] == "add" && it == words.end()) words.push_back(w);
+        if (argv[0] == "del") {
+            if (it == words.end()) { print(b, LK::ERROR, w + " is not highlighted"); return; }
+            words.erase(it);
+        }
+        std::string joined;
+        for (auto& x : words) joined += (joined.empty() ? "" : " ") + x;
+        cfg["general"]["hilight_words"] = unsaved["general"]["hilight_words"] = joined;
+        print(b, LK::INFO, (argv[0] == "add" ? "Highlighting " : "No longer highlighting ") + w + " (/save to keep)");
+        return;
+    }
     if (cmd == "save") {
         std::string err;
         if (unsaved.empty()) { print(b, LK::INFO, "Nothing to save"); return; }
@@ -604,9 +629,10 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "quit") {
-        quit_msg = args.empty() ? quit_msg : args;
+        quit_msg = args;
         for (auto& sv : servers)
-            if (sv->state != SS::DISCONNECTED) sv->user_quit = true, sv->send_now("QUIT :" + quit_msg);
+            if (sv->state != SS::DISCONNECTED)
+                sv->user_quit = true, sv->send_now("QUIT :" + (args.empty() ? bye(sv.get(), "quit_message") : args));
         quit = true;
         return;
     }
@@ -644,7 +670,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "disconnect") {
         if (!s) return;
         s->user_quit = true;
-        s->send_now("QUIT :" + (args.empty() ? quit_msg : args));
+        s->send_now("QUIT :" + (args.empty() ? bye(s, "quit_message") : args));
         if (s->conn.st == Conn::OPEN) s->conn.pump(0, s->inbuf);
         disconnect(s, "");
         return;
@@ -790,7 +816,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string ch = !argv.empty() && s->is_chan(argv[0]) ? argv[0] : b->name;
         std::string msg = !argv.empty() && s->is_chan(argv[0]) ? rest(1) : args;
         if (!s->is_chan(ch)) { print(b, LK::ERROR, "Not a channel"); return; }
-        s->send("PART " + ch + (msg.empty() ? "" : " :" + msg));
+        s->send("PART " + ch + " :" + (msg.empty() ? bye(s, "part_message") : msg));
         return;
     }
     if (cmd == "msg" || cmd == "query" || cmd == "notice") {

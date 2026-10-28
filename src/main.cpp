@@ -231,7 +231,7 @@ int main(int argc, char** argv) {
 
     // flush QUITs for up to a second
     for (auto& s : c.servers)
-        if (s->state != SS::DISCONNECTED && !s->user_quit) s->send_now("QUIT :" + c.quit_msg);
+        if (s->state != SS::DISCONNECTED && !s->user_quit) s->send_now("QUIT :" + (c.quit_msg.empty() ? c.bye(s.get(), "quit_message") : c.quit_msg));
     long long until = now_ms() + 1000;
     while (now_ms() < until) {
         fds.clear(), polled.clear();

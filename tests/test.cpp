@@ -207,6 +207,20 @@ int main() {
     core.exec(chb, "/lockdown");
     assert(sent() == "MODE #c +mntsi\r\n");
 
+    // highlights: the nick and hilight_words, whole words, * globs; the default part/quit message
+    auto hl = [&](const std::string& t) { feed(":bob!u@h PRIVMSG #c :" + t); return chb->lines.back().hilight; };
+    assert(hl("hey ME!") && !hl("isekur rocks"));
+    core.exec(chb, "/hilight add iSekur");
+    core.exec(chb, "/hilight add ger*");
+    assert(hl("isekur rocks") && !hl("isekurs rock") && hl("hi Gerardo") && !hl("hi roger"));
+    core.exec(chb, "/hilight del isekur");
+    assert(!hl("isekur rocks") && core.unsaved["general"]["hilight_words"] == "ger*");
+    core.exec(chb, "/part");
+    assert(sent() == "PART #c :iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur\r\n");
+    core.cfg["server.t"]["part_message"] = "bye";
+    core.exec(chb, "/part");
+    assert(sent() == "PART #c :bye\r\n");
+
     // autojoin with keys, NickServ when SASL didn't log in, rejoin of open tabs with their key
     core.exec(chb, "/autojoin add");
     core.exec(chb, "/join #k s3cret");

@@ -328,13 +328,30 @@ void Core::auto_away(Server* s, time_t now) {
 }
 
 // ---- handlers --------------------------------------------------------------
-static bool hilights(const std::string& text, const std::string& nick) {
-    std::string t = irc_lower(mirc_strip(text)), n = irc_lower(nick);
-    for (size_t p = t.find(n); p != std::string::npos; p = t.find(n, p + 1)) {
-        auto word = [](char ch) { return isalnum((unsigned char)ch) || strchr("[]\\`_^{|}-", ch); };
-        bool l = p == 0 || !word(t[p - 1]), r = p + n.size() >= t.size() || !word(t[p + n.size()]);
-        if (l && r) return true;
-    }
+// your nick or one of hilight_words, as a whole word ("isekur" isn't in "isekurs"); a word with
+// * is a glob matched against each word of the text
+static bool hilights(const std::string& text, const std::string& nick, const std::string& words) {
+    std::string t = irc_lower(mirc_strip(text));
+    auto word = [](char ch) { return isalnum((unsigned char)ch) || strchr("[]\\`_^{|}-", ch); };
+    auto has = [&](const std::string& n) {
+        for (size_t p = t.find(n); !n.empty() && p != std::string::npos; p = t.find(n, p + 1)) {
+            bool l = p == 0 || !word(t[p - 1]), r = p + n.size() >= t.size() || !word(t[p + n.size()]);
+            if (l && r) return true;
+        }
+        return false;
+    };
+    auto glob = [&](const std::string& g) {
+        for (size_t i = 0; i < t.size();) {
+            size_t j = i;
+            while (j < t.size() && word(t[j])) j++;
+            if (j > i && fnmatch(g.c_str(), t.substr(i, j - i).c_str(), 0) == 0) return true;
+            i = j + 1;
+        }
+        return false;
+    };
+    if (has(irc_lower(nick))) return true;
+    for (auto& w : split(irc_lower(words), ' '))
+        if (w.find('*') != std::string::npos ? glob(w) : has(w)) return true;
     return false;
 }
 
@@ -781,7 +798,7 @@ void Core::handle(Server* s, const Msg& m) {
             b = find(s, peer);
             if (!b) b = notice ? reply_buf() : open(s, BT::QUERY, peer);
         }
-        bool hl = !self && !snote && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick));
+        bool hl = !self && !snote && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick, opt(s, "hilight_words", "")));
         std::string who = m.nick.empty() ? s->cfg.host : m.nick;
         if (replay) {
             // the AFTER timestamp has 1s precision: skip what the log already showed

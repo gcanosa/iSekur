@@ -18,6 +18,7 @@ that mirrors your live session in a browser, bouncer style.
 - `--daemon` starts it headless; attach from a terminal or the browser
 - Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click edits it
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
+- Highlights on your nick plus your own words (`/hilight add isekur`, `*` globs), and quit/part messages you can set (`quit_message`, `part_message`)
 - `/grep [-all] text` searches the scrollback
 - Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`
 - `/help` with colors, details and examples; commands complete with Tab as you type
@@ -102,7 +103,7 @@ dropped instead of showing up as garbage.
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/ctcp`,
-`/theme`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`, `/web [start|stop|status]`,
+`/theme`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 
