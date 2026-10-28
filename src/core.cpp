@@ -287,6 +287,36 @@ std::string Core::opt(const Server* s, const std::string& key, const std::string
     return s ? ini_get(cfg, "server." + s->cfg.name, key, g) : g;
 }
 
+// /reload: the config file again, without restarting. Unsaved /set changes stay
+// on top; servers pick up their settings like /set does (on the next connect),
+// new [server.*] sections are added and connected when autoconnect is on.
+void Core::reload(Buffer* b) {
+    Ini fresh;
+    if (!ini_load(cfg_path, fresh)) { print(b, LK::ERROR, "Can't read " + cfg_path); return; }
+    for (auto& [sec, kv] : unsaved)
+        for (auto& [k, v] : kv) fresh[sec][k] = v;
+    cfg = fresh;
+    std::string err;
+    if (!load_theme(ini_get(cfg, "general", "theme", "default"), theme, err)) print(b, LK::ERROR, err);
+    notify(Ev::THEME, nullptr);
+    for (auto& sv : servers) sv->cfg = server_cfg(sv->cfg.name), load_flood(sv.get());
+    for (auto& [sec, kv] : cfg) {
+        if (sec.rfind("server.", 0) != 0) continue;
+        std::string name = sec.substr(7);
+        bool known = false;
+        for (auto& sv : servers) known = known || sv->cfg.name == name;
+        if (known) continue;
+        Server* s = add_server(server_cfg(name));
+        print(b, LK::INFO, "New server " + name + (s->cfg.autoconnect ? ": connecting" : " (autoconnect off: /connect " + name + ")"));
+        if (s->cfg.autoconnect) connect(s);
+    }
+    cfg_changed = dirty = true;
+    size_t n = 0;
+    for (auto& [sec, kv] : unsaved) n += kv.size();
+    print(b, LK::INFO, "Reloaded " + cfg_path + (n ? " (" + std::to_string(n) + " unsaved /set changes kept on top)" : "") +
+                           ". Server settings apply on the next /connect, [web] after /web stop and /web start");
+}
+
 void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done) {
     pass_buf = b, pass_label = label, pass_done = std::move(done);
     print(b, LK::INFO, "Type the " + label + " (hidden; an empty line cancels)");
@@ -536,7 +566,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             sv->cfg = server_cfg(sv->cfg.name);
             load_flood(sv.get());
         }
-        if (sec == "keys") keys_changed = true;
+        if (sec == "keys") cfg_changed = true;
         dirty = true;
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
@@ -672,6 +702,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "clear") { b->lines.clear(); b->scroll = 0; dirty = true; notify(Ev::BUFFER, b); return; }
+    if (cmd == "reload") { reload(b); return; }
     if (cmd == "theme") {
         std::string err;
         if (args.empty()) print(b, LK::INFO, "Current theme: " + theme.name);

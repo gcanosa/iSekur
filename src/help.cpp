@@ -146,6 +146,12 @@ static const std::vector<CmdInfo> CMDS = {
      "Without arguments lists everything; with a key shows it; with a value changes it right away. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them.",
      {"/set", "/set theme neon", "/set server.libera.autojoin #a,#b", "/set log on"}},
+    {"reload", "Settings", "", "Re-read the config file",
+     "Applies an edited config without restarting: theme, keys, mouse, colors, bell, logging and "
+     "the rest right away; server settings on the next /connect; [web] after /web stop and /web "
+     "start. Servers added to the file are opened (and connected when autoconnect is on); removed "
+     "ones stay until you close their tab. /set changes not yet saved stay on top.",
+     {"/reload"}},
     {"save", "Settings", "", "Write changed settings to the config file",
      "Saves what /set, /server, /autojoin and /ignore changed. Comments in the file are kept.",
      {"/save"}},

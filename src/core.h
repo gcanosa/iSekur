@@ -198,7 +198,7 @@ struct Core {
     std::vector<std::unique_ptr<Buffer>> bufs;  // tab order
     Buffer* active = nullptr;
     int next_id = 1;
-    bool quit = false, dirty = true, keys_changed = false;
+    bool quit = false, dirty = true, cfg_changed = false;  // cfg_changed: the TUI re-reads keys, mouse, colors
     // auto-away: nobody attached (daemon, no web client) or no input for a while
     bool attached = true;
     time_t detached_at = 0, last_input = time(nullptr);
@@ -223,6 +223,7 @@ struct Core {
     void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done);
 
     void load_config();
+    void reload(Buffer* b);  // /reload
     // [server.<name>] key, falling back to [general], then `def`
     std::string opt(const Server* s, const std::string& key, const std::string& def) const;
     bool opt_on(const Server* s, const std::string& key, bool def) const;
