@@ -131,3 +131,9 @@ shows plain text (and the browser input does not hide the password).
 
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
+
+## License
+
+GPL-3.0-or-later, see [LICENSE](LICENSE). You can use, change and share iSekur, but copies and
+modified versions you give to others must stay under the GPL with their source code, and keep the
+copyright notice. Copyright (C) 2026 Gerardo Canosa. The vendored termbox2 is MIT.
