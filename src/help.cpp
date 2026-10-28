@@ -158,6 +158,13 @@ static const std::vector<CmdInfo> CMDS = {
      {"/unignore spammer!*@*"}},
 
     // ---- Session
+    {"exec", "Session", "[-o] [-y] command", "Run a shell command",
+     "The output shows up in the cmd tab as it comes, without blocking the chat. With -o it is "
+     "said in the tab you typed it in once the command ends, unless it is longer than "
+     "paste_confirm lines (-y sends it anyway). Commands are killed after exec_timeout "
+     "seconds (default 30) or 1000 lines. /exec alone lists the running ones. Off in the "
+     "webchat unless /set exec_web on, since it runs commands on this machine.",
+     {"/exec ls -la", "/exec -o uptime", "/sh git log --oneline -5"}, "sh"},
     {"web", "Session", "[start|stop|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one).",

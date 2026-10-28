@@ -11,6 +11,8 @@
 #include <set>
 #include <string>
 #include <vector>
+#include <poll.h>
+#include <sys/types.h>
 #include "net.h"
 
 // ---- INI (config + themes) -------------------------------------------------
@@ -118,6 +120,18 @@ struct E2E {
     std::string nick, salt, key;  // key = scrypt(password, salt), "" until the password is typed
     bool mine = false;            // we sent the invite (salt)
     bool ok = false;              // both sides proved the same key: messages are encrypted
+};
+
+// /exec: a running shell command (exec.cpp)
+struct Job {
+    pid_t pid = -1;
+    int fd = -1;                   // its stdout+stderr, -1 once at EOF
+    std::string cmd, partial, note;  // partial: an unfinished line; note: why it was stopped
+    bool say = false, yes = false;   // -o: say the output in `to`; -y: even if it's long
+    Buffer* to = nullptr;
+    std::vector<std::string> out;    // -o: the lines, said when it ends
+    size_t nlines = 0;
+    time_t started = 0;
 };
 
 struct Core;
@@ -243,6 +257,12 @@ struct Core {
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
 
     void handle(Server* s, const Msg& m);  // irc.cpp
+    std::vector<Job> jobs;  // /exec, exec.cpp
+    bool from_web = false;  // exec() called for the webchat: /exec needs exec_web
+    void exec_cmd(Buffer* b, const std::string& args);
+    void jobs_poll(const std::vector<pollfd>& fds, size_t from);  // their pipes from fds[from] on
+    void job_read(Job& j);
+    void job_line(Job& j, const std::string& raw);
     void e2e_cmd(Buffer* b, const std::string& args);  // e2e.cpp
     void e2e_pass(Buffer* q, const std::string& pass);
     void e2e_ctcp(Server* s, const std::string& nick, const std::string& verb, const std::string& arg);

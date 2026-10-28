@@ -476,6 +476,7 @@ void Core::exec(Buffer* b, const std::string& input) {
 
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
+    if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = secret_key;
         if (argv.empty()) {
