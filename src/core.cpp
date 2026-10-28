@@ -575,6 +575,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         // servers pick up host/port/sasl/... on their next connect; flood limits now
         for (auto& sv : servers) {
             sv->cfg = server_cfg(sv->cfg.name);
+            if (key == "nick") sv->last_nick.clear();  // /set nick wins over the last /nick
             load_flood(sv.get());
         }
         if (sec == "keys") cfg_changed = true;
