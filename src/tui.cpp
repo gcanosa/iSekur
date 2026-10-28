@@ -333,23 +333,33 @@ void Tui::draw() {
 
     // live suggestions ("/set key", "/jo", "/help k"), Tab completes
     std::vector<Sugg> sk;
-    suggest(sk);
+    if (suggest(sk) < 0 || sugg_sel >= (int)sk.size()) sugg_sel = -1;
     if (!sk.empty()) {
-        int n = std::min((int)sk.size(), std::max(1, ch / 2));
+        int sz = (int)sk.size(), n = std::min(sz, std::max(1, ch / 2));
+        // scrolled so the highlight stays above the "... more" row
+        int off = sugg_sel >= n - 1 ? sugg_sel - n + 2 : 0;
+        if (off + n >= sz) off = sz - n;
         Style ks = T.get("input"), kk = sty(T, "set_key", "info"), kv = sty(T, "set_value", "input"), ke = T.get("separator");
         for (Style* st : {&kk, &kv, &ke})
             if (st->bg < 0) st->bg = ks.bg;
         for (int i = 0; i < n; i++) {
-            int yy = top + ch - n + i;
+            int yy = top + ch - n + i, idx = off + i;
             fill(yy, 0, W, ks);
-            if (i == n - 1 && (int)sk.size() > n) {
-                text(1, yy, W, "... " + std::to_string(sk.size() - (size_t)n + 1) + " more", ks, false);
+            if (i == n - 1 && idx < sz - 1) {
+                text(1, yy, W, "... " + std::to_string(sz - idx) + " more", ks, false);
                 break;
             }
-            const Sugg& g = sk[(size_t)i];
-            int x2 = text(1, yy, W, g.word, kk, false);
-            x2 = text(x2, yy, W, g.sep, ke, false);
-            text(x2, yy, W, g.val, kv, false);
+            const Sugg& g = sk[(size_t)idx];
+            Style rk = kk, re = ke, rv = kv;
+            if (idx == sugg_sel) {
+                for (Style* st : {&rk, &re, &rv}) st->attr |= A_REV;
+                Style rs = ks;
+                rs.attr |= A_REV;
+                fill(yy, 0, W, rs);
+            }
+            int x2 = text(1, yy, W, g.word, rk, false);
+            x2 = text(x2, yy, W, g.sep, re, false);
+            text(x2, yy, W, g.val, rv, false);
         }
     }
 
@@ -551,7 +561,7 @@ void Tui::on_readable() {
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
-        if (nl && paste.empty() && menu.items.empty()) { enter = true; continue; }
+        if (nl && paste.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
         else if (ev.type == TB_EVENT_MOUSE) mouse(ev.mod, ev.key, ev.x, ev.y);
         c.dirty = true;
@@ -613,6 +623,24 @@ void Tui::key(int mod, int k, uint32_t ch) {
         else input = from_utf8(p), cur = input.size();
         return;
     }
+    // the suggestion list under the input line takes Up/Down while it shows;
+    // Enter or Tab on the highlight puts it in the input line without sending
+    // (only Alt/Cmd are excluded: termbox reports Enter and Tab as Ctrl+M / Ctrl+I)
+    if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER)) && (k == TB_KEY_ARROW_UP || k == TB_KEY_ARROW_DOWN || (sugg_sel >= 0 && (k == TB_KEY_ENTER || k == TB_KEY_TAB)))) {
+        std::vector<Sugg> sg;
+        int from = suggest(sg), n = (int)sg.size();
+        if (from >= 0 && n > 0) {
+            if (k == TB_KEY_ARROW_DOWN) sugg_sel = std::min(sugg_sel + 1, n - 1);
+            else if (k == TB_KEY_ARROW_UP) sugg_sel = sugg_sel < 0 ? n - 1 : sugg_sel - 1;  // above the first: none
+            else if (sugg_sel < n) {
+                std::u32string w = from_utf8(sg[(size_t)sugg_sel].word + " ");
+                input.replace((size_t)from, cur - (size_t)from, w);
+                cur = (size_t)from + w.size(), sugg_sel = -1, completing = false;
+            }
+            return;
+        }
+    }
+    sugg_sel = -1;
     auto it = keymap.find(keyspec(mod, k, ch));
     if (it != keymap.end() && action(it->second)) return;
     if (k != TB_KEY_TAB) completing = false;
