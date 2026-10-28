@@ -179,11 +179,15 @@ int main() {
     // one iSekur per config: the second listener finds the first; close() removes the socket
     std::string serr, sp = sock_path_for("build/isekur-test.conf");
     Session s1, s2;
+#ifdef __CYGWIN__
+    assert(s1.listen(sp, serr) == 0);  // no detaching there
+#else
     assert(sp == "build/isekur.sock" && s1.listen(sp, serr) == 1 && s2.listen(sp, serr) == -1);
     s1.close();
     assert(access(sp.c_str(), F_OK) != 0 && s2.listen(sp, serr) == 1);
     s2.close();
     assert(Session().listen(std::string(200, 'x'), serr) == 0 && serr.find("too long") != std::string::npos);
+#endif
 
     assert(ctcp_version().rfind(version_string() + " :: ", 0) == 0 && version_string().find(ISEKUR_VERSION) != std::string::npos);
 
