@@ -29,6 +29,11 @@ hilight_window = on
 # invites (most terminals then flash, bounce the dock icon or play a sound).
 bell_notifications = on
 
+# /exec: shell commands are killed after this many seconds (0 = never). The
+# webchat can't run them unless exec_web = on (anyone logged in to it could).
+exec_timeout = 30
+exec_web     = off
+
 # Ask before sending a paste longer than this many lines (0 = never ask).
 paste_confirm = 5
 

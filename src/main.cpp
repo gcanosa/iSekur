@@ -171,6 +171,9 @@ int main(int argc, char** argv) {
             if (s->conn.fd >= 0) fds.push_back({s->conn.fd, s->conn.events(), 0}), polled.push_back(s.get());
         web.add_fds(fds);
         ses.add_fds(fds);
+        size_t job0 = fds.size();
+        for (auto& j : c.jobs)
+            if (j.fd >= 0) fds.push_back({j.fd, POLLIN, 0});
 
         if (wait_fds(fds, c.drain()) < 0 && errno != EINTR) break;
         // servers first: their handlers never delete servers, so `polled` stays valid
@@ -180,6 +183,7 @@ int main(int argc, char** argv) {
         bool hung = !local && (ses.lost || (c.tty && (fds[0].revents & (POLLHUP | POLLERR))));
         if (c.tty && !hung && (fds[0].revents || fds[1].revents)) tui.on_readable();
         web.process(fds);
+        c.jobs_poll(fds, job0);
         int t = ses.process(fds, c.tty);
         if (c.detach_req && local) c.print(c.active, LK::ERROR, "Detaching is not available: " + err);
         else if (c.tty && (hung || c.detach_req)) {

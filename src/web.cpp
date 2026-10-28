@@ -478,7 +478,7 @@ void Web::ws_frames(Client& cl) {
         auto m = json_flat(p);
         Buffer* b = by_id(c, atoi(m["buf"].c_str()));
         if (!b) continue;
-        if (m["t"] == "input") c.exec(b, m["text"]);
+        if (m["t"] == "input") c.from_web = true, c.exec(b, m["text"]), c.from_web = false;
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         if (cl.conn.closing) return;

@@ -100,6 +100,11 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
 
+Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab without blocking
+the chat; `/exec -o uptime` says it in the current channel or query (longer than `paste_confirm`
+lines needs `-y`). Commands are killed after `exec_timeout` seconds; the webchat can't run them
+unless `exec_web = on`.
+
 IRC operators: `/oper user` asks for the password (hidden). While you are +o or +s, server
 notices (`*** ...`) and WALLOPS go to a `*snotices` tab. `/kill`, `/gline`, `/kline`, `/zline`,
 `/shun`, `/wallops`, `/away`, `/kick` and friends take the reason as plain words (iSekur adds the
