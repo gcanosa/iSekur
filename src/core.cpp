@@ -24,7 +24,7 @@ void Core::load_config() {
     if (!load_theme(ini_get(cfg, "general", "theme", "default"), theme, err)) {
         if (!load_theme("default", theme, err)) theme = Theme{};
     }
-    Buffer* home = open(nullptr, BT::STATUS, "isekur");
+    Buffer* home = open(nullptr, BT::STATUS, "cmd");
     if (!found)
         print(home, LK::INFO, "No config at " + cfg_path +
                                   " - see iSekur.conf.example. Try /server irc.example.org 6697 -tls");

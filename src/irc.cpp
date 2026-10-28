@@ -457,7 +457,8 @@ void Core::handle(Server* s, const Msg& m) {
                 s->max_modes = t.size() <= 6 ? 12 : std::max(1, std::min(atoi(t.c_str() + 6), 12));
             } else if (t.rfind("NETWORK=", 0) == 0) {
                 s->network = t.substr(8);
-                notify(Ev::BUFFER, s->status);
+                for (auto& b : bufs)  // the webchat groups tabs by network name
+                    if (b->srv == s) notify(Ev::BUFFER, b.get());
             }
         }
         return;

@@ -105,7 +105,10 @@ static Style nick_style(const Theme& t, const std::string& nick) {
     return s;
 }
 
-static std::string buf_label(const Buffer* b) { return b->name; }  // status = config name
+// a status tab shows the network (NETWORK= from 005, e.g. OFTC), the config name until then
+static std::string buf_label(const Buffer* b) {
+    return b->type == BT::STATUS && b->srv && !b->srv->network.empty() ? b->srv->network : b->name;
+}
 
 // ---- line layout -----------------------------------------------------------
 static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_) {
@@ -389,6 +392,16 @@ void Tui::draw() {
         x = text(x, y, W, "] ", ss, false);
     }
     if (b->scroll) seg("-- MORE --", T.get("hilight"));
+    {  // uptime, under the nick list (right edge without one): u:3d4h22m, seconds below a day
+        long up = (long)(time(nullptr) - c.started);
+        std::string u = "u:";
+        const std::pair<long, const char*> units[] = {{2592000, "mo"}, {86400, "d"}, {3600, "h"}, {60, "m"}, {1, "s"}};
+        bool days = up >= 86400;
+        for (auto& [n, name] : units)
+            if ((u.size() > 2 || up >= n || n == 1) && !(n == 1 && days)) u += std::to_string(up / n) + name, up %= n;
+        int ux = nlw ? cw + 2 : W - (int)u.size() - 1;
+        if (ux > x) text(ux, y, W, u, sh, false);
+    }
 
     // input line
     y = H - 1;
