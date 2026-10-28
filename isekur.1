@@ -114,6 +114,8 @@ asks for a password and starts an encrypted query with another iSekur user, who 
 and your nick and the same password (AES-256-GCM, key from scrypt, kept in memory only);
 .B /e2e off
 ends it.
+.B /e2e #channel
+encrypts a channel for everyone who types the same password (no handshake; others see +iSE lines).
 Channel operators also get
 .BR /massop ", " /massdeop ", " /massvoice ", " /massdevoice ", " /masskick ,
 .BR /lockdown ", " /unlock ", " /kickban " (" /kb "), " /tempban ", " /chanstats

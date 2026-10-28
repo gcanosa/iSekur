@@ -737,7 +737,13 @@ void Core::handle(Server* s, const Msg& m) {
         bool snote = notice && server_msg && s->state == SS::CONNECTED && text.rfind("*** ", 0) == 0 &&
                      s->umodes.find_first_of("os") != std::string::npos;
         bool locked = false;  // /e2e: decrypted
-        if (!notice && text.rfind("+iSE ", 0) == 0 && !s->is_chan(tgt)) {
+        if (!notice && text.rfind("+iSE ", 0) == 0 && s->is_chan(tgt)) {
+            auto e = s->chan_e2e.find(irc_lower(tgt));
+            std::string plain;
+            if (e != s->chan_e2e.end() && e2e_open(e->second, text.substr(5), plain, irc_lower(tgt))) text = plain, locked = true;
+            else text = std::string("[\xf0\x9f\x94\x92 encrypted message: can't decrypt, ") +
+                        (e == s->chan_e2e.end() ? "no password (/e2e " + tgt + ")" : "wrong password?") + "]";
+        } else if (!notice && text.rfind("+iSE ", 0) == 0) {
             auto e = s->e2e.find(irc_lower(self ? tgt : m.nick));
             std::string plain;
             if (e != s->e2e.end() && e2e_open(e->second.key, text.substr(5), plain)) text = plain, locked = true;

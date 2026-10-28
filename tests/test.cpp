@@ -77,6 +77,10 @@ int main() {
         raw[14] ^= 1;
         assert(!e2e_open(k, b64(raw), out) && !e2e_open(k, "short", out));
         assert(("+iSE " + e2e_seal(k, std::string(259, 'x'))).size() <= 400);  // say() chunk fits
+        // channels: the channel name is AAD, a line copied to another channel doesn't open
+        std::string cs = e2e_seal(k, "hi", "#a");
+        assert(e2e_open(k, cs, out, "#a") && out == "hi");
+        assert(!e2e_open(k, cs, out, "#b") && !e2e_open(k, cs, out));
     }
 
     int op;
@@ -197,6 +201,20 @@ int main() {
     core.chan_timers(ts, t0 + 60);
     assert(sent() == "TOPIC #c :first\r\nTOPIC #c :second\r\n");
     core.exec(chb, "/topicrotate off");
+    {  // /e2e #c: what we send opens on the way back in, a wrong password doesn't; the menu flips
+        core.exec(chb, "/e2e #c hunter2");
+        assert(e2e_on(chb) && core.tab_menu(chb)[2].second == "/e2e off");
+        core.say(chb, "secret", false);
+        std::string line = sent();
+        assert(line.rfind("PRIVMSG #c :+iSE ", 0) == 0 && line.find("secret") == std::string::npos);
+        feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
+        assert(chb->lines.back().text == "\xf0\x9f\x94\x92 secret");
+        ts->chan_e2e["#c"] = e2e_key("nope", "isekur-chan:#c");
+        feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
+        assert(chb->lines.back().text.find("wrong password?") != std::string::npos);
+        core.exec(chb, "/e2e off");
+        assert(!e2e_on(chb) && core.tab_menu(chb)[2].second == "/e2e #c");
+    }
     core.chan_timers(ts, t0 + 999);
     assert(sent().empty());
     core.exec(chb, "/chanstats");

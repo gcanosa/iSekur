@@ -155,6 +155,7 @@ struct Server {
     int sasl_step = 0, nick_tries = 0, backoff = 0;
     bool cap_done = false, sasl_ok = false;
     std::map<std::string, E2E> e2e;  // irc_lower(nick) -> session
+    std::map<std::string, std::string> chan_e2e;  // irc_lower(chan) -> key from /e2e #chan, memory only
     std::map<std::string, std::string> chan_keys;  // irc_lower(chan) -> key from /join or autojoin, for rejoins
     time_t last_rx = 0, reconnect_at = 0, ping_at = 0, ctcp_at = 0;
     long long ping_sent_ms = 0;
@@ -274,6 +275,7 @@ struct Core {
     void e2e_pass(Buffer* q, const std::string& pass);
     void e2e_ctcp(Server* s, const std::string& nick, const std::string& verb, const std::string& arg);
     void e2e_note(Server* s, const std::string& nick, LK k, const std::string& text);
+    void e2e_chan(Buffer* b, const std::string& pass);
 };
 
 long long now_ms();
@@ -281,8 +283,9 @@ std::string b64(const std::string& s);
 bool rank_ok(const Server* s, const std::string& pfx, char need);  // chanops.cpp
 std::string unb64(const std::string& s);  // "" on bad input
 std::string e2e_key(const std::string& pass, const std::string& salt);  // e2e.cpp
-std::string e2e_seal(const std::string& key, const std::string& plain);  // b64(nonce|ct|tag)
-bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain);
+std::string e2e_seal(const std::string& key, const std::string& plain, const std::string& aad = "");  // b64(nonce|ct|tag)
+bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain, const std::string& aad = "");
+bool e2e_on(const Buffer* b);  // a 🔒 tab: an encrypted query, or a channel with a key
 std::string fmt_time(time_t t, const std::string& fmt);
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS

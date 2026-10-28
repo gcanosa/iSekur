@@ -133,6 +133,12 @@ sides see 🔒; a wrong one is reported to both and nothing is encrypted. Keys a
 only. `/e2e off` ends it. With `--daemon` the decryption happens in the daemon, so the webchat
 shows plain text (and the browser input does not hide the password).
 
+Encrypted channels: `/e2e #chan` (or "Turn on E2E" in the channel tab's right click menu) asks
+for a password and encrypts what you say there. Everyone who typed the same password reads it,
+marked 🔒 per line and on the tab; everyone else sees `+iSE` noise. There is no handshake, so
+a wrong password is only noticed when the others' lines don't open. Anyone with the password
+reads everything: to drop someone, change it. `/e2e off` in the channel turns it off.
+
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
 
