@@ -191,6 +191,19 @@ int main() {
     assert(sent().find("NickServ") == std::string::npos);
     core.exec(home, "/autojoin");  // no server in the cmd tab
 
+    // whois: framed, in the active tab
+    core.select(chb);
+    size_t wb = chb->lines.size();
+    feed(":srv 311 me Bob ~u h.example * :Bob Real");
+    feed(":srv 319 me Bob :@#c #d");
+    feed(":srv 317 me Bob 3725 1700000000 :seconds idle, signon time");
+    feed(":srv 318 me Bob :End of /WHOIS list.");
+    feed(":srv 318 me Bob :End of /WHOIS list.");  // a stray end: no second frame
+    std::vector<std::string> wl;
+    for (size_t k = wb; k < chb->lines.size(); k++) wl.push_back(mirc_strip(chb->lines[k].text));
+    assert(wl.size() == 6 && wl[0].rfind("┌─ whois Bob", 0) == 0 && wl[1] == "│ Bob (~u@h.example): Bob Real" &&
+           wl[2] == "│ channels @#c #d" && wl[3].rfind("│ idle 1h2m5s, signed on ", 0) == 0 && wl[4] == "└─────────");
+
     core.exec(home, "/detach");  // nothing attached (the webchat typed it)
     assert(!core.detach_req && home->lines.back().kind == LK::ERROR);
     core.tty = true;

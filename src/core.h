@@ -127,6 +127,7 @@ struct Server {
     int max_modes = 3;                      // 005 MODES: mode changes per MODE line
     std::deque<KickBan> kb_wait;            // one per USERHOST sent, answered in order
     std::vector<TempBan> tempbans;          // lifted by Core::chan_timers
+    std::string whois;  // irc_lower(nick) between its 311 and 318: the lines get a frame
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
     int sasl_step = 0, nick_tries = 0, backoff = 0;
     bool cap_done = false, sasl_ok = false;

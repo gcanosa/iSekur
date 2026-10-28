@@ -221,7 +221,7 @@ void Core::connect(Server* s) {
     s->conn.close();
     s->user_quit = false;
     s->caps.clear(), s->caps_ls.clear();
-    s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0;
+    s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear();
     s->away = s->auto_away = false;
     s->hist_batches.clear();
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
@@ -772,6 +772,41 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "ERROR") { print(s->status, LK::ERROR, m.p(0)); return; }
+
+    // whois: a framed block in the tab you asked from
+    static const std::set<std::string> whois_lines = {"301", "307", "310", "312", "313", "317", "319", "320",
+                                                      "330", "335", "338", "378", "379", "671", "276"};
+    if (cmd == "311" && m.params.size() > 5) {
+        s->whois = irc_lower(m.p(1));
+        print(reply_buf(), LK::INFO, "┌─ whois \x02" + m.p(1) + "\x02 ─────────");
+        print(reply_buf(), LK::INFO, "│ " + m.p(1) + " (" + m.p(2) + "@" + m.p(3) + "): " + m.p(5));
+        return;
+    }
+    if (!s->whois.empty() && m.params.size() > 2 && irc_lower(m.p(1)) == s->whois) {
+        if (cmd == "318") {
+            s->whois.clear();
+            print(reply_buf(), LK::INFO, "└─────────");
+            return;
+        }
+        if (whois_lines.count(cmd)) {
+            std::string txt;
+            if (cmd == "317") {  // nick idle signon :seconds idle, signon time
+                long idle = atol(m.p(2).c_str());
+                txt = "idle ";
+                if (idle >= 86400) txt += std::to_string(idle / 86400) + "d";
+                if (idle >= 3600) txt += std::to_string(idle / 3600 % 24) + "h";
+                if (idle >= 60) txt += std::to_string(idle / 60 % 60) + "m";
+                txt += std::to_string(idle % 60) + "s";
+                if (m.params.size() > 4) txt += ", signed on " + fmt_time(atol(m.p(3).c_str()), "%Y-%m-%d %H:%M");
+            } else if (cmd == "312") txt = "server " + m.p(2) + (m.params.size() > 3 ? " (" + m.p(3) + ")" : "");
+            else if (cmd == "319") txt = "channels " + m.p(2);
+            else if (cmd == "301") txt = "away: " + m.p(2);
+            else if (cmd == "330" && m.params.size() > 3) txt = "logged in as " + m.p(2);
+            else for (size_t i = 2; i < m.params.size(); i++) txt += (i > 2 ? " " : "") + m.params[i];
+            print(reply_buf(), LK::INFO, "│ " + txt);
+            return;
+        }
+    }
 
     // generic numerics: route to a channel buffer if the reply names one
     if (cmd.size() == 3 && isdigit((unsigned char)cmd[0])) {
