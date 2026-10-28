@@ -63,7 +63,8 @@ static const std::vector<CmdInfo> CMDS = {
      "/e2e #channel asks for a password and encrypts what you say there; whoever typed the same "
      "password reads it (lines with 🔒), the rest see +iSE noise. No check: a wrong password just "
      "can't open the others' lines. Anyone with the password reads it all; to drop someone, change it. "
-     "Also in the channel tab's right click menu.",
+     "Also in the channel tab's right click menu. For an autojoin channel the key (not the password) "
+     "is saved in the config as e2e_keys, so a restart doesn't ask; anyone who reads the file can read the channel.",
      {"/e2e alice", "/e2e #secret", "/e2e off", "/e2e"}, "sq"},
     {"me", "Chat", "action", "Send an action (/me waves)",
      "Shows as \"* yournick action\" in the channel or query.",

@@ -97,6 +97,7 @@ void Core::e2e_cmd(Buffer* b, const std::string& args) {
         std::string nick = argv.size() > 1 ? argv[1] : b->type != BT::STATUS ? b->name : "";
         if (s->is_chan(nick)) {
             if (!s->chan_e2e.erase(irc_lower(nick))) { print(b, LK::ERROR, "No encryption in " + nick); return; }
+            e2e_keep(s, true);
             Buffer* c = find(s, nick);
             print(c ? c : b, LK::INFO, "Encryption in " + nick + " turned off; you send plain text again");
             if (c) notify(Ev::BUFFER, c);
@@ -136,10 +137,32 @@ void Core::e2e_chan(Buffer* c, const std::string& pass) {
     std::string k = e2e_key(pass, "isekur-chan:" + irc_lower(c->name));
     if (k.empty()) { print(c, LK::ERROR, "Couldn't make the key"); return; }
     c->srv->chan_e2e[irc_lower(c->name)] = k;
+    e2e_keep(c->srv, true);
+    bool kept = ("," + ini_get(cfg, "server." + c->srv->cfg.name, "e2e_keys")).find("," + irc_lower(c->name) + ":") != std::string::npos;
     print(c, LK::INFO, "\xf0\x9f\x94\x92 Encryption in " + c->name + " is on: only people with the same password can read "
-                       "what you send. /e2e off turns it off");
+                       "what you send. " + (kept ? "Kept in the config for autojoin. " : "") + "/e2e off turns it off");
     notify(Ev::BUFFER, c);
     dirty = true;
+}
+
+// e2e_keys in [server.x]: the keys of the autojoin channels, so a restart doesn't ask again.
+// The scrypt key is stored, not the password: it opens the channel but doesn't give the password
+// back. now: written at once (/e2e), else with the next /save (/autojoin add|del).
+// ponytail: protected only by the file's 0600, like sasl_pass; a master password or the OS
+// keychain is the upgrade if that's not enough.
+void Core::e2e_keep(Server* s, bool now) {
+    std::string sec = "server." + s->cfg.name, v;
+    for (auto& e : s->cfg.autojoin) {
+        auto k = s->chan_e2e.find(irc_lower(split(e, ' ')[0]));
+        if (k != s->chan_e2e.end()) v += (v.empty() ? "" : ",") + k->first + ":" + b64(k->second);
+    }
+    if (v == ini_get(cfg, sec, "e2e_keys")) return;
+    cfg[sec]["e2e_keys"] = unsaved[sec]["e2e_keys"] = v;
+    if (!now) return;
+    Ini part{{sec, unsaved[sec]}};  // the whole section: a /server one isn't in the file yet
+    std::string err;
+    if (ini_save(cfg_path, part, err)) unsaved.erase(sec);
+    else print(s->status, LK::ERROR, err);
 }
 
 // the password arrived: accept an invite, or send one

@@ -166,6 +166,9 @@ Server* Core::add_server(const ServerCfg& sc) {
     servers.push_back(std::move(s));
     sp->status = open(sp, BT::STATUS, sc.name);
     load_flood(sp);
+    for (auto& e : split(ini_get(cfg, "server." + sc.name, "e2e_keys"), ','))  // "#chan:b64key", see e2e_keep
+        if (size_t c = e.rfind(':'); c != std::string::npos && unb64(e.substr(c + 1)).size() == 32)
+            sp->chan_e2e[irc_lower(e.substr(0, c))] = unb64(e.substr(c + 1));
     return sp;
 }
 
@@ -770,6 +773,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             std::string sec = "server." + sv->cfg.name;
             sv->cfg.autojoin = aj;
             cfg[sec]["autojoin"] = unsaved[sec]["autojoin"] = v;
+            e2e_keep(sv.get(), false);
             part[sec] = unsaved[sec];  // the whole section: a /server one isn't in the file yet
             unsaved.erase(sec);
             done += (done.empty() ? "" : "; ") + sv->cfg.name + ": " + std::to_string(aj.size()) + " channel" + (aj.size() == 1 ? "" : "s");
@@ -817,6 +821,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string v;
         for (auto& e : aj) v += (v.empty() ? "" : ",") + e;
         cfg[sec]["autojoin"] = unsaved[sec]["autojoin"] = v;
+        e2e_keep(s, false);
         print(b, LK::INFO, (argv[0] == "add" ? "Added " + ch + " to" : "Removed " + ch + " from") + " autojoin on " + s->cfg.name + " (/save to keep)");
         return;
     }

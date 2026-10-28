@@ -276,6 +276,7 @@ struct Core {
     void e2e_ctcp(Server* s, const std::string& nick, const std::string& verb, const std::string& arg);
     void e2e_note(Server* s, const std::string& nick, LK k, const std::string& text);
     void e2e_chan(Buffer* b, const std::string& pass);
+    void e2e_keep(Server* s, bool now);
 };
 
 long long now_ms();

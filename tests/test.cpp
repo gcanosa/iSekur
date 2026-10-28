@@ -214,6 +214,22 @@ int main() {
         assert(chb->lines.back().text.find("wrong password?") != std::string::npos);
         core.exec(chb, "/e2e off");
         assert(!e2e_on(chb) && core.tab_menu(chb)[2].second == "/e2e #c");
+        // an autojoin channel's key goes to the config (the key, not the password) and comes back
+        core.cfg_path = "build/test-e2e.conf";
+        unlink(core.cfg_path.c_str());
+        core.exec(chb, "/autojoin add");
+        core.exec(chb, "/e2e #c hunter2");
+        Ini disk;
+        assert(ini_load(core.cfg_path, disk));
+        std::string kv = ini_get(disk, "server.t", "e2e_keys");
+        assert(kv == "#c:" + b64(e2e_key("hunter2", "isekur-chan:#c")) && kv.find("hunter2") == std::string::npos);
+        Core fresh;
+        fresh.cfg = disk;
+        assert(fresh.add_server(tc)->chan_e2e["#c"] == ts->chan_e2e["#c"]);
+        core.exec(chb, "/e2e off");
+        assert(ini_load(core.cfg_path, disk) && ini_get(disk, "server.t", "e2e_keys").empty());
+        core.exec(chb, "/autojoin del");
+        unlink(core.cfg_path.c_str()), core.cfg_path.clear();
     }
     core.chan_timers(ts, t0 + 999);
     assert(sent().empty());
