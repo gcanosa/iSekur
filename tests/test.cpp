@@ -1,4 +1,5 @@
 // Self-checks for the parsing code: run with `make test`.
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <unistd.h>
