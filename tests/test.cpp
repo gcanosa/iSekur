@@ -278,6 +278,10 @@ int main() {
     for (size_t k = wb; k < chb->lines.size(); k++) wl.push_back(mirc_strip(chb->lines[k].text));
     assert(wl.size() == 6 && wl[0].rfind("┌─ whois Bob", 0) == 0 && wl[1] == "│ Bob (~u@h.example): Bob Real" &&
            wl[2] == "│ channels @#c #d" && wl[3].rfind("│ idle 1h2m5s, signed on ", 0) == 0 && wl[4] == "└─────────");
+    wb = chb->lines.size();  // a 311 without the "*" (SekurIRCd) is framed too
+    feed(":srv 311 me Erick erick c.example :Erick R");
+    feed(":srv 318 me Erick :End of /WHOIS list.");
+    assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
 
     core.exec(home, "/detach");  // nothing attached (the webchat typed it)
     assert(!core.detach_req && home->lines.back().kind == LK::ERROR);
