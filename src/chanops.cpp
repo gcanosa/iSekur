@@ -269,6 +269,7 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
     bool in_aj = std::any_of(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(b->name); });
     m.push_back({b->quiet ? "Quiet mode off" : "Quiet mode on", b->quiet ? "/quiet off" : "/quiet on"});
     m.push_back({"Clear", "/clear"});
+    m.push_back({e2e_on(b) ? "Turn off E2E" : "Turn on E2E...", e2e_on(b) ? "/e2e off" : "/e2e " + b->name});
     m.push_back({in_aj ? "Remove from autojoin" : "Add to autojoin", in_aj ? "/autojoin del" : "/autojoin add"});
     m.push_back({"", ""});
     m.push_back({"Close", b->joined ? "?Leave " + b->name + " and close its tab?\n/close" : "/close"});

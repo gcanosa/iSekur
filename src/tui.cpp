@@ -305,7 +305,7 @@ void Tui::draw() {
                 : !t->srv ? sty(T, "tab_home", "tab_server")
                 : t->type == BT::STATUS ? sty(T, "tab_server", "tabbar") : tbs;
         Row r;
-        cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + (hid ? " +" + std::to_string(hid) : "") + " ", s, false);
+        cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + (e2e_on(t) ? " \xf0\x9f\x94\x92" : "") + (hid ? " +" + std::to_string(hid) : "") + " ", s, false);
         if (t == b) av = (int)labels.size();
         labels.push_back(r);
         vis.push_back((int)i);

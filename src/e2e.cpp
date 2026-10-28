@@ -7,8 +7,13 @@
 //   A: opens it    -> CTCP ISEKUR-E2E-ACK <seal("ack")>, or ISEKUR-E2E-BAD
 //   messages: PRIVMSG B :+iSE <b64(nonce | ciphertext | tag)>
 //
+// /e2e #chan: no handshake, everyone who types the same password has the same key
+// (salt "isekur-chan:" + channel); the channel name is the GCM AAD, so a line copied
+// to another channel doesn't open. People without it see "+iSE ..." lines.
+//
 // ponytail: password only, no forward secrecy; an X25519 exchange
-// authenticated by the password is the upgrade if that matters.
+// authenticated by the password is the upgrade if that matters. No replay check in
+// channels: chathistory replays old lines on purpose; a timestamp inside would be the fix.
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include "core.h"
@@ -24,13 +29,14 @@ std::string e2e_key(const std::string& pass, const std::string& salt) {
     return std::string((char*)k, sizeof k);
 }
 
-std::string e2e_seal(const std::string& key, const std::string& plain) {
+std::string e2e_seal(const std::string& key, const std::string& plain, const std::string& aad) {
     unsigned char nonce[12], tag[16];
     RAND_bytes(nonce, sizeof nonce);
     std::string ct(plain.size(), '\0');
     int n = 0;
     EVP_CIPHER_CTX* x = EVP_CIPHER_CTX_new();
     EVP_EncryptInit_ex(x, EVP_aes_256_gcm(), nullptr, (const unsigned char*)key.data(), nonce);
+    if (!aad.empty()) EVP_EncryptUpdate(x, nullptr, &n, (const unsigned char*)aad.data(), (int)aad.size());
     EVP_EncryptUpdate(x, (unsigned char*)&ct[0], &n, (const unsigned char*)plain.data(), (int)plain.size());
     EVP_EncryptFinal_ex(x, (unsigned char*)&ct[0] + n, &n);
     EVP_CIPHER_CTX_ctrl(x, EVP_CTRL_GCM_GET_TAG, sizeof tag, tag);
@@ -38,7 +44,7 @@ std::string e2e_seal(const std::string& key, const std::string& plain) {
     return b64(std::string((char*)nonce, 12) + ct + std::string((char*)tag, 16));
 }
 
-bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain) {
+bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain, const std::string& aad) {
     std::string raw = unb64(sealed);
     if (key.size() != 32 || raw.size() < 28) return false;
     std::string ct = raw.substr(12, raw.size() - 28), tag = raw.substr(raw.size() - 16);
@@ -47,12 +53,21 @@ bool e2e_open(const std::string& key, const std::string& sealed, std::string& pl
     EVP_CIPHER_CTX* x = EVP_CIPHER_CTX_new();
     EVP_DecryptInit_ex(x, EVP_aes_256_gcm(), nullptr, (const unsigned char*)key.data(),
                        (const unsigned char*)raw.data());
-    bool ok = EVP_DecryptUpdate(x, (unsigned char*)&plain[0], &n, (const unsigned char*)ct.data(), (int)ct.size()) == 1 &&
+    bool ok = (aad.empty() || EVP_DecryptUpdate(x, nullptr, &n, (const unsigned char*)aad.data(), (int)aad.size()) == 1) &&
+              EVP_DecryptUpdate(x, (unsigned char*)&plain[0], &n, (const unsigned char*)ct.data(), (int)ct.size()) == 1 &&
               EVP_CIPHER_CTX_ctrl(x, EVP_CTRL_GCM_SET_TAG, 16, &tag[0]) == 1 &&
               EVP_DecryptFinal_ex(x, (unsigned char*)&plain[0] + n, &n) == 1;
     EVP_CIPHER_CTX_free(x);
     if (!ok) plain.clear();
     return ok;
+}
+
+bool e2e_on(const Buffer* b) {
+    Server* s = b->srv;
+    if (!s) return false;
+    if (b->type == BT::CHANNEL) return s->chan_e2e.count(irc_lower(b->name)) > 0;
+    auto e = b->type == BT::QUERY ? s->e2e.find(irc_lower(b->name)) : s->e2e.end();
+    return e != s->e2e.end() && e->second.ok;
 }
 
 static void ctcp(Server* s, const std::string& nick, const std::string& body) {
@@ -62,31 +77,50 @@ static void ctcp(Server* s, const std::string& nick, const std::string& body) {
 // a notice in the query tab if there is one, and in the server tab
 void Core::e2e_note(Server* s, const std::string& nick, LK k, const std::string& text) {
     Buffer* q = find(s, nick);
-    if (q) print(q, k, text);
+    if (q) print(q, k, text), notify(Ev::BUFFER, q);  // the tab's 🔒
     if (!q || active != q) print(s->status, k, text);
 }
 
-// /e2e nick | /e2e off [nick] | /e2e
+// /e2e nick | /e2e #chan | /e2e off [nick|#chan] | /e2e
 void Core::e2e_cmd(Buffer* b, const std::string& args) {
     Server* s = b->srv;
     auto argv = split(args, ' ');
     if (!s) { print(b, LK::ERROR, "No server here"); return; }
     if (argv.empty()) {
-        if (s->e2e.empty()) print(b, LK::INFO, "No encrypted chats. Start one with /e2e nick");
+        if (s->e2e.empty() && s->chan_e2e.empty()) print(b, LK::INFO, "No encrypted chats. Start one with /e2e nick or /e2e #channel");
         for (auto& [k, e] : s->e2e)
             print(b, LK::INFO, e.nick + ": " + (e.ok ? "encrypted" : e.key.empty() ? "invited you (/e2e " + e.nick + ")" : "waiting for the other side"));
+        for (auto& [k, key] : s->chan_e2e) print(b, LK::INFO, k + ": encrypted");
         return;
     }
-    if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
     if (argv[0] == "off") {
-        std::string nick = argv.size() > 1 ? argv[1] : b->type == BT::QUERY ? b->name : "";
+        std::string nick = argv.size() > 1 ? argv[1] : b->type != BT::STATUS ? b->name : "";
+        if (s->is_chan(nick)) {
+            if (!s->chan_e2e.erase(irc_lower(nick))) { print(b, LK::ERROR, "No encryption in " + nick); return; }
+            Buffer* c = find(s, nick);
+            print(c ? c : b, LK::INFO, "Encryption in " + nick + " turned off; you send plain text again");
+            if (c) notify(Ev::BUFFER, c);
+            dirty = true;
+            return;
+        }
+        if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
         if (nick.empty() || !s->e2e.erase(irc_lower(nick))) { print(b, LK::ERROR, "No encrypted chat with " + (nick.empty() ? "anyone here" : nick)); return; }
         ctcp(s, nick, "ISEKUR-E2E-OFF");
         e2e_note(s, nick, LK::INFO, "Encryption with " + nick + " turned off");
         return;
     }
     std::string nick = argv[0];
-    if (s->is_chan(nick) || irc_lower(nick) == irc_lower(s->nick)) { print(b, LK::ERROR, "/e2e takes a nick"); return; }
+    if (s->is_chan(nick)) {
+        Buffer* c = find(s, nick);
+        if (!c) { print(b, LK::ERROR, "Join " + nick + " first"); return; }
+        select(c);
+        std::string pass = after_words(args, 1);
+        if (pass.empty()) ask_pass(c, "password for " + c->name, [this, c](const std::string& p) { e2e_chan(c, p); });
+        else e2e_chan(c, pass);
+        return;
+    }
+    if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
+    if (irc_lower(nick) == irc_lower(s->nick)) { print(b, LK::ERROR, "/e2e takes a nick or a channel"); return; }
     Buffer* q = open(s, BT::QUERY, nick);
     select(q);
     std::string pass = after_words(args, 1);
@@ -95,6 +129,17 @@ void Core::e2e_cmd(Buffer* b, const std::string& args) {
         return;
     }
     e2e_pass(q, pass);
+}
+
+// the channel password arrived: nothing to check, a wrong one just won't open the others' lines
+void Core::e2e_chan(Buffer* c, const std::string& pass) {
+    std::string k = e2e_key(pass, "isekur-chan:" + irc_lower(c->name));
+    if (k.empty()) { print(c, LK::ERROR, "Couldn't make the key"); return; }
+    c->srv->chan_e2e[irc_lower(c->name)] = k;
+    print(c, LK::INFO, "\xf0\x9f\x94\x92 Encryption in " + c->name + " is on: only people with the same password can read "
+                       "what you send. /e2e off turns it off");
+    notify(Ev::BUFFER, c);
+    dirty = true;
 }
 
 // the password arrived: accept an invite, or send one

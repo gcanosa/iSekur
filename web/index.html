@@ -238,7 +238,7 @@ function renderSide() {
       (b.home ? " home" : b.type === "status" ? " server" : "") +
       ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
     const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
-    const nm = document.createElement("span"); nm.textContent = b.type === "status" ? "status" : b.name;
+    const nm = document.createElement("span"); nm.textContent = b.type === "status" ? "status" : b.name + (b.e2e ? " 🔒" : "");
     t.append(n, nm);
     if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
     t.onclick = () => { select(id); side.classList.remove("open"); };

@@ -491,11 +491,12 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
     if (!s || b->type == BT::STATUS || b->name[0] == '*') { print(b, LK::ERROR, "Not a channel or query window"); return; }
     if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
     // /e2e: "+iSE " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes
-    auto e = b->type == BT::QUERY ? s->e2e.find(irc_lower(b->name)) : s->e2e.end();
-    bool enc = e != s->e2e.end() && e->second.ok;
+    // (a channel also has its name as AAD, so the 400 bytes count it: long names get less text)
+    bool enc = e2e_on(b), chan = b->type == BT::CHANNEL;
+    std::string key = !enc ? "" : chan ? s->chan_e2e[irc_lower(b->name)] : s->e2e[irc_lower(b->name)].key;
     for (auto& part : chunk(text, enc ? 250 : 400)) {
         std::string body = action ? "\x01" "ACTION " + part + "\x01" : part;
-        s->send("PRIVMSG " + b->name + " :" + (enc ? "+iSE " + e2e_seal(e->second.key, body) : body));
+        s->send("PRIVMSG " + b->name + " :" + (enc ? "+iSE " + e2e_seal(key, body, chan ? irc_lower(b->name) : "") : body));
         if (!s->caps.count("echo-message"))
             add(b, Line{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? "\xf0\x9f\x94\x92 " + part : part, true});
     }

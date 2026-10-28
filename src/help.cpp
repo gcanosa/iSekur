@@ -54,13 +54,17 @@ static const std::vector<CmdInfo> CMDS = {
     {"query", "Chat", "nick [text]", "Open a private chat tab",
      "Opens (or switches to) a query tab with nick, and sends text if you give it.",
      {"/query alice", "/query bob hey, got a minute?"}},
-    {"e2e", "Chat", "nick | off [nick]", "Encrypted private chat with another iSekur user",
+    {"e2e", "Chat", "nick | #channel | off [nick|#channel]", "Encrypted chat with other iSekur users",
      "Asks for a password (typed hidden; an empty line cancels) and invites nick. They get a notice and "
      "accept with /e2e yournick and the same password. If the passwords match, both sides see "
      "\"Encrypted chat is on\" and the query is AES-256-GCM encrypted from then on; if not, "
      "both are told and nothing is encrypted. Keys live in memory only: after a restart, start "
-     "again. /e2e off ends it, /e2e alone lists sessions. Other clients see +iSE lines.",
-     {"/e2e alice", "/e2e off", "/e2e"}, "sq"},
+     "again. /e2e off ends it, /e2e alone lists sessions. Other clients see +iSE lines. "
+     "/e2e #channel asks for a password and encrypts what you say there; whoever typed the same "
+     "password reads it (lines with 🔒), the rest see +iSE noise. No check: a wrong password just "
+     "can't open the others' lines. Anyone with the password reads it all; to drop someone, change it. "
+     "Also in the channel tab's right click menu.",
+     {"/e2e alice", "/e2e #secret", "/e2e off", "/e2e"}, "sq"},
     {"me", "Chat", "action", "Send an action (/me waves)",
      "Shows as \"* yournick action\" in the channel or query.",
      {"/me waves", "/me is grabbing coffee"}},
