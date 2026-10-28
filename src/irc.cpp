@@ -820,10 +820,11 @@ void Core::handle(Server* s, const Msg& m) {
     // whois: a framed block in the tab you asked from
     static const std::set<std::string> whois_lines = {"301", "307", "310", "312", "313", "317", "319", "320",
                                                       "330", "335", "338", "378", "379", "671", "276"};
-    if (cmd == "311" && m.params.size() > 5) {
+    // "me nick user host * :real name"; some servers (SekurIRCd) leave out the "*"
+    if (cmd == "311" && m.params.size() > 4) {
         s->whois = irc_lower(m.p(1));
         print(reply_buf(), LK::INFO, "┌─ whois \x02" + m.p(1) + "\x02 ─────────");
-        print(reply_buf(), LK::INFO, "│ " + m.p(1) + " (" + m.p(2) + "@" + m.p(3) + "): " + m.p(5));
+        print(reply_buf(), LK::INFO, "│ " + m.p(1) + " (" + m.p(2) + "@" + m.p(3) + "): " + m.params.back());
         return;
     }
     if (!s->whois.empty() && m.params.size() > 2 && irc_lower(m.p(1)) == s->whois) {
