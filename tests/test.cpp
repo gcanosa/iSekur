@@ -46,6 +46,19 @@ int main() {
 
     assert(unb64(b64("hello!")) == "hello!" && b64("") == "" && unb64("!!!") == "");
 
+    {  // /e2e: same password opens, a wrong one or a flipped byte is caught
+        std::string k = e2e_key("hunter2", "0123456789abcdef"), bad = e2e_key("hunter3", "0123456789abcdef"), out;
+        assert(k.size() == 32 && k == e2e_key("hunter2", "0123456789abcdef") && k != bad);
+        std::string sealed = e2e_seal(k, "hola \x01" "ACTION x\x01");
+        assert(sealed != e2e_seal(k, "hola \x01" "ACTION x\x01"));  // fresh nonce
+        assert(e2e_open(k, sealed, out) && out == "hola \x01" "ACTION x\x01");
+        assert(!e2e_open(bad, sealed, out) && out.empty());
+        std::string raw = unb64(sealed);
+        raw[14] ^= 1;
+        assert(!e2e_open(k, b64(raw), out) && !e2e_open(k, "short", out));
+        assert(("+iSE " + e2e_seal(k, std::string(259, 'x'))).size() <= 400);  // say() chunk fits
+    }
+
     int op;
     std::string p;
     std::string big(70000, 'x');

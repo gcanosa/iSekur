@@ -143,6 +143,7 @@ void Core::close(Buffer* b) {
     } else if (b->type == BT::CHANNEL && b->joined && s) {
         s->send("PART " + b->name);
     }
+    if (pass_buf == b) pass_buf = nullptr;
     bool drop_server = s && b->type == BT::STATUS;
     int i = index_of(b);
     notify(Ev::CLOSE, b);
@@ -346,10 +347,14 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
     Server* s = b->srv;
     if (!s || b->type == BT::STATUS) { print(b, LK::ERROR, "Not a channel or query window"); return; }
     if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
-    for (auto& part : chunk(text, 400)) {
-        s->send("PRIVMSG " + b->name + " :" + (action ? "\x01" "ACTION " + part + "\x01" : part));
+    // /e2e: "+iSE " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes
+    auto e = b->type == BT::QUERY ? s->e2e.find(irc_lower(b->name)) : s->e2e.end();
+    bool enc = e != s->e2e.end() && e->second.ok;
+    for (auto& part : chunk(text, enc ? 250 : 400)) {
+        std::string body = action ? "\x01" "ACTION " + part + "\x01" : part;
+        s->send("PRIVMSG " + b->name + " :" + (enc ? "+iSE " + e2e_seal(e->second.key, body) : body));
         if (!s->caps.count("echo-message"))
-            add(b, Line{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, part, true});
+            add(b, Line{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? "\xf0\x9f\x94\x92 " + part : part, true});
     }
 }
 
@@ -373,6 +378,12 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     std::string in = input;
     if (!in.empty() && in.back() == '\r') in.pop_back();
+    if (b == pass_buf) {  // /e2e asked for a password: this line is it, never sent or shown
+        pass_buf = nullptr;
+        if (in.empty()) print(b, LK::INFO, "Cancelled");
+        else e2e_pass(b, in);
+        return;
+    }
     if (in.empty()) return;
     last_input = time(nullptr);
     if (in[0] != '/' || in.rfind("//", 0) == 0) {
@@ -393,6 +404,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     };
 
     if (cmd == "help") { help(b, args); return; }
+    if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = [](const std::string& k) {
             return k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
