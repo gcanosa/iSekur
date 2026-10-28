@@ -453,8 +453,8 @@ void Core::handle(Server* s, const Msg& m) {
                 s->chantypes = t.substr(10);
             } else if (t.rfind("CHANMODES=", 0) == 0) {
                 s->chanmodes = t.substr(10);
-            } else if (t.rfind("MODES=", 0) == 0) {
-                s->max_modes = std::max(1, std::min(atoi(t.c_str() + 6), 12));
+            } else if (t == "MODES" || t.rfind("MODES=", 0) == 0) {  // no value: unlimited
+                s->max_modes = t.size() <= 6 ? 12 : std::max(1, std::min(atoi(t.c_str() + 6), 12));
             } else if (t.rfind("NETWORK=", 0) == 0) {
                 s->network = t.substr(8);
                 notify(Ev::BUFFER, s->status);
@@ -657,20 +657,23 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "352") set_host(*this, s, m.p(5), m.p(2) + "@" + m.p(3));  // WHO; then printed as usual
     if (cmd == "302" && !s->kb_wait.empty()) {  // USERHOST for a /kickban: "nick*=+user@host"
         KickBan kb = s->kb_wait.front();
-        s->kb_wait.pop_front();
         std::string uh;
+        bool others = false;
         for (auto& e : split(m.p(1), ' ')) {
             size_t eq = e.find('=');
             if (eq == std::string::npos || e.size() < eq + 3) continue;
             std::string n = e.substr(0, eq);
             if (!n.empty() && n.back() == '*') n.pop_back();
             if (irc_lower(n) == irc_lower(kb.nick)) uh = e.substr(eq + 2);
+            else others = true;
         }
-        Buffer* b = find(s, kb.chan);
-        if (!b) return;
-        if (uh.empty()) print(b, LK::ERROR, kb.nick + " is no longer on IRC");
-        else kickban(s, b, kb, uh);
-        return;
+        if (!uh.empty() || !others) {  // else someone else's USERHOST (/quote): printed as usual
+            s->kb_wait.pop_front();
+            Buffer* b = find(s, kb.chan);
+            if (b && uh.empty()) print(b, LK::ERROR, kb.nick + " is no longer on IRC");
+            else if (b) kickban(s, b, kb, uh);
+            return;
+        }
     }
     if (cmd == "ACCOUNT" || cmd == "SETNAME" ||
         cmd == "TAGMSG")
