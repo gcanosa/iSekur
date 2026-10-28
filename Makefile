@@ -90,7 +90,7 @@ install: isekur
 	install -m 755 isekur $(DESTDIR)$(PREFIX)/bin/isekur
 	install -m 644 isekur.1 $(DESTDIR)$(MANDIR)/man1/isekur.1
 	install -m 644 themes/*.theme $(DESTDIR)$(DATADIR)/themes/
-	install -m 644 iSekur.conf.example README.md $(DESTDIR)$(DATADIR)/
+	install -m 644 iSekur.conf.example README.md LICENSE $(DESTDIR)$(DATADIR)/
 
 uninstall:
 	rm -f $(DESTDIR)$(PREFIX)/bin/isekur $(DESTDIR)$(MANDIR)/man1/isekur.1

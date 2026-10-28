@@ -34,7 +34,7 @@ jobs:
       - run: |
           d=isekur-${{ matrix.name }}
           mkdir -p $d/themes
-          cp isekur isekur.1 iSekur.conf.example README.md .github/install.sh $d/
+          cp isekur isekur.1 iSekur.conf.example README.md LICENSE .github/install.sh $d/
           cp themes/*.theme $d/themes/
           strip $d/isekur
           tar czf $d.tar.gz $d
