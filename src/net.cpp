@@ -86,6 +86,10 @@ bool Conn::start_tls() {
         ctx = SSL_CTX_new(TLS_client_method());
         SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
         SSL_CTX_set_default_verify_paths(ctx);
+#ifdef __APPLE__
+        // release builds link OpenSSL statically: its own cert dir may not exist, macOS ships this bundle
+        SSL_CTX_load_verify_locations(ctx, "/etc/ssl/cert.pem", nullptr);
+#endif
         SSL_CTX_set_verify(ctx, tls == 1 ? SSL_VERIFY_PEER : SSL_VERIFY_NONE, nullptr);
         if (!cert.empty()) {
             if (SSL_CTX_use_certificate_chain_file(ctx, cert.c_str()) != 1 ||

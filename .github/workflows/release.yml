@@ -1,0 +1,45 @@
+name: release
+on:
+  push:
+    tags: ['v*']
+
+# asset names carry no version, so releases/latest/download/<name> always points at the newest one
+jobs:
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-22.04    # older glibc, runs on current distros; uses the system's libssl3
+            name: linux-x86_64
+            libs: ''
+          - os: macos-latest    # OpenSSL linked in, so no Homebrew needed
+            name: macos-arm64
+            libs: OPENSSL_LIBS="$(brew --prefix openssl@3)/lib/libssl.a $(brew --prefix openssl@3)/lib/libcrypto.a"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0 }
+      - if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+      - run: make ${{ matrix.libs }} && make test ${{ matrix.libs }}
+      - run: |
+          d=isekur-${{ matrix.name }}
+          mkdir -p $d/themes
+          cp isekur isekur.1 iSekur.conf.example README.md .github/install.sh $d/
+          cp themes/*.theme $d/themes/
+          strip $d/isekur
+          tar czf $d.tar.gz $d
+      - uses: actions/upload-artifact@v4
+        with: { name: '${{ matrix.name }}', path: 'isekur-${{ matrix.name }}.tar.gz' }
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/download-artifact@v4
+        with: { merge-multiple: true }
+      - run: git archive --prefix=isekur-${GITHUB_REF_NAME#v}/ -o isekur-src.tar.gz HEAD
+      - run: gh release create "$GITHUB_REF_NAME" --title "iSekur ${GITHUB_REF_NAME#v}" --generate-notes isekur-*.tar.gz
+        env: { GH_TOKEN: '${{ github.token }}' }

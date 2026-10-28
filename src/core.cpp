@@ -175,7 +175,7 @@ void Core::load_flood(Server* s) {
 }
 
 // The build id only shows when it says more than the version (untagged or
-// modified builds); release tarballs without git just say "iSekur 0.2".
+// modified builds); release tarballs without git just say "iSekur 0.3".
 std::string version_string() {
     std::string build = ISEKUR_BUILD, v = "iSekur " ISEKUR_VERSION;
     return build.empty() || build == "v" ISEKUR_VERSION ? v : v + " (" + build + ")";
