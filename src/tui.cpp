@@ -517,6 +517,12 @@ void Tui::draw() {
     y = H - 1;
     Style is = T.get("input");
     fill(y, 0, W, is);
+    if (!confirm.empty()) {
+        int px = text(0, y, W, confirm.substr(0, confirm.find('\n')) + " (y/n) ", T.get("hilight"), false);
+        tb_set_cursor(px, y);
+        present();
+        return;
+    }
     if (!paste.empty()) {
         size_t n = 0;
         for (auto& l : split(paste, '\n')) n += !l.empty();
@@ -641,7 +647,7 @@ void Tui::on_readable() {
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
-        if (nl && paste.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
+        if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
         else if (ev.type == TB_EVENT_MOUSE) mouse(ev.mod, ev.key, ev.x, ev.y);
         c.dirty = true;
@@ -690,11 +696,18 @@ void Tui::key(int mod, int k, uint32_t ch) {
         }
         std::string cmd = k == TB_KEY_ENTER ? menu.items[(size_t)menu.sel].second : "";  // other keys close it
         menu.items.clear();
-        if (!cmd.empty() && (cmd.back() == ' ' || cmd.back() == ':')) input = from_utf8(cmd), cur = input.size();  // ends in a space: you finish it
+        if (!cmd.empty() && cmd[0] == '?') confirm = cmd.substr(1);  // asks first
+        else if (!cmd.empty() && (cmd.back() == ' ' || cmd.back() == ':')) input = from_utf8(cmd), cur = input.size();  // ends in a space: you finish it
         else if (!cmd.empty()) c.exec(c.active, cmd);
         return;
     }
     sel_x0 = -1;  // typing drops the highlight of a copied selection
+    if (!confirm.empty()) {  // a menu's question: y runs it, anything else drops it
+        std::string q;
+        q.swap(confirm);
+        if (ch == 'y' || ch == 'Y') c.exec(c.active, q.substr(q.find('\n') + 1));
+        return;
+    }
     if (!paste.empty()) {  // "Send N lines?" - y sends, anything else puts it back to edit
         std::string p;
         p.swap(paste);
@@ -826,10 +839,11 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (k == TB_KEY_MOUSE_RIGHT) {
         for (auto& h : hits) {
             if (h.y != y || x < h.x0 || x >= h.x1) continue;
-            if (!h.nick.empty()) open_menu(h.nick, x, y);
-            else if (y == top_row() - 1 && h.tab >= 0 && h.tab < (int)c.bufs.size() && c.bufs[(size_t)h.tab]->type == BT::STATUS &&
-                     c.bufs[(size_t)h.tab]->srv)  // a server tab: fold or unfold its channels
-                c.fold(c.bufs[(size_t)h.tab].get());
+            if (!h.nick.empty()) { open_menu(h.nick, x, y); continue; }
+            if (y != top_row() - 1 || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
+            Buffer* tb = c.bufs[(size_t)h.tab].get();
+            if (tb->type == BT::STATUS && tb->srv) c.fold(tb);  // a server tab: fold or unfold its channels
+            else if (tb->type == BT::CHANNEL) c.select(tb), menu = Menu{x, y, 0, tb->name, c.tab_menu(tb)}, c.dirty = true;  // its commands run there
         }
         return;
     }

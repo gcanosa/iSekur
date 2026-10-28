@@ -482,9 +482,10 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "fold") c.fold(b);
-        else if (m["t"] == "menu") {  // the right-click nick menu, for this browser only
-            std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(m["nick"]) + ",\"items\":[";
-            for (auto& [l, cmd] : c.nick_menu(b, m["nick"])) o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(l) + "," + json_str(cmd) + "]";
+        else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
+            bool tab = m["nick"].empty();
+            std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(tab ? b->name : m["nick"]) + ",\"items\":[";
+            for (auto& [l, cmd] : tab ? c.tab_menu(b) : c.nick_menu(b, m["nick"])) o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(l) + "," + json_str(cmd) + "]";
             cl.conn.out += ws_frame(o + "]}");
         }
         if (cl.conn.closing) return;

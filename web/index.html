@@ -242,6 +242,7 @@ function renderSide() {
     t.append(n, nm);
     if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
     t.onclick = () => { select(id); side.classList.remove("open"); };
+    if (b.type === "channel") t.oncontextmenu = e => askMenu(e, "", id);
     side.append(t);
   });
 }
@@ -458,9 +459,9 @@ $("#bell").onclick = async () => {
 bell();
 window.addEventListener("focus", seen);
 window.addEventListener("focus", () => { const b = bufs.get(active); if (b && b.act) { b.act = 0; send({t: "read", buf: active}); renderSide(); } });
-// right click (long press on phones) on a nick: the same menu as the terminal's, built by iSekur
-let menuAt = [0, 0];
-function askMenu(e, nick) { e.preventDefault(); menuAt = [e.clientX, e.clientY]; send({t: "menu", buf: active, nick}); }
+// right click (long press on phones) on a nick or a channel tab: the same menu as the terminal's, built by iSekur
+let menuAt = [0, 0], menuBuf = 0;
+function askMenu(e, nick, buf = active) { e.preventDefault(); menuAt = [e.clientX, e.clientY]; menuBuf = buf; send({t: "menu", buf, nick}); }
 function closeMenu() { const o = $("#ctx"); if (o) o.remove(); }
 function showMenu(m) {
   closeMenu();
@@ -472,8 +473,11 @@ function showMenu(m) {
     const it = document.createElement("div"); it.className = "it"; it.textContent = label;
     it.onclick = () => {
       closeMenu();
-      if (/[ :]$/.test(cmd)) { $("#line").value = cmd; $("#line").focus(); }  // you finish it
-      else send({t: "input", buf: active, text: cmd});
+      if (cmd[0] === "?") {  // "?question\n/command": ask first
+        const nl = cmd.indexOf("\n");
+        if (confirm(cmd.slice(1, nl))) send({t: "input", buf: menuBuf, text: cmd.slice(nl + 1)});
+      } else if (/[ :]$/.test(cmd)) { $("#line").value = cmd; $("#line").focus(); }  // you finish it
+      else send({t: "input", buf: menuBuf, text: cmd});
     };
     box.append(it);
   }

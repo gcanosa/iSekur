@@ -259,3 +259,18 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
     }
     return m;
 }
+
+// right click on a channel tab. A command starting with "?" asks first: "?question\n/command"
+std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const {
+    std::vector<std::pair<std::string, std::string>> m;
+    Server* s = b->srv;
+    if (b->type != BT::CHANNEL || !s) return m;
+    auto& aj = s->cfg.autojoin;
+    bool in_aj = std::any_of(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(b->name); });
+    m.push_back({b->quiet ? "Quiet mode off" : "Quiet mode on", b->quiet ? "/quiet off" : "/quiet on"});
+    m.push_back({"Clear", "/clear"});
+    m.push_back({in_aj ? "Remove from autojoin" : "Add to autojoin", in_aj ? "/autojoin del" : "/autojoin add"});
+    m.push_back({"", ""});
+    m.push_back({"Close", b->joined ? "?Leave " + b->name + " and close its tab?\n/close" : "/close"});
+    return m;
+}
