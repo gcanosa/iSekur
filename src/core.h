@@ -196,6 +196,8 @@ struct Core {
     bool daemon = false;      // the webchat is the only way in: /web stop is refused
     bool tty = false;         // a terminal is attached (the TUI is drawing)
     bool detach_req = false;  // /detach or Alt+D: main() lets go of the terminal
+    bool bell = false;  // the TUI rings the terminal bell on its next draw
+    void ring(Server* s);  // private message, mention or invite, if bell_notifications
     Buffer* pass_buf = nullptr;  // /e2e: the next line typed here is the password
 
     void load_config();
