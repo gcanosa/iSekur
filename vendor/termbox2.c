@@ -98,3 +98,83 @@ int isekur_extract_post(struct tb_event *ev, size_t *n) {
     *n = end + 1;
     return TB_OK;
 }
+
+// OSC 8 hyperlinks (ESC ] 8 ; ; url ESC \): isekur_link() tags this frame's cells with a link
+// id, isekur_present() is tb_present that also resends a cell whose link changed and opens or
+// closes the link around runs of cells. Terminals without OSC 8 ignore it. URLs are the
+// caller's job to keep to printable ASCII: they go into an escape sequence.
+static const char *const *lk_url;  // this frame's links, id - 1
+static unsigned long long *lk_hash, *lk_front;  // per link id / what each screen cell was sent with
+static unsigned short *lk_back;  // per cell: link id, 0 none
+static int lk_w, lk_h;
+
+void isekur_links_begin(void) {  // a new frame: no links yet
+    int w = global.front.width, h = global.front.height;
+    if (w != lk_w || h != lk_h) {  // resized: termbox redraws everything anyway
+        free(lk_back), free(lk_front);
+        lk_back = calloc((size_t)(w * h), sizeof *lk_back), lk_front = calloc((size_t)(w * h), sizeof *lk_front);
+        lk_w = w, lk_h = h;
+    } else if (lk_back) memset(lk_back, 0, (size_t)(w * h) * sizeof *lk_back);
+}
+
+void isekur_links_urls(const char *const *urls, int n) {  // what the ids stand for, before isekur_present
+    free(lk_hash);
+    lk_hash = calloc((size_t)n + 1, sizeof *lk_hash);
+    for (int i = 0; i < n; i++) {
+        unsigned long long x = 1469598103934665603ULL;  // FNV-1a
+        for (const char *p = urls[i]; *p; p++) x = (x ^ (unsigned char)*p) * 1099511628211ULL;
+        lk_hash[i + 1] = x | 1;  // never 0
+    }
+    lk_url = urls;
+}
+
+void isekur_link(int x, int y, int id) {
+    if (lk_back && x >= 0 && y >= 0 && x < lk_w && y < lk_h) lk_back[y * lk_w + x] = (unsigned short)id;
+}
+
+static int lk_send(int id) {
+    bytebuf_puts(&global.out, "\x1b]8;;");
+    if (id) bytebuf_puts(&global.out, lk_url[id - 1]);
+    return bytebuf_puts(&global.out, "\x1b\\");
+}
+
+int isekur_present(void) {
+    if_not_init_return();
+    int rv, open = 0, x, y, i;
+    global.last_x = -1;
+    global.last_y = -1;
+    for (y = 0; y < global.front.height; y++) {
+        for (x = 0; x < global.front.width;) {
+            struct tb_cell *back, *front;
+            if_err_return(rv, cellbuf_get(&global.back, x, y, &back));
+            if_err_return(rv, cellbuf_get(&global.front, x, y, &front));
+            int w = wcwidth((wchar_t)back->ch);
+            if (w < 1) w = 1;
+            size_t k = (size_t)(y * lk_w + x);
+            int id = lk_back && x < lk_w && y < lk_h ? lk_back[k] : 0;
+            unsigned long long h = id ? lk_hash[id] : 0;
+            if (cell_cmp(back, front) != 0 || (lk_front && x < lk_w && y < lk_h && lk_front[k] != h)) {
+                cell_copy(front, back);
+                if (lk_front && x < lk_w && y < lk_h) lk_front[k] = h;
+                if (id != open) lk_send(id), open = id;
+                send_attr(back->fg, back->bg);
+                if (w > 1 && x >= global.front.width - (w - 1)) {
+                    for (i = x; i < global.front.width; i++) send_char(i, y, ' ');
+                } else {
+                    send_char(x, y, back->ch);
+                    for (i = 1; i < w; i++) {  // see tb_present: skipped cells must diff later
+                        struct tb_cell *front_wide;
+                        uint32_t invalid = -1;
+                        if_err_return(rv, cellbuf_get(&global.front, x + i, y, &front_wide));
+                        if_err_return(rv, cell_set(front_wide, &invalid, 1, -1, -1));
+                    }
+                }
+            }
+            x += w;
+        }
+    }
+    if (open) lk_send(0);
+    if_err_return(rv, send_cursor_if(global.cursor_x, global.cursor_y));
+    if_err_return(rv, bytebuf_flush(&global.out, global.wfd));
+    return TB_OK;
+}
