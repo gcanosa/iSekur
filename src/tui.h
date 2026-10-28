@@ -24,7 +24,8 @@ private:
     size_t hpos = 0;
     std::map<std::string, std::string> keymap;
     void load_keys();  // defaults + [keys]; again after /set keys.*  // "M-Right" -> "next_tab"
-    bool nicklist = true, truecolor = true, mouse_on = true;
+    bool nicklist = true, topicbar = true, truecolor = true, mouse_on = true;
+    int top_row() const { return topicbar ? 2 : 1; }  // first chat row, under the topic and tab bars
     // clickable regions from the last draw(): tabs, activity numbers, nicks
     struct Hit { int y, x0, x1; int tab; std::string nick; };
     std::vector<Hit> hits;

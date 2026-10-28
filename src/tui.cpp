@@ -176,7 +176,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
 }
 
 // ---- drawing ---------------------------------------------------------------
-int Tui::chat_height() const { return std::max(1, tb_height() - 4); }
+int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); }
 
 void Tui::draw() {
     const Theme& T = c.theme;
@@ -194,21 +194,24 @@ void Tui::draw() {
     }
 
     // topic bar
-    Style ts = T.get("topic");
-    fill(0, 0, W, ts);
-    std::string topic;
-    if (b->type == BT::CHANNEL) topic = b->topic;
-    else if (b->type == BT::QUERY) topic = "Query with " + b->name;
-    else if (b->srv) {
-        static const char* st[] = {"disconnected", "connecting", "registering", "connected"};
-        topic = b->srv->cfg.host + ":" + std::to_string(b->srv->cfg.port) +
-                (b->srv->cfg.tls ? " (TLS)" : "") + " - " + st[(int)b->srv->state];
-    } else topic = "iSekur - multi-server IRC with a built-in webchat";
-    text(1, 0, W - 1, topic, ts);
+    if (topicbar) {
+        Style ts = T.get("topic");
+        fill(0, 0, W, ts);
+        std::string topic;
+        if (b->type == BT::CHANNEL) topic = b->topic;
+        else if (b->type == BT::QUERY) topic = "Query with " + b->name;
+        else if (b->srv) {
+            static const char* st[] = {"disconnected", "connecting", "registering", "connected"};
+            topic = b->srv->cfg.host + ":" + std::to_string(b->srv->cfg.port) +
+                    (b->srv->cfg.tls ? " (TLS)" : "") + " - " + st[(int)b->srv->state];
+        } else topic = "iSekur - multi-server IRC with a built-in webchat";
+        text(1, 0, W - 1, topic, ts);
+    }
 
     // tab bar
     Style tbs = T.get("tabbar");
-    fill(1, 0, W, tbs);
+    int ty = top_row() - 1;
+    fill(ty, 0, W, tbs);
     std::vector<Row> labels;
     int ai = c.index_of(b);
     for (size_t i = 0; i < c.bufs.size(); i++) {
@@ -227,12 +230,12 @@ void Tui::draw() {
     while (span > W && first < ai) span -= width(labels[(size_t)first++]);
     for (int i = first, x = 0; i < (int)labels.size() && x < W; i++) {
         int x0 = x;
-        x = draw_row(x, 1, W, labels[(size_t)i]);
-        hits.push_back({1, x0, x, i, ""});
+        x = draw_row(x, ty, W, labels[(size_t)i]);
+        hits.push_back({ty, x0, x, i, ""});
     }
 
     // nick list
-    int top = 2, ch = chat_height();
+    int top = top_row(), ch = chat_height();
     int nlw = nicklist && b->type == BT::CHANNEL && W >= 60 ? atoi(T.lay("nicklist_width", "18").c_str()) : 0;
     int cw = W - (nlw ? nlw + 1 : 0);
     nl_x = nlw ? cw : -1;
@@ -449,7 +452,8 @@ void Tui::load_keys() {
     keymap["C-w"] = "close_tab";
     keymap["PgUp"] = "scroll_up";
     keymap["PgDn"] = "scroll_down";
-    keymap["F2"] = "toggle_nicklist";
+    keymap["M-u"] = keymap["F2"] = "toggle_nicklist";
+    keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
     keymap["F3"] = "toggle_mouse";
     keymap["M-d"] = keymap["∂"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"
     // [keys] action = spec [spec...]
@@ -499,6 +503,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "scroll_up") c.active->scroll += chat_height() / 2;
     else if (a == "scroll_down") c.active->scroll = std::max(0, c.active->scroll - chat_height() / 2);
     else if (a == "toggle_nicklist") nicklist = !nicklist;
+    else if (a == "toggle_topic") topicbar = !topicbar;
     else if (a == "detach") c.detach_req = true;
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
@@ -572,7 +577,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (mod & TB_MOD_MOTION) return;
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) {
         int d = k == TB_KEY_MOUSE_WHEEL_UP ? 3 : -3;
-        bool over_nicks = nl_x >= 0 && x > nl_x && y >= 2 && y < 2 + chat_height();
+        bool over_nicks = nl_x >= 0 && x > nl_x && y >= top_row() && y < top_row() + chat_height();
         if (over_nicks) nl_scroll = std::max(0, nl_scroll - d);
         else c.active->scroll = std::max(0, c.active->scroll + d);
         c.dirty = true;

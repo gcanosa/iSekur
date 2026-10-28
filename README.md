@@ -67,7 +67,8 @@ Not available on Cygwin.
 | Ctrl+X | next server |
 | Ctrl+W | close tab (parts the channel) |
 | PgUp / PgDn | scroll |
-| F2 | toggle nicklist |
+| Alt+U (Option+U on a Mac), F2 | show / hide the nicklist |
+| Alt+T (Option+T on a Mac) | show / hide the topic bar |
 | F3 | toggle mouse (Shift+drag selects text while it's on) |
 | Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
 | Ctrl+A / E, Ctrl+U / K | start / end of line, delete to start / end |

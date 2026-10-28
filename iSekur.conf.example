@@ -81,7 +81,8 @@ password_hash =              ; run: isekur --hash-password
 # Key bindings: <action> = <key> [key...]
 # Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
 # Actions: next_tab prev_tab next_active next_server close_tab scroll_up
-#          scroll_down toggle_nicklist tab_1 .. tab_10
+#          scroll_down toggle_nicklist toggle_topic detach toggle_mouse tab_1 .. tab_10
 [keys]
 ; next_tab = M-Right C-n
-; toggle_nicklist = F2
+; toggle_nicklist = M-u F2
+; toggle_topic = M-t
