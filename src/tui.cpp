@@ -257,14 +257,36 @@ void Tui::draw() {
         cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + " ", s, false);
         labels.push_back(r);
     }
-    int first = 0, span = 0;
-    for (int i = 0; i <= ai; i++) span += width(labels[(size_t)i]);
-    while (span > W && first < ai) span -= width(labels[(size_t)first++]);
-    for (int i = first, x = 0; i < (int)labels.size() && x < W; i++) {
-        int x0 = x;
-        x = draw_row(x, ty, W, labels[(size_t)i]);
-        hits.push_back({ty, x0, x, i, ""});
+    // too many tabs: the active one stays in view, "‹N" / "N›" count the hidden ones on each
+    // side (colored like the most urgent of them) and a click on it brings the next one in
+    int nt = (int)labels.size(), total = 0, first = 0, lm = 0, rm = 0;
+    for (auto& l : labels) total += width(l);
+    auto pick = [&] {
+        int span = 0;
+        first = 0;
+        for (int i = 0; i <= ai; i++) span += width(labels[(size_t)i]);
+        while (span > W - lm - rm && first < ai) span -= width(labels[(size_t)first++]);
+    };
+    if (total > W) rm = 4, pick();
+    if (first) lm = 4, pick();
+    int last = first, tx = lm;
+    for (int i = first; i < nt && (i == first || tx + width(labels[(size_t)i]) <= W - rm); i++) {
+        int x0 = tx;
+        tx = draw_row(tx, ty, W - rm, labels[(size_t)i]);
+        hits.push_back({ty, x0, tx, i, ""});
+        last = i;
     }
+    auto more = [&](int from, int to, bool left) {
+        int act = 0;
+        for (int i = from; i < to; i++) act = std::max(act, c.bufs[(size_t)i]->activity);
+        Style ms = act == 3 ? T.get("tab_hilight") : act == 2 ? T.get("tab_msg") : act == 1 ? T.get("tab_data") : tbs;
+        std::string num = std::to_string(to - from), m = left ? "‹" + num : num + "›";
+        int x0 = left ? 1 : W - (int)num.size() - 2;
+        text(x0, ty, W, m, ms, false);
+        hits.push_back({ty, left ? 0 : x0, left ? lm : W, left ? to - 1 : from, ""});
+    };
+    if (first) more(0, first, true);
+    if (last < nt - 1) more(last + 1, nt, false);
 
     // nick list
     int top = top_row(), ch = chat_height();

@@ -37,10 +37,12 @@ static const std::vector<CmdInfo> CMDS = {
     {"join", "Chat", "#channel [key]", "Join a channel",
      "The # is added when you leave it out. Give the key for channels with +k.",
      {"/join #sekurnet", "/j linux", "/join #private s3cret"}, "j"},
-    {"autojoin", "Chat", "[add|del] [#channel [key]]", "Channels joined when the server connects",
+    {"autojoin", "Chat", "[add|del] [#channel [key]] | snap [here]", "Channels joined when the server connects",
      "Without arguments, lists this server's autojoin channels. add / del change the list, the "
-     "current channel when you name none; add keeps the key you gave /join. /save keeps it.",
-     {"/autojoin", "/autojoin add", "/autojoin add #private s3cret", "/autojoin del #old"}},
+     "current channel when you name none; add keeps the key you gave /join. /save keeps it. "
+     "snap makes every server's autojoin the channels open right now (here: only this server's) "
+     "and writes it to the config at once.",
+     {"/autojoin", "/autojoin add", "/autojoin add #private s3cret", "/autojoin del #old", "/autojoin snap"}},
     {"part", "Chat", "[#channel] [message]", "Leave a channel",
      "Leaves the current channel, or the one you name. The tab stays open with the history; "
      "/close (or Ctrl+W) closes it.",
