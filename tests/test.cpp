@@ -43,6 +43,18 @@ int main() {
     assert(ini["a"]["k"] == "v" && ini["a"]["c"] == "#chan" && ini_get(ini, "b", "x") == "1");
     assert(ini_get(ini, "b", "missing", "d") == "d");
     assert(ini_get(ini_parse("[a]\nk =    ; placeholder\n"), "a", "k", "d") == "d");  // empty = default
+    {  // the banner keeps its art under the colors, with or without a theme
+        Theme th;
+        th.nicks = {0xff0000, 0x00ff00};
+        th.el["timestamp"].fg = 0x333333;
+        for (const Theme& t : {th, Theme{}}) {
+            auto bl = banner_lines(t);
+            assert(bl.size() == 6 && mirc_strip(bl[0]).rfind(u8"██╗███████╗", 0) == 0);
+        }
+        assert(banner_lines(th)[0].rfind("\x04" "ff0000", 0) == 0);
+        th.el["default"].fg = 0xeeeeee;
+        assert(banner_lines(th, true)[0].rfind("\x04" "eeeeee", 0) == 0 && banner_lines(th, true)[0].find("808080") != std::string::npos);
+    }
     {  // first-run config: every setting, no example servers, no placeholder nick
         Ini f = ini_parse(fresh_config());
         for (auto& [sec, kv] : f) assert(sec.rfind("server.", 0) != 0);

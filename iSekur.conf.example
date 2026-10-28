@@ -25,6 +25,9 @@ log_rotate  = on             ; start a new file each day; old ones become <name>
 # Copy highlights and private messages to window 1 ("what did I miss").
 hilight_window = on
 
+# The iSekur banner at startup: in the theme's colors, or white and gray.
+banner_mono = off
+
 # Ring the terminal bell for private messages, mentions of your nick and
 # invites (most terminals then flash, bounce the dock icon or play a sound).
 bell_notifications = on

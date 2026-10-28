@@ -43,6 +43,7 @@ void Core::load_config() {
         if (!load_theme("default", theme, err)) theme = Theme{};
     }
     Buffer* home = open(nullptr, BT::STATUS, "cmd");
+    for (auto& l : banner_lines(theme, opt_on(nullptr, "banner_mono", false))) print(home, LK::INFO, l);
     if (created)
         print(home, LK::INFO, "Wrote " + cfg_path + " with every setting: edit it, or /set key value and /save. "
                               "Add a server with /server irc.example.org 6697 -tls");
@@ -56,6 +57,37 @@ void Core::load_config() {
         Server* s = add_server(server_cfg(sec.substr(7)));
         if (s->cfg.autoconnect) connect(s);
     }
+}
+
+// The startup banner: each letter in a color of the theme's nick palette, the
+// shadow in its (dim) timestamp color; mono: the text color and gray.
+// mIRC \x04 colors, so the webchat shows it too.
+std::vector<std::string> banner_lines(const Theme& t, bool mono) {
+    static const char* art[] = {
+        u8"██╗███████╗███████╗██╗  ██╗██╗   ██╗██████╗ ",
+        u8"██║██╔════╝██╔════╝██║ ██╔╝██║   ██║██╔══██╗",
+        u8"██║███████╗█████╗  █████╔╝ ██║   ██║██████╔╝",
+        u8"██║╚════██║██╔══╝  ██╔═██╗ ██║   ██║██╔══██╗",
+        u8"██║███████║███████╗██║  ██╗╚██████╔╝██║  ██║",
+        u8"╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝"};
+    static const int ends[] = {3, 11, 19, 27, 36, 44};  // column after each letter: I S E K U R
+    auto code = [](RGB c) { return c < 0 ? std::string("\x0f") : "\x04" + rgb_hex(c).substr(1); };
+    RGB shade = mono ? 0x808080 : t.get("timestamp").fg;
+    std::vector<std::string> out;
+    for (const char* row : art) {
+        std::string s = row, line, cur;
+        size_t i = 0;
+        for (int col = 0, letter = 0; i < s.size(); col++) {
+            while (col >= ends[letter] && letter < 5) letter++;
+            uint32_t cp = utf8_next(s, i);
+            RGB c = cp != 0x2588 ? shade : mono || t.nicks.empty() ? t.get("default").fg : t.nicks[(size_t)letter * t.nicks.size() / 6];
+            std::string want = cp == ' ' ? cur : code(c);
+            if (want != cur) line += want, cur = want;
+            utf8_put(line, cp);
+        }
+        out.push_back(line);
+    }
+    return out;
 }
 
 // the template as a first config: its example servers commented out, and the
