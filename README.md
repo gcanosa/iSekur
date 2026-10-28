@@ -1,4 +1,4 @@
-# iSekur 0.2
+# iSekur 0.3
 
 A small, very colorful terminal IRC client in C++17 with a built-in webchat
 that mirrors your live session in a browser, bouncer style.
@@ -25,6 +25,16 @@ that mirrors your live session in a browser, bouncer style.
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - Optional chat logs (`log = on`, rotated daily) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
+
+## Download
+
+Prebuilt packages of the latest release (the links always point at the newest one):
+[macOS, Apple silicon](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz),
+[Linux x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-x86_64.tar.gz) (needs libssl3),
+[source](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-src.tar.gz).
+
+    curl -L https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz | tar xz
+    sudo isekur-macos-arm64/install.sh     # /usr/local
 
 ## Build
 
