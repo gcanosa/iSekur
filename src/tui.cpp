@@ -41,8 +41,46 @@ static int cwidth(uint32_t cp) {
     return w < 0 ? 1 : w;
 }
 
-struct Cell { uint32_t cp; Style st; int w; };
+struct Cell { uint32_t cp; Style st; int w; int link = 0; };  // link: frame_urls index + 1
 using Row = std::vector<Cell>;
+
+// clickable URLs (OSC 8, vendor/termbox2.c): the ones drawn this frame
+extern "C" void isekur_links_begin(void);
+extern "C" void isekur_links_urls(const char* const* urls, int n);
+extern "C" void isekur_link(int x, int y, int id);
+extern "C" int isekur_present(void);
+static std::vector<std::string> frame_urls;
+
+static void present() {
+    std::vector<const char*> u;
+    for (auto& s : frame_urls) u.push_back(s.c_str());
+    isekur_links_urls(u.data(), (int)u.size());
+    isekur_present();
+}
+
+// http(s)://... in a row of cells, like the webchat: up to a space or < > " ', without the
+// trailing punctuation of the sentence. Printable ASCII only, since it goes into an escape
+// sequence (anything else ends the link).
+static void linkify(Row& r) {
+    auto at = [&](size_t i, const char* s) {
+        for (size_t k = 0; s[k]; k++)
+            if (i + k >= r.size() || r[i + k].cp != (uint32_t)s[k]) return false;
+        return true;
+    };
+    for (size_t i = 0; i < r.size(); i++) {
+        if (!at(i, "http://") && !at(i, "https://")) continue;
+        if (i && r[i - 1].cp < 128 && isalnum((int)r[i - 1].cp)) continue;
+        size_t j = i;
+        while (j < r.size() && r[j].cp > 0x20 && r[j].cp < 0x7f && !strchr("<>\"'", (int)r[j].cp)) j++;
+        while (j > i && strchr(".,;:!?)]", (int)r[j - 1].cp)) j--;
+        std::string url;
+        for (size_t k = i; k < j; k++) url += (char)r[k].cp;
+        if (url.size() <= 8 || url.size() > 2000 || frame_urls.size() >= 65535) { i = j; continue; }
+        frame_urls.push_back(url);
+        for (size_t k = i; k < j; k++) r[k].link = (int)frame_urls.size();
+        i = j;
+    }
+}
 
 static void cells(Row& out, const std::string& s, Style st, bool mirc = true) {
     auto put = [&](uint32_t cp, const Style& cs) {
@@ -59,6 +97,7 @@ static int draw_row(int x, int y, int xmax, const Row& r) {
     for (auto& c : r) {
         if (x + c.w > xmax) break;
         cell(x, y, c.cp, c.st);
+        if (c.link) isekur_link(x, y, c.link);
         x += c.w;
     }
     return x;
@@ -156,6 +195,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     int indent = width(pre), avail = std::max(10, width_ - indent);
     Row body_cells;
     cells(body_cells, txt, body);
+    linkify(body_cells);
 
     std::vector<Row> rows;
     Row cur = pre;
@@ -188,13 +228,14 @@ void Tui::draw() {
     Style def = T.get("default");
     tb_set_clear_attrs(tbc(def.fg), tbc(def.bg));
     tb_clear();
+    isekur_links_begin(), frame_urls.clear();
     int W = tb_width(), H = tb_height();
     Buffer* b = c.active;
     c.dirty = false;
     hits.clear(), nl_x = -1;
     if (H < 6 || W < 30 || !b) {
         text(0, 0, W, "terminal too small", def, false);
-        tb_present();
+        present();
         return;
     }
 
@@ -213,6 +254,7 @@ void Tui::draw() {
         if (topic_buf != b) topic_buf = b, topic_off = 0, topic_open = false;
         Row r;
         cells(r, topic, ts);
+        linkify(r);
         int tw = W - 2, maxh = std::max(1, (H - 4) / 2);
         if (topic_open && width(r) > tw) {  // unfolded: wrapped over as many rows as it needs
             std::vector<Row> rows(1);
@@ -481,7 +523,7 @@ void Tui::draw() {
         int px = text(0, y, W, "Send " + std::to_string(n) + " lines to " + buf_label(b) + "? (y/n) ",
                       T.get("hilight"), false);
         tb_set_cursor(px, y);
-        tb_present();
+        present();
         return;
     }
     bool masked = c.pass_buf == b;  // /e2e, /oper password
@@ -505,7 +547,7 @@ void Tui::draw() {
         col += w;
     }
     tb_set_cursor(px + curw - off, y);
-    tb_present();
+    present();
 }
 
 // ---- keyboard --------------------------------------------------------------
