@@ -91,7 +91,7 @@ dropped instead of showing up as garbage.
 
 `/server host [port] [-tls] [-noverify]`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/ctcp`,
-`/theme`, `/set [section.]key [value]`, `/save`, `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`, `/web [start|stop|status]`,
+`/theme`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 

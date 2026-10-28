@@ -182,6 +182,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
 int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); }
 
 void Tui::draw() {
+    if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
@@ -512,20 +513,24 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
 bool Tui::init(std::string& err, int fd) {
     int r = fd < 0 ? tb_init() : tb_init_fd(fd);
     if (r != TB_OK) { err = tb_strerror(r) + std::string(" (") + std::to_string(r) + ")"; return false; }
-    mouse_on = ini_get(c.cfg, "general", "mouse", "on") != "off";
-    tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
     tb_set_func(TB_FUNC_EXTRACT_PRE, isekur_extract_pre);
     tb_set_func(TB_FUNC_EXTRACT_POST, isekur_extract_post);
+    nicklist = c.theme.lay("nicklist", "on") != "off";
+    apply_cfg();
+    return true;
+}
+
+// mouse, colors and keys from the config: at start, and after /set keys.* or /reload
+void Tui::apply_cfg() {
+    mouse_on = ini_get(c.cfg, "general", "mouse", "on") != "off";
+    tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
     std::string mode = ini_get(c.cfg, "general", "colors", "auto");
     const char* ct = getenv("COLORTERM");
     truecolor = mode == "truecolor" ||
                 (mode == "auto" && ct && (std::string(ct) == "truecolor" || std::string(ct) == "24bit"));
     g_true = truecolor;
     tb_set_output_mode(truecolor ? TB_OUTPUT_TRUECOLOR : TB_OUTPUT_256);
-    nicklist = c.theme.lay("nicklist", "on") != "off";
-
     load_keys();
-    return true;
 }
 
 void Tui::load_keys() {
@@ -601,7 +606,6 @@ bool Tui::action(const std::string& a) {
 }
 
 void Tui::key(int mod, int k, uint32_t ch) {
-    if (c.keys_changed) c.keys_changed = false, load_keys();
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {

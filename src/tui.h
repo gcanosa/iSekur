@@ -23,6 +23,7 @@ private:
     std::vector<std::string> hist;
     size_t hpos = 0;
     std::map<std::string, std::string> keymap;
+    void apply_cfg();  // mouse, colors, keys
     void load_keys();  // defaults + [keys]; again after /set keys.*  // "M-Right" -> "next_tab"
     bool nicklist = true, topicbar = true, truecolor = true, mouse_on = true;
     int top_row() const { return topicbar ? topic_h + 1 : 1; }  // first chat row, under the topic and tab bars
