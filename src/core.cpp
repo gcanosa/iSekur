@@ -351,6 +351,18 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
     }
 }
 
+// the text after the first n words
+std::string after_words(const std::string& args, size_t n) {
+    size_t pos = 0;
+    for (size_t k = 0; k < n && pos != std::string::npos; k++) {
+        pos = args.find_first_not_of(' ', pos);
+        pos = pos == std::string::npos ? pos : args.find(' ', pos);
+    }
+    if (pos == std::string::npos) return std::string();
+    pos = args.find_first_not_of(' ', pos);
+    return pos == std::string::npos ? std::string() : args.substr(pos);
+}
+
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
     if (input.find('\n') != std::string::npos) {
@@ -370,16 +382,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     std::string args = sp == std::string::npos ? "" : in.substr(sp + 1);
     for (auto& ch : cmd) ch = (char)tolower((unsigned char)ch);
     auto argv = split(args, ' ');
-    auto rest = [&](size_t n) {  // args after the first n words
-        size_t pos = 0;
-        for (size_t k = 0; k < n && pos != std::string::npos; k++) {
-            pos = args.find_first_not_of(' ', pos);
-            pos = pos == std::string::npos ? pos : args.find(' ', pos);
-        }
-        if (pos == std::string::npos) return std::string();
-        pos = args.find_first_not_of(' ', pos);
-        return pos == std::string::npos ? std::string() : args.substr(pos);
-    };
+    auto rest = [&](size_t n) { return after_words(args, n); };
     Server* s = b->srv;
     auto need = [&]() {
         if (s && s->state == SS::CONNECTED) return true;
@@ -599,6 +602,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         else s->send("TOPIC " + b->name + " :" + args);
         return;
     }
+    if (chanop(b, cmd, args)) return;
     if (cmd == "raw" || cmd == "quote") { s->send(args); return; }
     if (cmd == "ctcp") {  // /ctcp nick VERSION|TIME|PING|...
         if (argv.size() < 2) { print(b, LK::ERROR, "Usage: /ctcp target VERSION|TIME|PING [args]"); return; }

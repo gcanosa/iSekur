@@ -63,6 +63,50 @@ static const std::vector<CmdInfo> CMDS = {
      "Sends the line to the server exactly as typed. Unknown commands do this too.",
      {"/raw PRIVMSG #chan :hello", "/quote WHO #sekurnet"}, "quote"},
 
+    // ---- Channel ops
+    {"massop", "Channel ops", "", "Op everyone in the channel",
+     "Gives +o to everyone who isn't an op yet, several per MODE line (as many as the server's "
+     "MODES allows). Needs ops.",
+     {"/massop"}},
+    {"massdeop", "Channel ops", "", "Deop everyone except yourself",
+     "Takes +o from every op but you. Needs ops.",
+     {"/massdeop"}},
+    {"massvoice", "Channel ops", "", "Voice everyone",
+     "Gives +v to everyone below halfop who doesn't have it. Handy with /lockdown: the regulars can "
+     "keep talking while the channel is moderated.",
+     {"/massvoice"}},
+    {"massdevoice", "Channel ops", "", "Remove voice from everyone",
+     "Takes +v from everyone but you.",
+     {"/massdevoice"}},
+    {"masskick", "Channel ops", "[-yes] [reason]", "Kick everyone who isn't an op or halfop",
+     "Asks first: without -yes it only says how many users it would kick. Ops, halfops and you stay. "
+     "Kicks go through flood control, so a big channel takes a while.",
+     {"/masskick spam wave", "/masskick -yes spam wave"}},
+    {"lockdown", "Channel ops", "", "Lock the channel: +mntsi",
+     "Moderated (only voiced and ops talk), no outside messages, topic lock, secret, invite only. "
+     "Use it during a flood or raid; /unlock lifts it.",
+     {"/lockdown", "/lockdown then /massvoice to let the regulars talk"}},
+    {"unlock", "Channel ops", "", "Lift a lockdown: -msi",
+     "Removes moderated, secret and invite only. +n and +t stay.",
+     {"/unlock"}},
+    {"kickban", "Channel ops", "nick [reason]", "Ban *!*@host and kick, in one go",
+     "Bans the user's host (so a new nick doesn't get them back in) and kicks them. If the host isn't "
+     "known yet iSekur asks the server for it first.",
+     {"/kickban troll", "/kb troll flooding the channel"}, "kb"},
+    {"tempban", "Channel ops", "nick minutes [reason]", "Kick + ban, unbanned after some minutes",
+     "Like /kickban, then lifts the ban after the given minutes (1 to 10080). The unban is sent by "
+     "iSekur, so it has to be running then. /chanstats lists the pending ones.",
+     {"/tempban troll 30 spam", "/tempban flooder 1440 come back tomorrow"}},
+    {"chanstats", "Channel ops", "", "Users, ops, voices, topic and modes",
+     "Counts the nicklist (ops, halfops, voiced, regular, away) and shows the modes, the topic, "
+     "the topic rotation and pending temp bans. Nothing is sent to the server.",
+     {"/chanstats"}},
+    {"topicrotate", "Channel ops", "minutes topic | topic ... | off", "Change the topic on a timer",
+     "Sets the topics in turn, one every N minutes (1 to 1440), starting right away. Separate them "
+     "with |. Without arguments shows what's rotating; off stops it. It runs while iSekur runs and "
+     "is not saved.",
+     {"/topicrotate 60 Welcome! | Rules: be nice | Meeting Friday 18:00 UTC", "/topicrotate", "/topicrotate off"}},
+
     // ---- Windows
     {"win", "Windows", "N", "Go to tab N",
      "Same as Alt+1..9 / Alt+0, but works for tabs past 10.",

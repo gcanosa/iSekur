@@ -71,7 +71,7 @@ struct Line {
 
 enum class BT { STATUS, CHANNEL, QUERY };
 struct Server;
-struct NickEntry { std::string nick, prefix; bool away = false; };
+struct NickEntry { std::string nick, prefix; bool away = false; std::string host; };  // host: user@host, "" = unknown
 struct Buffer {
     int id;
     BT type;
@@ -86,6 +86,11 @@ struct Buffer {
     bool joined = false;
     FILE* log = nullptr;                     // opened lazily when logging is on
     std::string log_day;                     // YYYY-MM-DD the open log belongs to
+    // /topicrotate: topics set in turn every rot_min minutes
+    std::vector<std::string> rot;
+    int rot_min = 0;
+    size_t rot_i = 0;
+    time_t rot_at = 0;
     ~Buffer() { if (log) fclose(log); }
 };
 
@@ -99,6 +104,9 @@ struct ServerCfg {
     std::vector<std::string> autojoin;
 };
 enum class SS { DISCONNECTED, CONNECTING, REGISTERING, CONNECTED };
+// /kickban and /tempban; waits in kb_wait while USERHOST looks the host up
+struct KickBan { std::string chan, nick, reason; int minutes = 0; };
+struct TempBan { std::string chan, mask; time_t until; };
 
 struct Core;
 struct Server {
@@ -111,6 +119,9 @@ struct Server {
     std::set<std::string> hist_batches;    // open chathistory BATCH ids
     std::string inbuf;
     std::string chanmodes = "beI,k,l,imnpst";
+    int max_modes = 3;                      // 005 MODES: mode changes per MODE line
+    std::deque<KickBan> kb_wait;            // one per USERHOST sent, answered in order
+    std::vector<TempBan> tempbans;          // lifted by Core::chan_timers
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
     int sasl_step = 0, nick_tries = 0, backoff = 0;
     bool cap_done = false;
@@ -198,6 +209,9 @@ struct Core {
     void exec(Buffer* b, const std::string& input);  // "/cmd" or text
     void say(Buffer* b, const std::string& text, bool action = false);
     void help(Buffer* b, const std::string& topic);  // help.cpp
+    bool chanop(Buffer* b, const std::string& cmd, const std::string& args);  // false: not one
+    void kickban(Server* s, Buffer* b, const KickBan& kb, const std::string& userhost);
+    void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
 
     void handle(Server* s, const Msg& m);  // irc.cpp
 };
@@ -209,5 +223,6 @@ std::string fmt_time(time_t t, const std::string& fmt);
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
+std::string after_words(const std::string& s, size_t n);  // the text after the first n words
 std::string safe_name(const std::string& n);  // network name -> safe log file name
 bool parse_log_line(const std::string& s, Line& l);

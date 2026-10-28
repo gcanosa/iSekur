@@ -115,6 +115,59 @@ int main() {
     core.exec(home, "/help ban");
     assert(mirc_strip(home->lines.back().text).find("No such command: /ban") == 0);
 
+    // channel op commands against a fake connected server; flood_ms 0 = lines go out at once
+    ServerCfg tc;
+    tc.name = "t", tc.nick = "me";
+    Server* ts = core.add_server(tc);
+    ts->state = SS::CONNECTED, ts->flood_ms = 0;
+    ts->prefix_modes = "qaohv", ts->prefix_chars = "~&@%+";
+    Buffer* chb = core.open(ts, BT::CHANNEL, "#c");
+    chb->joined = true;
+    auto feed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(ts, mm); };
+    auto sent = [&]() { std::string o = ts->conn.out; ts->conn.out.clear(); return o; };
+    feed(":srv 005 me MODES=3 :are supported");
+    feed(":srv 353 me = #c :@me!u@me.host +v1!u@h1 r1!u@h2 %hop!u@h3 @op2!x@h4 r2");
+    sent();
+    core.exec(chb, "/massvoice");
+    assert(sent() == "MODE #c +vv r1 r2\r\n");
+    core.exec(chb, "/massop");
+    assert(sent() == "MODE #c +ooo hop r1 r2\r\nMODE #c +o v1\r\n");
+    core.exec(chb, "/massdeop");
+    assert(sent() == "MODE #c -o op2\r\n");
+    core.exec(chb, "/masskick bye");  // asks first
+    assert(sent().empty() && chb->lines.back().text.find("/masskick -yes bye") != std::string::npos);
+    core.exec(chb, "/masskick -yes bye");
+    assert(sent() == "KICK #c r1 :bye\r\nKICK #c r2 :bye\r\nKICK #c v1 :bye\r\n");
+    core.exec(chb, "/kb r1 go away");
+    assert(sent() == "MODE #c +b *!*@h2\r\nKICK #c r1 :go away\r\n");
+    core.exec(chb, "/tempban r2 5");  // host unknown: USERHOST first, the 302 finishes it
+    assert(sent() == "USERHOST r2\r\n");
+    feed(":srv 302 me :r2=+u@h9");
+    assert(sent() == "MODE #c +b *!*@h9\r\nKICK #c r2 :Banned for 5 minutes\r\n" && ts->tempbans.size() == 1);
+    time_t t0 = time(nullptr);
+    core.chan_timers(ts, t0 + 299);
+    assert(sent().empty());
+    core.chan_timers(ts, t0 + 301);
+    assert(sent() == "MODE #c -b *!*@h9\r\n" && ts->tempbans.empty());
+    core.exec(chb, "/topicrotate 1 first | second ");
+    core.chan_timers(ts, t0);
+    core.chan_timers(ts, t0 + 30);
+    core.chan_timers(ts, t0 + 60);
+    assert(sent() == "TOPIC #c :first\r\nTOPIC #c :second\r\n");
+    core.exec(chb, "/topicrotate off");
+    core.chan_timers(ts, t0 + 999);
+    assert(sent().empty());
+    core.exec(chb, "/chanstats");
+    bool counted = false;
+    for (auto& l : chb->lines) counted |= mirc_strip(l.text).find("Users: 6  (2 ops, 1 halfops, 1 voiced, 2 regular; 0 away)") == 0;
+    assert(counted);
+    chb->nicks["me"].prefix = "+";  // not an op any more
+    core.exec(chb, "/lockdown");
+    assert(sent().empty() && chb->lines.back().kind == LK::ERROR);
+    chb->nicks["me"].prefix = "@";
+    core.exec(chb, "/lockdown");
+    assert(sent() == "MODE #c +mntsi\r\n");
+
     assert(ctcp_version().rfind(version_string() + " :: ", 0) == 0 && version_string().find(ISEKUR_VERSION) != std::string::npos);
 
     Server sv;  // token bucket: 2 at once, then one per second
