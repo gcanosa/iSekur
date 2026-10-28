@@ -221,7 +221,7 @@ void Core::connect(Server* s) {
     s->conn.close();
     s->user_quit = false;
     s->caps.clear(), s->caps_ls.clear();
-    s->sasl_step = 0, s->cap_done = false, s->nick_tries = 0;
+    s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0;
     s->away = s->auto_away = false;
     s->hist_batches.clear();
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
@@ -416,7 +416,7 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "AUTHENTICATE") { sasl_step(*this, s, m.p(0)); return; }
     if (cmd == "900") { print(s->status, LK::INFO, m.p(3)); return; }
-    if (cmd == "903") { print(s->status, LK::INFO, "SASL authentication successful"); cap_end(s); return; }
+    if (cmd == "903") { print(s->status, LK::INFO, "SASL authentication successful"); s->sasl_ok = true; cap_end(s); return; }
     if (cmd == "902" || cmd == "904" || cmd == "905" || cmd == "906" || cmd == "908") {
         print(s->status, LK::ERROR, "SASL: " + m.params.back());
         cap_end(s);
@@ -431,12 +431,23 @@ void Core::handle(Server* s, const Msg& m) {
         s->ping_at = time(nullptr) + 30;
         cap_end(s);  // servers that ignored CAP never got here waiting
         print(s->status, LK::INFO, m.p(1));
-        std::vector<std::string> chans = s->cfg.autojoin;
+        // ponytail: IDENTIFY goes out right before the JOINs, so a +r channel can still beat
+        // NickServ; SASL has no such race. Wait for the 900/NOTICE if that bites.
+        if (!s->cfg.nickserv_pass.empty() && !s->sasl_ok) s->send("PRIVMSG NickServ :IDENTIFY " + s->cfg.nickserv_pass);
+        std::vector<std::string> chans;  // autojoin, then the channel tabs still open (reconnects)
+        for (auto& e : s->cfg.autojoin) {
+            auto w = split(e, ' ');
+            if (w.size() > 1) s->chan_keys[irc_lower(w[0])] = w[1];
+            chans.push_back(w[0]);
+        }
         for (auto& b : bufs)
             if (b->srv == s && b->type == BT::CHANNEL &&
-                std::find(chans.begin(), chans.end(), b->name) == chans.end())
+                std::find_if(chans.begin(), chans.end(), [&](const std::string& c) { return irc_lower(c) == irc_lower(b->name); }) == chans.end())
                 chans.push_back(b->name);
-        for (auto& ch : chans) s->send("JOIN " + ch);
+        for (auto& ch : chans) {
+            auto k = s->chan_keys.find(irc_lower(ch));
+            s->send("JOIN " + ch + (k != s->chan_keys.end() ? " " + k->second : ""));
+        }
         notify(Ev::BUFFER, s->status);
         return;
     }

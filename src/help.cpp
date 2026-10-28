@@ -37,6 +37,10 @@ static const std::vector<CmdInfo> CMDS = {
     {"join", "Chat", "#channel [key]", "Join a channel",
      "The # is added when you leave it out. Give the key for channels with +k.",
      {"/join #sekurnet", "/j linux", "/join #private s3cret"}, "j"},
+    {"autojoin", "Chat", "[add|del] [#channel [key]]", "Channels joined when the server connects",
+     "Without arguments, lists this server's autojoin channels. add / del change the list, the "
+     "current channel when you name none; add keeps the key you gave /join. /save keeps it.",
+     {"/autojoin", "/autojoin add", "/autojoin add #private s3cret", "/autojoin del #old"}},
     {"part", "Chat", "[#channel] [message]", "Leave a channel",
      "Leaves the current channel, or the one you name. The tab stays open with the history; "
      "/close (or Ctrl+W) closes it.",
@@ -136,7 +140,7 @@ static const std::vector<CmdInfo> CMDS = {
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them.",
      {"/set", "/set theme neon", "/set server.libera.autojoin #a,#b", "/set log on"}},
     {"save", "Settings", "", "Write changed settings to the config file",
-     "Saves what /set, /server and /ignore changed. Comments in the file are kept.",
+     "Saves what /set, /server, /autojoin and /ignore changed. Comments in the file are kept.",
      {"/save"}},
     {"ignore", "Settings", "[mask]", "Ignore a nick or mask, or list ignores",
      "A bare nick becomes nick!*@*. Ignored users' messages, notices, invites and CTCPs are dropped. "
