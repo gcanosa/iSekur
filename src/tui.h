@@ -20,6 +20,7 @@ private:
     std::u32string input;
     size_t cur = 0;
     std::string paste;  // a multi-line paste waiting for y/n
+    std::string confirm;  // "question\n/command" from a menu, waiting for y/n
     std::vector<std::string> hist;
     size_t hpos = 0;
     std::map<std::string, std::string> keymap;
@@ -41,7 +42,7 @@ private:
     struct Hit { int y, x0, x1; int tab; std::string nick; };
     std::vector<Hit> hits;
     int nl_x = -1, nl_scroll = 0;
-    // right click on a nick: a menu of commands ("" label = separator); Up/Down/Enter or a click
+    // right click on a nick or a channel tab: a menu of commands ("" label = separator); Up/Down/Enter or a click
     struct Menu { int x = 0, y = 0, sel = 0; std::string nick; std::vector<std::pair<std::string, std::string>> items; };
     Menu menu;  // items.empty() = closed
     void open_menu(const std::string& nick, int x, int y);

@@ -225,6 +225,19 @@ int main() {
     assert(!chb->collapsed);
     core.fold(ts->status);
     assert(!ts->status->collapsed);
+    // the channel tab menu: autojoin add/del flips with the list, a joined channel asks before closing
+    auto tab_cmd = [&](const std::string& l) {
+        for (auto& [lab, cmd] : core.tab_menu(chb)) if (lab == l) return cmd;
+        return std::string("-");
+    };
+    bool joined = chb->joined;
+    chb->joined = true;
+    assert(tab_cmd("Close")[0] == '?' && tab_cmd("Clear") == "/clear");
+    chb->joined = joined;
+    core.exec(chb, tab_cmd("Add to autojoin"));
+    assert(tab_cmd("Remove from autojoin") == "/autojoin del");
+    core.exec(chb, "/autojoin del");
+    assert(tab_cmd("Add to autojoin") == "/autojoin add" && core.tab_menu(ts->status).empty());
 
     // highlights: the nick and hilight_words, whole words, * globs; the default part/quit message
     auto hl = [&](const std::string& t) { feed(":bob!u@h PRIVMSG #c :" + t); return chb->lines.back().hilight; };
