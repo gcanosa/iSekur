@@ -174,6 +174,10 @@ enum class Ev { LINE, BUFFER, CLOSE, THEME };
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
+    Ini defaults;      // iSekur.conf.example (compiled in) minus its example servers
+    // what /set lists: every key in the config or the template, the config's value winning
+    struct Setting { std::string key, val; };  // key: "nick", "web.port", "server.x.host"
+    std::vector<Setting> settings() const;
     std::string cfg_path;
     Theme theme;
     std::vector<std::unique_ptr<Server>> servers;
@@ -257,6 +261,7 @@ std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
 std::string after_words(const std::string& s, size_t n);  // the text after the first n words
+std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
 void mkdir_p(const std::string& path);  // 0700
 std::string safe_name(const std::string& n);  // network name -> safe log file name

@@ -4,10 +4,12 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <glob.h>
+#include <sstream>
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include "core.h"
 #include "version.h"
+#include "conf_template.h"
 
 static const size_t MAX_LINES = 2000;
 
@@ -19,13 +21,32 @@ std::string default_config_path() {
 
 void Core::load_config() {
     if (cfg_path.empty()) cfg_path = default_config_path();
-    bool found = ini_load(cfg_path, cfg);
+    bool found = ini_load(cfg_path, cfg), created = false;
+    if (!found) {  // first start: every setting in a file to edit or /set
+        mkdir_p(cfg_path.substr(0, cfg_path.rfind('/')));
+        mode_t old = umask(077);
+        FILE* f = fopen(cfg_path.c_str(), "wx");
+        umask(old);
+        if (f) {
+            std::string t = fresh_config();
+            created = fwrite(t.data(), 1, t.size(), f) == t.size();
+            created = (fclose(f) == 0) && created;
+            found = created && ini_load(cfg_path, cfg);
+        }
+    }
+    defaults = ini_parse(conf_template);
+    for (auto it = defaults.begin(); it != defaults.end();)
+        it = it->first.rfind("server.", 0) == 0 ? defaults.erase(it) : std::next(it);
+    defaults["general"]["nick"] = defaults["general"]["altnick"] = defaults["web"]["user"] = "";  // placeholders
     std::string err;
     if (!load_theme(ini_get(cfg, "general", "theme", "default"), theme, err)) {
         if (!load_theme("default", theme, err)) theme = Theme{};
     }
     Buffer* home = open(nullptr, BT::STATUS, "cmd");
-    if (!found)
+    if (created)
+        print(home, LK::INFO, "Wrote " + cfg_path + " with every setting: edit it, or /set key value and /save. "
+                              "Add a server with /server irc.example.org 6697 -tls");
+    else if (!found)
         print(home, LK::INFO, "No config at " + cfg_path +
                                   " - see iSekur.conf.example. Try /server irc.example.org 6697 -tls");
     print(home, LK::INFO, "Welcome to " + version_string() + ". /help lists commands.");
@@ -35,6 +56,46 @@ void Core::load_config() {
         Server* s = add_server(server_cfg(sec.substr(7)));
         if (s->cfg.autoconnect) connect(s);
     }
+}
+
+// the template as a first config: its example servers commented out, and the
+// identity placeholders (mynick, me) empty, so they fall back to your login
+std::string fresh_config() {
+    std::istringstream in(conf_template);
+    std::string out, line, sec;
+    while (std::getline(in, line)) {
+        std::string t = line.substr(0, line.find_first_of("=;#"));
+        while (!t.empty() && t.back() == ' ') t.pop_back();
+        if (!line.empty() && line[0] == '[') sec = line.substr(1, line.find(']') - 1);
+        if (sec.rfind("server.", 0) == 0 && !line.empty() && line[0] != '#' && line[0] != ';') line = "; " + line;
+        else if ((sec == "general" && (t == "nick" || t == "altnick")) || (sec == "web" && t == "user"))
+            line = line.substr(0, line.find('=') + 1);
+        out += line + "\n";
+    }
+    return out;
+}
+
+static bool secret_key(const std::string& k) {
+    return k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
+}
+
+std::vector<Core::Setting> Core::settings() const {
+    Ini all = defaults;
+    for (auto& [sec, kv] : cfg)
+        for (auto& [k, v] : kv)
+            if (!v.empty() || !all[sec].count(k)) all[sec][k] = v;  // "key =" keeps the default
+    std::vector<Setting> out;
+    for (auto& [sec, kv] : all)
+        for (auto& [k, v] : kv) {
+            bool set = !ini_get(cfg, sec, k).empty();
+            std::string val = !set && v.empty() ? "(not set)"
+                              : secret_key(k) && !v.empty() ? "********"
+                                                            : v;
+            if (!set && !v.empty()) val += "  (default)";
+            if (unsaved.count(sec) && unsaved.at(sec).count(k)) val += "  (unsaved)";
+            out.push_back({(sec == "general" ? "" : sec + ".") + k, val});
+        }
+    return out;
 }
 
 // [server.<name>] with [general] fallbacks; also re-read by /set
@@ -416,15 +477,9 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
-        auto secret = [](const std::string& k) {
-            return k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
-        };
+        auto secret = secret_key;
         if (argv.empty()) {
-            for (auto& [sec, kv] : cfg)
-                for (auto& [k, v] : kv)
-                    print(b, LK::INFO, (sec == "general" ? "" : sec + ".") + k + " = " +
-                                           (secret(k) ? "********" : v) +
-                                           (unsaved.count(sec) && unsaved[sec].count(k) ? "  (unsaved)" : ""));
+            for (auto& st : settings()) print(b, LK::INFO, st.key + " = " + st.val);
             return;
         }
         size_t dot = argv[0].rfind('.');
@@ -433,7 +488,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string val = rest(1);
         if (key.empty() || sec.empty()) { print(b, LK::ERROR, "Usage: /set [section.]key value"); return; }
         if (argv.size() == 1) {
-            print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : ini_get(cfg, sec, key, "(not set: default)")));
+            std::string def = ini_get(defaults, sec, key);
+            print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }
         cfg[sec][key] = unsaved[sec][key] = val;

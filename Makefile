@@ -54,6 +54,11 @@ build/%.o: src/%.cpp | build
 build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+# the config template is compiled in too: /set lists its keys and defaults
+build/core.o: build/conf_template.h
+build/conf_template.h: iSekur.conf.example | build
+	{ printf 'static const char conf_template[] = R"ISEKURCONF('; cat iSekur.conf.example; printf ')ISEKURCONF";\n'; } > $@
+
 # the webchat page is compiled into the binary
 build/web.o: build/web_assets.h
 build/web_assets.h: web/index.html | build

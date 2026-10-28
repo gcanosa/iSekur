@@ -36,8 +36,9 @@ Needs a C++17 compiler, GNU make and OpenSSL 1.1+/LibreSSL. termbox2 is vendored
     sudo make install            # /usr/local; PREFIX=... must match the build
     man isekur
 
-Copy `iSekur.conf.example` to `~/.config/isekur/isekur.conf`, or change
-settings from inside the client with `/set theme neon`, `/set server.libera.autojoin #a,#b`
+On the first start iSekur writes `~/.config/isekur/isekur.conf` with every setting at its
+default (the example servers commented out, an empty value means the default), so you can edit
+it by hand, or change settings from inside the client with `/set theme neon`, `/set server.libera.autojoin #a,#b`
 and write them back with `/save` (comments in the file are kept). Changes apply
 right away; server settings are used on the next `/connect`, `[web]` after `/web stop` + `/web start`. Run
 `./isekur --hash-password` to get the `[web] password_hash` value.

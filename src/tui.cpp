@@ -875,13 +875,8 @@ int Tui::suggest(std::vector<Sugg>& out) const {
     std::string cmd = irc_lower(s.substr(1, sp - 1)), arg = s.substr(sp + 1);
     if (arg.find(' ') == std::string::npos) {
         if (cmd == "set") {  // config keys containing what's typed
-            for (auto& [sec, kv] : c.cfg)
-                for (auto& [k, v] : kv) {
-                    std::string full = (sec == "general" ? "" : sec + ".") + k;
-                    bool secret = k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
-                    if (irc_lower(full).find(irc_lower(arg)) != std::string::npos)
-                        out.push_back({full, " = ", secret ? "********" : v});
-                }
+            for (auto& st : c.settings())
+                if (irc_lower(st.key).find(irc_lower(arg)) != std::string::npos) out.push_back({st.key, " = ", st.val});
             return (int)sp + 1;
         }
         if (cmd == "help") { cmds(arg, false); return (int)sp + 1; }

@@ -42,6 +42,13 @@ int main() {
     Ini ini = ini_parse("# c\n[a]\nk = v ; note\nc = #chan\n[b]\nx=1\n");
     assert(ini["a"]["k"] == "v" && ini["a"]["c"] == "#chan" && ini_get(ini, "b", "x") == "1");
     assert(ini_get(ini, "b", "missing", "d") == "d");
+    assert(ini_get(ini_parse("[a]\nk =    ; placeholder\n"), "a", "k", "d") == "d");  // empty = default
+    {  // first-run config: every setting, no example servers, no placeholder nick
+        Ini f = ini_parse(fresh_config());
+        for (auto& [sec, kv] : f) assert(sec.rfind("server.", 0) != 0);
+        assert(f["general"].count("nick") && f["general"]["nick"].empty() && f["web"]["user"].empty());
+        assert(f["general"]["bell_notifications"] == "on" && f["general"].count("log_dir") && f["web"]["port"] == "8443");
+    }
     assert(parse_color("#ff8800") == 0xff8800 && parse_color("default") == -1 && parse_color("196") == 0xff0000);
 
     assert(unb64(b64("hello!")) == "hello!" && b64("") == "" && unb64("!!!") == "");
@@ -98,7 +105,7 @@ int main() {
     ch["general"]["log"] = "on";
     ch["web"]["port"] = "9000";
     std::string up = ini_update("# top\n[general]\ntheme = default ; old\n\n[server.x]\nhost = h\n", ch);
-    assert(up == "# top\n[general]\ntheme = neon\nlog = on\n\n[server.x]\nhost = h\n\n[web]\nport = 9000\n");
+    assert(up == "# top\n[general]\ntheme = neon    ; old\nlog = on\n\n[server.x]\nhost = h\n\n[web]\nport = 9000\n");
     assert(ini_parse(up)["general"]["log"] == "on" && ini_parse(up)["server.x"]["host"] == "h");
 
     Core core;

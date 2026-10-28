@@ -9,7 +9,7 @@ theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes
 timestamp = %H:%M
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
 mouse     = on               ; click tabs/nicks, wheel scrolls, drag copies; F3 toggles
-; ignore  = spammer!*@* *!*@*.bad.host   ; or use /ignore and /save
+ignore    =                  ; e.g. spammer!*@* *!*@*.bad.host, or use /ignore and /save
 
 # Flood control: lines sent at once, then one every N ms (0 = no limit).
 flood_burst       = 5
@@ -18,7 +18,7 @@ flood_interval_ms = 2000
 # Chat logs: channels and queries go to <log_dir>/<server>/<name>.log
 # (private files, formatting stripped). Any of these can also be set per server.
 log       = off
-; log_dir = ~/irclogs        ; default: "logs" next to this file
+log_dir   =                  ; default: "logs" next to this file, e.g. ~/irclogs
 log_history = 200            ; lines restored into a tab from its log (0 = off)
 log_rotate  = on             ; start a new file each day; old ones become <name>.YYYY-MM-DD.log
 
@@ -80,8 +80,8 @@ bind          = 127.0.0.1
 port          = 8443
 user          = me
 password_hash =              ; run: isekur --hash-password
-; cert = /path/fullchain.pem
-; key  = /path/privkey.pem
+cert          =              ; e.g. /path/fullchain.pem (empty: self-signed)
+key           =              ; e.g. /path/privkey.pem
 
 # Key bindings: <action> = <key> [key...]
 # Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).

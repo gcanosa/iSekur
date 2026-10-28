@@ -75,7 +75,10 @@ std::string ini_update(const std::string& text, const Ini& changes) {
             std::string k = trim(t.substr(0, t.find('=')));
             auto it = changes.find(sec);
             if (it != changes.end() && it->second.count(k)) {
-                if (done.insert({sec, k}).second) out += k + " = " + it->second.at(k) + "\n";
+                size_t sc = line.find(" ;", line.find('='));  // keep the line's comment, aligned as it was
+                std::string kv = k + " = " + it->second.at(k), note = sc == std::string::npos ? "" : line.substr(sc + 1);
+                if (!note.empty()) kv += std::string(sc + 1 > kv.size() ? sc + 1 - kv.size() : 1, ' ') + note;
+                if (done.insert({sec, k}).second) out += kv + "\n";
                 continue;  // duplicate keys collapse into the first one
             }
         }
@@ -114,7 +117,7 @@ std::string ini_get(const Ini& ini, const std::string& sec, const std::string& k
     auto s = ini.find(sec);
     if (s == ini.end()) return def;
     auto k = s->second.find(key);
-    return k == s->second.end() ? def : k->second;
+    return k == s->second.end() || k->second.empty() ? def : k->second;  // "key =" is a placeholder
 }
 
 std::vector<std::string> split(const std::string& s, char sep) {
