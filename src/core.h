@@ -91,6 +91,7 @@ struct Buffer {
     int scroll = 0;                          // rows scrolled back (tui)
     bool joined = false;
     bool quiet = false;                      // /quiet: hide joins, parts, quits, nick changes
+    bool collapsed = false;                  // a server tab hiding its channels in the tab bar (right click)
     FILE* log = nullptr;                     // opened lazily when logging is on
     std::string log_day;                     // YYYY-MM-DD the open log belongs to
     // /topicrotate: topics set in turn every rot_min minutes

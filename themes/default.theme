@@ -8,6 +8,7 @@ default        = default default
 topic          = #e6e6fa #3b2a6b
 tabbar         = #8a8fb0 #1c1d2b
 tab_server     = #b8a1ff #1c1d2b bold
+tab_home       = #7fdbca #1c1d2b bold
 tab_active     = #1c1d2b #c792ea bold
 tab_data       = #7aa2f7 #1c1d2b
 tab_msg        = #ffffff #1c1d2b bold

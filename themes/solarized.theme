@@ -4,6 +4,7 @@ default        = #93a1a1 #002b36
 topic          = #fdf6e3 #073642 bold
 tabbar         = #586e75 #073642
 tab_server     = #b58900 #073642 bold
+tab_home       = #2aa198 #073642 bold
 tab_active     = #002b36 #268bd2 bold
 tab_data       = #2aa198 #073642
 tab_msg        = #eee8d5 #073642 bold

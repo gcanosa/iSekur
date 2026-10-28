@@ -243,19 +243,30 @@ void Tui::draw() {
     Style tbs = T.get("tabbar");
     int ty = top_row() - 1;
     fill(ty, 0, W, tbs);
+    // a collapsed server tab hides its channels and queries (the active one stays), shows "+N"
+    // and takes their activity color; Ctrl+N/P, Ctrl+A and /win still go to them
     std::vector<Row> labels;
-    int ai = c.index_of(b);
+    std::vector<int> vis;  // c.bufs index of each label
+    int ai = c.index_of(b), av = 0;  // av: the active tab among the labels
     for (size_t i = 0; i < c.bufs.size(); i++) {
         Buffer* t = c.bufs[i].get();
+        if (t != b && t->type != BT::STATUS && t->srv && t->srv->status->collapsed) continue;
+        int act = t->activity, hid = 0;
+        if (t->type == BT::STATUS && t->collapsed)
+            for (auto& o : c.bufs)
+                if (o->srv == t->srv && o.get() != t && o.get() != b) hid++, act = std::max(act, o->activity);
         Style s = t == b ? (t->quiet ? sty(T, "tab_quiet_act", "tab_active") : T.get("tab_active"))
-                : t->activity == 3 ? T.get("tab_hilight")
-                : t->activity == 2 ? T.get("tab_msg")
-                : t->activity == 1 ? T.get("tab_data")
+                : act == 3 ? T.get("tab_hilight")
+                : act == 2 ? T.get("tab_msg")
+                : act == 1 ? T.get("tab_data")
                 : t->quiet ? sty(T, "tab_quiet", "tabbar")
+                : !t->srv ? sty(T, "tab_home", "tab_server")
                 : t->type == BT::STATUS ? sty(T, "tab_server", "tabbar") : tbs;
         Row r;
-        cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + " ", s, false);
+        cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + (hid ? " +" + std::to_string(hid) : "") + " ", s, false);
+        if (t == b) av = (int)labels.size();
         labels.push_back(r);
+        vis.push_back((int)i);
     }
     // too many tabs: the active one stays in view, "‹N" / "N›" count the hidden ones on each
     // side (colored like the most urgent of them) and a click on it brings the next one in
@@ -264,8 +275,8 @@ void Tui::draw() {
     auto pick = [&] {
         int span = 0;
         first = 0;
-        for (int i = 0; i <= ai; i++) span += width(labels[(size_t)i]);
-        while (span > W - lm - rm && first < ai) span -= width(labels[(size_t)first++]);
+        for (int i = 0; i <= av; i++) span += width(labels[(size_t)i]);
+        while (span > W - lm - rm && first < av) span -= width(labels[(size_t)first++]);
     };
     if (total > W) rm = 4, pick();
     if (first) lm = 4, pick();
@@ -273,17 +284,17 @@ void Tui::draw() {
     for (int i = first; i < nt && (i == first || tx + width(labels[(size_t)i]) <= W - rm); i++) {
         int x0 = tx;
         tx = draw_row(tx, ty, W - rm, labels[(size_t)i]);
-        hits.push_back({ty, x0, tx, i, ""});
+        hits.push_back({ty, x0, tx, vis[(size_t)i], ""});
         last = i;
     }
     auto more = [&](int from, int to, bool left) {
         int act = 0;
-        for (int i = from; i < to; i++) act = std::max(act, c.bufs[(size_t)i]->activity);
+        for (int i = from; i < to; i++) act = std::max(act, c.bufs[(size_t)vis[(size_t)i]]->activity);
         Style ms = act == 3 ? T.get("tab_hilight") : act == 2 ? T.get("tab_msg") : act == 1 ? T.get("tab_data") : tbs;
         std::string num = std::to_string(to - from), m = left ? "‹" + num : num + "›";
         int x0 = left ? 1 : W - (int)num.size() - 2;
         text(x0, ty, W, m, ms, false);
-        hits.push_back({ty, left ? 0 : x0, left ? lm : W, left ? to - 1 : from, ""});
+        hits.push_back({ty, left ? 0 : x0, left ? lm : W, vis[(size_t)(left ? to - 1 : from)], ""});
     };
     if (first) more(0, first, true);
     if (last < nt - 1) more(last + 1, nt, false);
@@ -771,8 +782,13 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (k == TB_KEY_MOUSE_RIGHT) {
-        for (auto& h : hits)
-            if (h.y == y && x >= h.x0 && x < h.x1 && !h.nick.empty()) open_menu(h.nick, x, y);
+        for (auto& h : hits) {
+            if (h.y != y || x < h.x0 || x >= h.x1) continue;
+            if (!h.nick.empty()) open_menu(h.nick, x, y);
+            else if (y == top_row() - 1 && h.tab >= 0 && h.tab < (int)c.bufs.size() && c.bufs[(size_t)h.tab]->type == BT::STATUS &&
+                     c.bufs[(size_t)h.tab]->srv)  // a server tab: fold or unfold its channels
+                c.bufs[(size_t)h.tab]->collapsed ^= true, c.dirty = true;
+        }
         return;
     }
     if (over_topic && k >= TB_KEY_MOUSE_WHEEL_RIGHT && k <= TB_KEY_MOUSE_WHEEL_UP) {

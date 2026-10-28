@@ -86,6 +86,7 @@ Not available on Cygwin.
 | Ctrl+T, Alt+T (Option+T on a Mac) | show / hide the topic bar |
 | F3 | toggle mouse (drag copies; Shift+drag is the terminal's own selection) |
 | right click on a nick | menu: query, whois, CTCPs, ignore, op / voice / kick / ban when your rank allows, kill / G-line when you are an IRC operator (Up/Down/Enter or click) |
+| right click on a server tab | hide or show its channels and queries in the tab bar ("+N" counts them, colored by their activity); Ctrl+N/P, Ctrl+A and `/win` still reach them |
 | Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
 | Up / Down while matches are listed | move through them; Enter or Tab puts the highlighted one in the input line without sending |
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
