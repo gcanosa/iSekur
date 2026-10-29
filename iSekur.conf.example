@@ -44,6 +44,10 @@ bell_notifications = on
 # webchat can't run them unless exec_web = on (anyone logged in to it could).
 exec_timeout = 30
 exec_web     = off
+# A password before anything shows: at startup, on every attach and after /lock.
+# Set it with /lock on (it's stored hashed here), turn it off with /lock off.
+lock = off
+#lock_password_hash =
 # /shell checks the login and password with this PAM service
 #pam_service = login
 

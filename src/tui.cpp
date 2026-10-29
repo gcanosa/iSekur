@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cstdlib>
 #include <cwchar>
+#include <random>
 #include "core.h"
 #include "termbox2.h"
 #include "vterm.h"
@@ -234,6 +235,13 @@ void Tui::draw() {
     Buffer* b = c.active;
     c.dirty = false;
     hits.clear(), nl_x = -1;
+    if (c.locked) {  // the lock screen: nothing of the session shows until the password
+        std::vector<std::string> info;
+        if (!c.lock_msg.empty()) info.push_back(c.lock_msg);
+        draw_dialog(W, H, "iSekur is locked", info, "password", true, lock_in, lock_in.size(), "Enter: unlock · Alt+D: detach");
+        present();
+        return;
+    }
     if (H < 6 || W < 30 || !b) {
         text(0, 0, W, "terminal too small", def, false);
         present();
@@ -551,16 +559,18 @@ void Tui::draw() {
         present();
         return;
     }
-    bool prompt = c.pass_buf == b, masked = prompt && c.pass_hidden;  // /e2e, /oper password; /shell login
-    int px = text(0, y, W, prompt ? "[" + c.pass_label + "] " : "[" + buf_label(b) + "] ",
-                  prompt ? T.get("hilight") : sty(T, "input_prompt", "input"), false);
+    if (c.pass_buf == b) {  // /shell login, /e2e and /oper passwords: a dialog box
+        draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel");
+        present();
+        return;
+    }
+    int px = text(0, y, W, "[" + buf_label(b) + "] ", sty(T, "input_prompt", "input"), false);
     int avail = std::max(1, W - px - 1);
     int curw = 0;
-    for (size_t i = 0; i < cur; i++) curw += masked ? 1 : cwidth(input[i]);
+    for (size_t i = 0; i < cur; i++) curw += cwidth(input[i]);
     int off = std::max(0, curw - avail);
     int col = 0;
     for (char32_t ch32 : input) {
-        if (masked) ch32 = U'*';
         int w = cwidth(ch32);
         if (col >= off && col - off + w <= avail) {
             if (ch32 < 0x20) {  // formatting codes show as reverse letters, like irssi
@@ -573,6 +583,52 @@ void Tui::draw() {
     }
     tb_set_cursor(px + curw - off, y);
     present();
+}
+
+// the password prompt over the middle of the screen:
+//   ┌─ Shell login ──────────────────┐
+//   │  login: ethernet               │
+//   │  password: ********            │
+//   │  Enter: OK · Esc: cancel       │
+//   └────────────────────────────────┘
+void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
+                      bool hidden, const std::u32string& in, size_t at, const std::string& hint) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "menu", "nicklist"), fs = T.get("input"), es = T.get("error"), hs = bs, ns = sty(T, "timestamp", "menu"), ls = sty(T, "menu_border", "separator");
+    for (Style* st : {&es, &ns, &ls}) st->bg = bs.bg;
+    hs.attr |= A_BOLD;
+    int bw = std::min(W - 2, 48), x0 = (W - bw) / 2, inner = bw - 4;
+    int bh = 5 + (int)info.size(), y0 = std::max(0, (H - bh) / 2 - 1);
+    for (int yy = y0; yy < y0 + bh; yy++) fill(yy, x0, x0 + bw, bs);
+    for (int xx = x0; xx < x0 + bw; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
+    for (int yy = y0; yy < y0 + bh; yy++) cell(x0, yy, U'│', ls), cell(x0 + bw - 1, yy, U'│', ls);
+    cell(x0, y0, U'┌', ls), cell(x0 + bw - 1, y0, U'┐', ls), cell(x0, y0 + bh - 1, U'└', ls), cell(x0 + bw - 1, y0 + bh - 1, U'┘', ls);
+    text(x0 + 2, y0, x0 + bw - 2, " " + title + " ", hs, false);
+    int yy = y0 + 1;
+    for (auto& l : info)
+        text(x0 + 2, yy++, x0 + 2 + inner, l[0] == '!' ? l.substr(1) : l, l[0] == '!' ? es : bs, false);
+    int fy = yy, fx = text(x0 + 2, fy, x0 + 2 + inner, label + ": ", hs, false);
+    int avail = std::max(1, x0 + 2 + inner - fx);
+    fill(fy, fx, fx + avail, fs);
+    // a password shows 1-3 dots per character, picked as it's typed: you see each key
+    // land, someone watching can't count the length
+    static std::minstd_rand rng{std::random_device{}()};
+    while (pass_dots.size() < in.size()) pass_dots.push_back((uint8_t)(1 + rng() % 3));
+    pass_dots.resize(in.size());
+    std::u32string shown;
+    if (!hidden) shown = in;
+    else for (uint8_t d : pass_dots) shown.append(d, U'•');
+    int curw = 0;
+    if (hidden) curw = (int)shown.size();  // the cursor stays at the end
+    else for (size_t i = 0; i < at; i++) curw += cwidth(in[i]);
+    int off = std::max(0, curw - avail + 1), col = 0;
+    for (char32_t ch32 : shown) {
+        int w = cwidth(ch32);
+        if (col >= off && col - off + w <= avail) cell(fx + col - off, fy, ch32 < 0x20 ? U' ' : ch32, fs);
+        col += w;
+    }
+    text(x0 + 2, fy + 2, x0 + 2 + inner, hint, ns, false);
+    tb_set_cursor(fx + curw - off, fy);
 }
 
 // ---- keyboard --------------------------------------------------------------
@@ -731,7 +787,7 @@ void Tui::on_readable() {
     bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if (shell_keys() && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too
+        if ((c.locked || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -773,6 +829,17 @@ bool Tui::action(const std::string& a) {
 }
 
 void Tui::key(int mod, int k, uint32_t ch) {
+    if (c.locked) {  // only the password; Alt+D still detaches
+        auto it = keymap.find(keyspec(mod, k, ch));
+        if (it != keymap.end() && it->second == "detach") { action("detach"); return; }
+        if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) return;
+        if (ch) lock_in += (char32_t)ch;
+        else if (k == TB_KEY_SPACE) lock_in += U' ';
+        else if ((k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2) && !lock_in.empty()) lock_in.pop_back();
+        else if (k == TB_KEY_ESC || k == TB_KEY_CTRL_U) lock_in.clear();
+        else if (k == TB_KEY_ENTER) c.unlock(to_utf8(lock_in)), lock_in.clear();
+        return;
+    }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -802,6 +869,15 @@ void Tui::key(int mod, int k, uint32_t ch) {
         return;
     }
     if (shell_keys()) { shell_key(mod, k, ch); return; }
+    if (c.pass_buf == c.active) {  // the password dialog
+        if ((k == TB_KEY_ESC || k == TB_KEY_CTRL_C) && !ch && !(mod & TB_MOD_ALT)) {  // Esc (or Ctrl+C) cancels
+            input.clear(), cur = 0;
+            c.exec(c.active, "");
+            return;
+        }
+        if (c.pass_hidden) cur = input.size();  // no moving inside what you can't see
+        if (k == TB_KEY_ARROW_UP || k == TB_KEY_ARROW_DOWN || k == TB_KEY_TAB) return;  // no history or completion in it
+    }
     // the suggestion list under the input line takes Up/Down while it shows;
     // Enter or Tab on the highlight puts it in the input line without sending
     // (only Alt/Cmd are excluded: termbox reports Enter and Tab as Ctrl+M / Ctrl+I)
@@ -898,6 +974,7 @@ void Tui::copy_sel() {
 // left click picks a tab or an activity number, opens a query with a nick, or
 // unfolds the topic (double click: edit it); a drag in the chat copies text.
 void Tui::mouse(int mod, int k, int x, int y) {
+    if (c.locked) return;
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && (nl_x < 0 || x < nl_x);
     if (selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {
@@ -1005,6 +1082,7 @@ void Tui::submit() {
 
 int Tui::suggest(std::vector<Sugg>& out) const {
     std::string s = to_utf8(input.substr(0, cur));
+    if (c.pass_buf == c.active) return -1;  // a password is not a command
     if (s.empty() || s[0] != '/' || s.rfind("//", 0) == 0) return -1;
     size_t sp = s.find(' ');
     auto cmds = [&](const std::string& pfx, bool slash) {

@@ -239,7 +239,18 @@ struct Core {
     std::string pass_label;  // the TUI's prompt, e.g. "Password for bob"
     std::function<void(const std::string&)> pass_done;
     bool pass_hidden = true;  // false: a login name, shown as typed
-    void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden = true);
+    // the TUI asks in a dialog box: pass_title on its border, pass_info above the field ("!..." = an error)
+    std::string pass_title;
+    std::vector<std::string> pass_info;
+    // lock = on with lock_password_hash: the terminal shows only a password box at
+    // startup, on every attach and after /lock (exec.cpp)
+    bool locked = false;
+    std::string lock_msg;  // the box's error line ("!...")
+    bool lock_on() const;
+    void lock_cmd(Buffer* b, const std::string& args);
+    void unlock(const std::string& pass);
+    void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden = true,
+                  const std::string& title = "", std::vector<std::string> info = {});
 
     void load_config();
     void reload(Buffer* b);  // /reload
@@ -284,6 +295,7 @@ struct Core {
     bool from_web = false;  // exec() called for the webchat: /exec needs exec_web
     void exec_cmd(Buffer* b, const std::string& args);
     void shell_cmd(Buffer* b);                       // /shell: asks the system login first
+    void shell_login(Buffer* sb, const std::string& err);  // the login dialog, again after a wrong one
     void shell_start(Buffer* sb);
     bool os_login(const std::string& login, const std::string& pass, std::string& why);
     void shell_line(Buffer* b, const std::string& l);  // a line typed in a shell tab with no shell
