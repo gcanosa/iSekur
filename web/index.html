@@ -52,7 +52,8 @@ button, input { font: inherit; color: inherit; }
 #side .tab.off { opacity: .55; }
 /* bottom left: add a server, settings, about */
 #foot { grid-area: foot; display: flex; gap: 6px; padding: 8px 10px; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
-#foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; cursor: pointer; color: var(--muted); font-size: 15px; }
+#foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1.2; }
+#foot #setbtn { font-size: 27px; line-height: 1; }  /* the gear glyph draws small */
 #foot button:hover { color: var(--fg); border-color: var(--accent); }
 /* dialogs: a box with its title on the border, like the terminal's */
 dialog { background: var(--menu-bg, var(--panel)); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
