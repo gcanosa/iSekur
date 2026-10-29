@@ -70,6 +70,8 @@ button, input { font: inherit; color: inherit; }
 .l .nk { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   border-right: 1px solid var(--separator-fg, var(--line)); padding-right: 10px; }
 .l .tx { white-space: pre-wrap; }
+.l.hdr .tx { cursor: pointer; }
+.l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
 .l.hl { background: #ff00aa10; }
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
@@ -213,6 +215,10 @@ function lineEl(b, l) {
   else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, l.x); }
   else { nk.textContent = MARK[l.k] || "--"; mirc(tx, l.x); }
   nk.title = l.n;
+  if (b.name === "*channels") {  // the /list table: hints, and the header gets a hand on its column names
+    if (/^\s+#\s+Channel/.test(tx.textContent)) d.classList.add("hdr"), d.title = "Click Channel or Users to sort";
+    else if (/^\s+\d+\.\s+[#&]/.test(tx.textContent)) d.classList.add("chrow"), d.title = "Double click to join";
+  }
   if (l.n && !l.s && b.type !== "status" && (l.k === "msg" || l.k === "action" || l.k === "notice")) nk.oncontextmenu = e => askMenu(e, l.n);
   d.append(ts, nk, tx);
   return d;
@@ -256,6 +262,7 @@ function renderTopic() {
   const b = bufs.get(active), t = $("#topic .t"); t.textContent = "";
   if (!b) return;
   if (b.type === "channel") mirc(t, b.topic || "");
+  else if (b.name === "*channels") t.textContent = "Channel list: /list again refreshes it · /join #channel";
   else if (b.type === "query") t.textContent = "Query with " + b.name;
   else if (b.type === "shell") t.textContent = "Shell: it runs in iSekur's terminal only";
   else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
@@ -474,6 +481,32 @@ $("#bell").onclick = async () => {
   bell();
 };
 bell();
+// the word under the pointer in the chat (split on spaces only: "#chan" keeps its "#")
+function wordAt(e) {
+  const r = document.caretRangeFromPoint ? document.caretRangeFromPoint(e.clientX, e.clientY)
+          : (p => p && {startContainer: p.offsetNode, startOffset: p.offset})(document.caretPositionFromPoint?.(e.clientX, e.clientY));
+  const n = r && r.startContainer;
+  if (!n || n.nodeType !== 3) return "";
+  const t = n.textContent, i = r.startOffset;
+  const a = t.lastIndexOf(" ", i - 1) + 1, z = t.indexOf(" ", i);
+  return t.slice(a, z < 0 ? t.length : z).replace(/[,.;:!?)\]}'"]+$/, "").replace(/^[(\[{'"]+/, "");
+}
+const isChan = w => /^[#&][^\s,]+$/.test(w);
+// *channels: a click on the Channel or Users header sorts by it
+$("#msgs").addEventListener("click", e => {
+  const b = bufs.get(active), w = wordAt(e);
+  if (b && b.name === "*channels" && (w === "Channel" || w === "Users") && e.target.closest(".l.hdr"))
+    send({t: "input", buf: active, text: "/list sort " + (w === "Channel" ? "name" : "users")});
+});
+// double click a #channel in the chat joins it; in *channels anywhere on its row
+$("#msgs").addEventListener("dblclick", e => {
+  const b = bufs.get(active);
+  if (!b || !b.srv) return;
+  let w = wordAt(e);
+  const row = e.target.closest(".l");
+  if (!isChan(w) && b.name === "*channels" && row) w = (row.querySelector(".tx").textContent.match(/[#&][^\s,]+/) || [""])[0];
+  if (isChan(w)) { window.getSelection().removeAllRanges(); send({t: "input", buf: active, text: "/join " + w}); }
+});
 window.addEventListener("focus", seen);
 window.addEventListener("focus", () => { const b = bufs.get(active); if (b && b.act) { b.act = 0; send({t: "read", buf: active}); renderSide(); } });
 // right click (long press on phones) on a nick or a channel tab: the same menu as the terminal's, built by iSekur

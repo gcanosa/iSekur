@@ -221,7 +221,7 @@ void Core::connect(Server* s) {
     s->conn.close();
     s->user_quit = false;
     s->caps.clear(), s->caps_ls.clear();
-    s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear();
+    s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear(), s->list.clear(), s->listing = false;
     s->away = s->auto_away = false;
     s->hist_batches.clear();
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
@@ -820,6 +820,26 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "ERROR") { print(s->status, LK::ERROR, m.p(0)); return; }
     if (cmd == "WALLOPS") {  // with the server notices: oper chatter in one place
         line(open(s, BT::QUERY, "*snotices"), LK::INFO, "", "\x02!" + (m.nick.empty() ? m.prefix : m.nick) + "!\x02 " + m.p(0));
+        return;
+    }
+
+    // /list: a table in the server's *channels tab, busiest first, drawn when the 323 ends it
+    if (cmd == "321" || (cmd == "322" && !s->listing)) {
+        s->list.clear(), s->listing = true, s->list_sort = 'u', s->list_rev = false;
+        Buffer* lb = open(s, BT::QUERY, "*channels");
+        lb->lines.clear(), lb->scroll = lb->unread = 0;
+        notify(Ev::CLEAR, lb);
+        add(lb, Line{ts, LK::INFO, "", "Listing channels...", false, false, true});
+        select(lb), notify(Ev::FOCUS, lb);
+        if (cmd == "321") return;
+    }
+    if (cmd == "322" && m.params.size() > 2) {  // me #chan users :topic
+        s->list.push_back({m.p(1), atoi(m.p(2).c_str()), m.params.size() > 3 ? m.params.back() : ""});
+        return;
+    }
+    if (cmd == "323") {
+        s->listing = false;
+        list_table(s);
         return;
     }
 
