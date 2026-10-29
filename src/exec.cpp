@@ -4,11 +4,13 @@
 #include <cstring>
 #include <fcntl.h>
 #include <pwd.h>
+#ifndef ISEKUR_NO_PAM
 #include <security/pam_appl.h>
+#endif
 #include <sys/ioctl.h>
 #if defined(__APPLE__)
 #include <util.h>
-#elif defined(__linux__)
+#elif defined(__linux__) || defined(__CYGWIN__)
 #include <pty.h>
 #else
 #include <libutil.h>
@@ -142,6 +144,7 @@ void Core::jobs_poll(const std::vector<pollfd>& fds, size_t from) {
     }
 }
 
+#ifndef ISEKUR_NO_PAM
 // PAM conversation: the login for a shown prompt, the password for a hidden one
 static int pam_conv_fn(int n, const struct pam_message** msg, struct pam_response** resp, void* data) {
     auto* up = (std::pair<std::string, std::string>*)data;
@@ -155,11 +158,16 @@ static int pam_conv_fn(int n, const struct pam_message** msg, struct pam_respons
     *resp = r;
     return PAM_SUCCESS;
 }
+#endif
 
 // the system's own check of a login and password (PAM service pam_service, default "login").
 // Only the user iSekur runs as: the shell runs as that user whoever logs in.
 // ponytail: blocks the loop while PAM checks (a few seconds after a wrong password)
 bool Core::os_login(const std::string& login, const std::string& pass, std::string& why) {
+#ifdef ISEKUR_NO_PAM
+    why = "this build has no PAM to check it with";
+    return false;
+#else
     passwd* pw = getpwuid(getuid());
     if (!pw || login != pw->pw_name) { why = ""; return false; }  // same answer as a wrong password
     std::pair<std::string, std::string> up{login, pass};
@@ -171,6 +179,7 @@ bool Core::os_login(const std::string& login, const std::string& pass, std::stri
     if (rc != PAM_SUCCESS && rc != PAM_AUTH_ERR && rc != PAM_USER_UNKNOWN) why = pam_strerror(ph, rc);
     pam_end(ph, rc);
     return rc == PAM_SUCCESS;
+#endif
 }
 
 // ---- /shell: a real terminal in a tab ---------------------------------------
