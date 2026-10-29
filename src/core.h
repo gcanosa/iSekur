@@ -327,7 +327,7 @@ std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
 std::string after_words(const std::string& s, size_t n);  // the text after the first n words
-std::vector<std::string> banner_lines(const Theme& t, bool mono = false);  // the startup banner, theme colors or gray
+std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double shine = -99);  // the startup banner, theme colors or gray
 std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
 void mkdir_p(const std::string& path);  // 0700

@@ -61,8 +61,9 @@ void Core::load_config() {
 
 // The startup banner: each letter in a color of the theme's nick palette, the
 // shadow in its (dim) timestamp color; mono: the text color and gray.
-// mIRC \x04 colors, so the webchat shows it too.
-std::vector<std::string> banner_lines(const Theme& t, bool mono) {
+// mIRC \x04 colors, so the webchat shows it too. shine: the column a diagonal
+// band of light crosses at the top row (banner_anim), far off = no light.
+std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine) {
     static const char* art[] = {
         u8"██╗███████╗███████╗██╗  ██╗██╗   ██╗██████╗ ",
         u8"██║██╔════╝██╔════╝██║ ██╔╝██║   ██║██╔══██╗",
@@ -73,7 +74,14 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono) {
     static const int ends[] = {3, 11, 19, 27, 36, 44};  // column after each letter: I S E K U R
     auto code = [](RGB c) { return c < 0 ? std::string("\x0f") : "\x04" + rgb_hex(c).substr(1); };
     RGB shade = mono ? 0x808080 : t.get("timestamp").fg;
+    auto lit = [](RGB c, double k) {  // c moved toward white by k (0..1)
+        if (c < 0) c = 0xc0c0c0;
+        int r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
+        auto up = [k](int v) { return v + (int)((255 - v) * k); };
+        return up(r) << 16 | up(g) << 8 | up(b);
+    };
     std::vector<std::string> out;
+    int y = 0;
     for (const char* row : art) {
         std::string s = row, line, cur;
         size_t i = 0;
@@ -81,11 +89,14 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono) {
             while (col >= ends[letter] && letter < 5) letter++;
             uint32_t cp = utf8_next(s, i);
             RGB c = cp != 0x2588 ? shade : mono || t.nicks.empty() ? t.get("default").fg : t.nicks[(size_t)letter * t.nicks.size() / 6];
+            double k = 1 - std::abs(col + y - shine) / 4;  // the band leans: lower rows lag a column each
+            if (k > 0 && cp != ' ') c = lit(c, k * (cp == 0x2588 ? 0.85 : 0.5));
             std::string want = cp == ' ' ? cur : code(c);
             if (want != cur) line += want, cur = want;
             utf8_put(line, cp);
         }
         out.push_back(line);
+        y++;
     }
     return out;
 }

@@ -35,6 +35,8 @@ part_message =
 
 # The iSekur banner at startup: in the theme's colors, or white and gray.
 banner_mono = off
+# A light sweeps across it once when iSekur starts in a terminal (not with banner_mono).
+banner_anim = on
 
 # Ring the terminal bell for private messages, mentions of your nick and
 # invites (most terminals then flash, bounce the dock icon or play a sound).
