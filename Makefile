@@ -29,9 +29,14 @@ endif
 ifneq ($(findstring CYGWIN,$(shell uname -s)),)
   OPENSSL_CFLAGS += -D_GNU_SOURCE -DISEKUR_NO_PAM
 else
-  PAM_LIBS := -lpam
   ifneq ($(shell uname -s),Darwin)
-    PAM_LIBS += -lutil  # forkpty
+    PAM_LIBS := -lutil  # forkpty
+  endif
+  ifeq ($(shell echo '\#include <security/pam_appl.h>' | $(CXX) -E -x c++ - >/dev/null 2>&1 && echo yes),yes)
+    PAM_LIBS += -lpam
+  else
+    $(warning no PAM headers (libpam0g-dev / pam-devel): building without /shell login)
+    OPENSSL_CFLAGS += -DISEKUR_NO_PAM
   endif
 endif
 
