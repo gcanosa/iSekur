@@ -156,6 +156,10 @@ int main(int argc, char** argv) {
     c.locked = local && c.lock_on();
     bool hinted = false;
 
+    // banner_anim: a light sweeps the banner (home's first 6 lines) once, ~1.2s,
+    // when a terminal first shows it (usually an attach a moment after start); not in banner_mono
+    long long anim0 = 0;
+    bool anim_due = c.opt_on(nullptr, "banner_anim", true) && !c.opt_on(nullptr, "banner_mono", false);
     time_t last_sec = 0;
     std::vector<pollfd> fds;
     std::vector<Server*> polled;
@@ -179,7 +183,7 @@ int main(int argc, char** argv) {
         for (auto& b : c.bufs)
             if (b->term && b->term->fd >= 0) fds.push_back({b->term->fd, POLLIN, 0});
 
-        if (wait_fds(fds, c.drain()) < 0 && errno != EINTR) break;
+        if (wait_fds(fds, anim0 ? std::min(c.drain(), 33) : c.drain()) < 0 && errno != EINTR) break;
         c.terms_poll(fds, term0);  // first: nothing has closed a tab yet, so the order still holds
         // servers first: their handlers never delete servers, so `polled` stays valid
         for (size_t i = 0; i < polled.size(); i++)
@@ -232,6 +236,15 @@ int main(int argc, char** argv) {
         c.set_attached(c.tty || web.attached());
         c.tick(now);
         if (now != last_sec) last_sec = now, c.dirty = true;  // status bar clock, uptime seconds
+        if (anim_due && c.tty && !c.locked) anim_due = false, anim0 = home->lines.size() >= 6 ? now_ms() : 0;
+        if (anim0) {
+            double t = (now_ms() - anim0) / 1200.0;  // 0..1 over the sweep
+            bool done = t >= 1 || !c.tty || home->lines.size() < 6;
+            auto art = banner_lines(c.theme, false, done ? -99 : -10 + t * 64);
+            for (size_t i = 0; i < 6 && i < home->lines.size(); i++) home->lines[i].text = art[i];
+            if (done) anim0 = 0;
+            c.dirty = true;
+        }
         if (c.tty && c.dirty) tui.draw();
     }
 
