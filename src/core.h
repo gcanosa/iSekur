@@ -239,6 +239,7 @@ struct Core {
     std::string pass_label;  // the TUI's prompt, e.g. "Password for bob"
     std::function<void(const std::string&)> pass_done;
     bool pass_hidden = true;  // false: a login name, shown as typed
+    bool pass_web = false;    // asked by the webchat: its answer comes from there, the TUI shows no dialog
     // the TUI asks in a dialog box: pass_title on its border, pass_info above the field ("!..." = an error)
     std::string pass_title;
     std::vector<std::string> pass_info;
@@ -249,6 +250,7 @@ struct Core {
     bool lock_on() const;
     void lock_cmd(Buffer* b, const std::string& args);
     void unlock(const std::string& pass);
+    bool asking(const Buffer* b) const { return b && pass_buf == b && !pass_web; }  // the TUI's dialog is up on b
     void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden = true,
                   const std::string& title = "", std::vector<std::string> info = {});
 

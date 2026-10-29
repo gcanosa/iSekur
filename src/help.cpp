@@ -87,6 +87,16 @@ static const std::vector<CmdInfo> CMDS = {
      {"/raw PRIVMSG #chan :hello", "/quote WHO #sekurnet"}, "quote"},
 
     // ---- Channel ops
+    {"op", "Channel ops", "nick ...", "Give ops", "In the channel's tab; several nicks at once.", {"/op alice bob"}},
+    {"deop", "Channel ops", "nick ...", "Take ops", "In the channel's tab.", {"/deop alice"}},
+    {"halfop", "Channel ops", "nick ...", "Give halfop (+h)", "In the channel's tab, on servers with halfops.", {"/halfop alice"}},
+    {"dehalfop", "Channel ops", "nick ...", "Take halfop", "In the channel's tab.", {"/dehalfop alice"}},
+    {"voice", "Channel ops", "nick ...", "Give voice", "In the channel's tab.", {"/voice alice bob"}},
+    {"devoice", "Channel ops", "nick ...", "Take voice", "In the channel's tab.", {"/devoice alice"}},
+    {"ban", "Channel ops", "[nick|mask ...]", "Ban, or list the bans",
+     "In the channel's tab. A bare nick bans nick!*@*; /kickban finds the host. /ban alone lists the bans.",
+     {"/ban", "/ban troll", "/ban *!*@bad.host"}},
+    {"unban", "Channel ops", "mask ...", "Lift a ban", "In the channel's tab; the mask as /ban lists it.", {"/unban *!*@bad.host"}},
     {"massop", "Channel ops", "", "Op everyone in the channel",
      "Gives +o to everyone who isn't an op yet, several per MODE line (as many as the server's "
      "MODES allows). Needs ops.",
@@ -220,12 +230,14 @@ static const std::vector<CmdInfo> CMDS = {
     {"away", "Server", "[message]", "Set or clear away",
      "With a message marks you away, without one clears it. A manual /away turns off auto-away until you come back.",
      {"/away lunch", "/away"}},
-    {"mode", "Server", "target modes [args]", "Change channel or user modes",
-     "Sent as typed.", {"/mode #chan +o alice", "/mode #chan +b *!*@bad.host"}},
-    {"kick", "Server", "#channel nick [reason]", "Kick a user",
-     "Sent as typed. /kickban kicks and bans in one go.", {"/kick #chan troll bye"}},
-    {"invite", "Server", "nick #channel", "Invite a user to a channel",
-     "Sent as typed.", {"/invite alice #private"}},
+    {"mode", "Server", "[target] modes [args]", "Change channel or user modes",
+     "In a channel's tab the channel is the target when you start with + or -, and /mode "
+     "alone shows its modes.", {"/mode +m", "/mode #chan +o alice", "/mode #chan +b *!*@bad.host"}},
+    {"kick", "Server", "[#channel] nick [reason]", "Kick a user",
+     "In a channel's tab the channel can be left out. /kickban kicks and bans in one go.",
+     {"/kick troll bye", "/kick #chan troll bye"}},
+    {"invite", "Server", "nick [#channel]", "Invite a user to a channel",
+     "In a channel's tab the channel can be left out.", {"/invite alice", "/invite alice #private"}},
     {"list", "Server", "[pattern]", "List channels",
      "Sent as typed.", {"/list", "/list *linux*"}},
 

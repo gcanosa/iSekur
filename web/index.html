@@ -253,6 +253,8 @@ function renderTopic() {
   if (!b) return;
   if (b.type === "channel") mirc(t, b.topic || "");
   else if (b.type === "query") t.textContent = "Query with " + b.name;
+  else if (b.type === "shell") t.textContent = "Shell: it runs in iSekur's terminal only";
+  else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
   else t.textContent = b.srv + " - " + b.state;
   $("#prompt").textContent = "[" + label(b) + "]";
   const nick = b.me ? b.me + " · " : "";
