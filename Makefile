@@ -25,9 +25,14 @@ else
   endif
 endif
 
-# Cygwin's newlib hides strptime() unless asked
+# Cygwin's newlib hides strptime() unless asked; it has no PAM, so no /shell login there
 ifneq ($(findstring CYGWIN,$(shell uname -s)),)
-  OPENSSL_CFLAGS += -D_GNU_SOURCE
+  OPENSSL_CFLAGS += -D_GNU_SOURCE -DISEKUR_NO_PAM
+else
+  PAM_LIBS := -lpam
+  ifneq ($(shell uname -s),Darwin)
+    PAM_LIBS += -lutil  # forkpty
+  endif
 endif
 
 PREFIX   ?= /usr/local
@@ -38,10 +43,7 @@ COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-stro
             -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Ivendor/libvterm/include -Isrc -Ibuild $(OPENSSL_CFLAGS)
 CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
-LDLIBS   += $(OPENSSL_LIBS) -lpam
-ifeq ($(shell uname -s),Linux)
-  LDLIBS += -lutil
-endif
+LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS)
 
 SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp
 VTERM := $(wildcard vendor/libvterm/src/*.c)
