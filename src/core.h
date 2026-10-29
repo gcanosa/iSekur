@@ -112,6 +112,7 @@ struct Buffer {
     int scroll = 0;                          // rows scrolled back (tui)
     bool joined = false;
     bool quiet = false;                      // /quiet: hide joins, parts, quits, nick changes
+    bool quiet_typing = false;               // quiet only because /typing turned it on: /typing off undoes it
     bool collapsed = false;                  // a server tab hiding its channels in the tab bar (right click)
     std::unique_ptr<Term> term;              // a shell tab's running shell
     FILE* log = nullptr;                     // opened lazily when logging is on
@@ -303,7 +304,8 @@ struct Core {
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
     std::vector<std::pair<std::string, std::string>> nick_menu(Buffer* b, const std::string& nick) const;  // label, command
     std::vector<std::pair<std::string, std::string>> tab_menu(Buffer* b) const;  // a channel tab's
-    void about(Buffer* from);  // /about: the *about tab; main.cpp sweeps its banner while it's shown
+    void about(Buffer* from);
+    int typing_quiet(bool on);  // /typing on|off: quiet mode with it in the channel tabs; returns how many changed  // /about: the *about tab; main.cpp sweeps its banner while it's shown
     long long about_t0 = 0;
     long long typing_until = 0;  // /typing: the last line still typing ends then (main.cpp redraws until)
     std::vector<std::string> about_full;  // its lines in full; about_typed get typed out in turn

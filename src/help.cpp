@@ -233,7 +233,9 @@ static const std::vector<CmdInfo> CMDS = {
     {"typing", "Session", "[on|off]", "Messages type themselves out",
      "Other people's messages, actions and notices appear letter by letter with a cursor, about "
      "30 a second (a long line still takes at most 2s), in the terminal and the webchat. Alone it "
-     "toggles. Kept until restart; /save writes typing_effect to the config.",
+     "toggles. Kept until restart; /save writes typing_effect to the config. Quiet mode comes on "
+     "with it in every channel (joins and parts would be noise between typed lines) and goes off "
+     "again with /typing off, except where you turned it on yourself.",
      {"/typing", "/typing off"}},
     {"about", "Session", "", "About iSekur",
      "Opens the *about tab: the version, the author, where to get iSekur, its sponsored network "

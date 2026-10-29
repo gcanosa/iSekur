@@ -110,6 +110,7 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 .l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
 .l.hl { background: #ff00aa10; }
+#msgs.quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
 .k-part, .k-part .nk, .k-quit, .k-quit .nk { color: var(--part-fg, var(--part)); }
 .k-info .tx, .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-info .nk, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--info-fg, var(--info)); }
@@ -261,7 +262,7 @@ function mirc(parent, s) {
 const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
 function lineEl(b, l) {
   const d = document.createElement("div");
-  d.className = "l k-" + l.k + (l.h ? " hl" : "");
+  d.className = "l k-" + l.k + (l.h ? " hl" : "") + (!l.s && /^(join|part|quit|nick)$/.test(l.k) ? " noise" : "");
   const ts = document.createElement("span"); ts.className = "ts";
   const t = new Date(l.ts * 1000); ts.textContent = t.toTimeString().slice(0, 5);
   const nk = document.createElement("span"); nk.className = "nk";
@@ -359,6 +360,7 @@ function renderNicks() {
 function renderMsgs() {
   const m = $("#msgs"), b = bufs.get(active); m.textContent = "";
   if (!b) return;
+  m.classList.toggle("quiet", !!b.q);
   const frag = document.createDocumentFragment();
   const mark = b.unread > 0 && b.unread < b.lines.length ? b.lines.length - b.unread : -1;
   b.lines.forEach((l, i) => {
@@ -401,7 +403,7 @@ function onMsg(ev) {
     bufs.set(m.id, m);
     if (m.id === active && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
     renderSide();
-    if (m.id === active) { renderTopic(); renderNicks(); }
+    if (m.id === active) { renderTopic(); renderNicks(); $("#msgs").classList.toggle("quiet", !!m.q); }
   } else if (m.t === "lines") {
     const b = bufs.get(m.buf); if (b) b.lines = m.lines;
     if (m.buf === active) renderMsgs();
