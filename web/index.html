@@ -18,7 +18,7 @@ body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--mono); }
 button, input { font: inherit; color: inherit; }
 #login { display: none; height: 100%; align-items: center; justify-content: center; padding: 16px; }
 #login form { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 12px; padding: 28px; display: grid; gap: 12px;
+  border-radius: 12px; padding: 28px; display: grid; gap: 12px; position: relative;
   box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent); }
 #login h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .5px;
   background: linear-gradient(90deg, var(--accent), var(--accent2), var(--join));
@@ -27,6 +27,7 @@ button, input { font: inherit; color: inherit; }
 #login input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
 #login button { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #111;
   border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
+#ver { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: var(--muted); opacity: .6; }
 #loginerr { color: var(--err); min-height: 1.4em; font-size: 13px; }
 
 #app { display: none; height: 100%; grid-template-columns: 220px 1fr auto;
@@ -49,7 +50,8 @@ button, input { font: inherit; color: inherit; }
 #side .tab.off { opacity: .55; }
 #topic { grid-area: topic; background: var(--topic-bg, var(--panel)); color: var(--topic-fg, inherit);
   padding: 8px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; min-height: 38px; }
-#topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+#topic .t.full { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow-y: auto; }
 #topic button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
 #menu { display: none; }
 #ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg));
@@ -113,6 +115,7 @@ button, input { font: inherit; color: inherit; }
     <input id="lp" name="password" type="password" placeholder="password" autocomplete="current-password" required>
     <button>Connect</button>
     <div id="loginerr"></div>
+    <div id="ver">v@ISEKUR_VERSION@</div>
   </form>
 </div>
 <div id="app">
@@ -257,6 +260,7 @@ function renderTopic() {
   else if (b.type === "shell") t.textContent = "Shell: it runs in iSekur's terminal only";
   else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
   else t.textContent = b.srv + " - " + b.state;
+  t.title = t.textContent;
   $("#prompt").textContent = "[" + label(b) + "]";
   const nick = b.me ? b.me + " · " : "";
   const st = $("#status"); st.textContent = "";
@@ -385,6 +389,8 @@ $("#menu").onclick = () => $("#side").classList.toggle("open");
 // desktop: hide/show the list (remembered); phone: open/close the overlay
 const narrow = matchMedia("(max-width: 760px)");
 try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"); } catch (e) {}
+// click the topic to see all of it
+$("#topic .t").onclick = e => { if (!e.target.closest("a")) e.currentTarget.classList.toggle("full"); };
 $("#nickbtn").onclick = () => {
   if (narrow.matches) return $("#nicks").classList.toggle("open");
   const off = $("#nicks").classList.toggle("off");
