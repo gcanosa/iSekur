@@ -31,7 +31,9 @@ static const std::vector<CmdInfo> CMDS = {
      "/detach or Alt+D (Option+D on a Mac).",
      {"/quit", "/quit see you tomorrow"}},
     {"nick", "Connection", "newnick", "Change your nickname",
-     "Changes your nick on the server of the current tab. When disconnected, it is used on the next connect.",
+     "Changes your nick on the server of the current tab. When disconnected, it is used on the next connect. "
+     "iSekur remembers it per network ([server.x] last_nick, written to the config at once), so "
+     "reconnects and restarts use it; /set nick (or server.x.nick) goes back to the configured one.",
      {"/nick ethernet", "/nick ethernet_away"}},
 
     // ---- Chat
