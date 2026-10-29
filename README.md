@@ -26,6 +26,9 @@ that mirrors your live session in a browser, bouncer style.
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - The webchat has the same nick and channel tab menus (right click or long press on a nick or a channel tab), folding networks, Alt+A for the next active tab and the theme's tab colors
+- Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about
+- `/list` opens a sortable channel table in its own tab (click Channel or Users); double click a #channel anywhere to join it
+- The status bar can show CPU, memory, load and a battery next to the uptime (`/statusbar`), colored by thresholds you can change (`cpu_levels`, `mem_levels`) and by the theme
 - Optional chat logs (`log = on`, rotated daily) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
 ## Download
@@ -164,6 +167,12 @@ so a restart doesn't ask again; the file is 0600, and whoever can read it can re
 
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
+`/about` shows the version and where to find iSekur.
+
+## Support
+
+Questions, bugs and ideas: **#iSekur** on **irc.sekurnet.org**, iSekur's sponsored network
+(`/server irc.sekurnet.org 6697 -tls -name sekurnet`, then `/join #iSekur`), or a GitHub issue.
 
 ## License
 

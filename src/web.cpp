@@ -487,7 +487,24 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "fold") c.fold(b);
-        else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
+        else if (m["t"] == "about") {  // the /about dialog
+            std::string o = "{\"t\":\"about\",\"lines\":[";
+            for (auto& l : about_lines(c.theme, -99, true)) o += std::string(o.back() == '[' ? "" : ",") + json_str(l);
+            cl.conn.out += ws_frame(o + "]}");
+        } else if (m["t"] == "settings") {  // the settings dialog: [section, key, value, default, unsaved, secret]
+            Ini all = c.defaults;
+            for (auto& [sec, kv] : c.cfg)
+                for (auto& [k, v] : kv) all[sec][k];
+            std::string o = "{\"t\":\"settings\",\"list\":[";
+            for (auto& [sec, kv] : all)
+                for (auto& [k, d] : kv) {
+                    std::string v = ini_get(c.cfg, sec, k);
+                    bool sec_k = secret_key(k), uns = c.unsaved.count(sec) && c.unsaved.at(sec).count(k);
+                    o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(sec) + "," + json_str(k) + "," +
+                         json_str(sec_k ? (v.empty() ? "" : "\x01") : v) + "," + json_str(sec_k ? "" : d) + "," + (uns ? "1" : "0") + "," + (sec_k ? "1" : "0") + "]";
+                }
+            cl.conn.out += ws_frame(o + "]}");
+        } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
             bool tab = m["nick"].empty();
             std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(tab ? b->name : m["nick"]) + ",\"items\":[";
             for (auto& [l, cmd] : tab ? c.tab_menu(b) : c.nick_menu(b, m["nick"])) o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(l) + "," + json_str(cmd) + "]";

@@ -17,6 +17,7 @@
 
 // ---- INI (config + themes) -------------------------------------------------
 using Ini = std::map<std::string, std::map<std::string, std::string>>;
+bool secret_key(const std::string& k);  // passwords and hashes: never shown
 Ini ini_parse(const std::string& text);
 bool ini_load(const std::string& path, Ini& out);
 std::string ini_update(const std::string& text, const Ini& changes);
@@ -295,6 +296,8 @@ struct Core {
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
     std::vector<std::pair<std::string, std::string>> nick_menu(Buffer* b, const std::string& nick) const;  // label, command
     std::vector<std::pair<std::string, std::string>> tab_menu(Buffer* b) const;  // a channel tab's
+    void about(Buffer* from);  // /about: the *about tab; main.cpp sweeps its banner while it's shown
+    long long about_t0 = 0;
     void list_table(Server* s);  // chanops.cpp: the collected /list as a table in *channels
     void list_sort(Buffer* b, const std::string& by);  // "name", "users" or "" (flip the current one)
     void fold(Buffer* status);  // a server tab: hide or show its channels in the tab bar and the webchat list
@@ -335,6 +338,7 @@ std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
 std::string after_words(const std::string& s, size_t n);  // the text after the first n words
 std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double shine = -99);  // the startup banner, theme colors or gray
+std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool web = false);  // /about: the banner + version, author, links
 std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
 void mkdir_p(const std::string& path);  // 0700

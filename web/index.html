@@ -31,7 +31,7 @@ button, input { font: inherit; color: inherit; }
 #loginerr { color: var(--err); min-height: 1.4em; font-size: 13px; }
 
 #app { display: none; height: 100%; grid-template-columns: 220px 1fr auto;
-  grid-template-rows: auto 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "side input input"; }
+  grid-template-rows: auto 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "foot input input"; }
 #side { grid-area: side; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); overflow-y: auto; padding: 8px 0; }
 #side .srv { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
 #side .tab { display: flex; gap: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
@@ -48,6 +48,42 @@ button, input { font: inherit; color: inherit; }
 #side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
 #side .tab.a3 { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
 #side .tab.off { opacity: .55; }
+/* bottom left: add a server, settings, about */
+#foot { grid-area: foot; display: flex; gap: 6px; padding: 8px 10px; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
+#foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; cursor: pointer; color: var(--muted); font-size: 15px; }
+#foot button:hover { color: var(--fg); border-color: var(--accent); }
+/* dialogs: a box with its title on the border, like the terminal's */
+dialog { background: var(--menu-bg, var(--panel)); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
+dialog::backdrop { background: #0009; }
+dialog form { display: grid; gap: 10px; padding: 18px 20px; }
+dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--accent); }
+dialog label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
+dialog label.ck { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; }
+dialog input:not([type=checkbox]) { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--fg); min-width: 0; }
+dialog input:focus { outline: none; border-color: var(--accent); }
+dialog .row2 { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
+dialog .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
+dialog .btns button { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+dialog .btns button.go { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #111; border: 0; font-weight: 700; }
+dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
+#dabout { width: min(720px, calc(100vw - 32px)); }
+#abox { font-size: 13px; line-height: 1.4; }
+#abox a { color: var(--accent2); }
+#abanner { position: relative; display: inline-block; white-space: pre; line-height: 1; margin-bottom: 6px; overflow: hidden; }
+#atext { white-space: pre-wrap; }
+/* the terminal's light sweep: a slanted white band crossing the banner every 3.5s */
+#abanner::after { content: ""; position: absolute; inset: -20% auto -20% 0; width: 18%; pointer-events: none;
+  background: linear-gradient(90deg, transparent, #ffffffb0, transparent); transform: skewX(-25deg) translateX(-200%);
+  mix-blend-mode: overlay; animation: shine 3.5s ease-in-out infinite; }
+@keyframes shine { 0% { left: 0; transform: skewX(-25deg) translateX(-200%); } 34%, 100% { left: 100%; transform: skewX(-25deg) translateX(100%); } }
+@media (prefers-reduced-motion: reduce) { #abanner::after { animation: none; display: none; } }
+#atext > div { animation: rise .5s ease-out both; }
+@keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+#setlist { overflow-y: auto; max-height: 55vh; display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 4px 10px; align-items: center; }
+#setlist .sec { grid-column: 1 / -1; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding-top: 8px; }
+#setlist .k { font-size: 13px; overflow-wrap: anywhere; }
+#setlist .k.uns::after { content: " ●"; color: var(--accent); }
+#setlist input.chg { border-color: var(--accent2); }
 #topic { grid-area: topic; background: var(--topic-bg, var(--panel)); color: var(--topic-fg, inherit);
   padding: 8px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; min-height: 38px; }
 #topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -98,7 +134,9 @@ button, input { font: inherit; color: inherit; }
 @media (max-width: 760px) {
   #app { grid-template-columns: 1fr; grid-template-areas: "topic" "msgs" "status" "input"; }
   #side { display: none; position: fixed; inset: 0 30% 0 0; z-index: 5; box-shadow: 0 0 40px #000; }
-  #side.open { display: block; }
+  #side.open { display: block; padding-bottom: 56px; }
+  #foot { display: none; }
+  #side.open ~ #foot { display: flex; position: fixed; left: 0; right: 30%; bottom: 0; z-index: 6; }
   #nicks { display: none; position: fixed; inset: 0 0 0 40%; z-index: 5; width: auto; }
   #nicks.open { display: block; }
   #menu { display: inline-block; }
@@ -122,12 +160,34 @@ button, input { font: inherit; color: inherit; }
 </div>
 <div id="app">
   <nav id="side"></nav>
+  <div id="foot"><button id="addsrv" title="Add a server" aria-label="Add a server">+</button><button id="setbtn" title="Settings" aria-label="Settings">⚙</button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur">ⓘ</button></div>
   <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout">logout</button></div>
   <main id="msgs" aria-live="polite"></main>
   <aside id="nicks"></aside>
   <div id="status"></div>
   <form id="input"><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
 </div>
+<dialog id="dsrv"><form method="dialog">
+  <h2>Add a server</h2>
+  <div class="row2"><label>Host or IP<input name="host" required placeholder="irc.sekurnet.org"></label><label>Port<input name="port" type="number" min="1" max="65535" value="6697"></label></div>
+  <label>Network name (its [server.name] in the config)<input name="name" pattern="[A-Za-z0-9._\-]+" placeholder="sekurnet" title="letters, digits, . _ and - only"></label>
+  <label>Nickname<input name="nick" placeholder="(your default nick)"></label>
+  <label class="ck"><input type="checkbox" name="tls" checked> SSL/TLS</label>
+  <label class="ck"><input type="checkbox" name="verify" checked> Verify the certificate (off for self-signed servers)</label>
+  <label class="ck"><input type="checkbox" name="save" checked> Save it to the config (/save)</label>
+  <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok">Connect</button></div>
+</form></dialog>
+<dialog id="dset"><form method="dialog">
+  <h2>Settings</h2>
+  <input id="setq" placeholder="Filter keys..." autocomplete="off">
+  <div id="setlist"></div>
+  <div class="hint" id="setmsg">Empty = the default. ● = changed and not saved yet.</div>
+  <div class="btns"><button value="cancel" formnovalidate>Close</button><button value="apply">Apply</button><button class="go" value="save">Apply &amp; save</button></div>
+</form></dialog>
+<dialog id="dabout"><form method="dialog">
+  <div id="abox"><div id="abanner"></div><div id="atext"></div></div>
+  <div class="btns"><button class="go" value="ok">Close</button></div>
+</form></dialog>
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
@@ -367,6 +427,10 @@ function onMsg(ev) {
     cmds = m.list;
   } else if (m.t === "menu") {
     showMenu(m);
+  } else if (m.t === "about") {
+    renderAbout(m.lines);
+  } else if (m.t === "settings") {
+    renderSettings(m.list);
   }
 }
 
@@ -398,6 +462,73 @@ const narrow = matchMedia("(max-width: 760px)");
 try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"); } catch (e) {}
 // click the topic to see all of it
 $("#topic .t").onclick = e => { if (!e.target.closest("a")) e.currentTarget.classList.toggle("full"); };
+// + : a new server, sent as /server host port [-tls] [-noverify] -name N -nick X
+const dsrv = $("#dsrv"), fs = dsrv.querySelector("form").elements;
+$("#addsrv").onclick = () => { $("#side").classList.remove("open"); dsrv.querySelector("form").reset(); dsrv.showModal(); };
+fs.tls.onchange = () => { if (fs.port.value === "6667" || fs.port.value === "6697") fs.port.value = fs.tls.checked ? "6697" : "6667"; fs.verify.disabled = !fs.tls.checked; };
+dsrv.onclose = () => {
+  if (dsrv.returnValue !== "ok") return;
+  const host = fs.host.value.trim(), name = fs.name.value.trim(), nick = fs.nick.value.trim();
+  let cmd = "/server " + host + " " + (fs.port.value || (fs.tls.checked ? 6697 : 6667));
+  if (fs.tls.checked) cmd += " -tls" + (fs.verify.checked ? "" : " -noverify");
+  if (name) cmd += " -name " + name;
+  if (nick) cmd += " -nick " + nick;
+  send({t: "input", buf: active, text: cmd});
+  if (fs.save.checked) send({t: "input", buf: active, text: "/save"});
+};
+// ⓘ : /about in a dialog; the lines come from iSekur (the same text as the terminal's *about tab)
+const dabout = $("#dabout");
+function openAbout() { $("#side").classList.remove("open"); send({t: "about", buf: active}); dabout.showModal(); }
+$("#aboutbtn").onclick = openAbout;
+function renderAbout(lines) {
+  const ban = $("#abanner"), txt = $("#atext"); ban.textContent = txt.textContent = "";
+  lines.forEach((l, i) => {
+    const d = document.createElement("div");
+    if (l) mirc(d, l); else d.textContent = " ";
+    if (i < 6) ban.append(d); else d.style.animationDelay = (i - 6) * 60 + "ms", txt.append(d);
+  });
+}
+// ⚙ : every setting, edited in place; changes go out as /set lines (and /save)
+const dset = $("#dset"); let setRows = [];
+$("#setbtn").onclick = () => { $("#side").classList.remove("open"); $("#setlist").textContent = "Loading..."; send({t: "settings", buf: active}); dset.showModal(); };
+function renderSettings(list) {
+  const box = $("#setlist"); box.textContent = ""; setRows = [];
+  let last = null;
+  for (const [sec, k, v, def, uns, secret] of list) {
+    const full = (sec === "general" ? "" : sec + ".") + k;
+    if (sec !== last) { const h = document.createElement("div"); h.className = "sec"; h.textContent = "[" + sec + "]"; box.append(h); last = sec; }
+    const kl = document.createElement("div"); kl.className = "k" + (+uns ? " uns" : ""); kl.textContent = k; kl.title = full;
+    const inp = document.createElement("input");
+    if (+secret) { inp.type = "password"; inp.placeholder = v ? "******** (set; type to change)" : "(not set)"; inp.autocomplete = "new-password"; }
+    else { inp.value = v; inp.placeholder = def ? "default: " + def : "(not set)"; }
+    const orig = +secret ? "" : v;
+    inp.oninput = () => inp.classList.toggle("chg", inp.value !== orig);
+    box.append(kl, inp);
+    setRows.push({full, sec, k, inp, orig, kl});
+  }
+  filterSettings();
+}
+function filterSettings() {
+  const q = $("#setq").value.toLowerCase();
+  for (const r of setRows) { const show = !q || r.full.toLowerCase().includes(q); r.kl.hidden = r.inp.hidden = !show; }
+  for (const h of $("#setlist").querySelectorAll(".sec")) {
+    let n = h.nextElementSibling, any = false;
+    while (n && !n.classList.contains("sec")) { if (!n.hidden) any = true; n = n.nextElementSibling; }
+    h.hidden = !any;
+  }
+}
+$("#setq").oninput = filterSettings;
+dset.querySelector("form").onsubmit = e => {
+  const how = e.submitter && e.submitter.value;
+  if (how !== "apply" && how !== "save") return;
+  e.preventDefault();  // stays open: the list comes back with the new values
+  let n = 0;
+  for (const r of setRows)
+    if (r.inp.value !== r.orig) { send({t: "input", buf: active, text: "/set " + r.full + " " + (r.inp.value === "" ? '""' : r.inp.value)}); n++; }
+  if (how === "save") send({t: "input", buf: active, text: "/save"});
+  $("#setmsg").textContent = n ? n + " changed" + (how === "save" ? " and saved" : " (not saved yet: Apply & save, or /save)") : how === "save" ? "Saved" : "Nothing changed";
+  send({t: "settings", buf: active});
+};
 $("#nickbtn").onclick = () => {
   if (narrow.matches) return $("#nicks").classList.toggle("open");
   const off = $("#nicks").classList.toggle("off");
@@ -437,6 +568,7 @@ $("#input").onsubmit = e => {
   const v = $("#line").value; if (!v) return;
   if (hist[hist.length - 1] !== v) hist.push(v);
   hpos = hist.length;
+  if (/^\/about\s*$/i.test(v)) { $("#line").value = ""; openAbout(); return; }  // a dialog here, not a tab
   send({t: "input", buf: active, text: v});
   $("#line").value = "";
 };

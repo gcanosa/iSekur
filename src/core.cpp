@@ -101,6 +101,37 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine) {
     return out;
 }
 
+// /about: the banner, then who and where. mIRC codes, so the webchat's dialog shows the same
+std::vector<std::string> about_lines(const Theme& t, double shine, bool web) {
+    auto out = banner_lines(t, false, shine);
+    const char* k = "\x03" "14";  // labels gray, values in the text color
+    for (std::string l : {std::string(""),
+                          std::string("\x02iSekur " ISEKUR_VERSION "\x02  a colorful terminal IRC client with a built-in webchat"),
+                          std::string(k) + "multi-server · IRCv3 · TLS + SASL · E2E channels and queries · /shell · detach and attach",
+                          std::string(""),
+                          std::string(k) + "Author     \x0f" "Gerardo Canosa",
+                          std::string(k) + "Source     \x0f" "https://github.com/gcanosa/iSekur",
+                          std::string(k) + "Download   \x0f" "https://github.com/gcanosa/iSekur/releases/latest",
+                          std::string(k) + "License    \x0f" "GPL-3.0-or-later: use it, change it, share it",
+                          std::string(""),
+                          std::string(k) + "Sponsored  \x0f\x02" "irc.sekurnet.org\x02  the network iSekur calls home",
+                          std::string(k) + "Support    \x0f\x02" "#iSekur\x02 there: questions, bugs, ideas",
+                          std::string(k) + "           \x0f" "/server irc.sekurnet.org 6697 -tls -name sekurnet, then /join #iSekur",
+                          std::string(""),
+                          std::string(k) + (web ? "/help lists the commands · Esc closes this" : "/help lists the commands · Ctrl+W closes this tab")})
+        out.push_back(l);
+    return out;
+}
+
+void Core::about(Buffer* from) {
+    Buffer* b = open(nullptr, BT::QUERY, "*about");
+    b->lines.clear(), b->scroll = b->unread = 0;
+    notify(Ev::CLEAR, b);
+    for (auto& l : about_lines(theme)) add(b, Line{time(nullptr), LK::INFO, "", l, false, false, true});
+    about_t0 = now_ms();
+    select(b);
+}
+
 // the template as a first config: its example servers commented out, and the
 // identity placeholders (mynick, me) empty, so they fall back to your login
 std::string fresh_config() {
@@ -118,7 +149,7 @@ std::string fresh_config() {
     return out;
 }
 
-static bool secret_key(const std::string& k) {
+bool secret_key(const std::string& k) {
     return k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
 }
 
@@ -570,6 +601,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     };
 
     if (cmd == "help") { help(b, args); return; }
+    if (cmd == "about") { about(b); return; }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "shell") { shell_cmd(b); return; }
@@ -584,6 +616,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string sec = dot == std::string::npos ? "general" : argv[0].substr(0, dot);
         std::string key = dot == std::string::npos ? argv[0] : argv[0].substr(dot + 1);
         std::string val = rest(1);
+        if (val == "\"\"") val.clear();  // /set key "": empty, i.e. the default again
         if (key.empty() || sec.empty()) { print(b, LK::ERROR, "Usage: /set [section.]key value"); return; }
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
@@ -668,23 +701,31 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify]"); return; }
-        for (auto& sv : servers)
-            if (sv->cfg.name == argv[0]) { connect(sv.get()); select(sv->status); return; }
-        std::string sec = "server." + argv[0], port;
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick]"); return; }
+        std::string name = argv[0], nick, port;
         bool tls = false, verify = true;
         for (size_t i = 1; i < argv.size(); i++) {
             if (argv[i] == "-tls") tls = true;
             else if (argv[i] == "-noverify") verify = false;
+            else if ((argv[i] == "-name" || argv[i] == "-nick") && i + 1 < argv.size()) (argv[i] == "-name" ? name : nick) = argv[i + 1], i++;
             else port = argv[i];
         }
+        // the name is a config section: [server.<name>]
+        if (name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos) {
+            print(b, LK::ERROR, "A server name can have letters, digits, . _ and - only");
+            return;
+        }
+        for (auto& sv : servers)
+            if (sv->cfg.name == name) { connect(sv.get()); select(sv->status); return; }
+        std::string sec = "server." + name;
         if (port.empty() || (tls && port == "6667")) port = tls ? "6697" : "6667";
         // remembered like /set, so /save keeps it for the next start
         for (auto& [k, v] : std::map<std::string, std::string>{
                  {"host", argv[0]}, {"port", port},
                  {"tls", tls ? "true" : "false"}, {"tls_verify", verify ? "true" : "false"}})
             cfg[sec][k] = unsaved[sec][k] = v;
-        ServerCfg sc = server_cfg(argv[0]);
+        if (!nick.empty()) cfg[sec]["nick"] = unsaved[sec]["nick"] = nick;
+        ServerCfg sc = server_cfg(name);
         Server* ns = add_server(sc);
         select(ns->status);
         connect(ns);
