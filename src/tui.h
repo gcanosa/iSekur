@@ -7,6 +7,7 @@
 
 struct Core;
 struct Buffer;
+struct Term;
 struct Tui {
     Core& c;
     explicit Tui(Core& core) : c(core) {}
@@ -53,6 +54,9 @@ private:
     bool completing = false;
 
     void key(int mod, int key, uint32_t ch);
+    bool shell_keys() const;  // a live shell tab: keys go to it
+    void shell_key(int mod, int k, uint32_t ch);
+    void draw_term(Term* t, int top, int rows, int cols);
     void mouse(int mod, int key, int x, int y);
     bool action(const std::string& a);
     void complete();

@@ -35,13 +35,17 @@ DATADIR  ?= $(PREFIX)/share/isekur
 MANDIR   ?= $(PREFIX)/share/man
 OPT      ?= -O2
 COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-strong \
-            -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Isrc -Ibuild $(OPENSSL_CFLAGS)
+            -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Ivendor/libvterm/include -Isrc -Ibuild $(OPENSSL_CFLAGS)
 CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
-LDLIBS   += $(OPENSSL_LIBS)
+LDLIBS   += $(OPENSSL_LIBS) -lpam
+ifeq ($(shell uname -s),Linux)
+  LDLIBS += -lutil
+endif
 
 SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp
-OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o
+VTERM := $(wildcard vendor/libvterm/src/*.c)
+OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 
 all: isekur
 
@@ -53,6 +57,10 @@ build/%.o: src/%.cpp | build
 
 build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+# libvterm 0.3.3 (MIT): the screen of /shell's terminal
+build/vterm_%.o: vendor/libvterm/src/%.c | build
+	$(CC) $(CFLAGS) -Ivendor/libvterm/include -w -c -o $@ $<
 
 # the config template is compiled in too: /set lists its keys and defaults
 build/core.o: build/conf_template.h
@@ -78,7 +86,7 @@ build:
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/termbox2.o
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:

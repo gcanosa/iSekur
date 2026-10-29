@@ -44,6 +44,8 @@ bell_notifications = on
 # webchat can't run them unless exec_web = on (anyone logged in to it could).
 exec_timeout = 30
 exec_web     = off
+# /shell checks the login and password with this PAM service
+#pam_service = login
 
 # Ask before sending a paste longer than this many lines (0 = never ask).
 paste_confirm = 5

@@ -29,7 +29,7 @@ jobs:
       - uses: actions/checkout@v5
         with: { fetch-depth: 0, ref: '${{ env.TAG }}' }
       - if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libssl-dev
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev libpam0g-dev
       - run: make ${{ matrix.libs }} && make test ${{ matrix.libs }}
       - run: |
           d=isekur-${{ matrix.name }}

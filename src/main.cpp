@@ -174,8 +174,12 @@ int main(int argc, char** argv) {
         size_t job0 = fds.size();
         for (auto& j : c.jobs)
             if (j.fd >= 0) fds.push_back({j.fd, POLLIN, 0});
+        size_t term0 = fds.size();
+        for (auto& b : c.bufs)
+            if (b->term && b->term->fd >= 0) fds.push_back({b->term->fd, POLLIN, 0});
 
         if (wait_fds(fds, c.drain()) < 0 && errno != EINTR) break;
+        c.terms_poll(fds, term0);  // first: nothing has closed a tab yet, so the order still holds
         // servers first: their handlers never delete servers, so `polled` stays valid
         for (size_t i = 0; i < polled.size(); i++)
             if (fds[srv0 + i].revents) c.on_readable(polled[i], fds[srv0 + i].revents);

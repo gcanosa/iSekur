@@ -182,6 +182,14 @@ static const std::vector<CmdInfo> CMDS = {
      "seconds (default 30) or 1000 lines. /exec alone lists the running ones. Off in the "
      "webchat unless /set exec_web on, since it runs commands on this machine.",
      {"/exec ls -la", "/exec -o uptime", "/sh git log --oneline -5"}, "sh"},
+    {"shell", "Session", "", "Open a real terminal in a tab",
+     "Asks for this machine's login and password first (the user iSekur runs as, checked by "
+     "the system through PAM; pam_service sets the service, default login; three wrong ones "
+     "lock it for a minute), then runs $SHELL as a login shell on a pty: vim, top, ssh, "
+     "Ctrl+C all work. Every key goes to it except Alt+Left/Right and Alt+1-9 (other tabs); "
+     "the mouse wheel scrolls back. exit ends it, Ctrl+W then closes the tab. Terminal only: "
+     "never from the webchat.",
+     {"/shell"}},
     {"web", "Session", "[start|stop|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one).",

@@ -41,7 +41,7 @@ Prebuilt packages of the latest release (the links always point at the newest on
 
 ## Build
 
-Needs a C++17 compiler, GNU make and OpenSSL 1.1+/LibreSSL. termbox2 is vendored.
+Needs a C++17 compiler, GNU make, OpenSSL 1.1+/LibreSSL and PAM (libpam0g-dev on Debian/Ubuntu). termbox2 and libvterm are vendored.
 
     make            # gmake on *BSD
     make test
@@ -120,6 +120,14 @@ Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab
 the chat; `/exec -o uptime` says it in the current channel or query (longer than `paste_confirm`
 lines needs `-y`). Commands are killed after `exec_timeout` seconds; the webchat can't run them
 unless `exec_web = on`.
+
+`/shell` opens a real terminal in a tab (its own color, `tab_shell` in the theme) after asking
+for this machine's login and password, checked by the system through PAM (`pam_service`,
+default `login`; three wrong ones lock it for a minute). It runs your `$SHELL` as a login shell
+on a pty, so vim, top, ssh, Ctrl+C and tab completion work. Every key goes to it but Alt+←/→
+and Alt+1-9, which move between tabs; the mouse wheel scrolls back through what went off the
+top. `exit` ends it, Ctrl+W then closes the tab (closing a tab with a running shell hangs it up).
+It is never reachable from the webchat or from IRC: only from the terminal iSekur runs in.
 
 IRC operators: `/oper user` asks for the password (hidden). While you are +o or +s, server
 notices (`*** ...`) and WALLOPS go to a `*snotices` tab. `/kill`, `/gline`, `/kline`, `/zline`,
