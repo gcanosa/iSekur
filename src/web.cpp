@@ -393,8 +393,13 @@ void Web::http(Client& cl) {
     bool same_origin = origin.empty() || origin == (secure ? "https://" : "http://") + h["host"];
 
     if (method == "GET" && (path == "/" || path == "/index.html")) {
-        respond(cl.conn, 200, "OK", "text/html; charset=utf-8",
-                std::string(index_html, sizeof index_html - 1));
+        static const std::string page = [] {
+            std::string p(index_html, sizeof index_html - 1), k = "@ISEKUR_VERSION@";
+            size_t i = p.find(k);
+            if (i != std::string::npos) p.replace(i, k.size(), ISEKUR_VERSION);
+            return p;
+        }();
+        respond(cl.conn, 200, "OK", "text/html; charset=utf-8", page);
     } else if (method == "GET" && path == "/session") {
         if (authed) respond(cl.conn, 200, "OK", "application/json", "{\"user\":" + json_str(user) + "}");
         else respond(cl.conn, 401, "Unauthorized", "application/json", "{}");
