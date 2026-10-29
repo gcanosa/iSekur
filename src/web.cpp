@@ -488,8 +488,11 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "fold") c.fold(b);
         else if (m["t"] == "about") {  // the /about dialog
+            std::vector<int> typed;
             std::string o = "{\"t\":\"about\",\"lines\":[";
-            for (auto& l : about_lines(c.theme, -99, true)) o += std::string(o.back() == '[' ? "" : ",") + json_str(l);
+            for (auto& l : about_lines(c.theme, -99, true, &typed)) o += std::string(o.back() == '[' ? "" : ",") + json_str(l);
+            o += "],\"typed\":[";
+            for (int i : typed) o += std::string(o.back() == '[' ? "" : ",") + std::to_string(i);
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "settings") {  // the settings dialog: [section, key, value, default, unsaved, secret]
             Ini all = c.defaults;

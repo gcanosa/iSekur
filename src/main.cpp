@@ -246,6 +246,20 @@ int main(int argc, char** argv) {
             if (done) anim0 = 0;
             c.dirty = true;
         }
+        if (about && !c.about_typed.empty()) {  // type the lines out in turn, ~30 a second, a ▌ cursor ahead
+            long long t = now_ms() - c.about_t0 - 400;  // after the first sweep has started
+            bool all = true;
+            for (int idx : c.about_typed) {
+                if (idx >= (int)about->lines.size() || idx >= (int)c.about_full.size()) continue;
+                const std::string& full = c.about_full[(size_t)idx];
+                size_t len = mirc_strip(full).size(), n = t <= 0 ? 0 : (size_t)(t / 33);  // ponytail: byte length, the typed lines are ASCII
+                std::string want = n >= len ? full : mirc_prefix(full, n) + "\x0f\u258C";
+                if (about->lines[(size_t)idx].text != want) about->lines[(size_t)idx].text = want, c.dirty = true;
+                if (n < len) { all = false; break; }  // the next line waits for this one
+                t -= (long long)len * 33 + 300;
+            }
+            if (all) c.about_typed.clear();
+        }
         if (about) {  // the light crosses the banner every 3.5s, for as long as the tab is shown
             long long ph = (now_ms() - c.about_t0) % 3500;
             static bool lit = false;

@@ -48,6 +48,7 @@ bool load_theme(const std::string& name, Theme& out, std::string& err);
 void mirc_walk(const std::string& s, Style base,
                const std::function<void(uint32_t, const Style&)>& f);
 std::string mirc_strip(const std::string& s);
+std::string mirc_prefix(const std::string& s, size_t n);  // up to the n-th visible character, codes kept
 uint32_t utf8_next(const std::string& s, size_t& i);  // invalid bytes -> Latin-1
 void utf8_put(std::string& out, uint32_t cp);
 
@@ -298,6 +299,8 @@ struct Core {
     std::vector<std::pair<std::string, std::string>> tab_menu(Buffer* b) const;  // a channel tab's
     void about(Buffer* from);  // /about: the *about tab; main.cpp sweeps its banner while it's shown
     long long about_t0 = 0;
+    std::vector<std::string> about_full;  // its lines in full; about_typed get typed out in turn
+    std::vector<int> about_typed;
     void list_table(Server* s);  // chanops.cpp: the collected /list as a table in *channels
     void list_sort(Buffer* b, const std::string& by);  // "name", "users" or "" (flip the current one)
     void fold(Buffer* status);  // a server tab: hide or show its channels in the tab bar and the webchat list
@@ -338,7 +341,8 @@ std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
 std::string after_words(const std::string& s, size_t n);  // the text after the first n words
 std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double shine = -99);  // the startup banner, theme colors or gray
-std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool web = false);  // /about: the banner + version, author, links
+// typed: the lines /about types out (the tagline, the support channel)
+std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool web = false, std::vector<int>* typed = nullptr);  // /about: the banner + version, author, links
 std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
 void mkdir_p(const std::string& path);  // 0700

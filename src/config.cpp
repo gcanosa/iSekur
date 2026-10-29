@@ -338,6 +338,34 @@ void mirc_walk(const std::string& s, Style base,
     }
 }
 
+// s up to its n-th visible character, color and bold codes kept (/about's typing)
+std::string mirc_prefix(const std::string& s, size_t n) {
+    size_t i = 0, seen = 0;
+    auto digits = [&] { size_t k = 0; while (k < 2 && i < s.size() && isdigit((unsigned char)s[i])) i++, k++; return k > 0; };
+    auto hex6 = [&] {
+        for (int k = 0; k < 6; k++)
+            if (i + k >= s.size() || !isxdigit((unsigned char)s[i + k])) return false;
+        return i += 6, true;
+    };
+    while (i < s.size()) {
+        unsigned char c = (unsigned char)s[i];
+        if (c == 0x03) {
+            i++;
+            if (digits() && i + 1 < s.size() && s[i] == ',' && isdigit((unsigned char)s[i + 1])) i++, digits();
+            continue;
+        }
+        if (c == 0x04) {
+            i++;
+            if (hex6() && i < s.size() && s[i] == ',') i++, hex6();
+            continue;
+        }
+        if (c < 0x20) { i++; continue; }
+        if (seen == n) break;
+        utf8_next(s, i), seen++;
+    }
+    return s.substr(0, i);
+}
+
 std::string mirc_strip(const std::string& s) {
     std::string out;
     mirc_walk(s, {}, [&](uint32_t cp, const Style&) { utf8_put(out, cp); });
