@@ -79,7 +79,7 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 @media (prefers-reduced-motion: reduce) { #abanner::after { animation: none; display: none; } }
 #atext > div { animation: rise .5s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
-#dset { width: min(900px, calc(100vw - 32px)); color-scheme: dark; }
+#dset { width: min(900px, calc(100vw - 32px)); color-scheme: dark; overflow: hidden; }
 /* categories on the left (All, general, keys, web, server.*), their keys on the right */
 #setbody { display: grid; grid-template-columns: 170px 1fr; gap: 14px; height: min(60vh, 560px); }
 #setnav { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); padding-right: 10px; }
@@ -101,6 +101,15 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #setlist .k { font-size: 13px; overflow-wrap: anywhere; }
 #setlist .k.uns::after { content: " ●"; color: var(--accent); }
 #setlist input.chg { border-color: var(--accent2); }
+#setlist select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--fg); justify-self: start; min-width: 160px; }
+/* on/off: a switch */
+#setlist .sw { display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--fg); font-size: 13px; padding: 4px 0; }
+#setlist .sw input { position: absolute; opacity: 0; pointer-events: none; }
+#setlist .sw i { width: 34px; height: 18px; border-radius: 9px; background: var(--line); position: relative; transition: background .15s; flex: none; }
+#setlist .sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
+#setlist .sw input:checked + i { background: var(--accent); }
+#setlist .sw input:checked + i::after { transform: translateX(16px); background: #fff; }
+#setlist .sw input:focus-visible + i { outline: 2px solid var(--accent2); outline-offset: 2px; }
 #topic { grid-area: topic; background: var(--topic-bg, var(--panel)); color: var(--topic-fg, inherit);
   padding: 8px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; min-height: 38px; }
 #topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
@@ -558,22 +567,40 @@ $("#setbtn").onclick = () => { $("#side").classList.remove("open"); $("#setlist"
 let setCat = "";  // "" = All
 function renderSettings(list) {
   const box = $("#setlist"); box.textContent = ""; setRows = [];
-  for (const [sec, k, v, def, uns, secret] of list) {
+  for (const [sec, k, v, def, uns, secret, choices] of list) {
     const full = (sec === "general" ? "" : sec + ".") + k;
     const kl = document.createElement("div"); kl.className = "k" + (+uns ? " uns" : ""); kl.textContent = k; kl.title = full;
-    const inp = document.createElement("input");
-    if (+secret) { inp.type = "password"; inp.placeholder = v ? "******** (set; type to change)" : "(not set)"; inp.autocomplete = "new-password"; }
-    else { inp.value = v; inp.placeholder = def ? "default: " + def : "(not set)"; }
-    const orig = +secret ? "" : v;
-    inp.oninput = () => inp.classList.toggle("chg", inp.value !== orig);
-    setRows.push({full, sec, k, inp, orig, kl, uns: +uns});
+    const row = {full, sec, k, kl, uns: +uns};
+    const now = v || def;  // what's in effect
+    // a switch, a list or a text field; switches and lists apply at once (Apply & save keeps them)
+    const live = val => { send({t: "input", buf: active, text: "/set " + full + " " + val}); row.orig = val; kl.classList.add("uns"); $("#setmsg").textContent = full + " = " + val + " (not saved yet: Apply & save, or /save)"; };
+    if (choices.length === 2 && k !== "theme") {
+      const lab = document.createElement("label"); lab.className = "sw";
+      const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = now === choices[0];
+      const t = document.createElement("span"); t.textContent = now + (v ? "" : "  (default)");
+      cb.onchange = () => { const val = cb.checked ? choices[0] : choices[1]; t.textContent = val; live(val); };
+      lab.append(cb, document.createElement("i"), t);
+      Object.assign(row, {el: lab, get: () => cb.checked ? choices[0] : choices[1], orig: now});
+    } else if (choices.length) {
+      const sel = document.createElement("select");
+      for (const c of choices) sel.append(new Option(c, c, false, c === now));
+      sel.onchange = () => live(sel.value);
+      Object.assign(row, {el: sel, get: () => sel.value, orig: now});
+    } else {
+      const inp = document.createElement("input");
+      if (+secret) { inp.type = "password"; inp.placeholder = v ? "******** (set; type to change)" : "(not set)"; inp.autocomplete = "new-password"; }
+      else { inp.value = v; inp.placeholder = def ? "default: " + def : "(not set)"; }
+      inp.oninput = () => inp.classList.toggle("chg", inp.value !== row.orig);
+      Object.assign(row, {el: inp, get: () => inp.value, orig: +secret ? "" : v});
+    }
+    setRows.push(row);
   }
   filterSettings();
 }
 // the categories with how many keys match, and the keys of the chosen one (or all, under section headers)
 function filterSettings() {
   const q = $("#setq").value.toLowerCase(), box = $("#setlist"), nav = $("#setnav");
-  const match = r => !q || r.full.toLowerCase().includes(q) || r.inp.value.toLowerCase().includes(q);
+  const match = r => !q || r.full.toLowerCase().includes(q) || r.get().toLowerCase().includes(q);
   const secs = [...new Set(setRows.map(r => r.sec))];
   const count = s => setRows.filter(r => (!s || r.sec === s) && match(r));
   if (setCat && (!secs.includes(setCat) || !count(setCat).length)) setCat = "";  // a search with no hits here shows them all
@@ -594,7 +621,7 @@ function filterSettings() {
   for (const r of setRows) {
     if ((setCat && r.sec !== setCat) || !match(r)) continue;
     if (r.sec !== last) { const h = document.createElement("div"); h.className = "sec"; h.textContent = "[" + r.sec + "]"; box.append(h); last = r.sec; }
-    box.append(r.kl, r.inp); any = true;
+    box.append(r.kl, r.el); any = true;
   }
   if (!any) { const n = document.createElement("div"); n.className = "none"; n.textContent = "No key matches \u201c" + q + "\u201d"; box.append(n); }
 }
@@ -605,7 +632,7 @@ dset.querySelector("form").onsubmit = e => {
   e.preventDefault();  // stays open: the list comes back with the new values
   let n = 0;
   for (const r of setRows)
-    if (r.inp.value !== r.orig) { send({t: "input", buf: active, text: "/set " + r.full + " " + (r.inp.value === "" ? '""' : r.inp.value)}); n++; }
+    if (r.get() !== r.orig) { send({t: "input", buf: active, text: "/set " + r.full + " " + (r.get() === "" ? '""' : r.get())}); n++; }
   if (how === "save") send({t: "input", buf: active, text: "/save"});
   $("#setmsg").textContent = n ? n + " changed" + (how === "save" ? " and saved" : " (not saved yet: Apply & save, or /save)") : how === "save" ? "Saved" : "Nothing changed";
   send({t: "settings", buf: active});

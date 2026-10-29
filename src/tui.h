@@ -68,7 +68,7 @@ private:
     void mouse(int mod, int key, int x, int y);
     // /set alone: every setting in a window over the chat; categories left, keys right, a search on top
     struct SetWin {
-        bool open = false, editing = false;
+        bool open = false, editing = false, searching = false;  // searching: "/" was typed, keys go to the search
         int focus = 1, cat = 0, sel = 0, top = 0;  // focus: 0 categories, 1 keys
         std::u32string q, ed;                      // the search; the value being edited
         size_t ecur = 0;

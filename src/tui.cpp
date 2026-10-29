@@ -752,11 +752,11 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
 
 // ---- the settings window (/set alone) ----------------------------------------
 //   ┌─ Settings ───────────────────────────────────────────────┐
-//   │ search: tls_                                             │
+//   │ / search: tls_                                           │
 //   │ All          50 │ [server.libera]                        │
 //   │ general      36 │  tls              true                 │
 //   │ ⇢ libera      6 │  tls_verify       default: true        │
-//   │ ↑↓ move · Enter edit · Del default · Ctrl+S save · Esc   │
+//   │ ↑↓ move · e edit · Space on/off · d default · s save · q │
 //   └──────────────────────────────────────────────────────────┘
 static std::string lower(std::string s) { for (auto& ch : s) ch = (char)tolower((unsigned char)ch); return s; }
 static std::string full_key(const Core::SetRow& r) { return (r.sec == "general" ? "" : r.sec + ".") + r.key; }
@@ -801,11 +801,12 @@ void Tui::draw_settings(int W, int H) {
     set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
     sw.sel = std::max(0, std::min(sw.sel, (int)rows.size() - 1));
 
-    // search line
-    int sx = text(x0 + 2, y0 + 1, x1, "search: ", dim, false);
-    fill(y0 + 1, sx, x1 - 1, fs);
-    text(sx, y0 + 1, x1 - 1, to_utf8(sw.q), fs, false);
-    if (!sw.editing) tb_set_cursor(sx + (int)sw.q.size(), y0 + 1);
+    // search line: "/" starts it, letters are commands otherwise
+    int sx = text(x0 + 2, y0 + 1, x1, "/ search: ", sw.searching ? keyst : dim, false);
+    if (sw.searching || !sw.q.empty()) fill(y0 + 1, sx, x1 - 1, sw.searching ? fs : bs);
+    text(sx, y0 + 1, x1 - 1, sw.q.empty() && !sw.searching ? "type / to search every key and value" : to_utf8(sw.q), sw.q.empty() && !sw.searching ? dim : sw.searching ? fs : val, false);
+    if (sw.searching) tb_set_cursor(sx + (int)sw.q.size(), y0 + 1);
+    else if (!sw.editing) tb_hide_cursor();
 
     // categories
     int nw = 22, ly = y0 + 3, n = bh - 6;  // n rows for the lists
@@ -858,13 +859,28 @@ void Tui::draw_settings(int W, int H) {
             tb_set_cursor(vx + (int)sw.ecur - off, yy);
             continue;
         }
+        std::string eff = L.r->val.empty() ? L.r->def : L.r->val;
+        if (L.r->choices.size() == 2 && L.r->key != "theme") {  // on/off: ● on, ○ off, (default) when not set
+            bool yes = eff == L.r->choices[0];
+            Style ts = on ? sel : yes ? val : dim;
+            int ex = text(vx, yy, vmax, std::string(yes ? "\u25CF " : "\u25CB ") + eff, ts, false);
+            if (L.r->val.empty()) ex = text(ex, yy, vmax, "  (default)", on ? sel : dim, false);
+            if (on) text(ex, yy, vmax, "   Space: switch", sel, false);
+            continue;
+        }
         std::string v = L.r->secret ? (L.r->val.empty() ? "(not set)" : "********") : L.r->val.empty() ? (L.r->def.empty() ? "(not set)" : "default: " + L.r->def) : L.r->val;
-        text(vx, yy, vmax, v, on ? sel : L.r->val.empty() ? dim : val, false);
+        int ex = text(vx, yy, vmax, v, on ? sel : L.r->val.empty() ? dim : val, false);
+        if (on && !L.r->choices.empty()) {  // the themes: where this one is among them
+            std::string list;
+            for (auto& ch : L.r->choices) list += (list.empty() ? "" : " ") + (ch == eff ? "[" + ch + "]" : ch);
+            text(ex, yy, vmax, "   Space: next  " + list, sel, false);
+        }
     }
     // what happened, or what the keys do
-    std::string hint = sw.editing ? "Enter: set it · Esc: cancel · empty = the default"
-                       : sw.focus == 0 ? "\u2191\u2193: category · \u2192 or Tab: its keys · type to search · Esc: close"
-                                       : "\u2191\u2193 PgUp PgDn: move · Enter: edit · Del: default · Tab: categories · Ctrl+S: save · Esc: close";
+    std::string hint = sw.editing     ? "Enter: set it · Esc: cancel · empty = the default"
+                       : sw.searching ? "type to search · Enter or \u2193: to the list · Esc: clear it"
+                       : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · /: search · q Esc: close"
+                                       : "\u2191\u2193: move · e Enter: edit · Space: on/off, next theme · d: default · /: search · s: save · q: close";
     text(x0 + 2, y1 - 1, x1 - 1, sw.msg.empty() ? hint : sw.msg, sw.msg.empty() ? dim : mark, false);
 }
 
@@ -882,7 +898,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
             std::string v = to_utf8(sw.ed);
             c.exec(c.active, "/set " + full_key(*r) + " " + (v.empty() ? "\"\"" : v));
             sw.editing = false;
-            sw.msg = full_key(*r) + (v.empty() ? " is back to its default" : " = " + (r->secret ? std::string("********") : v)) + "  (not saved yet: Ctrl+S)";
+            sw.msg = full_key(*r) + (v.empty() ? " is back to its default" : " = " + (r->secret ? std::string("********") : v)) + "  (not saved yet: s)";
             return;
         }
         if (ch || k == TB_KEY_SPACE) sw.ed.insert(sw.ecur++, 1, ch ? (char32_t)ch : U' ');
@@ -898,14 +914,34 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     sw.msg.clear();
     int page = std::max(1, sw.h - 7);
     if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) return;
+    if (sw.searching) {  // after "/": the keys go to the search
+        if (k == TB_KEY_ESC) sw.q.clear(), sw.searching = false;
+        else if (k == TB_KEY_ENTER || k == TB_KEY_ARROW_DOWN || k == TB_KEY_TAB) sw.searching = false, sw.focus = 1;
+        else if (bs) { if (!sw.q.empty()) sw.q.pop_back(); else sw.searching = false; }
+        else if (ch || k == TB_KEY_SPACE) sw.q += ch ? (char32_t)ch : U' ';
+        sw.sel = sw.top = 0;
+        return;
+    }
     if (k == TB_KEY_ESC) { if (!sw.q.empty()) sw.q.clear(); else sw.open = false; return; }
-    if (k == TB_KEY_CTRL_S) {
+    if (ch == 'q') { sw.open = false; return; }
+    if (ch == '/') { sw.searching = true; return; }
+    if (k == TB_KEY_CTRL_S || ch == 's') {
         c.exec(c.active, "/save");
         sw.msg = "Saved to " + c.cfg_path;
         return;
     }
-    if (ch || k == TB_KEY_SPACE) { sw.q += ch ? (char32_t)ch : U' '; sw.sel = sw.top = 0; return; }  // typing searches
-    if (bs) { if (!sw.q.empty()) sw.q.pop_back(), sw.sel = sw.top = 0; return; }
+    if (ch == 'e') k = TB_KEY_ENTER, ch = 0;
+    if (ch == 'd') k = TB_KEY_DELETE, ch = 0;
+    if ((k == TB_KEY_SPACE || ch == ' ') && sw.focus == 1 && r && !r->choices.empty()) {  // on <-> off, the next theme: right away
+        std::string eff = r->val.empty() ? r->def : r->val;
+        auto it = std::find(r->choices.begin(), r->choices.end(), eff);
+        std::string next = it == r->choices.end() || it + 1 == r->choices.end() ? r->choices[0] : *(it + 1);
+        c.exec(c.active, "/set " + full_key(*r) + " " + next);
+        sw.msg = full_key(*r) + " = " + next + "  (not saved yet: s)";
+        return;
+    }
+    if (ch || k == TB_KEY_SPACE) return;  // other letters do nothing here
+    if (bs) return;
     if (k == TB_KEY_TAB) { sw.focus = !sw.focus; return; }
     if (k == TB_KEY_ARROW_LEFT) { sw.focus = 0; return; }
     if (k == TB_KEY_ARROW_RIGHT) { sw.focus = 1; return; }
@@ -926,7 +962,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     else if (k == TB_KEY_ENTER && r) sw.editing = true, sw.ed = r->secret ? U"" : from_utf8(r->val), sw.ecur = sw.ed.size();
     else if (k == TB_KEY_DELETE && r) {
         c.exec(c.active, "/set " + full_key(*r) + " \"\"");
-        sw.msg = full_key(*r) + " is back to its default  (not saved yet: Ctrl+S)";
+        sw.msg = full_key(*r) + " is back to its default  (not saved yet: s)";
     }
 }
 
@@ -937,6 +973,7 @@ void Tui::settings_mouse(int k, int x, int y) {
         return;
     }
     if (k != TB_KEY_MOUSE_LEFT || sw.editing) return;
+    if (y == sw.y0 + 1) { sw.searching = true; return; }  // the search line
     int i = y - sw.list_y;
     if (i < 0 || i >= sw.h - 6 || x <= sw.x0 || x >= sw.x0 + sw.w - 1) return;
     auto all = c.setting_rows();

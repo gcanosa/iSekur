@@ -26,7 +26,7 @@ that mirrors your live session in a browser, bouncer style.
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - The webchat has the same nick and channel tab menus (right click or long press on a nick or a channel tab), folding networks, Alt+A for the next active tab and the theme's tab colors
-- `/set` alone opens a settings window in the terminal: every key by category, a search, edit in place, Ctrl+S saves
+- `/set` alone opens a settings window in the terminal: every key by category, `/` to search, `e` to edit in place, Space to switch on/off or step through the themes, `s` saves (the webchat's ⚙ has switches and a theme list)
 - Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about
 - `/list` opens a sortable channel table in its own tab (click Channel or Users); double click a #channel anywhere to join it
 - The status bar can show CPU, memory, load and a battery next to the uptime (`/statusbar`), colored by thresholds you can change (`cpu_levels`, `mem_levels`) and by the theme

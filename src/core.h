@@ -43,6 +43,7 @@ struct Theme {
     std::string lay(const std::string& k, const std::string& def) const;
 };
 bool load_theme(const std::string& name, Theme& out, std::string& err);
+std::vector<std::string> theme_names();  // installed themes, sorted
 
 // mIRC formatting: walk text, emitting codepoints with their style.
 void mirc_walk(const std::string& s, Style base,
@@ -224,7 +225,8 @@ struct Core {
     struct Setting { std::string key, val; };  // key: "nick", "web.port", "server.x.host"
     std::vector<Setting> settings() const;
     // every key, for the settings windows (terminal and webchat): val is "" when not set
-    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; };
+    // choices: what Space / the webchat's switch or list steps through: on/off (true/false, yes/no), the themes
+    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; };
     std::vector<SetRow> setting_rows() const;
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     std::string cfg_path;
