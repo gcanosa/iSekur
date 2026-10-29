@@ -223,6 +223,10 @@ struct Core {
     // what /set lists: every key in the config or the template, the config's value winning
     struct Setting { std::string key, val; };  // key: "nick", "web.port", "server.x.host"
     std::vector<Setting> settings() const;
+    // every key, for the settings windows (terminal and webchat): val is "" when not set
+    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; };
+    std::vector<SetRow> setting_rows() const;
+    bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     std::string cfg_path;
     Theme theme;
     std::vector<std::unique_ptr<Server>> servers;

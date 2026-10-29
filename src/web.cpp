@@ -495,17 +495,11 @@ void Web::ws_frames(Client& cl) {
             for (int i : typed) o += std::string(o.back() == '[' ? "" : ",") + std::to_string(i);
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "settings") {  // the settings dialog: [section, key, value, default, unsaved, secret]
-            Ini all = c.defaults;
-            for (auto& [sec, kv] : c.cfg)
-                for (auto& [k, v] : kv) all[sec][k];
             std::string o = "{\"t\":\"settings\",\"list\":[";
-            for (auto& [sec, kv] : all)
-                for (auto& [k, d] : kv) {
-                    std::string v = ini_get(c.cfg, sec, k);
-                    bool sec_k = secret_key(k), uns = c.unsaved.count(sec) && c.unsaved.at(sec).count(k);
-                    o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(sec) + "," + json_str(k) + "," +
-                         json_str(sec_k ? (v.empty() ? "" : "\x01") : v) + "," + json_str(sec_k ? "" : d) + "," + (uns ? "1" : "0") + "," + (sec_k ? "1" : "0") + "]";
-                }
+            for (auto& r : c.setting_rows())  // secrets: only whether they're set
+                o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(r.sec) + "," + json_str(r.key) + "," +
+                     json_str(r.secret ? (r.val.empty() ? "" : "\x01") : r.val) + "," + json_str(r.secret ? "" : r.def) + "," +
+                     (r.unsaved ? "1" : "0") + "," + (r.secret ? "1" : "0") + "]";
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
             bool tab = m["nick"].empty();

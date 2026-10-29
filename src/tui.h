@@ -66,6 +66,21 @@ private:
     std::u32string lock_in;  // the lock screen's password, apart from the input line
     std::vector<uint8_t> pass_dots;  // how many dots each typed password character shows
     void mouse(int mod, int key, int x, int y);
+    // /set alone: every setting in a window over the chat; categories left, keys right, a search on top
+    struct SetWin {
+        bool open = false, editing = false;
+        int focus = 1, cat = 0, sel = 0, top = 0;  // focus: 0 categories, 1 keys
+        std::u32string q, ed;                      // the search; the value being edited
+        size_t ecur = 0;
+        std::string msg;                           // the last thing done, under the list
+        int x0 = 0, y0 = 0, w = 0, h = 0, nav_w = 0, list_y = 0;  // where it was drawn, for the mouse
+        long long click_ms = 0;
+    };
+    SetWin sw;
+    struct SetView { std::vector<std::string> cats; std::vector<int> counts; std::vector<const void*> rows; };
+    void draw_settings(int W, int H);
+    void settings_key(int mod, int k, uint32_t ch);
+    void settings_mouse(int k, int x, int y);
     bool action(const std::string& a);
     void complete();
     // live list under the input line: config keys after "/set ", commands while
