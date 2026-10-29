@@ -31,6 +31,8 @@ ifneq ($(findstring CYGWIN,$(shell uname -s)),)
 else
   ifneq ($(shell uname -s),Darwin)
     PAM_LIBS := -lutil  # forkpty
+  else
+    PAM_LIBS := -framework IOKit -framework CoreFoundation  # /statusbar bat
   endif
   ifeq ($(shell echo '\#include <security/pam_appl.h>' | $(CXX) -E -x c++ - >/dev/null 2>&1 && echo yes),yes)
     PAM_LIBS += -lpam
@@ -50,7 +52,7 @@ CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS)
 
-SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp
+SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/sysinfo.cpp
 VTERM := $(wildcard vendor/libvterm/src/*.c)
 OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 

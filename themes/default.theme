@@ -18,6 +18,14 @@ tab_quiet      = #7f849c #1c1d2b italic
 tab_quiet_act  = #1c1d2b #7f849c bold
 status         = #8a8fb0 #1c1d2b
 status_hi      = #e0e0ff #1c1d2b
+# /statusbar: its text, cpu/mem past cpu_levels/mem_levels (warn, high, crit), the
+# battery bars (ok when full) and the battery body (fg: empty bars, bg: the body)
+status_info    = #e0e0ff #1c1d2b
+status_ok      = #9ece6a
+status_warn    = #ffcb6b
+status_high    = #ff9e64
+status_crit    = #ff5370 bold
+status_bat     = #5c6080 #3b3f5c
 input          = default default
 input_prompt   = #c792ea default bold
 set_key        = #c792ea default bold

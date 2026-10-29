@@ -718,6 +718,31 @@ void Core::exec(Buffer* b, const std::string& input) {
                                                                   : "off: showing joins, parts, quits and nick changes"));
         return;
     }
+    if (cmd == "statusbar") {  // /statusbar [item [on|off]]: what status_info shows right of the status bar
+        static const std::vector<std::string> items = {"up", "cpu", "mem", "load", "bat"};
+        auto on = split(opt(nullptr, "status_info", "up"), ' ');
+        if (argv.empty()) {
+            std::string l;
+            for (auto& it : items) l += " " + it + (std::find(on.begin(), on.end(), it) != on.end() ? ":on" : ":off");
+            print(b, LK::INFO, "Status bar:" + l + "  (/statusbar item [on|off])");
+            return;
+        }
+        if (std::find(items.begin(), items.end(), argv[0]) == items.end() || (argv.size() > 1 && argv[1] != "on" && argv[1] != "off")) {
+            print(b, LK::ERROR, "Usage: /statusbar [up|cpu|mem|load|bat] [on|off]");
+            return;
+        }
+        auto it = std::find(on.begin(), on.end(), argv[0]);
+        bool want = argv.size() > 1 ? argv[1] == "on" : it == on.end();
+        if (!want && it != on.end()) on.erase(it);
+        if (want && it == on.end()) on.push_back(argv[0]);
+        std::string joined;
+        for (auto& x : items)  // kept in the order they're drawn
+            if (std::find(on.begin(), on.end(), x) != on.end()) joined += (joined.empty() ? "" : " ") + x;
+        cfg["general"]["status_info"] = unsaved["general"]["status_info"] = joined;
+        dirty = true;
+        print(b, LK::INFO, argv[0] + (want ? " on" : " off") + " in the status bar (/save to keep)");
+        return;
+    }
     if (cmd == "detach") {
         if (tty) detach_req = true;
         else print(b, LK::ERROR, "No terminal is attached; isekur --attach brings one");

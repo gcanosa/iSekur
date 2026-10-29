@@ -38,6 +38,15 @@ banner_mono = off
 # A light sweeps across it once when iSekur starts in a terminal (not with banner_mono).
 banner_anim = on
 
+# Right of the status bar: up (iSekur's uptime), cpu (this machine's CPU %),
+# mem (memory free/total), load (load average), bat (battery, laptops only).
+# Or /statusbar cpu on and /save.
+status_info = up
+# When cpu and mem catch the eye: "min avg max" percents (memory: % in use).
+# At min the value turns yellow, at avg orange, at max red.
+cpu_levels = 50 75 90
+mem_levels = 70 85 95
+
 # Ring the terminal bell for private messages, mentions of your nick and
 # invites (most terminals then flash, bounce the dock icon or play a sound).
 bell_notifications = on
