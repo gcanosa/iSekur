@@ -3,7 +3,7 @@
 A small, very colorful terminal IRC client in C++17 with a built-in webchat
 that mirrors your live session in a browser, bouncer style.
 
-![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, a "new" marker above missed messages](docs/screenshot.png)
+![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
 - Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
 - 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme neon` switches live)
@@ -48,6 +48,8 @@ Needs a C++17 compiler, GNU make, OpenSSL 1.1+/LibreSSL and PAM (libpam0g-dev on
     ./isekur        # or: ./isekur -c path/to/isekur.conf
     sudo make install            # /usr/local; PREFIX=... must match the build
     man isekur
+
+![The welcome tab: the iSekur banner in the theme's colors](docs/welcome.png)
 
 On the first start iSekur writes `~/.config/isekur/isekur.conf` with every setting at its
 default (the example servers commented out, an empty value means the default), so you can edit
@@ -129,6 +131,8 @@ and Alt+1-9, which move between tabs; the mouse wheel scrolls back through what 
 top. `exit` ends it, Ctrl+W then closes the tab (closing a tab with a running shell hangs it up).
 It is never reachable from the webchat or from IRC: only from the terminal iSekur runs in.
 
+![/shell asks for the machine's login and password in a dialog box](docs/shell-login.png)
+
 `/lock on` sets a master password (off by default): from then on iSekur shows only a password
 box at startup, on every `--attach` and after `/lock`, before any tab, log or message. It's
 stored hashed in the config; three wrong tries wait a minute; `/lock off` asks for it before
@@ -155,6 +159,8 @@ a wrong password is only noticed when the others' lines don't open. Anyone with 
 reads everything: to drop someone, change it. `/e2e off` in the channel turns it off. For an
 autojoin channel the key is saved in the config (`e2e_keys`, the scrypt key, not the password),
 so a restart doesn't ask again; the file is 0600, and whoever can read it can read the channel.
+
+![An encrypted channel: 🔒 on the tab and on every line, and a line sent with the wrong password](docs/e2e.png)
 
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
