@@ -201,9 +201,18 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv) all[sec][k];
     std::vector<SetRow> out;
+    auto themes = theme_names();
     for (auto& [sec, kv] : all)
-        for (auto& [k, d] : kv)
-            out.push_back({sec, k, ini_get(cfg, sec, k), d, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k)});
+        for (auto& [k, d] : kv) {
+            SetRow r{sec, k, ini_get(cfg, sec, k), d, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}};
+            std::string v = r.val.empty() ? d : r.val;
+            for (auto& ch : v) ch = (char)tolower((unsigned char)ch);
+            if (sec == "general" && k == "theme") r.choices = themes;
+            else if (v == "on" || v == "off") r.choices = {"on", "off"};
+            else if (v == "true" || v == "false") r.choices = {"true", "false"};
+            else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
+            out.push_back(r);
+        }
     return out;
 }
 
@@ -884,7 +893,11 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "reload") { reload(b); return; }
     if (cmd == "theme") {
         std::string err;
-        if (args.empty()) print(b, LK::INFO, "Current theme: " + theme.name);
+        if (args.empty()) {
+            std::string l;
+            for (auto& n : theme_names()) l += (l.empty() ? "" : ", ") + n;
+            print(b, LK::INFO, "Current theme: " + theme.name + "  (installed: " + l + ")");
+        }
         else if (load_theme(args, theme, err)) { dirty = true; notify(Ev::THEME, nullptr); print(b, LK::INFO, "Theme: " + args); }
         else print(b, LK::ERROR, err);
         return;

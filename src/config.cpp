@@ -9,6 +9,7 @@
 #include <cerrno>
 #include <cstring>
 #include <set>
+#include <glob.h>
 #include <openssl/evp.h>
 #include "core.h"
 
@@ -211,13 +212,35 @@ static Style parse_style(const std::string& v) {
     return st;
 }
 
-bool load_theme(const std::string& name, Theme& out, std::string& err) {
+// where themes are looked for, first match wins
+static std::vector<std::string> theme_dirs() {
     std::vector<std::string> dirs = {"themes"};
     if (const char* x = getenv("XDG_CONFIG_HOME")) dirs.push_back(std::string(x) + "/isekur/themes");
     if (const char* h = getenv("HOME")) dirs.push_back(std::string(h) + "/.config/isekur/themes");
 #ifdef ISEKUR_DATADIR
     dirs.push_back(ISEKUR_DATADIR "/themes");
 #endif
+    return dirs;
+}
+
+// every installed theme by name, sorted (the settings windows cycle through them)
+std::vector<std::string> theme_names() {
+    std::set<std::string> names;
+    for (auto& d : theme_dirs()) {
+        glob_t g;
+        if (glob((d + "/*.theme").c_str(), 0, nullptr, &g) == 0)
+            for (size_t i = 0; i < g.gl_pathc; i++) {
+                std::string p = g.gl_pathv[i];
+                p = p.substr(p.rfind('/') + 1);
+                names.insert(p.substr(0, p.size() - 6));
+            }
+        globfree(&g);
+    }
+    return {names.begin(), names.end()};
+}
+
+bool load_theme(const std::string& name, Theme& out, std::string& err) {
+    auto dirs = theme_dirs();
     Ini ini;
     bool ok = false;
     for (auto& d : dirs)
