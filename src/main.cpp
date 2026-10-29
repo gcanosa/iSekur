@@ -183,7 +183,8 @@ int main(int argc, char** argv) {
         for (auto& b : c.bufs)
             if (b->term && b->term->fd >= 0) fds.push_back({b->term->fd, POLLIN, 0});
 
-        if (wait_fds(fds, anim0 ? std::min(c.drain(), 33) : c.drain()) < 0 && errno != EINTR) break;
+        Buffer* about = c.tty && c.active && !c.active->srv && c.active->name == "*about" && c.active->lines.size() >= 6 ? c.active : nullptr;
+        if (wait_fds(fds, anim0 || about ? std::min(c.drain(), 33) : c.drain()) < 0 && errno != EINTR) break;
         c.terms_poll(fds, term0);  // first: nothing has closed a tab yet, so the order still holds
         // servers first: their handlers never delete servers, so `polled` stays valid
         for (size_t i = 0; i < polled.size(); i++)
@@ -244,6 +245,15 @@ int main(int argc, char** argv) {
             for (size_t i = 0; i < 6 && i < home->lines.size(); i++) home->lines[i].text = art[i];
             if (done) anim0 = 0;
             c.dirty = true;
+        }
+        if (about) {  // the light crosses the banner every 3.5s, for as long as the tab is shown
+            long long ph = (now_ms() - c.about_t0) % 3500;
+            static bool lit = false;
+            if (ph < 1200 || lit) {
+                auto art = banner_lines(c.theme, false, ph < 1200 ? -10 + ph / 1200.0 * 64 : -99);
+                for (size_t i = 0; i < 6; i++) about->lines[i].text = art[i];
+                lit = ph < 1200, c.dirty = true;
+            }
         }
         if (c.tty && c.dirty) tui.draw();
     }

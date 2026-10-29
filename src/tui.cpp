@@ -355,6 +355,7 @@ void Tui::draw() {
         std::string topic;
         if (b->type == BT::CHANNEL) topic = b->topic;
         else if (b->name == "*channels") topic = "Channel list: /list again refreshes it · /join #channel";
+        else if (b->name == "*about" && !b->srv) topic = "About iSekur";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
         else if (b->type == BT::SHELL) topic = b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {

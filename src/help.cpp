@@ -12,12 +12,13 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify]", "Connect to a new server",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick]", "Connect to a new server",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
-     "-noverify skips the certificate check (self-signed servers). The server is remembered "
+     "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
+     "(default: the host), -nick its own nick (default: [general] nick). The server is remembered "
      "like /set does, so /save keeps it for the next start. Naming a server you already have "
      "reconnects it.",
-     {"/server irc.libera.chat 6697 -tls", "/server irc.example.org", "/server 10.0.0.5 6697 -tls -noverify"}},
+     {"/server irc.libera.chat 6697 -tls -name libera", "/server irc.example.org", "/server 10.0.0.5 6697 -tls -noverify"}},
     {"connect", "Connection", "[name]", "Reconnect a configured server",
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect libera"}},
@@ -171,7 +172,8 @@ static const std::vector<CmdInfo> CMDS = {
     // ---- Settings
     {"set", "Settings", "[section.]key [value]", "Show or change a setting",
      "Without arguments lists everything; with a key shows it; with a value changes it right away. "
-     "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them.",
+     "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
+     "/set key \"\" empties it, which means its default again.",
      {"/set", "/set theme neon", "/set server.libera.autojoin #a,#b", "/set log on"}},
     {"reload", "Settings", "", "Re-read the config file",
      "Applies an edited config without restarting: theme, keys, mouse, colors, bell, logging and "
@@ -228,6 +230,10 @@ static const std::vector<CmdInfo> CMDS = {
      "(or just isekur) brings it back, from any terminal or SSH session. Alt+D does the same "
      "(Option+D on a Mac). Closing the terminal or losing SSH detaches too, instead of quitting.",
      {"/detach", "isekur --attach  (from your shell, later)"}},
+    {"about", "Session", "", "About iSekur",
+     "Opens the *about tab: the version, the author, where to get iSekur, its sponsored network "
+     "irc.sekurnet.org and the support channel #iSekur there. The webchat shows it in a dialog (the i button, bottom left).",
+     {"/about"}},
     {"help", "Session", "[command]", "This help",
      "Without arguments lists every command. With a command name shows details and examples. "
      "Tab completes command names here and after \"/\".",
