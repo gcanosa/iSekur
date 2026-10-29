@@ -428,7 +428,7 @@ function onMsg(ev) {
   } else if (m.t === "menu") {
     showMenu(m);
   } else if (m.t === "about") {
-    renderAbout(m.lines);
+    renderAbout(m);
   } else if (m.t === "settings") {
     renderSettings(m.list);
   }
@@ -479,14 +479,44 @@ dsrv.onclose = () => {
 // ⓘ : /about in a dialog; the lines come from iSekur (the same text as the terminal's *about tab)
 const dabout = $("#dabout");
 function openAbout() { $("#side").classList.remove("open"); send({t: "about", buf: active}); dabout.showModal(); }
+dabout.onclose = () => clearInterval(typer);
 $("#aboutbtn").onclick = openAbout;
-function renderAbout(lines) {
+// s up to its n-th visible character, the mIRC codes kept (like mirc_prefix in iSekur)
+function mircPrefix(s, n) {
+  let i = 0, seen = 0;
+  const run = re => { const m = re.exec(s.slice(i)); if (m) i += m[0].length; };
+  while (i < s.length) {
+    const c = s[i];
+    if (c === "\x03") { i++; run(/^\d{1,2}(?:,\d{1,2})?/); continue; }
+    if (c === "\x04") { i++; run(/^[0-9a-fA-F]{6}(?:,[0-9a-fA-F]{6})?/); continue; }
+    if (c < " ") { i++; continue; }
+    if (seen === n) break;
+    i += s.codePointAt(i) > 0xffff ? 2 : 1; seen++;
+  }
+  return s.slice(0, i);
+}
+let typer = 0;
+function renderAbout(m) {
   const ban = $("#abanner"), txt = $("#atext"); ban.textContent = txt.textContent = "";
-  lines.forEach((l, i) => {
+  clearInterval(typer);
+  const typed = [];
+  m.lines.forEach((l, i) => {
     const d = document.createElement("div");
-    if (l) mirc(d, l); else d.textContent = " ";
+    if (!l) d.textContent = " ";
+    else if (m.typed.includes(i) && !matchMedia("(prefers-reduced-motion: reduce)").matches) typed.push([d, l]), d.textContent = " ";
+    else mirc(d, l);
     if (i < 6) ban.append(d); else d.style.animationDelay = (i - 6) * 60 + "ms", txt.append(d);
   });
+  // the typed lines, one after the other, ~30 characters a second with a ▌ cursor
+  let k = 0, n = 0, wait = 12;
+  typer = setInterval(() => {
+    if (wait-- > 0) return;
+    if (k >= typed.length) return clearInterval(typer);
+    const [d, l] = typed[k];
+    d.textContent = ""; mirc(d, mircPrefix(l, ++n));
+    if (mircPrefix(l, n) !== l) d.insertAdjacentText("beforeend", "\u258C");
+    else k++, n = 0, wait = 9;
+  }, 33);
 }
 // ⚙ : every setting, edited in place; changes go out as /set lines (and /save)
 const dset = $("#dset"); let setRows = [];

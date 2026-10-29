@@ -102,7 +102,7 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine) {
 }
 
 // /about: the banner, then who and where. mIRC codes, so the webchat's dialog shows the same
-std::vector<std::string> about_lines(const Theme& t, double shine, bool web) {
+std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std::vector<int>* typed) {
     auto out = banner_lines(t, false, shine);
     const char* k = "\x03" "14";  // labels gray, values in the text color
     for (std::string l : {std::string(""),
@@ -120,6 +120,11 @@ std::vector<std::string> about_lines(const Theme& t, double shine, bool web) {
                           std::string(""),
                           std::string(k) + (web ? "/help lists the commands · Esc closes this" : "/help lists the commands · Ctrl+W closes this tab")})
         out.push_back(l);
+    if (typed) {
+        typed->clear();
+        for (size_t i = 0; i < out.size(); i++)
+            if (out[i].find("a colorful terminal") != std::string::npos || out[i].find("#iSekur\x02 there") != std::string::npos) typed->push_back((int)i);
+    }
     return out;
 }
 
@@ -127,7 +132,12 @@ void Core::about(Buffer* from) {
     Buffer* b = open(nullptr, BT::QUERY, "*about");
     b->lines.clear(), b->scroll = b->unread = 0;
     notify(Ev::CLEAR, b);
-    for (auto& l : about_lines(theme)) add(b, Line{time(nullptr), LK::INFO, "", l, false, false, true});
+    about_full = about_lines(theme, -99, false, &about_typed);
+    for (size_t i = 0; i < about_full.size(); i++) {
+        bool typing = tty && std::find(about_typed.begin(), about_typed.end(), (int)i) != about_typed.end();
+        add(b, Line{time(nullptr), LK::INFO, "", typing ? "" : about_full[i], false, false, true});  // main.cpp types them out
+    }
+    if (!tty) about_typed.clear();
     about_t0 = now_ms();
     select(b);
 }

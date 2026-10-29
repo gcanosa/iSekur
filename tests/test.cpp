@@ -357,6 +357,10 @@ int main() {
     feed(":srv 318 me Erick :End of /WHOIS list.");
     assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
 
+    // mirc_prefix: n visible characters, the codes around them kept
+    assert(mirc_prefix("\x02iSe\x02kur", 4) == "\x02iSe\x02k" && mirc_prefix("\x03" "04,12red", 2) == "\x03" "04,12re");
+    assert(mirc_prefix("\x04" "ff00aaab", 1) == "\x04" "ff00aaa" && mirc_prefix("hi", 9) == "hi" && mirc_strip(mirc_prefix("a\x03" "1,b", 2)) == "a,");
+
     // /list: a table in *channels, busiest first, the [+modes] kept
     feed(":srv 321 me Channel :Users  Name");
     feed(":srv 322 me #small 3 :[+nt] hi");
