@@ -40,6 +40,7 @@ button, input { font: inherit; color: inherit; }
 #side .srv[data-id]:hover { color: var(--fg); }
 #side .tab.home { color: var(--tab_home-fg, var(--info)); }
 #side .tab.server { color: var(--tab_server-fg, inherit); }
+#side .tab.shell { color: var(--tab_shell-fg, var(--tab_home-fg, inherit)); }
 #side .tab .more { color: var(--muted); }
 #side .tab.active { background: var(--tab_active-bg, #ffffff12); color: var(--tab_active-fg, inherit); border-left-color: var(--accent); }
 #side .tab.a1 { color: var(--tab_data-fg, #9aa0c0); }
@@ -235,7 +236,7 @@ function renderSide() {
       for (const x of order) { const o = bufs.get(x); if (o && o !== b && o.srv === b.srv && x !== active) hid++, act = Math.max(act, o.act); }
     const t = document.createElement("div");
     t.className = "tab" + (id === active ? " active" : "") + (act ? " a" + act : "") +
-      (b.home ? " home" : b.type === "status" ? " server" : "") +
+      (b.home ? " home" : b.type === "status" ? " server" : b.type === "shell" ? " shell" : "") +
       ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
     const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
     const nm = document.createElement("span"); nm.textContent = b.type === "status" ? "status" : b.name + (b.e2e ? " 🔒" : "");

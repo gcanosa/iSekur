@@ -5,6 +5,7 @@
 #include <cwchar>
 #include "core.h"
 #include "termbox2.h"
+#include "vterm.h"
 
 static bool g_true = true;  // truecolor output, else nearest xterm-256
 
@@ -302,6 +303,7 @@ void Tui::draw() {
                 : act == 2 ? T.get("tab_msg")
                 : act == 1 ? T.get("tab_data")
                 : t->quiet ? sty(T, "tab_quiet", "tabbar")
+                : t->type == BT::SHELL ? sty(T, "tab_shell", "tab_home")
                 : !t->srv ? sty(T, "tab_home", "tab_server")
                 : t->type == BT::STATUS ? sty(T, "tab_server", "tabbar") : tbs;
         Row r;
@@ -376,6 +378,12 @@ void Tui::draw() {
         for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, cw + 1, W, T.get("nicklist"));
     }
 
+    // a shell tab: its terminal screen, unless scrolled back into what went off the top
+    Term* term = b->term.get();
+    if (term && b->scroll == 0) {
+        c.term_resize(term, ch, cw);
+        draw_term(term, top, ch, cw);
+    } else {
     // chat
     std::vector<Row> rows;  // bottom-up
     int need = ch + b->scroll;
@@ -397,6 +405,7 @@ void Tui::draw() {
         size_t idx = (size_t)(b->scroll + k);
         if (idx >= rows.size()) break;
         draw_row(0, top + ch - 1 - k, cw, rows[idx]);
+    }
     }
     if (sel_x0 >= 0) {  // the selection, reversed in place
         tb_cell* cb = tb_cell_buffer();
@@ -532,9 +541,19 @@ void Tui::draw() {
         present();
         return;
     }
-    bool masked = c.pass_buf == b;  // /e2e, /oper password
-    int px = text(0, y, W, masked ? "[" + c.pass_label + "] " : "[" + buf_label(b) + "] ",
-                  masked ? T.get("hilight") : sty(T, "input_prompt", "input"), false);
+    if (term && c.pass_buf != b) {  // keys go to the shell: the input line only says so
+        text(0, y, W, "[" + buf_label(b) + "] ", T.get("hilight"), false);
+        text((int)buf_label(b).size() + 3, y, W, "keys go to the shell · Alt+←/→ or Alt+1-9: other tabs · wheel: scrollback · exit ends it", sty(T, "timestamp", "input"), false);
+        VTermPos p;
+        vterm_state_get_cursorpos(vterm_obtain_state(term->vt), &p);
+        if (term->cursor && b->scroll == 0 && p.row < ch && p.col < cw) tb_set_cursor(p.col, top + p.row);
+        else tb_hide_cursor();
+        present();
+        return;
+    }
+    bool prompt = c.pass_buf == b, masked = prompt && c.pass_hidden;  // /e2e, /oper password; /shell login
+    int px = text(0, y, W, prompt ? "[" + c.pass_label + "] " : "[" + buf_label(b) + "] ",
+                  prompt ? T.get("hilight") : sty(T, "input_prompt", "input"), false);
     int avail = std::max(1, W - px - 1);
     int curw = 0;
     for (size_t i = 0; i < cur; i++) curw += masked ? 1 : cwidth(input[i]);
@@ -589,6 +608,72 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
     if (key >= TB_KEY_F12 && key <= TB_KEY_F1) return s + "F" + std::to_string(TB_KEY_F1 - key + 1);
     if (key >= 1 && key <= 26) return s + "C-" + (char)('a' + key - 1);
     return s + "?";
+}
+
+// ---- shell tabs (/shell) ----------------------------------------------------
+// the active tab has a running shell and nothing (menu, y/n question, login) is asking
+bool Tui::shell_keys() const {
+    Buffer* b = c.active;
+    return b && b->term && b->term->fd >= 0 && c.pass_buf != b && menu.items.empty() && confirm.empty();
+}
+
+// every key to the shell, but Alt/Cmd ones bound to moving between tabs
+void Tui::shell_key(int mod, int k, uint32_t ch) {
+    Buffer* b = c.active;
+    if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) {
+        auto it = keymap.find(keyspec(mod, k, ch));
+        if (it != keymap.end()) {
+            const std::string& a = it->second;
+            if (a == "next_tab" || a == "prev_tab" || a == "next_active" || a == "next_server" || a.rfind("tab_", 0) == 0) { action(a); return; }
+        }
+    }
+    VTerm* vt = b->term->vt;
+    b->scroll = 0;  // typing goes back to the live screen
+    int m = (mod & TB_MOD_ALT ? VTERM_MOD_ALT : 0) | (mod & TB_MOD_CTRL ? VTERM_MOD_CTRL : 0) | (mod & TB_MOD_SHIFT ? VTERM_MOD_SHIFT : 0);
+    if (ch) { vterm_keyboard_unichar(vt, ch, (VTermModifier)m); return; }
+    VTermKey vk = VTERM_KEY_NONE;
+    switch (k) {
+    case TB_KEY_ENTER: vk = VTERM_KEY_ENTER; break;
+    case TB_KEY_TAB: vk = VTERM_KEY_TAB; break;
+    case TB_KEY_BACKSPACE2: vk = VTERM_KEY_BACKSPACE; break;
+    case TB_KEY_ESC: vk = VTERM_KEY_ESCAPE; break;
+    case TB_KEY_ARROW_UP: vk = VTERM_KEY_UP; break;
+    case TB_KEY_ARROW_DOWN: vk = VTERM_KEY_DOWN; break;
+    case TB_KEY_ARROW_LEFT: vk = VTERM_KEY_LEFT; break;
+    case TB_KEY_ARROW_RIGHT: vk = VTERM_KEY_RIGHT; break;
+    case TB_KEY_INSERT: vk = VTERM_KEY_INS; break;
+    case TB_KEY_DELETE: vk = VTERM_KEY_DEL; break;
+    case TB_KEY_HOME: vk = VTERM_KEY_HOME; break;
+    case TB_KEY_END: vk = VTERM_KEY_END; break;
+    case TB_KEY_PGUP: vk = VTERM_KEY_PAGEUP; break;
+    case TB_KEY_PGDN: vk = VTERM_KEY_PAGEDOWN; break;
+    case TB_KEY_SPACE: vterm_keyboard_unichar(vt, ' ', (VTermModifier)m); return;
+    }
+    if (k >= TB_KEY_F12 && k <= TB_KEY_F1) vk = (VTermKey)VTERM_KEY_FUNCTION(TB_KEY_F1 - k + 1);
+    if (k < 0x80) m &= ~VTERM_MOD_CTRL;  // termbox calls Enter, Tab, Esc, Backspace Ctrl+M, I, [, ?
+    if (vk != VTERM_KEY_NONE) vterm_keyboard_key(vt, vk, (VTermModifier)m);
+    else if (k >= 0 && k < 0x20) vterm_keyboard_unichar(vt, (uint32_t)k, (VTermModifier)(m & VTERM_MOD_ALT));  // Ctrl+C, Ctrl+W...: the byte
+}
+
+// the shell's screen, cell by cell; its default colors are the theme's
+void Tui::draw_term(Term* t, int top, int rows, int cols) {
+    VTermScreen* scr = vterm_obtain_screen(t->vt);
+    Style def = c.theme.get("default");
+    for (int r = 0; r < rows && r < t->rows; r++)
+        for (int x = 0; x < cols && x < t->cols; x++) {
+            VTermScreenCell cl;
+            if (!vterm_screen_get_cell(scr, VTermPos{r, x}, &cl) || cl.width == 0) continue;
+            Style st = def;
+            auto rgb = [&](VTermColor col, RGB& out) {
+                vterm_screen_convert_color_to_rgb(scr, &col);
+                out = col.rgb.red << 16 | col.rgb.green << 8 | col.rgb.blue;
+            };
+            if (!VTERM_COLOR_IS_DEFAULT_FG(&cl.fg)) rgb(cl.fg, st.fg);
+            if (!VTERM_COLOR_IS_DEFAULT_BG(&cl.bg)) rgb(cl.bg, st.bg);
+            st.attr = (cl.attrs.bold ? A_BOLD : 0) | (cl.attrs.italic ? A_ITALIC : 0) | (cl.attrs.underline ? A_UNDER : 0) | (cl.attrs.reverse ? A_REV : 0);
+            uint32_t cp = cl.chars[0];
+            cell(x, top + r, cp < 0x20 || cp == 0x7f ? ' ' : cp, st);  // never a control byte to the real terminal
+        }
 }
 
 bool Tui::init(std::string& err, int fd) {
@@ -646,6 +731,7 @@ void Tui::on_readable() {
     bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
+        if (shell_keys() && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -715,6 +801,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         else input = from_utf8(p), cur = input.size();
         return;
     }
+    if (shell_keys()) { shell_key(mod, k, ch); return; }
     // the suggestion list under the input line takes Up/Down while it shows;
     // Enter or Tab on the highlight puts it in the input line without sending
     // (only Alt/Cmd are excluded: termbox reports Enter and Tab as Ctrl+M / Ctrl+I)

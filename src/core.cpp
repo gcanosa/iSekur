@@ -331,9 +331,9 @@ void Core::reload(Buffer* b) {
                            ". Server settings apply on the next /connect, [web] after /web stop and /web start");
 }
 
-void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done) {
-    pass_buf = b, pass_label = label, pass_done = std::move(done);
-    print(b, LK::INFO, "Type the " + label + " (hidden; an empty line cancels)");
+void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden) {
+    pass_buf = b, pass_label = label, pass_done = std::move(done), pass_hidden = hidden;
+    print(b, LK::INFO, "Type the " + label + (hidden ? " (hidden; an empty line cancels)" : " (an empty line cancels)"));
 }
 
 void Core::ring(Server* s) {
@@ -534,6 +534,11 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (in.empty()) return;
     last_input = time(nullptr);
+    // a shell tab: everything goes to the shell (/bin/ls too) but iSekur's own commands
+    if (b->type == BT::SHELL && (in[0] != '/' || !find_command(in.substr(1, in.find(' ') - 1)))) {
+        shell_line(b, in);
+        return;
+    }
     if (in[0] != '/' || in.rfind("//", 0) == 0) {
         say(b, in[0] == '/' ? in.substr(1) : in);
         return;
@@ -554,6 +559,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
+    if (cmd == "shell") { shell_cmd(b); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = secret_key;
         if (argv.empty()) {

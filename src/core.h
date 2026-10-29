@@ -75,8 +75,21 @@ inline bool noise(const Line& l) {
     return !l.self && (l.kind == LK::JOIN || l.kind == LK::PART || l.kind == LK::QUIT || l.kind == LK::NICK);
 }
 
-enum class BT { STATUS, CHANNEL, QUERY };
+enum class BT { STATUS, CHANNEL, QUERY, SHELL };  // SHELL: /shell, no server
 struct Server;
+struct Core;
+struct VTerm;
+// /shell: a shell on a pty and its screen (exec.cpp); the TUI draws vt
+struct Term {
+    pid_t pid = -1;
+    int fd = -1;  // the pty master
+    VTerm* vt = nullptr;
+    int rows = 24, cols = 80;
+    bool cursor = true;
+    Core* c = nullptr;
+    struct Buffer* b = nullptr;
+    ~Term();  // hangs up the shell
+};
 struct NickEntry { std::string nick, prefix; bool away = false; std::string host; };  // host: user@host, "" = unknown
 struct Buffer {
     int id;
@@ -92,6 +105,7 @@ struct Buffer {
     bool joined = false;
     bool quiet = false;                      // /quiet: hide joins, parts, quits, nick changes
     bool collapsed = false;                  // a server tab hiding its channels in the tab bar (right click)
+    std::unique_ptr<Term> term;              // a shell tab's running shell
     FILE* log = nullptr;                     // opened lazily when logging is on
     std::string log_day;                     // YYYY-MM-DD the open log belongs to
     // /topicrotate: topics set in turn every rot_min minutes
@@ -224,7 +238,8 @@ struct Core {
     Buffer* pass_buf = nullptr;
     std::string pass_label;  // the TUI's prompt, e.g. "Password for bob"
     std::function<void(const std::string&)> pass_done;
-    void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done);
+    bool pass_hidden = true;  // false: a login name, shown as typed
+    void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden = true);
 
     void load_config();
     void reload(Buffer* b);  // /reload
@@ -268,6 +283,12 @@ struct Core {
     std::vector<Job> jobs;  // /exec, exec.cpp
     bool from_web = false;  // exec() called for the webchat: /exec needs exec_web
     void exec_cmd(Buffer* b, const std::string& args);
+    void shell_cmd(Buffer* b);                       // /shell: asks the system login first
+    void shell_start(Buffer* sb);
+    bool os_login(const std::string& login, const std::string& pass, std::string& why);
+    void shell_line(Buffer* b, const std::string& l);  // a line typed in a shell tab with no shell
+    void term_resize(Term* t, int rows, int cols);
+    void terms_poll(const std::vector<pollfd>& fds, size_t from);  // their ptys from fds[from] on
     void jobs_poll(const std::vector<pollfd>& fds, size_t from);  // their pipes from fds[from] on
     void job_read(Job& j);
     void job_line(Job& j, const std::string& raw);
