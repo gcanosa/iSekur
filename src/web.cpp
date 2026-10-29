@@ -524,7 +524,7 @@ static const char* KIND[] = {"msg", "action", "notice", "join", "part", "quit",
 static std::string line_json(const Line& l) {
     return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"k\":\"" + KIND[(int)l.kind] +
            "\",\"n\":" + json_str(l.nick) + ",\"x\":" + json_str(l.text) +
-           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + "}";
+           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + "}";
 }
 
 std::string Web::buf_json(Buffer* b) {

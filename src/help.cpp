@@ -230,6 +230,11 @@ static const std::vector<CmdInfo> CMDS = {
      "(or just isekur) brings it back, from any terminal or SSH session. Alt+D does the same "
      "(Option+D on a Mac). Closing the terminal or losing SSH detaches too, instead of quitting.",
      {"/detach", "isekur --attach  (from your shell, later)"}},
+    {"typing", "Session", "[on|off]", "Messages type themselves out",
+     "Other people's messages, actions and notices appear letter by letter with a cursor, about "
+     "30 a second (a long line still takes at most 2s), in the terminal and the webchat. Alone it "
+     "toggles. Kept until restart; /save writes typing_effect to the config.",
+     {"/typing", "/typing off"}},
     {"about", "Session", "", "About iSekur",
      "Opens the *about tab: the version, the author, where to get iSekur, its sponsored network "
      "irc.sekurnet.org and the support channel #iSekur there. The webchat shows it in a dialog (the i button, bottom left).",

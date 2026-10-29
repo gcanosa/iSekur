@@ -71,7 +71,13 @@ struct Line {
     std::string nick, text;
     bool self = false, hilight = false;
     bool nolog = false;  // /grep results: shown, never written to the log
+    long long typed_at = 0;  // /typing: when it started typing itself out (ms), 0 = shown at once
 };
+// /typing: how many of a line's len visible characters show at now; ~30 a second, never over 2s a line
+inline size_t typed_chars(const Line& l, size_t len, long long now) {
+    long long per = len ? std::min<long long>(33, 2000 / (long long)len) : 33;
+    return now <= l.typed_at ? 0 : (size_t)((now - l.typed_at) / std::max<long long>(per, 1));
+}
 // what /quiet hides: other people coming, going and renaming
 inline bool noise(const Line& l) {
     return !l.self && (l.kind == LK::JOIN || l.kind == LK::PART || l.kind == LK::QUIT || l.kind == LK::NICK);
@@ -299,6 +305,7 @@ struct Core {
     std::vector<std::pair<std::string, std::string>> tab_menu(Buffer* b) const;  // a channel tab's
     void about(Buffer* from);  // /about: the *about tab; main.cpp sweeps its banner while it's shown
     long long about_t0 = 0;
+    long long typing_until = 0;  // /typing: the last line still typing ends then (main.cpp redraws until)
     std::vector<std::string> about_full;  // its lines in full; about_typed get typed out in turn
     std::vector<int> about_typed;
     void list_table(Server* s);  // chanops.cpp: the collected /list as a table in *channels

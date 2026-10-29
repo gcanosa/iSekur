@@ -47,6 +47,9 @@ status_info = up
 cpu_levels = 50 75 90
 mem_levels = 70 85 95
 
+# Other people's messages type themselves out, letter by letter (/typing toggles it).
+typing_effect = off
+
 # Ring the terminal bell for private messages, mentions of your nick and
 # invites (most terminals then flash, bounce the dock icon or play a sound).
 bell_notifications = on
