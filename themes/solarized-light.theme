@@ -1,0 +1,57 @@
+# Solarized light (a light theme). /theme solarized-light
+[colors]
+default        = #586e75 #fdf6e3
+topic          = #586e75 #e4ddc8 bold
+tabbar         = #93a1a1 #eee8d5
+tab_server     = #6c71c4 #eee8d5 bold
+tab_home       = #2aa198 #eee8d5 bold
+tab_shell      = #cb4b16 #eee8d5 bold
+tab_active     = #ffffff #268bd2 bold
+tab_data       = #268bd2 #eee8d5
+tab_msg        = #586e75 #eee8d5 bold
+tab_hilight    = #d33682 #eee8d5 bold
+tab_quiet      = #93a1a1 #eee8d5 italic
+tab_quiet_act  = #ffffff #93a1a1 bold
+status         = #93a1a1 #eee8d5
+status_hi      = #586e75 #eee8d5
+status_info    = #586e75 #eee8d5
+status_ok      = #859900
+status_warn    = #b58900
+status_high    = #cb4b16
+status_crit    = #dc322f bold
+status_bat     = #93a1a1 #e4ddc8
+input          = #586e75 #fdf6e3
+input_prompt   = #268bd2 #fdf6e3 bold
+set_key        = #268bd2 #fdf6e3 bold
+set_value      = #b58900 #fdf6e3
+timestamp      = #93a1a1 #fdf6e3
+separator      = #d6cfb8 #fdf6e3
+nicklist       = #657b83 #fdf6e3
+nicklist_title = #93a1a1 #fdf6e3 italic
+nicklist_border= #d6cfb8 #fdf6e3
+nicklist_op    = #cb4b16 #fdf6e3 bold
+nicklist_voice = #859900 #fdf6e3
+menu           = #586e75 #eee8d5
+menu_sel       = #ffffff #268bd2 bold
+menu_border    = #d6cfb8 #eee8d5
+msg_self       = #2aa198 #fdf6e3 bold
+marker         = #d33682
+hilight        = #ffffff #d33682 bold
+hilight_text   = #d33682 #fdf6e3
+join           = #859900 #fdf6e3
+part           = #cb4b16 #fdf6e3
+quit           = #dc322f #fdf6e3
+notice         = #b58900 #fdf6e3 bold
+action         = #6c71c4 #fdf6e3 italic
+info           = #2aa198 #fdf6e3
+error          = #dc322f #fdf6e3 bold
+
+[nicks]
+palette = #dc322f #cb4b16 #b58900 #859900 #2aa198 #268bd2 #6c71c4 #d33682
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

@@ -1,0 +1,57 @@
+# Rosé Pine Dawn (a light theme). /theme rose-pine-dawn
+[colors]
+default        = #575279 #faf4ed
+topic          = #575279 #dfdad9 bold
+tabbar         = #9893a5 #f2e9e1
+tab_server     = #907aa9 #f2e9e1 bold
+tab_home       = #56949f #f2e9e1 bold
+tab_shell      = #d7827e #f2e9e1 bold
+tab_active     = #ffffff #907aa9 bold
+tab_data       = #56949f #f2e9e1
+tab_msg        = #575279 #f2e9e1 bold
+tab_hilight    = #b4637a #f2e9e1 bold
+tab_quiet      = #9893a5 #f2e9e1 italic
+tab_quiet_act  = #ffffff #9893a5 bold
+status         = #9893a5 #f2e9e1
+status_hi      = #575279 #f2e9e1
+status_info    = #575279 #f2e9e1
+status_ok      = #286983
+status_warn    = #ea9d34
+status_high    = #d7827e
+status_crit    = #b4637a bold
+status_bat     = #9893a5 #dfdad9
+input          = #575279 #faf4ed
+input_prompt   = #907aa9 #faf4ed bold
+set_key        = #907aa9 #faf4ed bold
+set_value      = #ea9d34 #faf4ed
+timestamp      = #9893a5 #faf4ed
+separator      = #dfdad9 #faf4ed
+nicklist       = #797593 #faf4ed
+nicklist_title = #9893a5 #faf4ed italic
+nicklist_border= #dfdad9 #faf4ed
+nicklist_op    = #d7827e #faf4ed bold
+nicklist_voice = #286983 #faf4ed
+menu           = #575279 #f2e9e1
+menu_sel       = #ffffff #907aa9 bold
+menu_border    = #dfdad9 #f2e9e1
+msg_self       = #286983 #faf4ed bold
+marker         = #b4637a
+hilight        = #ffffff #b4637a bold
+hilight_text   = #b4637a #faf4ed
+join           = #286983 #faf4ed
+part           = #d7827e #faf4ed
+quit           = #b4637a #faf4ed
+notice         = #ea9d34 #faf4ed bold
+action         = #907aa9 #faf4ed italic
+info           = #56949f #faf4ed
+error          = #b4637a #faf4ed bold
+
+[nicks]
+palette = #b4637a #d7827e #ea9d34 #286983 #56949f #907aa9
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

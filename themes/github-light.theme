@@ -1,0 +1,57 @@
+# GitHub light (a light theme). /theme github-light
+[colors]
+default        = #1f2328 #ffffff
+topic          = #1f2328 #eaeef2 bold
+tabbar         = #6e7781 #f6f8fa
+tab_server     = #8250df #f6f8fa bold
+tab_home       = #1b7c83 #f6f8fa bold
+tab_shell      = #bc4c00 #f6f8fa bold
+tab_active     = #ffffff #0969da bold
+tab_data       = #0969da #f6f8fa
+tab_msg        = #1f2328 #f6f8fa bold
+tab_hilight    = #bf3989 #f6f8fa bold
+tab_quiet      = #6e7781 #f6f8fa italic
+tab_quiet_act  = #ffffff #6e7781 bold
+status         = #6e7781 #f6f8fa
+status_hi      = #1f2328 #f6f8fa
+status_info    = #1f2328 #f6f8fa
+status_ok      = #1a7f37
+status_warn    = #9a6700
+status_high    = #bc4c00
+status_crit    = #cf222e bold
+status_bat     = #6e7781 #eaeef2
+input          = #1f2328 #ffffff
+input_prompt   = #0969da #ffffff bold
+set_key        = #0969da #ffffff bold
+set_value      = #9a6700 #ffffff
+timestamp      = #6e7781 #ffffff
+separator      = #d0d7de #ffffff
+nicklist       = #424a53 #ffffff
+nicklist_title = #6e7781 #ffffff italic
+nicklist_border= #d0d7de #ffffff
+nicklist_op    = #bc4c00 #ffffff bold
+nicklist_voice = #1a7f37 #ffffff
+menu           = #1f2328 #f6f8fa
+menu_sel       = #ffffff #0969da bold
+menu_border    = #d0d7de #f6f8fa
+msg_self       = #8250df #ffffff bold
+marker         = #bf3989
+hilight        = #ffffff #bf3989 bold
+hilight_text   = #bf3989 #ffffff
+join           = #1a7f37 #ffffff
+part           = #bc4c00 #ffffff
+quit           = #cf222e #ffffff
+notice         = #9a6700 #ffffff bold
+action         = #8250df #ffffff italic
+info           = #1b7c83 #ffffff
+error          = #cf222e #ffffff bold
+
+[nicks]
+palette = #cf222e #bc4c00 #9a6700 #1a7f37 #1b7c83 #0969da #8250df #bf3989
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

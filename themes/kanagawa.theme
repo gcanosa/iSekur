@@ -1,0 +1,57 @@
+# Kanagawa. /theme kanagawa
+[colors]
+default        = #dcd7ba #1f1f28
+topic          = #dcd7ba #2a2a37 bold
+tabbar         = #727169 #16161d
+tab_server     = #957fb8 #16161d bold
+tab_home       = #7aa89f #16161d bold
+tab_shell      = #ffa066 #16161d bold
+tab_active     = #16161d #7e9cd8 bold
+tab_data       = #7e9cd8 #16161d
+tab_msg        = #dcd7ba #16161d bold
+tab_hilight    = #d27e99 #16161d bold
+tab_quiet      = #727169 #16161d italic
+tab_quiet_act  = #16161d #727169 bold
+status         = #727169 #16161d
+status_hi      = #dcd7ba #16161d
+status_info    = #dcd7ba #16161d
+status_ok      = #98bb6c
+status_warn    = #e6c384
+status_high    = #ffa066
+status_crit    = #e46876 bold
+status_bat     = #727169 #2a2a37
+input          = #dcd7ba #1f1f28
+input_prompt   = #7e9cd8 #1f1f28 bold
+set_key        = #7e9cd8 #1f1f28 bold
+set_value      = #e6c384 #1f1f28
+timestamp      = #727169 #1f1f28
+separator      = #363646 #1f1f28
+nicklist       = #c8c093 #1f1f28
+nicklist_title = #727169 #1f1f28 italic
+nicklist_border= #363646 #1f1f28
+nicklist_op    = #ffa066 #1f1f28 bold
+nicklist_voice = #98bb6c #1f1f28
+menu           = #dcd7ba #16161d
+menu_sel       = #16161d #7e9cd8 bold
+menu_border    = #363646 #16161d
+msg_self       = #7fb4ca #1f1f28 bold
+marker         = #d27e99
+hilight        = #1f1f28 #d27e99 bold
+hilight_text   = #d27e99 #1f1f28
+join           = #98bb6c #1f1f28
+part           = #ffa066 #1f1f28
+quit           = #e46876 #1f1f28
+notice         = #e6c384 #1f1f28 bold
+action         = #957fb8 #1f1f28 italic
+info           = #7aa89f #1f1f28
+error          = #e46876 #1f1f28 bold
+
+[nicks]
+palette = #e46876 #ffa066 #e6c384 #98bb6c #7aa89f #7e9cd8 #957fb8 #d27e99 #7fb4ca
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

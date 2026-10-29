@@ -1,0 +1,57 @@
+# Dracula. /theme dracula
+[colors]
+default        = #f8f8f2 #282a36
+topic          = #f8f8f2 #44475a bold
+tabbar         = #6272a4 #21222c
+tab_server     = #bd93f9 #21222c bold
+tab_home       = #8be9fd #21222c bold
+tab_shell      = #ffb86c #21222c bold
+tab_active     = #21222c #bd93f9 bold
+tab_data       = #6272a4 #21222c
+tab_msg        = #f8f8f2 #21222c bold
+tab_hilight    = #ff79c6 #21222c bold
+tab_quiet      = #6272a4 #21222c italic
+tab_quiet_act  = #21222c #6272a4 bold
+status         = #6272a4 #21222c
+status_hi      = #f8f8f2 #21222c
+status_info    = #f8f8f2 #21222c
+status_ok      = #50fa7b
+status_warn    = #f1fa8c
+status_high    = #ffb86c
+status_crit    = #ff5555 bold
+status_bat     = #6272a4 #44475a
+input          = #f8f8f2 #282a36
+input_prompt   = #bd93f9 #282a36 bold
+set_key        = #bd93f9 #282a36 bold
+set_value      = #f1fa8c #282a36
+timestamp      = #6272a4 #282a36
+separator      = #44475a #282a36
+nicklist       = #e2e2dc #282a36
+nicklist_title = #6272a4 #282a36 italic
+nicklist_border= #44475a #282a36
+nicklist_op    = #ffb86c #282a36 bold
+nicklist_voice = #50fa7b #282a36
+menu           = #f8f8f2 #21222c
+menu_sel       = #21222c #bd93f9 bold
+menu_border    = #44475a #21222c
+msg_self       = #8be9fd #282a36 bold
+marker         = #ff79c6
+hilight        = #282a36 #ff79c6 bold
+hilight_text   = #ff79c6 #282a36
+join           = #50fa7b #282a36
+part           = #ffb86c #282a36
+quit           = #ff5555 #282a36
+notice         = #f1fa8c #282a36 bold
+action         = #bd93f9 #282a36 italic
+info           = #8be9fd #282a36
+error          = #ff5555 #282a36 bold
+
+[nicks]
+palette = #ff5555 #ffb86c #f1fa8c #50fa7b #8be9fd #6272a4 #bd93f9 #ff79c6
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

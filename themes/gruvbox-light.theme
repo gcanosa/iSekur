@@ -1,0 +1,57 @@
+# Gruvbox light (a light theme). /theme gruvbox-light
+[colors]
+default        = #3c3836 #fbf1c7
+topic          = #3c3836 #d5c4a1 bold
+tabbar         = #928374 #ebdbb2
+tab_server     = #8f3f71 #ebdbb2 bold
+tab_home       = #427b58 #ebdbb2 bold
+tab_shell      = #af3a03 #ebdbb2 bold
+tab_active     = #ffffff #af3a03 bold
+tab_data       = #076678 #ebdbb2
+tab_msg        = #3c3836 #ebdbb2 bold
+tab_hilight    = #8f3f71 #ebdbb2 bold
+tab_quiet      = #928374 #ebdbb2 italic
+tab_quiet_act  = #ffffff #928374 bold
+status         = #928374 #ebdbb2
+status_hi      = #3c3836 #ebdbb2
+status_info    = #3c3836 #ebdbb2
+status_ok      = #79740e
+status_warn    = #b57614
+status_high    = #af3a03
+status_crit    = #9d0006 bold
+status_bat     = #928374 #d5c4a1
+input          = #3c3836 #fbf1c7
+input_prompt   = #af3a03 #fbf1c7 bold
+set_key        = #af3a03 #fbf1c7 bold
+set_value      = #b57614 #fbf1c7
+timestamp      = #928374 #fbf1c7
+separator      = #d5c4a1 #fbf1c7
+nicklist       = #504945 #fbf1c7
+nicklist_title = #928374 #fbf1c7 italic
+nicklist_border= #d5c4a1 #fbf1c7
+nicklist_op    = #af3a03 #fbf1c7 bold
+nicklist_voice = #79740e #fbf1c7
+menu           = #3c3836 #ebdbb2
+menu_sel       = #ffffff #af3a03 bold
+menu_border    = #d5c4a1 #ebdbb2
+msg_self       = #076678 #fbf1c7 bold
+marker         = #8f3f71
+hilight        = #ffffff #8f3f71 bold
+hilight_text   = #8f3f71 #fbf1c7
+join           = #79740e #fbf1c7
+part           = #af3a03 #fbf1c7
+quit           = #9d0006 #fbf1c7
+notice         = #b57614 #fbf1c7 bold
+action         = #8f3f71 #fbf1c7 italic
+info           = #427b58 #fbf1c7
+error          = #9d0006 #fbf1c7 bold
+
+[nicks]
+palette = #9d0006 #af3a03 #b57614 #79740e #427b58 #076678 #8f3f71
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

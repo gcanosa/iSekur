@@ -1,0 +1,57 @@
+# Rosé Pine. /theme rose-pine
+[colors]
+default        = #e0def4 #191724
+topic          = #e0def4 #26233a bold
+tabbar         = #6e6a86 #1f1d2e
+tab_server     = #c4a7e7 #1f1d2e bold
+tab_home       = #9ccfd8 #1f1d2e bold
+tab_shell      = #ebbcba #1f1d2e bold
+tab_active     = #1f1d2e #c4a7e7 bold
+tab_data       = #9ccfd8 #1f1d2e
+tab_msg        = #e0def4 #1f1d2e bold
+tab_hilight    = #eb6f92 #1f1d2e bold
+tab_quiet      = #6e6a86 #1f1d2e italic
+tab_quiet_act  = #1f1d2e #6e6a86 bold
+status         = #6e6a86 #1f1d2e
+status_hi      = #e0def4 #1f1d2e
+status_info    = #e0def4 #1f1d2e
+status_ok      = #31748f
+status_warn    = #f6c177
+status_high    = #ebbcba
+status_crit    = #eb6f92 bold
+status_bat     = #6e6a86 #26233a
+input          = #e0def4 #191724
+input_prompt   = #c4a7e7 #191724 bold
+set_key        = #c4a7e7 #191724 bold
+set_value      = #f6c177 #191724
+timestamp      = #6e6a86 #191724
+separator      = #403d52 #191724
+nicklist       = #908caa #191724
+nicklist_title = #6e6a86 #191724 italic
+nicklist_border= #403d52 #191724
+nicklist_op    = #ebbcba #191724 bold
+nicklist_voice = #31748f #191724
+menu           = #e0def4 #1f1d2e
+menu_sel       = #1f1d2e #c4a7e7 bold
+menu_border    = #403d52 #1f1d2e
+msg_self       = #9ccfd8 #191724 bold
+marker         = #eb6f92
+hilight        = #191724 #eb6f92 bold
+hilight_text   = #eb6f92 #191724
+join           = #31748f #191724
+part           = #ebbcba #191724
+quit           = #eb6f92 #191724
+notice         = #f6c177 #191724 bold
+action         = #c4a7e7 #191724 italic
+info           = #9ccfd8 #191724
+error          = #eb6f92 #191724 bold
+
+[nicks]
+palette = #eb6f92 #ebbcba #f6c177 #31748f #9ccfd8 #c4a7e7
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

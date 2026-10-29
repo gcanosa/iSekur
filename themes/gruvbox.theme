@@ -1,0 +1,57 @@
+# Gruvbox dark. /theme gruvbox
+[colors]
+default        = #ebdbb2 #282828
+topic          = #ebdbb2 #3c3836 bold
+tabbar         = #928374 #1d2021
+tab_server     = #d3869b #1d2021 bold
+tab_home       = #8ec07c #1d2021 bold
+tab_shell      = #fe8019 #1d2021 bold
+tab_active     = #1d2021 #fabd2f bold
+tab_data       = #83a598 #1d2021
+tab_msg        = #ebdbb2 #1d2021 bold
+tab_hilight    = #d3869b #1d2021 bold
+tab_quiet      = #928374 #1d2021 italic
+tab_quiet_act  = #1d2021 #928374 bold
+status         = #928374 #1d2021
+status_hi      = #ebdbb2 #1d2021
+status_info    = #ebdbb2 #1d2021
+status_ok      = #b8bb26
+status_warn    = #fabd2f
+status_high    = #fe8019
+status_crit    = #fb4934 bold
+status_bat     = #928374 #3c3836
+input          = #ebdbb2 #282828
+input_prompt   = #fabd2f #282828 bold
+set_key        = #fabd2f #282828 bold
+set_value      = #fabd2f #282828
+timestamp      = #928374 #282828
+separator      = #3c3836 #282828
+nicklist       = #d5c4a1 #282828
+nicklist_title = #928374 #282828 italic
+nicklist_border= #3c3836 #282828
+nicklist_op    = #fe8019 #282828 bold
+nicklist_voice = #b8bb26 #282828
+menu           = #ebdbb2 #1d2021
+menu_sel       = #1d2021 #fabd2f bold
+menu_border    = #3c3836 #1d2021
+msg_self       = #83a598 #282828 bold
+marker         = #d3869b
+hilight        = #282828 #d3869b bold
+hilight_text   = #d3869b #282828
+join           = #b8bb26 #282828
+part           = #fe8019 #282828
+quit           = #fb4934 #282828
+notice         = #fabd2f #282828 bold
+action         = #d3869b #282828 italic
+info           = #8ec07c #282828
+error          = #fb4934 #282828 bold
+
+[nicks]
+palette = #fb4934 #fe8019 #fabd2f #b8bb26 #8ec07c #83a598 #d3869b
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M
