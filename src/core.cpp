@@ -316,6 +316,9 @@ void Core::select(Buffer* b) {
 
 void Core::add(Buffer* b, Line l) {
     if (!b) return;
+    // /typing: other people's messages type themselves out
+    if (!l.self && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) && opt_on(b->srv, "typing_effect", false))
+        l.typed_at = now_ms(), typing_until = std::max(typing_until, l.typed_at + 2100);
     b->lines.push_back(std::move(l));
     if (b->lines.size() > MAX_LINES) b->lines.pop_front();
     if (b->scroll) b->scroll++;  // keep the scrolled view still
@@ -612,6 +615,13 @@ void Core::exec(Buffer* b, const std::string& input) {
 
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "about") { about(b); return; }
+    if (cmd == "typing") {  // /typing [on|off]: like /statusbar, kept until restart unless /save
+        if (!args.empty() && args != "on" && args != "off") { print(b, LK::ERROR, "Usage: /typing [on|off]"); return; }
+        bool on = args.empty() ? !opt_on(nullptr, "typing_effect", false) : args == "on";
+        cfg["general"]["typing_effect"] = unsaved["general"]["typing_effect"] = on ? "on" : "off";
+        print(b, LK::INFO, std::string("Typing effect ") + (on ? "on: messages type themselves out" : "off") + " (/save to keep it)");
+        return;
+    }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "shell") { shell_cmd(b); return; }

@@ -270,9 +270,9 @@ function lineEl(b, l) {
     const e = b.nickmap && b.nickmap.get(ircLower(l.n));
     nk.textContent = (e && e[0] ? e[0][0] : "") + l.n;
     if (l.s) nk.className += " self"; else if (!l.h) nk.style.color = nickColor(l.n);
-    mirc(tx, l.x);
-  } else if (l.k === "action") { nk.textContent = "*"; mirc(tx, l.n + " " + l.x); }
-  else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, l.x); }
+    mirc(tx, l.x); tx.src_ = l.x;
+  } else if (l.k === "action") { nk.textContent = "*"; mirc(tx, tx.src_ = l.n + " " + l.x); }
+  else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, tx.src_ = l.x); }
   else { nk.textContent = MARK[l.k] || "--"; mirc(tx, l.x); }
   nk.title = l.n;
   if (b.name === "*channels") {  // the /list table: hints, and the header gets a hand on its column names
@@ -411,7 +411,9 @@ function onMsg(ev) {
     alertFor(b, m.buf, m.line);
     if (m.buf === active) {
       const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-      box.append(lineEl(b, m.line));
+      const el = lineEl(b, m.line);
+      box.append(el);
+      if (m.line.ty) typeOut(el.querySelector(".tx"));
       while (box.childElementCount > 2000) box.firstChild.remove();
       if (atBottom) box.scrollTop = box.scrollHeight;
     }
@@ -494,6 +496,19 @@ function mircPrefix(s, n) {
     i += s.codePointAt(i) > 0xffff ? 2 : 1; seen++;
   }
   return s.slice(0, i);
+}
+// /typing: a live line types itself out like iSekur's terminal (~30 a second, at most 2s a line)
+function typeOut(tx) {
+  const src = tx.src_; if (!src || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  let len = 0; while (mircPrefix(src, len + 1) !== mircPrefix(src, len)) len++;
+  const per = Math.min(33, 2000 / Math.max(len, 1)), t0 = performance.now();
+  const step = () => {
+    if (!tx.isConnected) return;
+    const n = Math.floor((performance.now() - t0) / per);
+    tx.textContent = ""; mirc(tx, mircPrefix(src, n));
+    if (n < len) { tx.insertAdjacentText("beforeend", "\u258C"); requestAnimationFrame(step); }
+  };
+  step();
 }
 let typer = 0;
 function renderAbout(m) {

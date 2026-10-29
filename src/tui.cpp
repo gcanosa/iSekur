@@ -295,6 +295,12 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     cells(pre, " " + T.lay("separator", "│") + " ", T.get("separator"), false);
 
     int indent = width(pre), avail = std::max(10, width_ - indent);
+    if (l.typed_at) {  // /typing: the part typed so far, and the cursor
+        size_t len = 0, n;
+        for (unsigned char ch : mirc_strip(txt)) len += (ch & 0xc0) != 0x80;  // characters, not bytes
+        n = typed_chars(l, len, now_ms());
+        if (n < len) txt = mirc_prefix(txt, n) + "\x0f\u258C";
+    }
     Row body_cells;
     cells(body_cells, txt, body);
     linkify(body_cells);

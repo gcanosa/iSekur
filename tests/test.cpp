@@ -357,6 +357,17 @@ int main() {
     feed(":srv 318 me Erick :End of /WHOIS list.");
     assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
 
+    // /typing: other people's messages get a typed_at, our own and info lines don't
+    core.exec(chb, "/typing on");
+    feed(":bob!u@h PRIVMSG #c :hello there");
+    assert(chb->lines.back().typed_at > 0 && core.typing_until > chb->lines.back().typed_at);
+    Line tl = chb->lines.back();
+    assert(typed_chars(tl, 11, tl.typed_at + 99) == 3 && typed_chars(tl, 11, tl.typed_at - 5) == 0);
+    assert(typed_chars(tl, 200, tl.typed_at + 2000) == 200);  // a long line: 2s at most
+    core.exec(chb, "/typing");
+    feed(":bob!u@h PRIVMSG #c :bye");
+    assert(chb->lines.back().typed_at == 0);
+
     // mirc_prefix: n visible characters, the codes around them kept
     assert(mirc_prefix("\x02iSe\x02kur", 4) == "\x02iSe\x02k" && mirc_prefix("\x03" "04,12red", 2) == "\x03" "04,12re");
     assert(mirc_prefix("\x04" "ff00aaab", 1) == "\x04" "ff00aaa" && mirc_prefix("hi", 9) == "hi" && mirc_strip(mirc_prefix("a\x03" "1,b", 2)) == "a,");
