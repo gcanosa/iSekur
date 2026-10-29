@@ -231,6 +231,14 @@ static int term_prop(VTermProp p, VTermValue* v, void* user) {
 
 void Core::shell_cmd(Buffer* b) {
     if (from_web) { print(b, LK::ERROR, "/shell works in the terminal only"); return; }
+#if defined(ISEKUR_NO_PAM) && defined(__CYGWIN__)
+    print(b, LK::ERROR, "/shell needs PAM to check the login, and Cygwin has none");
+    return;
+#elif defined(ISEKUR_NO_PAM)
+    print(b, LK::ERROR, "/shell needs PAM to check the login, and this build has none: install the PAM "
+                        "headers (libpam0g-dev on Debian/Ubuntu, pam-devel on Fedora) and rebuild iSekur");
+    return;
+#endif
     if (b->type == BT::SHELL && b->term) { print(b, LK::ERROR, "This tab has a shell running"); return; }
     Buffer* sb = b->type == BT::SHELL ? b : nullptr;  // a shell tab whose shell ended: log in there again
     if (!sb) {
