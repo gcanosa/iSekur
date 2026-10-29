@@ -50,6 +50,13 @@ static int sgr_mouse(struct tb_event *ev, size_t *n, size_t end) {
 
 int isekur_extract_pre(struct tb_event *ev, size_t *n) {
     struct bytebuf_t *in = &global.in;
+    // a lone ESC is the Esc key: Alt+x and escape sequences arrive in one read
+    // ponytail: a sequence split across reads (slow link) reads as Esc + text
+    if (in->len == 1) {
+        ev->type = TB_EVENT_KEY, ev->key = TB_KEY_ESC, ev->ch = 0, ev->mod = 0;
+        *n = 1;
+        return TB_OK;
+    }
     size_t end;
     int rv = csi_end(&end);
     if (rv != TB_OK) return rv == TB_ERR_NEED_MORE && in->len < 32 ? rv : TB_ERR;

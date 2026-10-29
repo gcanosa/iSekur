@@ -57,6 +57,11 @@ private:
     bool shell_keys() const;  // a live shell tab: keys go to it
     void shell_key(int mod, int k, uint32_t ch);
     void draw_term(Term* t, int top, int rows, int cols);
+    // a prompt box over the middle of the screen (/shell login, passwords, the lock screen)
+    void draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
+                     bool hidden, const std::u32string& in, size_t at, const std::string& hint);
+    std::u32string lock_in;  // the lock screen's password, apart from the input line
+    std::vector<uint8_t> pass_dots;  // how many dots each typed password character shows
     void mouse(int mod, int key, int x, int y);
     bool action(const std::string& a);
     void complete();

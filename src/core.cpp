@@ -331,9 +331,11 @@ void Core::reload(Buffer* b) {
                            ". Server settings apply on the next /connect, [web] after /web stop and /web start");
 }
 
-void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden) {
+void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden,
+                    const std::string& title, std::vector<std::string> info) {
     pass_buf = b, pass_label = label, pass_done = std::move(done), pass_hidden = hidden;
-    print(b, LK::INFO, "Type the " + label + (hidden ? " (hidden; an empty line cancels)" : " (an empty line cancels)"));
+    pass_title = title, pass_info = std::move(info);
+    if (!tty) print(b, LK::INFO, "Type the " + label + (hidden ? " (hidden; an empty line cancels)" : " (an empty line cancels)"));  // the TUI asks in a dialog
 }
 
 void Core::ring(Server* s) {
@@ -560,6 +562,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "shell") { shell_cmd(b); return; }
+    if (cmd == "lock") { lock_cmd(b, args); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = secret_key;
         if (argv.empty()) {

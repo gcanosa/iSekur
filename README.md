@@ -129,6 +129,13 @@ and Alt+1-9, which move between tabs; the mouse wheel scrolls back through what 
 top. `exit` ends it, Ctrl+W then closes the tab (closing a tab with a running shell hangs it up).
 It is never reachable from the webchat or from IRC: only from the terminal iSekur runs in.
 
+`/lock on` sets a master password (off by default): from then on iSekur shows only a password
+box at startup, on every `--attach` and after `/lock`, before any tab, log or message. It's
+stored hashed in the config; three wrong tries wait a minute; `/lock off` asks for it before
+turning it off, and `/lock on` again changes it (current password first). Forgot it? Stop
+iSekur (`pkill isekur`), set `lock = off` in the config and start it again. It locks the screen, not the files: the config and logs aren't encrypted, and
+the webchat keeps its own login.
+
 IRC operators: `/oper user` asks for the password (hidden). While you are +o or +s, server
 notices (`*** ...`) and WALLOPS go to a `*snotices` tab. `/kill`, `/gline`, `/kline`, `/zline`,
 `/shun`, `/wallops`, `/away`, `/kick` and friends take the reason as plain words (iSekur adds the

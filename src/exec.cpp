@@ -19,6 +19,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 #include "core.h"
+#include "web.h"  // hash_password, check_password
 
 static const size_t MAX_JOB_LINES = 1000;  // then it's killed: `yes` must not fill memory
 
@@ -242,21 +243,24 @@ void Core::shell_cmd(Buffer* b) {
         print(sb, LK::ERROR, "Too many wrong logins: try again in " + std::to_string(login_lock - time(nullptr)) + "s");
         return;
     }
-    // like sitting down at the machine: its login and password before a shell
-    ask_pass(sb, "login", [this, sb](const std::string& login) {
+    shell_login(sb, "");
+}
+
+// like sitting down at the machine: its login and password before a shell
+void Core::shell_login(Buffer* sb, const std::string& err) {
+    const std::string title = "Shell login";
+    ask_pass(sb, "login", [this, sb, title](const std::string& login) {
         if (from_web) { print(sb, LK::ERROR, "/shell works in the terminal only"); return; }
-        ask_pass(sb, "password for " + login, [this, sb, login](const std::string& pass) {
+        ask_pass(sb, "password", [this, sb, login](const std::string& pass) {
             if (from_web) { print(sb, LK::ERROR, "/shell works in the terminal only"); return; }
             std::string why;
-            if (!os_login(login, pass, why)) {
-                if (++login_fails >= 3) login_fails = 0, login_lock = time(nullptr) + 60;
-                print(sb, LK::ERROR, "Login incorrect" + (why.empty() ? "" : ": " + why) + ". /shell tries again, Ctrl+W closes the tab");
-                return;
-            }
-            login_fails = 0;
-            shell_start(sb);
-        });
-    }, false);
+            if (os_login(login, pass, why)) { login_fails = 0; shell_start(sb); return; }
+            std::string bad = "Login incorrect" + (why.empty() ? "" : ": " + why);
+            if (++login_fails < 3) { shell_login(sb, bad); return; }
+            login_fails = 0, login_lock = time(nullptr) + 60;
+            print(sb, LK::ERROR, bad + ". Too many wrong logins: /shell again in a minute, Ctrl+W closes the tab");
+        }, true, title, {"login: " + login});
+    }, false, title, err.empty() ? std::vector<std::string>{} : std::vector<std::string>{"!" + err});
 }
 
 void Core::shell_start(Buffer* sb) {
@@ -354,4 +358,68 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
 // a line typed in a shell tab with no shell running (before the login, or after it ended)
 void Core::shell_line(Buffer* b, const std::string& l) {
     print(b, LK::ERROR, from_web ? "The shell works in the terminal only" : "No shell running here: /shell logs in and starts one");
+}
+
+// ---- /lock: a master password for the terminal -------------------------------
+// ponytail: hides the session on screen only; the config, logs and webchat are not
+// encrypted or locked by it (the webchat has its own login)
+static int unlock_fails = 0;
+static time_t unlock_wait = 0;
+
+bool Core::lock_on() const {
+    return opt_on(nullptr, "lock", false) && !opt(nullptr, "lock_password_hash", "").empty();
+}
+
+void Core::unlock(const std::string& pass) {
+    if (time(nullptr) < unlock_wait) {
+        lock_msg = "!Too many tries: wait " + std::to_string(unlock_wait - time(nullptr)) + "s";
+    } else if (check_password(pass, opt(nullptr, "lock_password_hash", ""))) {
+        locked = false, unlock_fails = 0, lock_msg.clear();
+    } else if (++unlock_fails >= 3) {
+        unlock_fails = 0, unlock_wait = time(nullptr) + 60;
+        lock_msg = "!Wrong password. Too many tries: wait 60s";
+    } else lock_msg = "!Wrong password";
+    dirty = true;
+}
+
+static bool save_general(Core& c, const std::map<std::string, std::string>& kv, Buffer* b) {
+    Ini part;
+    for (auto& [k, v] : kv) c.cfg["general"][k] = part["general"][k] = v, c.unsaved["general"].erase(k);
+    std::string err;
+    if (ini_save(c.cfg_path, part, err)) return true;
+    c.print(b, LK::ERROR, err);
+    return false;
+}
+
+// /lock: lock now; /lock on: set the password and lock from now on; /lock off: stop
+void Core::lock_cmd(Buffer* b, const std::string& args) {
+    if (from_web && !args.empty()) { print(b, LK::ERROR, "/lock on|off works in the terminal only"); return; }
+    if (args.empty()) {
+        if (!lock_on()) { print(b, LK::ERROR, "Locking is off: /lock on sets a password"); return; }
+        locked = true, lock_msg.clear(), dirty = true;
+        return;
+    }
+    const std::string title = "Lock password";
+    if (args == "on") {  // with locking already on, it's a change: the current password first
+        auto set_new = [this, b, title]() {
+            ask_pass(b, "new password", [this, b, title](const std::string& p1) {
+                ask_pass(b, "again", [this, b, p1](const std::string& p2) {
+                    if (p1 != p2) { print(b, LK::ERROR, "The passwords don't match: /lock on to try again"); return; }
+                    if (save_general(*this, {{"lock", "on"}, {"lock_password_hash", hash_password(p1)}}, b))
+                        print(b, LK::INFO, "Locking on: iSekur asks for this password at startup, on every attach and after /lock");
+                }, true, title, {"Type it again"});
+            }, true, title, {"Asked at startup, on attach and after /lock"});
+        };
+        if (!lock_on()) { set_new(); return; }
+        ask_pass(b, "current password", [this, b, set_new](const std::string& p) {
+            if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: it stays as it was"); return; }
+            set_new();
+        }, true, title, {"Changing it: the current one first"});
+    } else if (args == "off") {
+        if (!lock_on()) { print(b, LK::INFO, "Locking is already off"); return; }
+        ask_pass(b, "password", [this, b](const std::string& p) {
+            if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: locking stays on"); return; }
+            if (save_general(*this, {{"lock", "off"}, {"lock_password_hash", ""}}, b)) print(b, LK::INFO, "Locking off");
+        }, true, title, {"The current one, to turn locking off"});
+    } else print(b, LK::ERROR, "Usage: /lock [on|off]");
 }

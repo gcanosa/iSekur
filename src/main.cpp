@@ -153,6 +153,7 @@ int main(int argc, char** argv) {
     Tui tui(c);
     if (local && !tui.init(err)) { fprintf(stderr, "terminal: %s\n", err.c_str()); return 1; }
     c.tty = local;
+    c.locked = local && c.lock_on();
     bool hinted = false;
 
     time_t last_sec = 0;
@@ -204,6 +205,7 @@ int main(int argc, char** argv) {
             }
             else {
                 c.tty = c.dirty = true;
+                c.locked = c.lock_on();  // every attach asks again
                 if (!hinted) c.print(home, LK::INFO, "Alt+D (Option+D on a Mac) or /detach leaves iSekur running in the background"), hinted = true;
             }
         }

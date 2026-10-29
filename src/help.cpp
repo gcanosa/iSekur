@@ -190,6 +190,15 @@ static const std::vector<CmdInfo> CMDS = {
      "the mouse wheel scrolls back. exit ends it, Ctrl+W then closes the tab. Terminal only: "
      "never from the webchat.",
      {"/shell"}},
+    {"lock", "Session", "[on|off]", "Lock the terminal with a password",
+     "/lock on sets a password (asked twice) and turns locking on: from then on iSekur shows "
+     "only a password box at startup, on every --attach and after /lock, before anything of "
+     "the session. /lock alone locks now. /lock off asks for the password and turns it off. "
+     "With locking on, /lock on changes the password (the current one first). Forgot it? Stop "
+     "iSekur, set lock = off in the config and start it again. "
+     "Three wrong tries wait a minute. It hides the screen: the config, logs and the webchat "
+     "(it has its own login) are not locked by it. Off by default.",
+     {"/lock on", "/lock", "/lock off"}},
     {"web", "Session", "[start|stop|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one).",
