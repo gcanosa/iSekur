@@ -358,15 +358,24 @@ int main() {
     assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
 
     // /typing: other people's messages get a typed_at, our own and info lines don't
-    core.exec(chb, "/typing on");
+    chb->quiet = false;
+    core.exec(chb, "/typing on");  // quiet comes on with it...
+    assert(chb->quiet && chb->quiet_typing);
     feed(":bob!u@h PRIVMSG #c :hello there");
     assert(chb->lines.back().typed_at > 0 && core.typing_until > chb->lines.back().typed_at);
     Line tl = chb->lines.back();
     assert(typed_chars(tl, 11, tl.typed_at + 99) == 3 && typed_chars(tl, 11, tl.typed_at - 5) == 0);
     assert(typed_chars(tl, 200, tl.typed_at + 2000) == 200);  // a long line: 2s at most
-    core.exec(chb, "/typing");
+    core.exec(chb, "/typing");  // ...and goes off with it
+    assert(!chb->quiet && !chb->quiet_typing);
     feed(":bob!u@h PRIVMSG #c :bye");
     assert(chb->lines.back().typed_at == 0);
+    core.exec(chb, "/quiet on");  // quiet on purpose: /typing off leaves it
+    core.exec(chb, "/typing on");
+    assert(chb->quiet && !chb->quiet_typing);
+    core.exec(chb, "/set typing_effect off");
+    assert(chb->quiet);
+    core.exec(chb, "/quiet off");
 
     // mirc_prefix: n visible characters, the codes around them kept
     assert(mirc_prefix("\x02iSe\x02kur", 4) == "\x02iSe\x02k" && mirc_prefix("\x03" "04,12red", 2) == "\x03" "04,12re");

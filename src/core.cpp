@@ -128,6 +128,20 @@ std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std
     return out;
 }
 
+int Core::typing_quiet(bool on) {
+    int n = 0;
+    for (auto& t : bufs) {
+        Buffer* x = t.get();
+        if (x->type != BT::CHANNEL) continue;
+        if (on && !x->quiet) x->quiet = x->quiet_typing = true, n++;
+        else if (!on && x->quiet_typing) x->quiet = x->quiet_typing = false, n++;
+        else continue;
+        notify(Ev::BUFFER, x);
+    }
+    dirty = true;
+    return n;
+}
+
 void Core::about(Buffer* from) {
     Buffer* b = open(nullptr, BT::QUERY, "*about");
     b->lines.clear(), b->scroll = b->unread = 0;
@@ -263,6 +277,7 @@ Buffer* Core::open(Server* s, BT t, const std::string& name) {
         if (Buffer* b = find(s, name)) return b;
     auto b = std::make_unique<Buffer>();
     b->id = next_id++, b->type = t, b->name = name, b->srv = s;
+    if (t == BT::CHANNEL && opt_on(s, "typing_effect", false)) b->quiet = b->quiet_typing = true;  // joins and parts would be noise among typed lines
     Buffer* bp = b.get();
     // keep each server's buffers together, status first
     size_t pos = bufs.size();
@@ -619,7 +634,13 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (!args.empty() && args != "on" && args != "off") { print(b, LK::ERROR, "Usage: /typing [on|off]"); return; }
         bool on = args.empty() ? !opt_on(nullptr, "typing_effect", false) : args == "on";
         cfg["general"]["typing_effect"] = unsaved["general"]["typing_effect"] = on ? "on" : "off";
+        int n = typing_quiet(on);
         print(b, LK::INFO, std::string("Typing effect ") + (on ? "on: messages type themselves out" : "off") + " (/save to keep it)");
+        print(b, LK::INFO, on ? "Quiet mode is on as well" + std::string(n ? " in " + std::to_string(n) + " channel" + (n > 1 ? "s" : "") : "") +
+                                    ": joins, parts, quits and nick changes are hidden while typing is on"
+                              : n ? "Quiet mode is off again in " + std::to_string(n) + " channel" + (n > 1 ? "s" : "") +
+                                        " (the ones you made quiet yourself stay quiet)"
+                                  : "Quiet mode unchanged: the quiet channels were made quiet by you");
         return;
     }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
@@ -656,6 +677,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             load_flood(sv.get());
         }
         if (sec == "keys") cfg_changed = true;
+        if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         dirty = true;
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
@@ -775,6 +797,8 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "close" || cmd == "wc") { close(b); return; }
     if (cmd == "quiet") {  // per tab, until restart
         b->quiet = args == "on" || (args != "off" && !b->quiet);
+        b->quiet_typing = false;  // your choice now: /typing off leaves it
+        notify(Ev::BUFFER, b);
         print(b, LK::INFO, std::string("Quiet mode ") + (b->quiet ? "on: joins, parts, quits and nick changes are hidden here"
                                                                   : "off: showing joins, parts, quits and nick changes"));
         return;
