@@ -650,6 +650,7 @@ $("#input").onsubmit = e => {
   if (hist[hist.length - 1] !== v) hist.push(v);
   hpos = hist.length;
   if (/^\/about\s*$/i.test(v)) { $("#line").value = ""; openAbout(); return; }  // a dialog here, not a tab
+  if (/^\/set\s*$/i.test(v)) { $("#line").value = ""; $("#setbtn").click(); return; }  // like the terminal: the settings window
   send({t: "input", buf: active, text: v});
   $("#line").value = "";
 };

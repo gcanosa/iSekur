@@ -9,6 +9,7 @@
 #include "termbox2.h"
 #include "vterm.h"
 
+static const int TB_MOD_SUPER = 16;  // vendor/termbox2.c: CSI u / modifyOtherKeys, Cmd
 static bool g_true = true;  // truecolor output, else nearest xterm-256
 
 static int nearest256(RGB c) {
@@ -331,6 +332,7 @@ int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); 
 
 void Tui::draw() {
     if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
+    if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true;
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
@@ -646,6 +648,11 @@ void Tui::draw() {
     y = H - 1;
     Style is = T.get("input");
     fill(y, 0, W, is);
+    if (sw.open) {  // /set: the settings window has the keys
+        draw_settings(W, H);
+        present();
+        return;
+    }
     if (!confirm.empty()) {
         int px = text(0, y, W, confirm.substr(0, confirm.find('\n')) + " (y/n) ", T.get("hilight"), false);
         tb_set_cursor(px, y);
@@ -743,11 +750,224 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
     tb_set_cursor(fx + curw - off, fy);
 }
 
+// ---- the settings window (/set alone) ----------------------------------------
+//   ┌─ Settings ───────────────────────────────────────────────┐
+//   │ search: tls_                                             │
+//   │ All          50 │ [server.libera]                        │
+//   │ general      36 │  tls              true                 │
+//   │ ⇢ libera      6 │  tls_verify       default: true        │
+//   │ ↑↓ move · Enter edit · Del default · Ctrl+S save · Esc   │
+//   └──────────────────────────────────────────────────────────┘
+static std::string lower(std::string s) { for (auto& ch : s) ch = (char)tolower((unsigned char)ch); return s; }
+static std::string full_key(const Core::SetRow& r) { return (r.sec == "general" ? "" : r.sec + ".") + r.key; }
+
+// the categories with how many keys match the search, and the rows of the chosen one
+static void set_view(const std::vector<Core::SetRow>& all, const std::string& q, int& cat,
+                     std::vector<std::string>& cats, std::vector<int>& counts, std::vector<const Core::SetRow*>& rows) {
+    auto match = [&](const Core::SetRow& r) { return q.empty() || lower(full_key(r)).find(q) != std::string::npos || (!r.secret && lower(r.val).find(q) != std::string::npos); };
+    cats = {""};
+    for (auto& r : all)
+        if (std::find(cats.begin(), cats.end(), r.sec) == cats.end()) cats.push_back(r.sec);
+    counts.assign(cats.size(), 0);
+    for (auto& r : all)
+        if (match(r)) counts[0]++, counts[(size_t)(std::find(cats.begin(), cats.end(), r.sec) - cats.begin())]++;
+    if (cat >= (int)cats.size() || (cat > 0 && !counts[(size_t)cat])) cat = 0;  // a search with no hits here: All
+    rows.clear();
+    for (auto& r : all)
+        if (match(r) && (cat == 0 || r.sec == cats[(size_t)cat])) rows.push_back(&r);
+}
+
+void Tui::draw_settings(int W, int H) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), keyst = sty(T, "set_key", "info"), val = sty(T, "set_value", "input"),
+          secst = sty(T, "info", "menu"), mark = sty(T, "hilight", "menu");
+    for (Style* st : {&ls, &dim, &keyst, &val, &secst}) st->bg = bs.bg;
+    mark.fg = sty(T, "input_prompt", "hilight").fg, mark.bg = bs.bg;
+    hs.attr |= A_BOLD;
+    int bw = std::min(W - 2, 110), bh = std::min(H - 2, 34);
+    if (bw < 40 || bh < 10) { text(0, H - 1, W, "The terminal is too small for the settings window (Esc closes it)", T.get("error"), false); return; }
+    int x0 = (W - bw) / 2, y0 = (H - bh) / 2, x1 = x0 + bw - 1, y1 = y0 + bh - 1;
+    for (int yy = y0; yy <= y1; yy++) fill(yy, x0, x1 + 1, bs);
+    for (int xx = x0; xx <= x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y1, U'─', ls);
+    for (int yy = y0; yy <= y1; yy++) cell(x0, yy, U'│', ls), cell(x1, yy, U'│', ls);
+    cell(x0, y0, U'┌', ls), cell(x1, y0, U'┐', ls), cell(x0, y1, U'└', ls), cell(x1, y1, U'┘', ls);
+    text(x0 + 2, y0, x1, " Settings ", hs, false);
+
+    auto all = c.setting_rows();
+    std::vector<std::string> cats;
+    std::vector<int> counts;
+    std::vector<const Core::SetRow*> rows;
+    set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
+    sw.sel = std::max(0, std::min(sw.sel, (int)rows.size() - 1));
+
+    // search line
+    int sx = text(x0 + 2, y0 + 1, x1, "search: ", dim, false);
+    fill(y0 + 1, sx, x1 - 1, fs);
+    text(sx, y0 + 1, x1 - 1, to_utf8(sw.q), fs, false);
+    if (!sw.editing) tb_set_cursor(sx + (int)sw.q.size(), y0 + 1);
+
+    // categories
+    int nw = 22, ly = y0 + 3, n = bh - 6;  // n rows for the lists
+    sw.x0 = x0, sw.y0 = y0, sw.w = bw, sw.h = bh, sw.nav_w = nw, sw.list_y = ly;
+    for (int i = 0; i < (int)cats.size() && i < n; i++) {
+        std::string name = cats[(size_t)i].empty() ? "All" : cats[(size_t)i].rfind("server.", 0) == 0 ? "\u21E2 " + cats[(size_t)i].substr(7) : cats[(size_t)i];
+        bool on = i == sw.cat, uns = false;
+        for (auto& r : all) uns |= r.unsaved && (i == 0 || r.sec == cats[(size_t)i]);
+        Style st = on ? sel : counts[(size_t)i] ? bs : dim;
+        if (on && sw.focus != 0) st = keyst, st.attr |= A_BOLD;  // chosen, but the keys have the focus
+        fill(ly + i, x0 + 2, x0 + 2 + nw - 1, on && sw.focus == 0 ? sel : bs);
+        text(x0 + 3, ly + i, x0 + nw - 5, name, st, false);
+        std::string cnt = (uns ? "\u25CF " : "") + std::to_string(counts[(size_t)i]);
+        int cl = (int)cnt.size() - (uns ? 2 : 0);
+        text(x0 + 2 + nw - 2 - cl, ly + i, x0 + 2 + nw, cnt, on && sw.focus == 0 ? sel : dim, false);
+    }
+    for (int yy = ly - 1; yy < ly + n; yy++) cell(x0 + 2 + nw, yy, U'│', ls);
+
+    // keys: with section headers when showing All (or a search across sections)
+    struct DL { const Core::SetRow* r; std::string head; };
+    std::vector<DL> lines;
+    std::string last;
+    int sel_line = 0;
+    for (size_t i = 0; i < rows.size(); i++) {
+        if (rows[i]->sec != last) lines.push_back({nullptr, "[" + rows[i]->sec + "]"}), last = rows[i]->sec;
+        if ((int)i == sw.sel) sel_line = (int)lines.size();
+        lines.push_back({rows[i], ""});
+    }
+    if (sel_line < sw.top + 1) sw.top = std::max(0, sel_line - 1);  // keep its header in sight
+    if (sel_line >= sw.top + n) sw.top = sel_line - n + 1;
+    int kx = x0 + nw + 4, kw = 0;
+    for (auto* r : rows) kw = std::max(kw, (int)r->key.size());
+    kw = std::min(kw + 3, 26);
+    int vx = kx + kw, vmax = x1 - 1;
+    if (rows.empty()) text(kx, ly, vmax, "No key matches \u201c" + to_utf8(sw.q) + "\u201d (Esc clears the search)", dim, false);
+    for (int i = 0; i < n && sw.top + i < (int)lines.size(); i++) {
+        auto& L = lines[(size_t)(sw.top + i)];
+        int yy = ly + i;
+        if (!L.r) { text(kx, yy, vmax, L.head, secst, false); continue; }
+        bool on = L.r == (rows.empty() ? nullptr : rows[(size_t)sw.sel]) && sw.focus == 1;
+        Style ks = on ? sel : keyst;
+        if (on) fill(yy, kx - 1, vmax + 1, sel);
+        if (L.r->unsaved) text(kx - 1, yy, kx, "\u25CF", on ? sel : mark, false);
+        text(kx + 1, yy, vx - 1, L.r->key, ks, false);
+        if (on && sw.editing) {  // the value being edited, with its cursor
+            fill(yy, vx, vmax, fs);
+            std::u32string shown = L.r->secret ? std::u32string(sw.ed.size(), U'\u2022') : sw.ed;
+            int avail = vmax - vx - 1, off = std::max(0, (int)sw.ecur - avail);
+            text(vx, yy, vmax, to_utf8(shown.substr((size_t)off)), fs, false);
+            tb_set_cursor(vx + (int)sw.ecur - off, yy);
+            continue;
+        }
+        std::string v = L.r->secret ? (L.r->val.empty() ? "(not set)" : "********") : L.r->val.empty() ? (L.r->def.empty() ? "(not set)" : "default: " + L.r->def) : L.r->val;
+        text(vx, yy, vmax, v, on ? sel : L.r->val.empty() ? dim : val, false);
+    }
+    // what happened, or what the keys do
+    std::string hint = sw.editing ? "Enter: set it · Esc: cancel · empty = the default"
+                       : sw.focus == 0 ? "\u2191\u2193: category · \u2192 or Tab: its keys · type to search · Esc: close"
+                                       : "\u2191\u2193 PgUp PgDn: move · Enter: edit · Del: default · Tab: categories · Ctrl+S: save · Esc: close";
+    text(x0 + 2, y1 - 1, x1 - 1, sw.msg.empty() ? hint : sw.msg, sw.msg.empty() ? dim : mark, false);
+}
+
+void Tui::settings_key(int mod, int k, uint32_t ch) {
+    auto all = c.setting_rows();
+    std::vector<std::string> cats;
+    std::vector<int> counts;
+    std::vector<const Core::SetRow*> rows;
+    set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
+    const Core::SetRow* r = rows.empty() ? nullptr : rows[(size_t)std::max(0, std::min(sw.sel, (int)rows.size() - 1))];
+    bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
+    if (sw.editing) {
+        if (k == TB_KEY_ESC) { sw.editing = false; return; }
+        if (k == TB_KEY_ENTER && r) {
+            std::string v = to_utf8(sw.ed);
+            c.exec(c.active, "/set " + full_key(*r) + " " + (v.empty() ? "\"\"" : v));
+            sw.editing = false;
+            sw.msg = full_key(*r) + (v.empty() ? " is back to its default" : " = " + (r->secret ? std::string("********") : v)) + "  (not saved yet: Ctrl+S)";
+            return;
+        }
+        if (ch || k == TB_KEY_SPACE) sw.ed.insert(sw.ecur++, 1, ch ? (char32_t)ch : U' ');
+        else if (bs && sw.ecur) sw.ed.erase(--sw.ecur, 1);
+        else if (k == TB_KEY_DELETE && sw.ecur < sw.ed.size()) sw.ed.erase(sw.ecur, 1);
+        else if (k == TB_KEY_ARROW_LEFT && sw.ecur) sw.ecur--;
+        else if (k == TB_KEY_ARROW_RIGHT && sw.ecur < sw.ed.size()) sw.ecur++;
+        else if (k == TB_KEY_HOME) sw.ecur = 0;
+        else if (k == TB_KEY_END || k == TB_KEY_CTRL_E) sw.ecur = sw.ed.size();
+        else if (k == TB_KEY_CTRL_U) sw.ed.erase(0, sw.ecur), sw.ecur = 0;
+        return;
+    }
+    sw.msg.clear();
+    int page = std::max(1, sw.h - 7);
+    if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) return;
+    if (k == TB_KEY_ESC) { if (!sw.q.empty()) sw.q.clear(); else sw.open = false; return; }
+    if (k == TB_KEY_CTRL_S) {
+        c.exec(c.active, "/save");
+        sw.msg = "Saved to " + c.cfg_path;
+        return;
+    }
+    if (ch || k == TB_KEY_SPACE) { sw.q += ch ? (char32_t)ch : U' '; sw.sel = sw.top = 0; return; }  // typing searches
+    if (bs) { if (!sw.q.empty()) sw.q.pop_back(), sw.sel = sw.top = 0; return; }
+    if (k == TB_KEY_TAB) { sw.focus = !sw.focus; return; }
+    if (k == TB_KEY_ARROW_LEFT) { sw.focus = 0; return; }
+    if (k == TB_KEY_ARROW_RIGHT) { sw.focus = 1; return; }
+    if (sw.focus == 0) {  // categories: the empty ones are skipped
+        int d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0, nc = (int)cats.size();
+        for (int i = sw.cat + d; d && i >= 0 && i < nc; i += d)
+            if (counts[(size_t)i]) { sw.cat = i, sw.sel = sw.top = 0; break; }
+        if (k == TB_KEY_ENTER) sw.focus = 1;
+        return;
+    }
+    int n = (int)rows.size();
+    if (k == TB_KEY_ARROW_DOWN) sw.sel = std::min(n - 1, sw.sel + 1);
+    else if (k == TB_KEY_ARROW_UP) sw.sel = std::max(0, sw.sel - 1);
+    else if (k == TB_KEY_PGDN) sw.sel = std::min(n - 1, sw.sel + page);
+    else if (k == TB_KEY_PGUP) sw.sel = std::max(0, sw.sel - page);
+    else if (k == TB_KEY_HOME) sw.sel = 0;
+    else if (k == TB_KEY_END) sw.sel = std::max(0, n - 1);
+    else if (k == TB_KEY_ENTER && r) sw.editing = true, sw.ed = r->secret ? U"" : from_utf8(r->val), sw.ecur = sw.ed.size();
+    else if (k == TB_KEY_DELETE && r) {
+        c.exec(c.active, "/set " + full_key(*r) + " \"\"");
+        sw.msg = full_key(*r) + " is back to its default  (not saved yet: Ctrl+S)";
+    }
+}
+
+// a click picks a category or a key (again, or a double click: edits it); the wheel moves
+void Tui::settings_mouse(int k, int x, int y) {
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) {
+        if (!sw.editing) settings_key(0, k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0), settings_key(0, k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
+        return;
+    }
+    if (k != TB_KEY_MOUSE_LEFT || sw.editing) return;
+    int i = y - sw.list_y;
+    if (i < 0 || i >= sw.h - 6 || x <= sw.x0 || x >= sw.x0 + sw.w - 1) return;
+    auto all = c.setting_rows();
+    std::vector<std::string> cats;
+    std::vector<int> counts;
+    std::vector<const Core::SetRow*> rows;
+    set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
+    if (x < sw.x0 + 2 + sw.nav_w) {  // a category
+        if (i < (int)cats.size() && counts[(size_t)i]) sw.cat = i, sw.sel = sw.top = 0, sw.focus = 0;
+        return;
+    }
+    // the row under the pointer, counting the section headers the way draw_settings lays them out
+    std::string last;
+    int line = 0, want = sw.top + i;
+    for (int j = 0; j < (int)rows.size(); j++) {
+        if (rows[(size_t)j]->sec != last) last = rows[(size_t)j]->sec, line++;
+        if (line == want) {
+            long long now = now_ms();
+            bool again = sw.focus == 1 && sw.sel == j && now - sw.click_ms < 500;
+            sw.sel = j, sw.focus = 1, sw.click_ms = now;
+            if (again) settings_key(0, TB_KEY_ENTER, 0);
+            return;
+        }
+        line++;
+    }
+}
+
 // ---- keyboard --------------------------------------------------------------
 // vendor/termbox2.c: CSI u / modifyOtherKeys decoding, TB_MOD_SUPER = Cmd
 extern "C" int isekur_extract_pre(struct tb_event*, size_t*);
 extern "C" int isekur_extract_post(struct tb_event*, size_t*);
-static const int TB_MOD_SUPER = 16;
 
 static std::string keyspec(int mod, int key, uint32_t ch) {
     std::string s = std::string(mod & TB_MOD_SUPER ? "D-" : "") + (mod & TB_MOD_ALT ? "M-" : "");
@@ -899,7 +1119,7 @@ void Tui::on_readable() {
     bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too
+        if ((c.locked || sw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -952,6 +1172,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         else if (k == TB_KEY_ENTER) c.unlock(to_utf8(lock_in)), lock_in.clear();
         return;
     }
+    if (sw.open) { settings_key(mod, k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -1104,6 +1325,7 @@ std::string Tui::word_at(int x, int y) const {
 // unfolds the topic (double click: edit it); a drag in the chat copies text.
 void Tui::mouse(int mod, int k, int x, int y) {
     if (c.locked) return;
+    if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && (nl_x < 0 || x < nl_x);
     if (selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {

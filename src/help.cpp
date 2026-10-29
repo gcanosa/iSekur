@@ -170,8 +170,11 @@ static const std::vector<CmdInfo> CMDS = {
      {"/theme", "/theme neon", "/theme solarized"}},
 
     // ---- Settings
-    {"set", "Settings", "[section.]key [value]", "Show or change a setting",
-     "Without arguments lists everything; with a key shows it; with a value changes it right away. "
+    {"set", "Settings", "[[section.]key [value]]", "The settings window, or show or change one setting",
+     "Alone it opens the settings window: every key by category (All, general, web, each server), "
+     "type to search, Up/Down to move, Tab or Left/Right between categories and keys, Enter edits, "
+     "Del puts the default back, Ctrl+S saves, Esc closes; the mouse works too (the webchat's ⚙ is "
+     "the same). With a key it shows it; with a value it changes it right away. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
      "/set key \"\" empties it, which means its default again.",
      {"/set", "/set theme neon", "/set server.libera.autojoin #a,#b", "/set log on"}},

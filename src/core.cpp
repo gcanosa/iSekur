@@ -196,6 +196,17 @@ std::vector<Core::Setting> Core::settings() const {
     return out;
 }
 
+std::vector<Core::SetRow> Core::setting_rows() const {
+    Ini all = defaults;
+    for (auto& [sec, kv] : cfg)
+        for (auto& [k, v] : kv) all[sec][k];
+    std::vector<SetRow> out;
+    for (auto& [sec, kv] : all)
+        for (auto& [k, d] : kv)
+            out.push_back({sec, k, ini_get(cfg, sec, k), d, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k)});
+    return out;
+}
+
 // [server.<name>] with [general] fallbacks; also re-read by /set
 ServerCfg Core::server_cfg(const std::string& name) const {
     const char* login = getenv("USER");
@@ -650,6 +661,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = secret_key;
         if (argv.empty()) {
+            if (tty && !from_web) { settings_win = dirty = true; return; }  // the terminal's settings window
             for (auto& st : settings()) print(b, LK::INFO, st.key + " = " + st.val);
             return;
         }
