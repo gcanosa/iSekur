@@ -151,6 +151,105 @@ static std::string buf_label(const Buffer* b) {
     return b->type == BT::STATUS && b->srv && !b->srv->network.empty() ? b->srv->network : b->name;
 }
 
+// ---- status_info: this machine's CPU, memory, load and battery -------------
+// src/sysinfo.cpp, apart since macOS headers have their own Style
+int cpu_pct();
+bool mem_free(unsigned long long& avail, unsigned long long& total);
+int battery_pct();
+
+// 512M, 3.2G, 16G, 1.5T: the unit that keeps it under 1024, one decimal below 10
+static std::string human_bytes(unsigned long long n) {
+    const char* u = "BKMGTP";
+    double v = (double)n;
+    while (v >= 1024 && u[1]) v /= 1024, u++;
+    char buf[32];
+    snprintf(buf, sizeof buf, v < 10 && *u != 'B' ? "%.1f%c" : "%.0f%c", v, *u);
+    std::string s = buf;
+    if (s.size() > 3 && s.compare(s.size() - 3, 2, ".0") == 0) s.erase(s.size() - 3, 2);  // 16.0G -> 16G
+    return s;
+}
+
+// uptime as 3d4h22m, seconds below a day
+static std::string fmt_uptime(long up) {
+    std::string u;
+    const std::pair<long, const char*> units[] = {{2592000, "mo"}, {86400, "d"}, {3600, "h"}, {60, "m"}, {1, "s"}};
+    bool days = up >= 86400;
+    for (auto& [n, name] : units)
+        if ((!u.empty() || up >= n || n == 1) && !(n == 1 && days)) u += std::to_string(up / n) + name, up %= n;
+    return u;
+}
+
+// cpu_levels / mem_levels: "min avg max" percents; at min a value turns status_warn, at avg
+// status_high, at max status_crit (0 = none of them). Anything but three rising numbers
+// 0-100 means the defaults.
+static int level(const Core& c, const std::string& key, const char* def, int pct) {
+    int l[3];
+    auto parse = [&](const std::string& v) {
+        return sscanf(v.c_str(), "%d %d %d", &l[0], &l[1], &l[2]) == 3 && 0 <= l[0] && l[0] <= l[1] && l[1] <= l[2] && l[2] <= 100;
+    };
+    if (!parse(c.opt(nullptr, key, def))) parse(def);
+    return pct >= l[2] ? 3 : pct >= l[1] ? 2 : pct >= l[0] ? 1 : 0;
+}
+
+// a status_info color from the theme, on base; a theme without it gets fg (and bg)
+static Style info_style(const Theme& T, const std::string& k, Style base, RGB fg, RGB bg = -1) {
+    Style t = T.el.count(k) ? T.get(k) : Style{fg, bg, 0};
+    if (t.fg >= 0) base.fg = t.fg;
+    if (t.bg >= 0) base.bg = t.bg;
+    base.attr |= t.attr;
+    return base;
+}
+// status_ok, status_warn, status_high, status_crit: green, yellow, orange, red by default
+static Style level_style(const Theme& T, int lv, Style base) {
+    static const char* keys[] = {"status_ok", "status_warn", "status_high", "status_crit"};
+    static const RGB fgs[] = {0x5fd75f, 0xffd75f, 0xffaf00, 0xff5f5f};
+    return info_style(T, keys[lv], base, fgs[lv]);
+}
+
+// the status_info items that are on, in a fixed order, drawn in st
+static std::vector<Row> status_info(const Core& c, Style st) {
+    const Theme& T = c.theme;
+    auto on = split(c.opt(nullptr, "status_info", "up"), ' ');
+    auto has = [&](const char* k) { return std::find(on.begin(), on.end(), k) != on.end(); };
+    std::vector<Row> out;
+    auto add = [&](const std::string& s) { out.emplace_back(), cells(out.back(), s, st, false); };
+    if (has("up")) add("u:" + fmt_uptime((long)(time(nullptr) - c.started)));
+    // label in st, the value in its level's color
+    auto leveled = [&](const std::string& label, const std::string& val, const std::string& key, const char* def, int pct) {
+        int lv = pct >= 0 ? level(c, key, def, pct) : 0;
+        Style vs = lv ? level_style(T, lv, st) : st;
+        out.emplace_back();
+        cells(out.back(), label, st, false);
+        cells(out.back(), val, vs, false);
+    };
+    if (has("cpu")) {
+        int p = cpu_pct();
+        leveled("cpu:", (p < 0 ? std::string("--") : std::to_string(p)) + "%", "cpu_levels", "50 75 90", p);
+    }
+    unsigned long long a, t;
+    if (has("mem") && mem_free(a, t))  // colored by how much is used
+        leveled("free:", human_bytes(a) + "/" + human_bytes(t), "mem_levels", "70 85 95", t ? (int)((t - a) * 100 / t) : -1);
+    double ld[3];
+    if (has("load") && getloadavg(ld, 3) == 3) {
+        char buf[48];
+        snprintf(buf, sizeof buf, "load:%.2f %.2f %.2f", ld[0], ld[1], ld[2]);
+        add(buf);
+    }
+    int bp = has("bat") ? battery_pct() : -1;
+    if (bp >= 0) {  // ▮▮▯╸64%: the bars on a status_bat body, 3 status_ok, 2 warn, 1 high, 1 crit below 15%
+        int bars = bp > 66 ? 3 : bp > 33 ? 2 : 1;
+        Style es = info_style(T, "status_bat", st, 0x6c6c6c, 0x3a3a3a);  // fg: empty bars and the tip, bg: the body
+        Style bs = level_style(T, bp > 66 ? 0 : bp > 33 ? 1 : bp >= 15 ? 2 : 3, st), tip = es;
+        bs.bg = es.bg, tip.bg = st.bg;  // no edge lines: fonts put ▕ ▏ in different places
+        Row r;
+        for (int i = 0; i < 3; i++) cells(r, i < bars ? "\u25AE" : "\u25AF", i < bars ? bs : es, false);
+        cells(r, "\u2578", tip, false);
+        cells(r, std::to_string(bp) + "%", bp < 15 ? Style{bs.fg, st.bg, st.attr} : st, false);
+        out.push_back(r);
+    }
+    return out;
+}
+
 // ---- line layout -----------------------------------------------------------
 static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_) {
     const Theme& T = c.theme;
@@ -497,15 +596,18 @@ void Tui::draw() {
         x = text(x, y, W, "] ", ss, false);
     }
     if (b->scroll) seg("-- MORE --", T.get("hilight"));
-    {  // uptime, under the nick list (right edge without one): u:3d4h22m, seconds below a day
-        long up = (long)(time(nullptr) - c.started);
-        std::string u = "u:";
-        const std::pair<long, const char*> units[] = {{2592000, "mo"}, {86400, "d"}, {3600, "h"}, {60, "m"}, {1, "s"}};
-        bool days = up >= 86400;
-        for (auto& [n, name] : units)
-            if ((u.size() > 2 || up >= n || n == 1) && !(n == 1 && days)) u += std::to_string(up / n) + name, up %= n;
-        int ux = nlw ? cw + 2 : W - (int)u.size() - 1;
-        if (ux > x) text(ux, y, W, u, sh, false);
+    {  // status_info (uptime, cpu, ...), under the nick list (right edge without one); the last ones drop when it won't fit
+        Style is = sty(T, "status_info", "status_hi");
+        auto parts = status_info(c, is);
+        for (; !parts.empty(); parts.pop_back()) {
+            Row u;
+            for (auto& p2 : parts) {
+                if (!u.empty()) cells(u, " ", is, false);
+                u.insert(u.end(), p2.begin(), p2.end());
+            }
+            int uw = width(u), ux = nlw && cw + 2 + uw <= W ? cw + 2 : W - uw - 1;
+            if (ux > x) { draw_row(ux, y, W, u); break; }
+        }
     }
 
     // nick menu, over everything but the input line

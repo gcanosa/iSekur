@@ -79,6 +79,16 @@ static const std::vector<CmdInfo> CMDS = {
      "Toggles for the current tab only. Hidden lines are still logged and come back with /quiet off. "
      "Your own joins and parts stay visible.",
      {"/quiet", "/quiet off"}},
+    {"statusbar", "Chat", "[up|cpu|mem|load|bat] [on|off]", "Show uptime, CPU, memory, load or battery in the status bar",
+     "Right of the status bar (under the nick list): up = how long iSekur has run, cpu = this "
+     "machine's CPU use, mem = memory free/total, load = load average (1, 5, 15 min), bat = battery as 3 bars (green, yellow, orange, red "
+     "below 15%) and its %, only on machines that have one. An item "
+     "alone toggles it, /statusbar alone lists them. Kept until restart; /save writes it to "
+     "status_info in the config. cpu and mem turn yellow, orange and red as they pass "
+     "cpu_levels (default 50 75 90) and mem_levels (memory in use, default 70 85 95): "
+     "/set cpu_levels 60 80 95. The theme sets the colors: status_info, status_ok, status_warn, "
+     "status_high, status_crit and status_bat. What doesn't fit is left out from the end.",
+     {"/statusbar cpu", "/statusbar bat on", "/statusbar up off"}},
     {"ctcp", "Chat", "target VERSION|TIME|PING", "Send a CTCP request",
      "PING shows the round trip time when the reply arrives.",
      {"/ctcp alice VERSION", "/ctcp alice PING"}},
