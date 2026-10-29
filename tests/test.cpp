@@ -357,6 +357,23 @@ int main() {
     feed(":srv 318 me Erick :End of /WHOIS list.");
     assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
 
+    // /list: a table in *channels, busiest first, the [+modes] kept
+    feed(":srv 321 me Channel :Users  Name");
+    feed(":srv 322 me #small 3 :[+nt] hi");
+    feed(":srv 322 me #big 250 :Big one");
+    feed(":srv 323 me :End of /LIST");
+    Buffer* lb = core.find(ts, "*channels");
+    assert(lb && core.active == lb && lb->lines.size() == 5 && lb->lines[0].nolog);
+    assert(mirc_strip(lb->lines[1].text).rfind("  #  Channel  Users \u25BC  Topic", 0) == 0);
+    assert(mirc_strip(lb->lines[2].text) == " 1.  #big         250  Big one" && mirc_strip(lb->lines[3].text) == " 2.  #small         3  [+nt] hi");
+    core.exec(lb, "/list sort name");  // A-Z, then Z-A on a second time
+    assert(mirc_strip(lb->lines[2].text).rfind(" 1.  #big", 0) == 0 && mirc_strip(lb->lines[1].text).find("Channel \u25BC") != std::string::npos);
+    core.exec(lb, "/list sort name");
+    assert(mirc_strip(lb->lines[2].text).rfind(" 1.  #small", 0) == 0 && mirc_strip(lb->lines[1].text).find("Channel \u25B2") != std::string::npos);
+    core.exec(lb, "/list sort users");
+    assert(mirc_strip(lb->lines[2].text).rfind(" 1.  #big", 0) == 0);
+    core.select(chb);
+
     core.exec(home, "/detach");  // nothing attached (the webchat typed it)
     assert(!core.detach_req && home->lines.back().kind == LK::ERROR);
     core.tty = true;

@@ -275,3 +275,61 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
     m.push_back({"Close", b->joined ? "?Leave " + b->name + " and close its tab?\n/close" : "/close"});
     return m;
 }
+
+// /list sort name|users, or a click on the header: a second time on the same column reverses it
+void Core::list_sort(Buffer* b, const std::string& by) {
+    Server* s = b->srv;
+    if (!s || s->list.empty()) { print(b, LK::ERROR, "Nothing to sort: /list first"); return; }
+    if (by != "" && by != "name" && by != "users") { print(b, LK::ERROR, "Usage: /list sort name|users"); return; }
+    char k = by.empty() ? s->list_sort : by[0] == 'n' ? 'n' : 'u';
+    s->list_rev = k == s->list_sort ? !s->list_rev : false;
+    s->list_sort = k;
+    list_table(s);
+}
+
+// /list, busiest first (or by name, /list sort):
+//    #   Channel          Users  Topic
+//    1.  #linux            1834  [+nt] Welcome to ...
+// colors are mIRC codes, so the webchat shows the same table (names white: 12 is too dark on dark themes)
+void Core::list_table(Server* s) {
+    Buffer* b = open(s, BT::QUERY, "*channels");
+    b->lines.clear(), b->scroll = b->unread = 0;
+    notify(Ev::CLEAR, b);
+    auto out = [&](const std::string& t) { add(b, Line{time(nullptr), LK::INFO, "", t, false, false, true}); };  // never logged
+    auto& L = s->list;
+    bool by_name = s->list_sort == 'n', rev = s->list_rev;
+    std::sort(L.begin(), L.end(), [&](auto& a, auto& z) {
+        std::string an = irc_lower(a.chan), zn = irc_lower(z.chan);
+        if (by_name) return rev ? an > zn : an < zn;
+        return a.users != z.users ? (rev ? a.users < z.users : a.users > z.users) : an < zn;
+    });
+    auto len = [](const std::string& t) { size_t n = 0; for (unsigned char ch : t) n += (ch & 0xc0) != 0x80; return n; };
+    auto pad = [&](const std::string& t, size_t w) { return t + std::string(w > len(t) ? w - len(t) : 0, ' '); };
+    auto lpad = [&](const std::string& t, size_t w) { return std::string(w > len(t) ? w - len(t) : 0, ' ') + t; };
+    long total = 0;
+    size_t nw = 7;  // "Channel"
+    for (auto& e : L) total += e.users, nw = std::max(nw, std::min<size_t>(len(e.chan), 30));
+    const size_t shown = std::min<size_t>(L.size(), 1900), rw = std::to_string(std::max<size_t>(shown, 1)).size() + 1;
+    out("\x02" "Channels on " + (s->network.empty() ? s->cfg.name : s->network) + "\x02  \x03" "14" + std::to_string(L.size()) +
+        " channels, " + std::to_string(total) + " users");
+    if (L.empty()) { out("\x03" "14Nothing matched. /list alone lists them all, /list *word* filters"); return; }
+    const char* arrow = rev ? " \u25B2" : " \u25BC";  // ▼ the usual order: users high to low, names A-Z; ▲ reversed
+    std::string head = " " + lpad("#", rw) + "  " + pad(std::string("Channel") + (by_name ? arrow : ""), nw) + "  " +
+                       lpad(std::string("Users") + (by_name ? "" : arrow), 7) + "  Topic";
+    out("\x03" "00,02\x02" + pad(head, std::max<size_t>(len(head) + 30, 72)) + "\x0f");
+    for (size_t i = 0; i < shown; i++) {
+        auto& e = L[i];
+        // busy channels stand out: 1000+ pink, 100+ yellow, 10+ green, the rest gray
+        const char* uc = e.users >= 1000 ? "13" : e.users >= 100 ? "08" : e.users >= 10 ? "09" : "14";
+        std::string topic = e.topic;
+        if (topic.rfind("[+", 0) == 0 && topic.find(']') != std::string::npos) {  // the server's "[+nt] " modes, dimmed
+            size_t close = topic.find(']');
+            topic = "\x03" "14" + topic.substr(0, close + 1) + "\x0f" + topic.substr(close + 1);
+        }
+        out(" \x03" "14" + lpad(std::to_string(i + 1) + ".", rw) + "\x0f  \x02\x03" "00" + pad(e.chan, nw) + "\x0f  \x03" + uc +
+            lpad(std::to_string(e.users), 7) + "\x0f  " + topic);
+    }
+    out("\x03" "14" + (shown < L.size() ? "The " + std::to_string(shown) + " busiest of " + std::to_string(L.size()) + " · " : std::string()) +
+        "double click a channel to join · click Channel or Users to sort · /list *word* filters");
+    dirty = true;
+}

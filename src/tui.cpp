@@ -2,6 +2,7 @@
 #include "tui.h"
 #include <algorithm>
 #include <cstdlib>
+#include <cstring>
 #include <cwchar>
 #include <random>
 #include "core.h"
@@ -353,6 +354,7 @@ void Tui::draw() {
         fill(0, 0, W, ts);
         std::string topic;
         if (b->type == BT::CHANNEL) topic = b->topic;
+        else if (b->name == "*channels") topic = "Channel list: /list again refreshes it · /join #channel";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
         else if (b->type == BT::SHELL) topic = b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {
@@ -1073,6 +1075,23 @@ void Tui::copy_sel() {
     tb_send(osc.data(), osc.size());
 }
 
+// the word drawn under x,y in the chat, without the punctuation around it
+std::string Tui::word_at(int x, int y) const {
+    tb_cell* cb = tb_cell_buffer();
+    int W = tb_width(), cw = nl_x >= 0 ? nl_x : W;
+    if (y < 0 || y >= tb_height() || x < 0 || x >= cw) return "";
+    auto ch = [&](int xx) { return cb[y * W + xx].ch; };
+    if (!ch(x) || ch(x) == ' ') return "";
+    int a = x, z = x;
+    while (a > 0 && ch(a - 1) && ch(a - 1) != ' ') a--;
+    while (z + 1 < cw && ch(z + 1) && ch(z + 1) != ' ') z++;
+    std::string w;
+    for (int xx = a; xx <= z; xx++) utf8_put(w, ch(xx));
+    while (!w.empty() && strchr(",.;:!?)]}'\"", w.back())) w.pop_back();
+    while (!w.empty() && strchr("([{'\"", w.front())) w.erase(0, 1);
+    return w;
+}
+
 // Wheel scrolls the chat (or the nicklist, or the topic, under the pointer);
 // left click picks a tab or an activity number, opens a query with a nick, or
 // unfolds the topic (double click: edit it); a drag in the chat copies text.
@@ -1154,7 +1173,22 @@ void Tui::mouse(int mod, int k, int x, int y) {
         else if (!h.nick.empty()) c.exec(c.active, "/query " + h.nick);
         return;
     }
-    if (over_chat) selecting = true, sel_x0 = sel_x1 = x, sel_y0 = sel_y1 = y;
+    if (over_chat) {
+        Buffer* b = c.active;
+        std::string w = word_at(x, y);
+        // *channels: a click on the Channel or Users header sorts by it
+        if (b->srv && b->name == "*channels" && (w == "Channel" || w == "Users")) { c.list_sort(b, w == "Channel" ? "name" : "users"); return; }
+        // double click a #channel (any tab of a server) joins it; in *channels anywhere on its row
+        long long now = now_ms();
+        bool dbl = now - chat_click_ms < 400 && chat_click_y == y;
+        chat_click_ms = dbl ? 0 : now, chat_click_y = y;
+        if (dbl && b->srv) {
+            if (!b->srv->is_chan(w) && b->name == "*channels")
+                for (int xx = 0; xx < x && !b->srv->is_chan(w); xx++) w = word_at(xx, y);  // the row's first #word: its name
+            if (b->srv->is_chan(w)) { c.exec(b, "/join " + w); return; }
+        }
+        selecting = true, sel_x0 = sel_x1 = x, sel_y0 = sel_y1 = y;
+    }
 }
 
 void Tui::open_menu(const std::string& nick, int x, int y) {

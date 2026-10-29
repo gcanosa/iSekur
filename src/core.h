@@ -165,6 +165,11 @@ struct Server {
     std::deque<KickBan> kb_wait;            // one per USERHOST sent, answered in order
     std::vector<TempBan> tempbans;          // lifted by Core::chan_timers
     std::string whois;  // irc_lower(nick) between its 311 and 318: the lines get a frame
+    struct ListEntry { std::string chan; int users; std::string topic; };
+    std::vector<ListEntry> list;  // /list: the 322s, kept after the 323 so /list sort redraws them
+    bool listing = false;
+    char list_sort = 'u';        // 'u' users, 'n' name
+    bool list_rev = false;       // users ascending / names Z-A
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
     int sasl_step = 0, nick_tries = 0, backoff = 0;
     bool cap_done = false, sasl_ok = false;
@@ -201,7 +206,7 @@ const std::vector<CmdInfo>& commands();
 const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
 
 // ---- core ------------------------------------------------------------------
-enum class Ev { LINE, BUFFER, CLOSE, THEME };
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -290,6 +295,8 @@ struct Core {
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
     std::vector<std::pair<std::string, std::string>> nick_menu(Buffer* b, const std::string& nick) const;  // label, command
     std::vector<std::pair<std::string, std::string>> tab_menu(Buffer* b) const;  // a channel tab's
+    void list_table(Server* s);  // chanops.cpp: the collected /list as a table in *channels
+    void list_sort(Buffer* b, const std::string& by);  // "name", "users" or "" (flip the current one)
     void fold(Buffer* status);  // a server tab: hide or show its channels in the tab bar and the webchat list
 
     void handle(Server* s, const Msg& m);  // irc.cpp

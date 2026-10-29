@@ -249,7 +249,11 @@ static const std::vector<CmdInfo> CMDS = {
     {"invite", "Server", "nick [#channel]", "Invite a user to a channel",
      "In a channel's tab the channel can be left out.", {"/invite alice", "/invite alice #private"}},
     {"list", "Server", "[pattern]", "List channels",
-     "Sent as typed.", {"/list", "/list *linux*"}},
+     "The server's answer opens in this server's *channels tab as a table, busiest first "
+     "(up to 1900 rows; a new /list replaces it). The pattern is sent as typed: *word* "
+     "filters by name; many servers also take >N (more than N users). /list sort name|users "
+     "(or a click on the Channel or Users header) sorts it again, a second time reverses it; "
+     "double click a channel to join it.", {"/list", "/list *linux*", "/list sort name"}},
 
     // ---- IRC operator (sent to the server; the reason/message needs no ':')
     {"oper", "IRC operator", "user [password]", "Log in as an IRC operator",

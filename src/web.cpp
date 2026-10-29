@@ -625,5 +625,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
         break;
     }
     case Ev::THEME: broadcast(theme_json()); break;
+    case Ev::CLEAR: known.erase(b->id), pending.insert(b->id); break;  // its lines go out again, from scratch
+    case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
     }
 }

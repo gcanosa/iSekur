@@ -783,7 +783,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         for (size_t i = from; i < n; i++) add(b, hits[i]);
         return;
     }
-    if (cmd == "clear") { b->lines.clear(); b->scroll = 0; dirty = true; notify(Ev::BUFFER, b); return; }
+    if (cmd == "clear") { b->lines.clear(); b->scroll = 0; dirty = true; notify(Ev::CLEAR, b); return; }
     if (cmd == "reload") { reload(b); return; }
     if (cmd == "theme") {
         std::string err;
@@ -945,6 +945,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         print(b, LK::INFO, "CTCP " + verb + " sent to " + argv[0]);
         return;
     }
+    if (cmd == "list" && !argv.empty() && argv[0] == "sort") { list_sort(b, argv.size() > 1 ? argv[1] : ""); return; }
     if (cmd == "oper" && argv.size() == 1) {  // no password typed: ask for it, hidden
         if (!need()) return;
         std::string user = argv[0];
