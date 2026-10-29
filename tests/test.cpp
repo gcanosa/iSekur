@@ -151,8 +151,8 @@ int main() {
     core.exec(home, "/help /join");  // usage, aliases, details, "Examples", 3 examples
     assert(home->lines.size() == before + 7 && home->lines.back().nolog);
     assert(mirc_strip(home->lines[before].text).rfind("/join #channel [key]", 0) == 0);
-    core.exec(home, "/help ban");
-    assert(mirc_strip(home->lines.back().text).find("No such command: /ban") == 0);
+    core.exec(home, "/help bogus");
+    assert(mirc_strip(home->lines.back().text).find("No such command: /bogus") == 0);
 
     // channel op commands against a fake connected server; flood_ms 0 = lines go out at once
     ServerCfg tc;
@@ -182,6 +182,30 @@ int main() {
     assert(sent().empty() && chb->lines.back().text.find("/masskick -yes bye") != std::string::npos);
     core.exec(chb, "/masskick -yes bye");
     assert(sent() == "KICK #c r1 :bye\r\nKICK #c r2 :bye\r\nKICK #c v1 :bye\r\n");
+    // one-user shortcuts and the channel a channel tab implies (MODES=3 from above)
+    core.exec(chb, "/op a b c d");
+    assert(sent() == "MODE #c +ooo a b c\r\nMODE #c +o d\r\n");
+    core.exec(chb, "/ban troll *!*@bad.host");
+    assert(sent() == "MODE #c +bb troll!*@* *!*@bad.host\r\n");
+    core.exec(chb, "/ban");
+    assert(sent() == "MODE #c +b\r\n");
+    core.exec(chb, "/kick r1 bye now");
+    assert(sent() == "KICK #c r1 :bye now\r\n");
+    core.exec(chb, "/kick #other r1 bye");
+    assert(sent() == "KICK #other r1 :bye\r\n");
+    core.exec(chb, "/mode +m");
+    assert(sent() == "MODE #c +m\r\n");
+    core.exec(chb, "/invite alice");
+    assert(sent() == "INVITE alice #c\r\n");
+    core.exec(home, "/op a");  // not a channel tab
+    assert(sent().empty());
+    // a password asked by the webchat is answered from there: a line typed in the terminal is chat
+    core.from_web = true, core.exec(chb, "/oper admin"), core.from_web = false;
+    assert(core.pass_buf == chb && !core.asking(chb));
+    core.exec(chb, "hello");
+    assert(sent().rfind("PRIVMSG #c :hello", 0) == 0 && core.pass_buf == chb);
+    core.from_web = true, core.exec(chb, "s3cret"), core.from_web = false;
+    assert(sent() == "OPER admin :s3cret\r\n" && !core.pass_buf);
     core.exec(chb, "/kb r1 go away");
     assert(sent() == "MODE #c +b *!*@h2\r\nKICK #c r1 :go away\r\n");
     core.exec(chb, "/tempban r2 5");  // host unknown: USERHOST first, the 302 finishes it

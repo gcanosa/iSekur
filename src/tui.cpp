@@ -255,6 +255,7 @@ void Tui::draw() {
         std::string topic;
         if (b->type == BT::CHANNEL) topic = b->topic;
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
+        else if (b->type == BT::SHELL) topic = b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {
             static const char* st[] = {"disconnected", "connecting", "registering", "connected"};
             topic = b->srv->cfg.host + ":" + std::to_string(b->srv->cfg.port) +
@@ -549,7 +550,7 @@ void Tui::draw() {
         present();
         return;
     }
-    if (term && c.pass_buf != b) {  // keys go to the shell: the input line only says so
+    if (term && !c.asking(b)) {  // keys go to the shell: the input line only says so
         text(0, y, W, "[" + buf_label(b) + "] ", T.get("hilight"), false);
         text((int)buf_label(b).size() + 3, y, W, "keys go to the shell · Alt+←/→ or Alt+1-9: other tabs · wheel: scrollback · exit ends it", sty(T, "timestamp", "input"), false);
         VTermPos p;
@@ -559,7 +560,7 @@ void Tui::draw() {
         present();
         return;
     }
-    if (c.pass_buf == b) {  // /shell login, /e2e and /oper passwords: a dialog box
+    if (c.asking(b)) {  // /shell login, /e2e and /oper passwords: a dialog box
         draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel");
         present();
         return;
@@ -670,7 +671,7 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
 // the active tab has a running shell and nothing (menu, y/n question, login) is asking
 bool Tui::shell_keys() const {
     Buffer* b = c.active;
-    return b && b->term && b->term->fd >= 0 && c.pass_buf != b && menu.items.empty() && confirm.empty();
+    return b && b->term && b->term->fd >= 0 && !c.asking(b) && menu.items.empty() && confirm.empty();
 }
 
 // every key to the shell, but Alt/Cmd ones bound to moving between tabs
@@ -718,7 +719,7 @@ void Tui::draw_term(Term* t, int top, int rows, int cols) {
     for (int r = 0; r < rows && r < t->rows; r++)
         for (int x = 0; x < cols && x < t->cols; x++) {
             VTermScreenCell cl;
-            if (!vterm_screen_get_cell(scr, VTermPos{r, x}, &cl) || cl.width == 0) continue;
+            if (!vterm_screen_get_cell(scr, VTermPos{r, x}, &cl) || cl.chars[0] == (uint32_t)-1) continue;  // -1: a wide char's right half
             Style st = def;
             auto rgb = [&](VTermColor col, RGB& out) {
                 vterm_screen_convert_color_to_rgb(scr, &col);
@@ -869,7 +870,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         return;
     }
     if (shell_keys()) { shell_key(mod, k, ch); return; }
-    if (c.pass_buf == c.active) {  // the password dialog
+    if (c.asking(c.active)) {  // the password dialog
         if ((k == TB_KEY_ESC || k == TB_KEY_CTRL_C) && !ch && !(mod & TB_MOD_ALT)) {  // Esc (or Ctrl+C) cancels
             input.clear(), cur = 0;
             c.exec(c.active, "");
@@ -1063,7 +1064,7 @@ void Tui::open_menu(const std::string& nick, int x, int y) {
 void Tui::submit() {
     std::string line = to_utf8(input);
     input.clear(), cur = 0;
-    if (c.pass_buf == c.active) { c.exec(c.active, line); return; }  // a password: no history
+    if (c.asking(c.active)) { c.exec(c.active, line); return; }  // a password: no history
     if (line.empty()) return;
     // paste_confirm = N (default 5, 0 = off): ask before sending more lines than that
     size_t lines = 0;
@@ -1082,7 +1083,7 @@ void Tui::submit() {
 
 int Tui::suggest(std::vector<Sugg>& out) const {
     std::string s = to_utf8(input.substr(0, cur));
-    if (c.pass_buf == c.active) return -1;  // a password is not a command
+    if (c.asking(c.active)) return -1;  // a password is not a command
     if (s.empty() || s[0] != '/' || s.rfind("//", 0) == 0) return -1;
     size_t sp = s.find(' ');
     auto cmds = [&](const std::string& pfx, bool slash) {

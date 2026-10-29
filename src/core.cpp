@@ -334,8 +334,8 @@ void Core::reload(Buffer* b) {
 void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden,
                     const std::string& title, std::vector<std::string> info) {
     pass_buf = b, pass_label = label, pass_done = std::move(done), pass_hidden = hidden;
-    pass_title = title, pass_info = std::move(info);
-    if (!tty) print(b, LK::INFO, "Type the " + label + (hidden ? " (hidden; an empty line cancels)" : " (an empty line cancels)"));  // the TUI asks in a dialog
+    pass_title = title, pass_info = std::move(info), pass_web = from_web;
+    if (!tty || from_web) print(b, LK::INFO, "Type the " + label + (hidden ? " (hidden; an empty line cancels)" : " (an empty line cancels)"));  // the TUI asks in a dialog
 }
 
 void Core::ring(Server* s) {
@@ -527,7 +527,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     std::string in = input;
     if (!in.empty() && in.back() == '\r') in.pop_back();
-    if (b == pass_buf) {  // a password prompt: this line is it, never sent or shown
+    if (b == pass_buf && from_web == pass_web) {  // a password prompt: this line is it, never sent or shown (only from the side that asked)
         auto done = std::move(pass_done);
         pass_buf = nullptr, pass_done = nullptr;
         if (in.empty()) print(b, LK::INFO, "Cancelled");
@@ -868,6 +868,36 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (chanop(b, cmd, args)) return;
+    // one-user mode shortcuts in a channel tab: /op bob alice, /ban spammer, /unban *!*@evil.host
+    static const std::map<std::string, std::string> quick = {
+        {"op", "+o"}, {"deop", "-o"}, {"voice", "+v"}, {"devoice", "-v"},
+        {"halfop", "+h"}, {"dehalfop", "-h"}, {"ban", "+b"}, {"unban", "-b"}};
+    auto qm = quick.find(cmd);
+    if (qm != quick.end()) {
+        if (b->type != BT::CHANNEL) { print(b, LK::ERROR, "/" + cmd + " works in a channel's tab"); return; }
+        if (!need()) return;
+        std::vector<std::string> who;
+        for (auto& w : argv)
+            if (!w.empty()) who.push_back(qm->second[1] == 'b' && w.find_first_of("!@*") == std::string::npos ? w + "!*@*" : w);  // a bare nick bans nick!*@*
+        if (who.empty()) {
+            if (cmd == "ban") s->send("MODE " + b->name + " +b");  // the ban list
+            else print(b, LK::ERROR, "Usage: /" + cmd + (qm->second[1] == 'b' ? " nick|mask ..." : " nick ..."));
+            return;
+        }
+        size_t per = (size_t)std::max(1, s->max_modes);
+        for (size_t i = 0; i < who.size(); i += per) {
+            std::string modes(1, qm->second[0]), list;
+            for (size_t k = i; k < who.size() && k < i + per; k++) modes += qm->second[1], list += " " + who[k];
+            s->send("MODE " + b->name + " " + modes + list);
+        }
+        return;
+    }
+    // in a channel's tab, /kick nick, /mode +m and /invite nick mean this channel
+    if (s && b->type == BT::CHANNEL) {
+        if (cmd == "kick" && !argv.empty() && !s->is_chan(argv[0])) args = b->name + " " + args, argv = split(args, ' ');
+        else if (cmd == "mode" && (args.empty() || args[0] == '+' || args[0] == '-')) args = b->name + (args.empty() ? "" : " " + args), argv = split(args, ' ');
+        else if (cmd == "invite" && argv.size() == 1) args += " " + b->name, argv = split(args, ' ');
+    }
     if (cmd == "raw" || cmd == "quote") { s->send(args); return; }
     if (cmd == "ctcp") {  // /ctcp nick VERSION|TIME|PING|...
         if (argv.size() < 2) { print(b, LK::ERROR, "Usage: /ctcp target VERSION|TIME|PING [args]"); return; }

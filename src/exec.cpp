@@ -214,7 +214,7 @@ static int term_pushline(int cols, const VTermScreenCell* cells, void* user) {
     std::string l;
     for (int i = 0; i < cols; i++) {
         uint32_t ch = cells[i].chars[0];
-        if (cells[i].width == 0 || (i && cells[i - 1].width == 2)) continue;
+        if (ch == (uint32_t)-1 || (i && cells[i - 1].width == 2)) continue;  // a wide char's right half
         utf8_put(l, ch < 0x20 ? ' ' : ch);
     }
     while (!l.empty() && l.back() == ' ') l.pop_back();
@@ -331,7 +331,7 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
             for (int c2 = 0; c2 < t->cols; c2++) {
                 VTermScreenCell cl;
                 vterm_screen_get_cell(scr, VTermPos{r, c2}, &cl);
-                if (cl.width == 0) continue;
+                if (cl.chars[0] == (uint32_t)-1) continue;  // a wide char's right half
                 utf8_put(l, cl.chars[0] < 0x20 ? ' ' : cl.chars[0]);
             }
             while (!l.empty() && l.back() == ' ') l.pop_back();
