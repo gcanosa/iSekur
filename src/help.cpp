@@ -167,7 +167,7 @@ static const std::vector<CmdInfo> CMDS = {
      {"/grep http", "/grep -all alice"}},
     {"theme", "Windows", "[name]", "Show or switch the color theme",
      "Themes are files in themes/*.theme. The switch is live; /set theme name + /save keeps it.",
-     {"/theme", "/theme neon", "/theme solarized"}},
+     {"/theme", "/theme dracula", "/theme catppuccin-latte"}},
 
     // ---- Settings
     {"set", "Settings", "[[section.]key [value]]", "The settings window, or show or change one setting",

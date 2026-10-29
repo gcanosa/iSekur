@@ -1,0 +1,57 @@
+# One Dark. /theme onedark
+[colors]
+default        = #abb2bf #282c34
+topic          = #abb2bf #3b4048 bold
+tabbar         = #5c6370 #21252b
+tab_server     = #c678dd #21252b bold
+tab_home       = #56b6c2 #21252b bold
+tab_shell      = #d19a66 #21252b bold
+tab_active     = #21252b #61afef bold
+tab_data       = #61afef #21252b
+tab_msg        = #abb2bf #21252b bold
+tab_hilight    = #c678dd #21252b bold
+tab_quiet      = #5c6370 #21252b italic
+tab_quiet_act  = #21252b #5c6370 bold
+status         = #5c6370 #21252b
+status_hi      = #abb2bf #21252b
+status_info    = #abb2bf #21252b
+status_ok      = #98c379
+status_warn    = #e5c07b
+status_high    = #d19a66
+status_crit    = #e06c75 bold
+status_bat     = #5c6370 #3b4048
+input          = #abb2bf #282c34
+input_prompt   = #61afef #282c34 bold
+set_key        = #61afef #282c34 bold
+set_value      = #e5c07b #282c34
+timestamp      = #5c6370 #282c34
+separator      = #3b4048 #282c34
+nicklist       = #9da5b4 #282c34
+nicklist_title = #5c6370 #282c34 italic
+nicklist_border= #3b4048 #282c34
+nicklist_op    = #d19a66 #282c34 bold
+nicklist_voice = #98c379 #282c34
+menu           = #abb2bf #21252b
+menu_sel       = #21252b #61afef bold
+menu_border    = #3b4048 #21252b
+msg_self       = #56b6c2 #282c34 bold
+marker         = #c678dd
+hilight        = #282c34 #c678dd bold
+hilight_text   = #c678dd #282c34
+join           = #98c379 #282c34
+part           = #d19a66 #282c34
+quit           = #e06c75 #282c34
+notice         = #e5c07b #282c34 bold
+action         = #c678dd #282c34 italic
+info           = #56b6c2 #282c34
+error          = #e06c75 #282c34 bold
+
+[nicks]
+palette = #e06c75 #d19a66 #e5c07b #98c379 #56b6c2 #61afef #c678dd
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

@@ -1,0 +1,57 @@
+# Catppuccin Latte (a light theme). /theme catppuccin-latte
+[colors]
+default        = #4c4f69 #eff1f5
+topic          = #4c4f69 #ccd0da bold
+tabbar         = #8c8fa1 #e6e9ef
+tab_server     = #8839ef #e6e9ef bold
+tab_home       = #179299 #e6e9ef bold
+tab_shell      = #fe640b #e6e9ef bold
+tab_active     = #ffffff #8839ef bold
+tab_data       = #1e66f5 #e6e9ef
+tab_msg        = #4c4f69 #e6e9ef bold
+tab_hilight    = #ea76cb #e6e9ef bold
+tab_quiet      = #8c8fa1 #e6e9ef italic
+tab_quiet_act  = #ffffff #8c8fa1 bold
+status         = #8c8fa1 #e6e9ef
+status_hi      = #4c4f69 #e6e9ef
+status_info    = #4c4f69 #e6e9ef
+status_ok      = #40a02b
+status_warn    = #df8e1d
+status_high    = #fe640b
+status_crit    = #d20f39 bold
+status_bat     = #8c8fa1 #ccd0da
+input          = #4c4f69 #eff1f5
+input_prompt   = #8839ef #eff1f5 bold
+set_key        = #8839ef #eff1f5 bold
+set_value      = #df8e1d #eff1f5
+timestamp      = #8c8fa1 #eff1f5
+separator      = #bcc0cc #eff1f5
+nicklist       = #5c5f77 #eff1f5
+nicklist_title = #8c8fa1 #eff1f5 italic
+nicklist_border= #bcc0cc #eff1f5
+nicklist_op    = #fe640b #eff1f5 bold
+nicklist_voice = #40a02b #eff1f5
+menu           = #4c4f69 #e6e9ef
+menu_sel       = #ffffff #8839ef bold
+menu_border    = #bcc0cc #e6e9ef
+msg_self       = #1e66f5 #eff1f5 bold
+marker         = #ea76cb
+hilight        = #ffffff #ea76cb bold
+hilight_text   = #ea76cb #eff1f5
+join           = #40a02b #eff1f5
+part           = #fe640b #eff1f5
+quit           = #d20f39 #eff1f5
+notice         = #df8e1d #eff1f5 bold
+action         = #8839ef #eff1f5 italic
+info           = #179299 #eff1f5
+error          = #d20f39 #eff1f5 bold
+
+[nicks]
+palette = #d20f39 #fe640b #df8e1d #40a02b #179299 #1e66f5 #8839ef #ea76cb
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

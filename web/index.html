@@ -37,6 +37,8 @@ button, input { font: inherit; color: inherit; }
 #side .tab { display: flex; gap: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
 #side .tab .n { color: var(--muted); min-width: 1.6em; text-align: right; }
 #side .tab:hover { background: #ffffff08; }
+.light #side .tab:hover, .light #setnav button:hover, .light .l:hover { background: #0000000a; }
+.light dialog::backdrop { background: #0005; }
 #side .srv[data-id] { cursor: pointer; user-select: none; }
 #side .srv[data-id]:hover { color: var(--fg); }
 #side .tab.home { color: var(--tab_home-fg, var(--info)); }
@@ -79,7 +81,7 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 @media (prefers-reduced-motion: reduce) { #abanner::after { animation: none; display: none; } }
 #atext > div { animation: rise .5s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
-#dset { width: min(900px, calc(100vw - 32px)); color-scheme: dark; overflow: hidden; }
+#dset { width: min(900px, calc(100vw - 32px)); overflow: hidden; }
 /* categories on the left (All, general, keys, web, server.*), their keys on the right */
 #setbody { display: grid; grid-template-columns: 170px 1fr; gap: 14px; height: min(60vh, 560px); }
 #setnav { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); padding-right: 10px; }
@@ -414,9 +416,20 @@ function applyTheme() {
     if (v.fg) r.setProperty("--" + k + "-fg", v.fg); else r.removeProperty("--" + k + "-fg");
     if (v.bg) r.setProperty("--" + k + "-bg", v.bg); else r.removeProperty("--" + k + "-bg");
   }
-  const d = (theme.el || {}).default || {};
-  if (d.bg) r.setProperty("--bg", d.bg);
-  if (d.fg) r.setProperty("--fg", d.fg);
+  const el = theme.el || {}, d = el.default || {};
+  if (d.bg) r.setProperty("--bg", d.bg); else r.removeProperty("--bg");
+  if (d.fg) r.setProperty("--fg", d.fg); else r.removeProperty("--fg");
+  // the page's own colors follow the theme too, so light themes get light panels, lines and dialogs
+  const set = (v, c) => c ? r.setProperty(v, c) : r.removeProperty(v);
+  set("--panel", (el.tabbar || {}).bg || (el.status || {}).bg);
+  set("--line", (el.separator || {}).fg);
+  set("--muted", (el.timestamp || {}).fg);
+  set("--accent", (el.input_prompt || {}).fg);
+  set("--accent2", (el.msg_self || {}).fg);
+  // light or dark by the background's brightness: native controls, scrollbars and hovers match
+  const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
+  document.documentElement.style.colorScheme = lum > 140 ? "light" : "dark";
+  document.documentElement.classList.toggle("light", lum > 140);
 }
 
 function onMsg(ev) {

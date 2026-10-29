@@ -377,6 +377,17 @@ int main() {
     assert(chb->quiet);
     core.exec(chb, "/quiet off");
 
+    // every shipped theme loads and colors the main parts
+    auto tn = theme_names();
+    assert(tn.size() >= 17 && std::find(tn.begin(), tn.end(), "dracula") != tn.end() && std::find(tn.begin(), tn.end(), "catppuccin-latte") != tn.end());
+    for (auto& n : tn) {
+        Theme th;
+        std::string terr;
+        assert(load_theme(n, th, terr));
+        for (const char* k : {"default", "status", "tab_active", "input", "timestamp", "join", "error"}) assert(th.el.count(k));
+        assert(th.nicks.size() >= 6);
+    }
+
     // mirc_prefix: n visible characters, the codes around them kept
     assert(mirc_prefix("\x02iSe\x02kur", 4) == "\x02iSe\x02k" && mirc_prefix("\x03" "04,12red", 2) == "\x03" "04,12re");
     assert(mirc_prefix("\x04" "ff00aaab", 1) == "\x04" "ff00aaa" && mirc_prefix("hi", 9) == "hi" && mirc_strip(mirc_prefix("a\x03" "1,b", 2)) == "a,");

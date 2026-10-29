@@ -1,0 +1,57 @@
+# Nord. /theme nord
+[colors]
+default        = #eceff4 #2e3440
+topic          = #eceff4 #434c5e bold
+tabbar         = #616e88 #3b4252
+tab_server     = #b48ead #3b4252 bold
+tab_home       = #8fbcbb #3b4252 bold
+tab_shell      = #d08770 #3b4252 bold
+tab_active     = #3b4252 #88c0d0 bold
+tab_data       = #81a1c1 #3b4252
+tab_msg        = #eceff4 #3b4252 bold
+tab_hilight    = #b48ead #3b4252 bold
+tab_quiet      = #616e88 #3b4252 italic
+tab_quiet_act  = #3b4252 #616e88 bold
+status         = #616e88 #3b4252
+status_hi      = #eceff4 #3b4252
+status_info    = #eceff4 #3b4252
+status_ok      = #a3be8c
+status_warn    = #ebcb8b
+status_high    = #d08770
+status_crit    = #bf616a bold
+status_bat     = #616e88 #434c5e
+input          = #eceff4 #2e3440
+input_prompt   = #88c0d0 #2e3440 bold
+set_key        = #88c0d0 #2e3440 bold
+set_value      = #ebcb8b #2e3440
+timestamp      = #616e88 #2e3440
+separator      = #434c5e #2e3440
+nicklist       = #d8dee9 #2e3440
+nicklist_title = #616e88 #2e3440 italic
+nicklist_border= #434c5e #2e3440
+nicklist_op    = #d08770 #2e3440 bold
+nicklist_voice = #a3be8c #2e3440
+menu           = #eceff4 #3b4252
+menu_sel       = #3b4252 #88c0d0 bold
+menu_border    = #434c5e #3b4252
+msg_self       = #81a1c1 #2e3440 bold
+marker         = #b48ead
+hilight        = #2e3440 #b48ead bold
+hilight_text   = #b48ead #2e3440
+join           = #a3be8c #2e3440
+part           = #d08770 #2e3440
+quit           = #bf616a #2e3440
+notice         = #ebcb8b #2e3440 bold
+action         = #b48ead #2e3440 italic
+info           = #8fbcbb #2e3440
+error          = #bf616a #2e3440 bold
+
+[nicks]
+palette = #bf616a #d08770 #ebcb8b #a3be8c #8fbcbb #81a1c1 #b48ead #88c0d0
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

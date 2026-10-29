@@ -1,0 +1,57 @@
+# Tokyo Night Day (a light theme). /theme tokyonight-day
+[colors]
+default        = #3760bf #e1e2e7
+topic          = #3760bf #c4c8da bold
+tabbar         = #848cb5 #d0d5e3
+tab_server     = #9854f1 #d0d5e3 bold
+tab_home       = #007197 #d0d5e3 bold
+tab_shell      = #b15c00 #d0d5e3 bold
+tab_active     = #ffffff #2e7de9 bold
+tab_data       = #2e7de9 #d0d5e3
+tab_msg        = #3760bf #d0d5e3 bold
+tab_hilight    = #d20065 #d0d5e3 bold
+tab_quiet      = #848cb5 #d0d5e3 italic
+tab_quiet_act  = #ffffff #848cb5 bold
+status         = #848cb5 #d0d5e3
+status_hi      = #3760bf #d0d5e3
+status_info    = #3760bf #d0d5e3
+status_ok      = #587539
+status_warn    = #8c6c3e
+status_high    = #b15c00
+status_crit    = #f52a65 bold
+status_bat     = #848cb5 #c4c8da
+input          = #3760bf #e1e2e7
+input_prompt   = #2e7de9 #e1e2e7 bold
+set_key        = #2e7de9 #e1e2e7 bold
+set_value      = #8c6c3e #e1e2e7
+timestamp      = #848cb5 #e1e2e7
+separator      = #a8aecb #e1e2e7
+nicklist       = #6172b0 #e1e2e7
+nicklist_title = #848cb5 #e1e2e7 italic
+nicklist_border= #a8aecb #e1e2e7
+nicklist_op    = #b15c00 #e1e2e7 bold
+nicklist_voice = #587539 #e1e2e7
+menu           = #3760bf #d0d5e3
+menu_sel       = #ffffff #2e7de9 bold
+menu_border    = #a8aecb #d0d5e3
+msg_self       = #007197 #e1e2e7 bold
+marker         = #d20065
+hilight        = #ffffff #d20065 bold
+hilight_text   = #d20065 #e1e2e7
+join           = #587539 #e1e2e7
+part           = #b15c00 #e1e2e7
+quit           = #f52a65 #e1e2e7
+notice         = #8c6c3e #e1e2e7 bold
+action         = #9854f1 #e1e2e7 italic
+info           = #007197 #e1e2e7
+error          = #f52a65 #e1e2e7 bold
+
+[nicks]
+palette = #f52a65 #b15c00 #8c6c3e #587539 #007197 #2e7de9 #9854f1 #d20065
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M
