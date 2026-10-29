@@ -84,6 +84,7 @@ button, input { font: inherit; color: inherit; }
 #nicks .op { color: var(--nicklist_op-fg, #ff9e64); }
 #nicks .voice { color: var(--nicklist_voice-fg, #9ece6a); }
 #nicks .away { opacity: .45; }
+@media (min-width: 761px) { #nicks.off { display: none; } }
 #status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
 #status b { color: var(--status_hi-fg, var(--fg)); font-weight: 400; }
 #input { grid-area: input; display: flex; gap: 8px; padding: 8px 10px; background: var(--input-bg, var(--bg)); }
@@ -381,7 +382,14 @@ $("#lf").onsubmit = async e => {
 };
 $("#logout").onclick = async () => { await fetch("/logout", {method: "POST", credentials: "same-origin"}); if (ws) { ws.onclose = null; ws.close(); } boot(); };
 $("#menu").onclick = () => $("#side").classList.toggle("open");
-$("#nickbtn").onclick = () => $("#nicks").classList.toggle("open");
+// desktop: hide/show the list (remembered); phone: open/close the overlay
+const narrow = matchMedia("(max-width: 760px)");
+try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"); } catch (e) {}
+$("#nickbtn").onclick = () => {
+  if (narrow.matches) return $("#nicks").classList.toggle("open");
+  const off = $("#nicks").classList.toggle("off");
+  try { localStorage.setItem("nicks", off ? "0" : "1"); } catch (e) {}
+};
 
 let comp = null, cmds = [];
 $("#line").addEventListener("keydown", e => {
