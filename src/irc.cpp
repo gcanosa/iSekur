@@ -594,7 +594,7 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "NICK") {
         const std::string& nn = m.p(0);
         bool me = is_me(m.nick);
-        if (me) s->nick = s->last_nick = nn;
+        if (me) s->nick = nn, remember_nick(s, nn);
         auto e = s->e2e.find(irc_lower(m.nick));  // the session follows the nick
         if (e != s->e2e.end() && !me) {
             E2E moved = e->second;

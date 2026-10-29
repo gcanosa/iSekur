@@ -142,6 +142,18 @@ int Core::typing_quiet(bool on) {
     return n;
 }
 
+// Written to the file at once, like e2e_keys: a restart connects with the nick you last chose
+// there. A server not saved yet (/server without /save) keeps it with its other unsaved keys.
+void Core::remember_nick(Server* s, const std::string& nick) {
+    std::string sec = "server." + s->cfg.name;
+    s->last_nick = nick;
+    if (ini_get(cfg, sec, "last_nick") == nick) return;
+    cfg[sec]["last_nick"] = nick;
+    bool saved = !cfg_path.empty() && !(unsaved.count(sec) && unsaved[sec].count("host"));
+    std::string err;
+    if (!saved || !ini_save(cfg_path, Ini{{sec, {{"last_nick", nick}}}}, err)) unsaved[sec]["last_nick"] = nick;
+}
+
 void Core::about(Buffer* from) {
     Buffer* b = open(nullptr, BT::QUERY, "*about");
     b->lines.clear(), b->scroll = b->unread = 0;
@@ -200,6 +212,19 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     Ini all = defaults;
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv) all[sec][k];
+    // every server shows the keys it can have, with what it uses when they aren't set
+    for (auto& [sec, kv] : cfg) {
+        if (sec.rfind("server.", 0) != 0) continue;
+        ServerCfg d = server_cfg(sec.substr(7));
+        const char* login = getenv("USER");
+        std::string gnick = ini_get(cfg, "general", "nick", login ? login : "isekur");  // what nick falls back to
+        for (auto& [k, v] : std::map<std::string, std::string>{
+                 {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
+                 {"autoconnect", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
+                 {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
+                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}})
+            if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
+    }
     std::vector<SetRow> out;
     auto themes = theme_names();
     for (auto& [sec, kv] : all)
@@ -247,7 +272,8 @@ ServerCfg Core::server_cfg(const std::string& name) const {
 Server* Core::add_server(const ServerCfg& sc) {
     auto s = std::make_unique<Server>();
     s->cfg = sc;
-    s->nick = sc.nick;
+    s->last_nick = ini_get(cfg, "server." + sc.name, "last_nick");  // the nick it had when iSekur stopped
+    s->nick = s->last_nick.empty() ? sc.nick : s->last_nick;
     Server* sp = s.get();
     servers.push_back(std::move(s));
     sp->status = open(sp, BT::STATUS, sc.name);
@@ -694,7 +720,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         // servers pick up host/port/sasl/... on their next connect; flood limits now
         for (auto& sv : servers) {
             sv->cfg = server_cfg(sv->cfg.name);
-            if (key == "nick") sv->last_nick.clear();  // /set nick wins over the last /nick
+            if (key == "nick" && (sec == "general" || sec == "server." + sv->cfg.name) && !sv->last_nick.empty())
+                remember_nick(sv.get(), "");  // /set nick wins over the last /nick
             load_flood(sv.get());
         }
         if (sec == "keys") cfg_changed = true;

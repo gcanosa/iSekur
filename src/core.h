@@ -165,7 +165,7 @@ struct Server {
     Conn conn;
     SS state = SS::DISCONNECTED;
     std::string nick, umodes, network;
-    std::string last_nick;  // set by a /nick of ours, used again on reconnect instead of cfg.nick
+    std::string last_nick;  // set by a /nick of ours, used on reconnect and restart ([server.x] last_nick) over cfg.nick
     std::string prefix_modes = "ov", prefix_chars = "@+", chantypes = "#&";
     std::set<std::string> caps, caps_ls;  // enabled / advertised
     std::set<std::string> hist_batches;    // open chathistory BATCH ids
@@ -311,6 +311,7 @@ struct Core {
     std::vector<std::pair<std::string, std::string>> nick_menu(Buffer* b, const std::string& nick) const;  // label, command
     std::vector<std::pair<std::string, std::string>> tab_menu(Buffer* b) const;  // a channel tab's
     void about(Buffer* from);
+    void remember_nick(Server* s, const std::string& nick);  // last_nick, kept in the config for the next start
     int typing_quiet(bool on);  // /typing on|off: quiet mode with it in the channel tabs; returns how many changed  // /about: the *about tab; main.cpp sweeps its banner while it's shown
     long long about_t0 = 0;
     long long typing_until = 0;  // /typing: the last line still typing ends then (main.cpp redraws until)

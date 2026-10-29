@@ -377,6 +377,29 @@ int main() {
     assert(chb->quiet);
     core.exec(chb, "/quiet off");
 
+    // our /nick is remembered per server (in the file when the server is saved); /set nick drops it
+    {
+        std::string path = "build/test-nick.conf";
+        unlink(path.c_str());
+        std::swap(core.cfg_path, path);
+        feed(":" + ts->nick + "!u@h NICK newme");
+        assert(ts->nick == "newme" && ts->last_nick == "newme" && ini_get(core.cfg, "server." + ts->cfg.name, "last_nick") == "newme");
+        Ini disk;
+        bool in_file = ini_load(core.cfg_path, disk) && ini_get(disk, "server." + ts->cfg.name, "last_nick") == "newme";
+        bool pending = core.unsaved.count("server." + ts->cfg.name) && core.unsaved["server." + ts->cfg.name].count("last_nick");
+        assert(in_file != pending);  // one or the other, by whether the server is saved
+        core.exec(home, "/set nick me");
+        assert(ts->last_nick.empty() && ini_get(core.cfg, "server." + ts->cfg.name, "last_nick").empty());
+        feed(":newme!u@h NICK me");
+        // the settings window lists the usual server keys even when unset, with what they fall back to
+        bool nick_row = false, tls_row = false;
+        for (auto& r : core.setting_rows())
+            if (r.sec == "server." + ts->cfg.name) nick_row |= r.key == "altnick" && !r.def.empty(), tls_row |= r.key == "tls_verify" && r.choices.size() == 2;
+        assert(nick_row && tls_row);
+        unlink(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
+    }
+
     // every shipped theme loads and colors the main parts
     auto tn = theme_names();
     assert(tn.size() >= 17 && std::find(tn.begin(), tn.end(), "dracula") != tn.end() && std::find(tn.begin(), tn.end(), "catppuccin-latte") != tn.end());
