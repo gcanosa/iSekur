@@ -349,6 +349,9 @@ void Core::close(Buffer* b) {
         }
         for (size_t i = bufs.size(); i-- > 0;)
             if (bufs[i]->srv == s && bufs[i].get() != b) close(bufs[i].get());
+        // a /server one not saved yet goes too, or a later /save would bring it back on the next start
+        std::string sec = "server." + s->cfg.name;
+        if (unsaved.count(sec) && unsaved[sec].count("host")) cfg.erase(sec), unsaved.erase(sec);
     } else if (b->type == BT::CHANNEL && b->joined && s) {
         s->send("PART " + b->name + " :" + bye(s, "part_message"));
     }

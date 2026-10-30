@@ -300,6 +300,16 @@ int main() {
     core.exec(chb, "/autojoin del");
     assert(tab_cmd("Add to autojoin") == "/autojoin add" && core.tab_menu(ts->status).empty());
 
+    // closing a /server tab (Ctrl+W): socket closed, server gone, nothing left for /save
+    {
+        size_t n = core.servers.size();
+        core.exec(home, "/server irc.invalid 6667 -name gone");
+        Server* g = core.servers.back().get();
+        assert(core.servers.size() == n + 1 && g->conn.fd >= 0 && core.cfg.count("server.gone"));
+        core.close(g->status);
+        assert(core.servers.size() == n && !core.cfg.count("server.gone") && !core.unsaved.count("server.gone"));
+    }
+
     // highlights: the nick and hilight_words, whole words, * globs; the default part/quit message
     auto hl = [&](const std::string& t) { feed(":bob!u@h PRIVMSG #c :" + t); return chb->lines.back().hilight; };
     assert(hl("hey ME!") && !hl("isekur rocks"));
