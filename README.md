@@ -45,6 +45,12 @@ Prebuilt packages of the latest release (the links always point at the newest on
     curl -L https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz | tar xz
     sudo isekur-macos-arm64/install.sh     # /usr/local
 
+## Install
+
+macOS (Homebrew):
+
+    brew install gcanosa/isekur/isekur
+
 ## Build
 
 Needs a C++17 compiler, GNU make, OpenSSL 1.1+/LibreSSL and PAM (libpam0g-dev on Debian/Ubuntu). termbox2 and libvterm are vendored.
