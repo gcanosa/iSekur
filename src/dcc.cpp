@@ -7,6 +7,7 @@
 #include <cstring>
 #include <fcntl.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include "core.h"
