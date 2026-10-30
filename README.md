@@ -50,6 +50,9 @@ Prebuilt packages of the latest release (the links always point at the newest on
 macOS (Homebrew):
 
     brew install gcanosa/isekur/isekur
+    isekur          # start it
+    man isekur      # the manual
+    brew upgrade isekur          # update to the latest release
 
 ## Build
 
