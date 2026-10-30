@@ -210,6 +210,18 @@ static const std::vector<CmdInfo> CMDS = {
      "seconds (default 30) or 1000 lines. /exec alone lists the running ones. Off in the "
      "webchat unless /set exec_web on, since it runs commands on this machine.",
      {"/exec ls -la", "/exec -o uptime", "/sh git log --oneline -5"}, "sh"},
+    {"dcc", "Session", "[list] | get [number|nick] | send nick file | close number|nick", "Send and receive files (DCC)",
+     "A file someone sends you is only offered: nothing is downloaded until you /dcc get it "
+     "(the newest offer, the one with that number, or the newest from that nick). It goes into "
+     "dcc_dir (default ~/Downloads, on the machine iSekur runs on) without overwriting anything; "
+     "a smaller file there with the same name is taken as a broken download and resumed. /dcc send "
+     "offers a file (a name alone is looked for in dcc_dir; from the webchat only those) and waits "
+     "5 minutes for them to take it. Behind a router set dcc_ip to your public address and forward "
+     "dcc_ports (e.g. 5000-5010) to this machine. Transfers run in the background with their "
+     "progress in the status bar and the webchat. /dcc close refuses an offer, cancels a transfer "
+     "or takes a finished one off the list. With dcc_web on, the webchat's Files window downloads "
+     "what's in dcc_dir, like a seedbox. Passive DCC is not supported yet.",
+     {"/dcc", "/dcc get", "/dcc get 3", "/dcc send bob ~/notes.txt", "/dcc close bob"}},
     {"shell", "Session", "", "Open a real terminal in a tab",
      "Asks for this machine's login and password first (the user iSekur runs as, checked by "
      "the system through PAM; pam_service sets the service, default login; three wrong ones "

@@ -52,7 +52,7 @@ CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS)
 
-SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/sysinfo.cpp
+SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp
 VTERM := $(wildcard vendor/libvterm/src/*.c)
 OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 
@@ -95,7 +95,7 @@ build:
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:

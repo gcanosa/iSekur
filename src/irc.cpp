@@ -284,6 +284,7 @@ void Core::on_readable(Server* s, short rev) {
 }
 
 void Core::tick(time_t now) {
+    dcc_tick(now);
     for (auto& sp : servers) {
         Server* s = sp.get();
         if (s->state == SS::DISCONNECTED) {
@@ -759,6 +760,9 @@ void Core::handle(Server* s, const Msg& m) {
                 text = arg;
             } else if (replay) {
                 return;  // old CTCP requests: neither shown nor answered
+            } else if (verb == "DCC" && !notice) {
+                if (!self) dcc_ctcp(s, m.nick, arg);
+                return;
             } else if (verb.rfind("ISEKUR-E2E", 0) == 0) {
                 if (!notice && !self && !locked) e2e_ctcp(s, m.nick, verb, arg);
                 return;

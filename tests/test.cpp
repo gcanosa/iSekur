@@ -2,7 +2,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <cstring>
+#include <functional>
 #include <unistd.h>
+#include <netinet/in.h>
 #include "core.h"
 #include "session.h"
 #include "web.h"
@@ -452,6 +455,122 @@ int main() {
 #endif
 
     assert(ctcp_version().rfind(version_string() + " :: ", 0) == 0 && version_string().find(ISEKUR_VERSION) != std::string::npos);
+
+    {  // /dcc: an offer, then a real download from a loopback sender
+        std::string derr;
+        int lfd = listen_tcp("127.0.0.1", 0, derr);
+        assert(lfd >= 0);
+        sockaddr_in la{};
+        socklen_t ll = sizeof la;
+        getsockname(lfd, (sockaddr*)&la, &ll);
+        std::string port = std::to_string(ntohs(la.sin_port));
+        system("rm -rf build/dcctest");
+        core.cfg["general"]["dcc_dir"] = "build/dcctest";
+        feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND \"../.x/.hi there.txt\" 2130706433 " + port + " 11\x01");
+        assert(core.dccs.size() == 1 && core.dccs[0]->file == "hi there.txt" && core.dccs[0]->host == "127.0.0.1");
+        feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND x ::1 0 5 tok\x01");  // passive: not taken
+        assert(core.dccs.size() == 1);
+        core.exec(chb, "/dcc get bob");
+        Dcc* d = core.dccs[0].get();
+        assert(d->st == Dcc::RUN && d->path == "build/dcctest/hi there.txt");
+        int peer = -1;
+        std::string acks;
+        for (int i = 0; i < 500 && d->st == Dcc::RUN; i++) {
+            std::vector<pollfd> pf{{d->conn.fd, d->conn.events(), 0}};
+            poll(pf.data(), 1, 10);
+            core.dccs_poll(pf, 0);
+            if (peer < 0 && (peer = accept(lfd, nullptr, nullptr)) >= 0) assert(write(peer, "hello world", 11) == 11);
+        }
+        assert(d->st == Dcc::DONE && d->got == 11);
+        char ab[8];
+        assert(read(peer, ab, sizeof ab) >= 4);  // an ack of all 11 bytes, big-endian, comes last
+        FILE* f = fopen("build/dcctest/hi there.txt", "rb");
+        char fb[32] = "";
+        assert(f && fread(fb, 1, sizeof fb, f) == 11 && std::string(fb) == "hello world");
+        fclose(f), close(peer), close(lfd);
+
+        // the loop main() runs, for the transfers only; `side` is the other end
+        auto run = [&](Dcc* x, const std::function<void()>& side) {
+            for (int i = 0; i < 500 && x->st != Dcc::DONE && x->st != Dcc::FAILED; i++) {
+                std::vector<pollfd> pf;
+                for (auto& y : core.dccs)
+                    if (y->conn.fd >= 0) pf.push_back({y->conn.fd, y->conn.events(), 0});
+                    else if (y->lfd >= 0) pf.push_back({y->lfd, POLLIN, 0});
+                poll(pf.data(), pf.size(), 5);
+                core.dccs_poll(pf, 0);
+                side();
+            }
+        };
+        auto dial = [](int port) {
+            int fd = socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in a{};
+            a.sin_family = AF_INET, a.sin_port = htons((uint16_t)port), a.sin_addr.s_addr = htonl(0x7f000001);
+            assert(connect(fd, (sockaddr*)&a, sizeof a) == 0);
+            return fd;
+        };
+
+        // resume: "r.txt" is there with 5 of its 11 bytes, so /dcc get asks for the rest
+        f = fopen("build/dcctest/r.txt", "wb");
+        fputs("hello", f), fclose(f);
+        lfd = listen_tcp("127.0.0.1", 0, derr);
+        ll = sizeof la, getsockname(lfd, (sockaddr*)&la, &ll);
+        port = std::to_string(ntohs(la.sin_port));
+        feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND r.txt 2130706433 " + port + " 11\x01");
+        sent();
+        core.exec(chb, "/dcc get");
+        d = core.dccs.back().get();
+        assert(d->st == Dcc::RESUME && d->pos == 5 && sent() == "PRIVMSG bob :\x01" "DCC RESUME r.txt " + port + " 5\x01\r\n");
+        feed(":bob!u@h PRIVMSG me :\x01" "DCC ACCEPT r.txt " + port + " 5\x01");
+        assert(d->st == Dcc::RUN);
+        peer = -1;
+        run(d, [&] { if (peer < 0 && (peer = accept(lfd, nullptr, nullptr)) >= 0) assert(write(peer, " world", 6) == 6); });
+        assert(d->st == Dcc::DONE && d->got == 11);
+        f = fopen("build/dcctest/r.txt", "rb");
+        memset(fb, 0, sizeof fb);
+        assert(fread(fb, 1, sizeof fb, f) == 11 && std::string(fb) == "hello world");
+        fclose(f), close(peer), close(lfd);
+
+        // /dcc send: a name alone is in dcc_dir; we listen, they connect, read it all and ack it
+        core.cfg["general"]["dcc_ip"] = "127.0.0.1";
+        core.exec(chb, "/dcc send bob nope.txt");
+        assert(core.dccs.back().get() == d && sent().empty());  // no such file: nothing offered
+        core.exec(chb, "/dcc send bob r.txt");
+        Dcc* o = core.dccs.back().get();
+        std::string offer = sent();
+        assert(o->send && o->st == Dcc::WAIT && offer.find("DCC SEND r.txt 2130706433 " + std::to_string(o->port) + " 11\x01") != std::string::npos);
+        int rcv = dial(o->port);
+        std::string got;
+        run(o, [&] {
+            char rb[64];
+            ssize_t n = recv(rcv, rb, sizeof rb, MSG_DONTWAIT);
+            if (n > 0) {
+                got.append(rb, (size_t)n);
+                unsigned char ack[4] = {0, 0, 0, (unsigned char)got.size()};
+                assert(write(rcv, ack, 4) == 4);
+            }
+        });
+        assert(o->st == Dcc::DONE && got == "hello world");
+        close(rcv);
+
+        // they resume ours at 6: we accept and send the rest only
+        core.exec(chb, "/dcc send bob r.txt");
+        o = core.dccs.back().get();
+        sent();
+        feed(":bob!u@h PRIVMSG me :\x01" "DCC RESUME r.txt " + std::to_string(o->port) + " 6\x01");
+        assert(o->pos == 6 && sent() == "PRIVMSG bob :\x01" "DCC ACCEPT r.txt " + std::to_string(o->port) + " 6\x01\r\n");
+        rcv = dial(o->port), got.clear();
+        run(o, [&] {
+            char rb[64];
+            ssize_t n = recv(rcv, rb, sizeof rb, MSG_DONTWAIT);
+            if (n > 0) {
+                got.append(rb, (size_t)n);
+                unsigned char ack[4] = {0, 0, 0, (unsigned char)(6 + got.size())};
+                assert(write(rcv, ack, 4) == 4);
+            }
+        });
+        assert(o->st == Dcc::DONE && got == "world");
+        close(rcv);
+    }
 
     Server sv;  // token bucket: 2 at once, then one per second
     sv.flood_burst = 2, sv.flood_ms = 1000, sv.tokens = 2, sv.tokens_at = 0;

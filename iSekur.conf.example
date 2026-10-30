@@ -85,6 +85,17 @@ ctcp_version = on
 ctcp_time    = on
 ctcp_ping    = on
 
+# Files sent to you (DCC SEND) wait for /dcc get, then download here; the
+# status bar shows the progress. On a VPS that's the VPS's disk.
+dcc_dir = ~/Downloads
+# /dcc send: the address offered (empty: the one the IRC connection uses) and
+# the ports to listen on (empty: any). Behind a router: your public address,
+# and forward those ports to this machine.
+dcc_ip    =
+dcc_ports =               ; e.g. 5000-5010
+# The webchat's Files window downloads what's in dcc_dir (a seedbox).
+dcc_web   = off
+
 # One [server.<name>] section per network. All of them connect at startup
 # unless autoconnect = false.
 [server.sekurnet]

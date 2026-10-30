@@ -159,6 +159,26 @@ struct Job {
     time_t started = 0;
 };
 
+// /dcc: a file offered to us (DCC SEND) or by us (/dcc send), and its transfer (dcc.cpp)
+struct Dcc {
+    int id = 0;
+    Server* srv = nullptr;
+    std::string nick, file, host, path, err;  // file: the name offered (cleaned when it came to us); path: on this machine
+    int port = 0;
+    bool send = false;                        // we offer it
+    // got: bytes from the start of the file (a resume starts at pos); queued: read from the file so far (send)
+    unsigned long long size = 0, got = 0, pos = 0, queued = 0;  // size 0 = not said
+    // RESUME: we asked to resume, waiting for their ACCEPT; WAIT: our offer, listening on lfd
+    enum St { OFFER, RESUME, WAIT, RUN, DONE, FAILED } st = OFFER;
+    Conn conn;
+    int lfd = -1;
+    FILE* f = nullptr;
+    std::string acks;                         // send: a half-read ack
+    time_t at = 0, last_rx = 0, ended = 0;    // offered, then started; the last progress; done or failed (the status bar shows it a while)
+    unsigned long long rate = 0, rate_got = 0;  // bytes/s over the last second
+    ~Dcc();
+};
+
 struct Core;
 struct Server {
     ServerCfg cfg;
@@ -216,7 +236,7 @@ const std::vector<CmdInfo>& commands();
 const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
 
 // ---- core ------------------------------------------------------------------
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -322,6 +342,13 @@ struct Core {
     void fold(Buffer* status);  // a server tab: hide or show its channels in the tab bar and the webchat list
 
     void handle(Server* s, const Msg& m);  // irc.cpp
+    std::vector<std::unique_ptr<Dcc>> dccs;  // dcc.cpp
+    int dcc_next = 1;
+    void dcc_ctcp(Server* s, const std::string& nick, const std::string& arg);  // CTCP DCC SEND/RESUME/ACCEPT
+    std::string dcc_dir(const Server* s = nullptr) const;  // dcc_dir, ~ expanded
+    void dcc_cmd(Buffer* b, const std::string& args);
+    void dccs_poll(const std::vector<pollfd>& fds, size_t from);  // their sockets from fds[from] on
+    void dcc_tick(time_t now);  // rates, stalled downloads
     std::vector<Job> jobs;  // /exec, exec.cpp
     bool from_web = false;  // exec() called for the webchat: /exec needs exec_web
     void exec_cmd(Buffer* b, const std::string& args);
@@ -352,6 +379,7 @@ std::string e2e_seal(const std::string& key, const std::string& plain, const std
 bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain, const std::string& aad = "");
 bool e2e_on(const Buffer* b);  // a 🔒 tab: an encrypted query, or a channel with a key
 std::string fmt_time(time_t t, const std::string& fmt);
+std::string human_bytes(unsigned long long n);  // 512M, 3.2G
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);

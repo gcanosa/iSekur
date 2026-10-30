@@ -196,6 +196,7 @@ bool Conn::pump(short rev, std::string& in) {
                 if (n <= 0) { err = n ? strerror(errno) : "connection closed"; return false; }
             }
             in.append(buf, (size_t)n);
+            if (in_cap && in.size() >= in_cap) break;
             if (in.size() > (1 << 20)) { err = "input flood"; return false; }
         }
     }
@@ -239,6 +240,9 @@ int listen_tcp(const std::string& bind, int port, std::string& err) {
     int fd = socket(res->ai_family, SOCK_STREAM, 0);
     int one = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+    // "::" takes IPv4 too (BSD/macOS default to v6 only, Linux doesn't)
+    int zero = 0;
+    if (res->ai_family == AF_INET6) setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
     if (fd < 0 || ::bind(fd, res->ai_addr, res->ai_addrlen) || listen(fd, 16)) {
         err = strerror(errno);
         if (fd >= 0) ::close(fd);
