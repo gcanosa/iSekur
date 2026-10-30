@@ -80,7 +80,7 @@ away_message   = Not here right now
 history_fetch = 100
 
 # CTCP answers (at most one reply every 2s per server, against floods).
-# VERSION says e.g. "iSekur 0.3 :: Linux 6.8.0/x86_64 :: ... :: <github link>".
+# VERSION says e.g. "iSekur 0.4 :: Linux 6.8.0/x86_64 :: ... :: <github link>".
 ctcp_version = on
 ctcp_time    = on
 ctcp_ping    = on
