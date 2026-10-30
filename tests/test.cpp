@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <csignal>
 #include <cstring>
 #include <functional>
 #include <unistd.h>
@@ -21,6 +22,7 @@ static std::string client_frame(const std::string& p) {  // masked, like a brows
 }
 
 int main() {
+    signal(SIGPIPE, SIG_IGN);  // like main.cpp: a closed resolver pipe or socket must not kill us
     Msg m;
     assert(irc_parse("@time=2024-01-02T03:04:05.000Z;msgid=a\\sb :nick!u@h PRIVMSG #chan :hello there", m));
     assert(m.cmd == "PRIVMSG" && m.nick == "nick" && m.p(0) == "#chan" && m.p(1) == "hello there");
