@@ -63,6 +63,10 @@ private:
     std::string dcc_json(std::string* sig = nullptr);  // the transfers going on; sig: just which and their states
     std::string last_dcc, last_dcc_sig;
     time_t last_dcc_at = 0;
+    std::string keys_json();  // [keys] for the webchat's own bindings
+    std::string stat_json();  // the status line: per network umodes and lag, status_info
+    std::string last_keys, last_stat;
+    time_t last_stat_at = 0;
     void files(Client& cl, const std::string& path, const std::map<std::string, std::string>& h);  // dcc_web
     void feed(Client& cl);
 };

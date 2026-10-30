@@ -650,7 +650,9 @@ std::string Web::buf_json(Buffer* b) {
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
            ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
-           ",\"me\":" + json_str(s ? s->nick : "") +
+           ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(atoi(c.opt(s, "paste_confirm", "5").c_str())) +
+           (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +
+                                                ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
            ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + ",\"nicks\":" + nicks + "}";
 }
@@ -690,9 +692,11 @@ void Web::snapshot(Client& cl) {
         known.insert(b->id);
     }
     send(order_json());
-    std::string cm = "{\"t\":\"cmds\",\"list\":[";  // for Tab completion
-    for (auto& k : commands()) cm += std::string(cm.back() == '[' ? "" : ",") + json_str(k.name);
+    std::string cm = "{\"t\":\"cmds\",\"list\":[";  // Tab completion and the suggestions: [name, usage, summary, aliases]
+    for (auto& k : commands()) cm += std::string(cm.back() == '[' ? "" : ",") + "[" + json_str(k.name) + "," + json_str(k.usage) + "," + json_str(k.summary) + "," + json_str(k.aliases) + "]";
     send(cm + "]}");
+    send(keys_json());
+    send(stat_json());
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
     send(dcc_json());
 }
@@ -712,6 +716,25 @@ void Web::broadcast(const std::string& json) {
     }
 }
 
+std::string Web::keys_json() {
+    std::string o = "{\"t\":\"keys\",\"map\":{";
+    auto ks = c.cfg.find("keys");
+    if (ks != c.cfg.end())
+        for (auto& [act, specs] : ks->second)
+            for (auto& sp : split(specs, ' ')) o += std::string(o.back() == '{' ? "" : ",") + json_str(sp) + ":" + json_str(act);
+    return o + "}}";
+}
+
+std::string Web::stat_json() {
+    std::string o = "{\"t\":\"stat\",\"srv\":{";
+    for (auto& s : c.servers) {
+        char lag[16];
+        snprintf(lag, sizeof lag, "%.1f", s->state == SS::CONNECTED ? s->lag : 0.0);
+        o += std::string(o.back() == '{' ? "" : ",") + json_str(s->network.empty() ? s->cfg.name : s->network) + ":[" + json_str(s->umodes) + "," + lag + "]";
+    }
+    return o + "},\"info\":" + status_info_json(c) + "}";
+}
+
 void Web::flush_buf(Buffer* b) {
     pending.erase(b->id);
     broadcast(buf_json(b));
@@ -727,6 +750,14 @@ void Web::flush() {
     pending.clear();
     std::string o = order_json();
     if (o != last_order) broadcast(o), last_order = o;
+    std::string k = keys_json();
+    if (k != last_keys) broadcast(k), last_keys = k;
+    time_t t = time(nullptr);
+    if (t != last_stat_at) {  // the clock, lag, cpu...: at most once a second
+        last_stat_at = t;
+        std::string st = stat_json();
+        if (st != last_stat) broadcast(st), last_stat = st;
+    }
     // transfers: a new one or a new state at once, the bytes once a second
     std::string sig, dj = dcc_json(&sig);
     time_t now = time(nullptr);
@@ -757,6 +788,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::THEME: broadcast(theme_json()); break;
     case Ev::CLEAR: known.erase(b->id), pending.insert(b->id); break;  // its lines go out again, from scratch
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
+    case Ev::BELL: broadcast("{\"t\":\"bell\"}"); break;
     case Ev::NOTE:
         broadcast("{\"t\":\"note\",\"buf\":" + std::to_string(b->id) + ",\"err\":" + (l->kind == LK::ERROR ? "true" : "false") +
                   ",\"title\":" + json_str(l->nick) + ",\"x\":" + json_str(l->text) + "}");

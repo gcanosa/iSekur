@@ -159,6 +159,16 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #status { display: flex; gap: 12px; align-items: center; }
 #status b { color: var(--status_hi-fg, var(--fg)); font-weight: 400; }
 #stl { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+#stl .act { cursor: pointer; }
+#stl .act.a1 { color: var(--tab_data-fg, #9aa0c0); }
+#stl .act.a2 { color: var(--tab_msg-fg, #ffffff); }
+#stl .act.a3 { color: var(--tab_hilight-fg, #ff6ac1); }
+#stl .err { color: var(--error-fg, #ff5f5f); }
+#stl .more { color: var(--hilight-fg, #ffd75f); }
+#status { overflow: hidden; }
+#app > * { min-width: 0; }  /* grid cells shrink to the phone instead of growing to their text */
+#sti { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 100 auto; color: var(--status_info-fg, var(--status_hi-fg, var(--fg))); }
+#topic.hide .t { visibility: hidden; }  /* toggle_topic (Alt+T) */
 /* /dcc transfers on the right: ⇣name [bar] 42% 1.2M/s; a click opens the Files dialog */
 #dccbar { margin-left: auto; display: flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; color: var(--status_hi-fg, var(--fg)); }
 #dccbar:empty { display: none; }
@@ -187,7 +197,15 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .flist .r .b button:hover, .flist .r .b a:hover { border-color: var(--accent); }
 .flist .r progress { width: 100%; grid-column: 1 / -1; }
 .flist .none { color: var(--muted); padding: 6px; }
-#input { grid-area: input; display: flex; gap: 8px; padding: 8px 10px; background: var(--input-bg, var(--bg)); }
+#input { grid-area: input; display: flex; gap: 8px; padding: 8px 10px; background: var(--input-bg, var(--bg)); position: relative; }
+/* live suggestions over the input line ("/jo", "/set key", "/help k"), like the terminal's */
+#sugg { position: absolute; left: 0; right: 0; bottom: 100%; max-height: 40vh; overflow-y: auto; background: var(--input-bg, var(--bg)); border-top: 1px solid var(--line); z-index: 4; }
+#sugg:empty, #input:not(:focus-within) #sugg { display: none; }
+#sugg div { padding: 2px 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+#sugg div.on { background: var(--tab_active-bg, var(--line)); }
+#sugg .w { color: var(--set_key-fg, var(--info-fg, var(--accent))); }
+#sugg .s { color: var(--separator-fg, var(--muted)); }
+#sugg .v { color: var(--set_value-fg, var(--input-fg, var(--fg))); }
 #prompt { color: var(--input_prompt-fg, var(--accent)); align-self: center; white-space: nowrap; }
 #line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
 #line:focus { outline: none; border-color: var(--accent); }
@@ -224,8 +242,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout">logout</button></div>
   <main id="msgs" aria-live="polite"></main>
   <aside id="nicks"></aside>
-  <div id="status"><span id="stl"></span><span id="dccbar" title="Files and transfers"></span></div>
-  <form id="input"><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
+  <div id="status"><span id="stl"></span><span id="sti"></span><span id="dccbar" title="Files and transfers"></span></div>
+  <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
 </div>
 <dialog id="dsrv"><form method="dialog">
   <h2>Add a server</h2>
@@ -398,14 +416,36 @@ function renderTopic() {
   else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
   else t.textContent = b.srv + " - " + b.state;
   t.title = t.textContent;
-  $("#prompt").textContent = "[" + label(b) + "]";
-  const nick = b.me ? b.me + " · " : "";
-  const st = $("#stl"); st.textContent = "";
-  const add = (txt, bold) => { const e = document.createElement(bold ? "b" : "span"); e.textContent = txt; st.append(e); };
-  add("[" + nick); add(label(b) + (b.modes ? "(+" + b.modes + ")" : ""), true); add("]  ");
-  const acts = order.map((id, i) => [i + 1, bufs.get(id)]).filter(([, x]) => x && x.act);
-  if (acts.length) add("[Act: " + acts.map(([i]) => i).join(",") + "]");
+  applyAsk();
+  renderStatus();
 }
+
+// the status line, like the terminal's: [time] [nick(+umodes)] [N:network/tab(+modes)] [Lag] [Act: ...] [-- MORE --] ... status_info
+let stat = {srv: {}, info: []}, moreShown = false;
+const atBottom = () => { const m = $("#msgs"); return m.scrollHeight - m.scrollTop - m.clientHeight < 40; };
+function renderStatus() {
+  const b = bufs.get(active), st = $("#stl"), si = $("#sti"); st.textContent = si.textContent = "";
+  if (!b) return;
+  const seg = (txt, cls) => st.append("[", el("b", cls, txt), "] ");
+  seg(new Date().toTimeString().slice(0, 5));
+  const sv = stat.srv[b.srv];
+  if (b.me) seg(b.me + (sv && sv[0] ? "(+" + sv[0] + ")" : ""));
+  seg((order.indexOf(active) + 1) + ":" + (b.me && b.type !== "status" ? b.srv + "/" : "") + label(b) + (b.modes ? "(+" + b.modes + ")" : ""));
+  if (b.state !== "connected") seg(b.state === "disconnected" ? "disconnected" : "connecting", "err");
+  else if (sv && sv[1] >= 1) seg("Lag " + sv[1].toFixed(1) + "s");
+  const acts = order.map((id, i) => [i + 1, id, bufs.get(id)]).filter(([, , x]) => x && x.act);
+  if (acts.length) {
+    st.append("[Act: ");
+    acts.forEach(([n, id, x], i) => { if (i) st.append(","); const a = el("span", "act a" + x.act, n); a.onclick = () => select(id); st.append(a); });
+    st.append("] ");
+  }
+  if ((moreShown = !atBottom())) seg("-- MORE --", "more");
+  for (const item of stat.info) {  // uptime, cpu, mem, load, battery: colored by iSekur
+    if (si.childNodes.length) si.append(" ");
+    for (const [txt, fg, bg] of item) { const e = el("span", "", txt); if (fg) e.style.color = fg; if (bg) e.style.background = bg; si.append(e); }
+  }
+}
+setInterval(renderStatus, 10000);  // the clock
 
 function renderNicks() {
   const el = $("#nicks"), b = bufs.get(active);
@@ -483,7 +523,7 @@ function onMsg(ev) {
     bufs.set(m.id, m);
     if (m.id === active && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
     renderSide();
-    if (m.id === active) { renderTopic(); renderNicks(); $("#msgs").classList.toggle("quiet", !!m.q); }
+    if (m.id === active) { renderTopic(); renderNicks(); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
   } else if (m.t === "lines") {
     const b = bufs.get(m.buf); if (b) b.lines = m.lines;
     if (m.buf === active) renderMsgs();
@@ -509,12 +549,20 @@ function onMsg(ev) {
     select(m.buf);
   } else if (m.t === "cmds") {
     cmds = m.list;
+  } else if (m.t === "keys") {
+    keymap = {...KEYS_DEF, ...m.map};
+  } else if (m.t === "stat") {
+    stat = m; renderStatus();
+  } else if (m.t === "bell") {
+    beep();
   } else if (m.t === "menu") {
     showMenu(m);
   } else if (m.t === "about") {
     renderAbout(m);
   } else if (m.t === "settings") {
-    renderSettings(m.list);
+    setCache = m.list;
+    if (dset.open) renderSettings(m.list);
+    renderSugg();
   } else if (m.t === "note") {
     toast(m);
   } else if (m.t === "dcc") {
@@ -553,6 +601,23 @@ const narrow = matchMedia("(max-width: 760px)");
 try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"); } catch (e) {}
 // click the topic to see all of it
 $("#topic .t").onclick = e => { if (!e.target.closest("a")) e.currentTarget.classList.toggle("full"); };
+// double click: the topic into the input line, if we may set it (+t needs ops)
+$("#topic .t").ondblclick = e => {
+  e.currentTarget.classList.remove("full");
+  const b = bufs.get(active);
+  if (!b || b.type !== "channel" || b.ask) return;
+  const pf = b.prefixes || "@+", me = b.nickmap.get(ircLower(b.me || "")), r = me && me[0] ? pf.indexOf(me[0][0]) : -1;
+  let need = pf.indexOf("%"); if (need < 0) need = pf.indexOf("@");
+  if (b.modes.includes("t") && !(r >= 0 && need >= 0 && r <= need)) return localLine(b, b.name + " is +t: only channel operators can change the topic");
+  window.getSelection().removeAllRanges();
+  setLine("/topic " + b.topic);
+};
+// a line only this page shows (the terminal prints these into the tab)
+function localLine(b, text) {
+  const l = {ts: Date.now() / 1000, k: "error", n: "", x: text, s: 0, h: 0};
+  b.lines.push(l);
+  if (b.id === active) { $("#msgs").append(lineEl(b, l)); $("#msgs").scrollTop = $("#msgs").scrollHeight; }
+}
 // + : a new server, sent as /server host port [-tls] [-noverify] -name N -nick X
 const dsrv = $("#dsrv"), fs = dsrv.querySelector("form").elements;
 $("#addsrv").onclick = () => { $("#side").classList.remove("open"); dsrv.querySelector("form").reset(); dsrv.showModal(); };
@@ -768,21 +833,116 @@ $("#nickbtn").onclick = () => {
   try { localStorage.setItem("nicks", off ? "0" : "1"); } catch (e) {}
 };
 
-let comp = null, cmds = [];
-$("#line").addEventListener("keydown", e => {
-  const inp = e.target;
+let comp = null, cmds = [], setCache = [], setAsked = false, suggSel = -1;
+const line = $("#line");
+// the input line shows formatting codes as ␂␃␏␖␝␟ and a paste's newlines as ↵ (the terminal shows
+// them reversed); they go out as the real thing. One character each way, so positions match.
+const enc = s => s.replace(/\r\n?/g, "\n").replace(/\n/g, "↵").replace(/[\x00-\x1f]/g, c => String.fromCharCode(0x2400 + c.charCodeAt(0)));
+const dec = s => s.replace(/↵/g, "\n").replace(/[␀-␟]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x2400));
+function insert(s) { line.setRangeText(s, line.selectionStart, line.selectionEnd, "end"); renderSugg(); }
+function setLine(v) { line.value = enc(v); line.focus(); line.selectionStart = line.selectionEnd = line.value.length; renderSugg(); }
+// a password asked for here (/oper, /e2e...): a hidden field, no history, Esc cancels
+function applyAsk() {
+  const b = bufs.get(active), a = b && b.ask, pw = !!(a && a.hidden);
+  if (line.type !== (pw ? "password" : "text")) { line.type = pw ? "password" : "text"; line.value = ""; }
+  line.autocomplete = pw ? "new-password" : "off";
+  line.placeholder = a ? (a.title ? a.title + " · " : "") + "the " + a.label + " (Enter: OK · Esc: cancel)" : "";
+  $("#prompt").textContent = b ? "[" + (a ? a.label : label(b)) + "]" : "";
+  renderSugg();
+}
+const asking = () => { const b = bufs.get(active); return !!(b && b.ask); };
+// like the terminal's: [from, [[word, sep, value], ...]]; from -1: none, -2: only the command's usage
+function suggest(s) {
+  if (asking() || s[0] !== "/" || s.startsWith("//")) return [-1, []];
+  const sp = s.indexOf(" "), out = [];
+  const cm = (pfx, slash) => { for (const [n, u, sum] of cmds) if (n.startsWith(ircLower(pfx))) out.push([(slash ? "/" : "") + n, (u ? " " + u : "") + "  ", sum]); };
+  if (sp < 0) { cm(s.slice(1), true); return [0, out]; }
+  const cmd = ircLower(s.slice(1, sp)), arg = s.slice(sp + 1);
+  if (arg.includes(" ")) return [-1, []];
+  if (cmd === "set") {  // config keys containing what's typed
+    if (!setAsked) setAsked = true, send({t: "settings", buf: active});
+    for (const [sec, k, v, def, , secret] of setCache) {
+      const full = (sec === "general" ? "" : sec + ".") + k;
+      if (full.toLowerCase().includes(arg.toLowerCase())) out.push([full, " = ", +secret ? (v ? "********" : "") : v || def]);
+    }
+    return [sp + 1, out];
+  }
+  if (cmd === "help") { cm(arg, false); return [sp + 1, out]; }
+  const k = cmds.find(c => c[0] === cmd || (c[3] || "").split(" ").includes(cmd));
+  if (k) { out.push(["/" + k[0], (k[1] ? " " + k[1] : "") + "  ", k[2]]); return [-2, out]; }
+  return [-1, []];
+}
+function renderSugg() {
+  const box = $("#sugg"), v = dec(line.value.slice(0, line.selectionStart));
+  if (!/^\/set /i.test(v)) setAsked = false;  // the next /set asks for fresh values
+  const [, sg] = suggest(v);
+  if (suggSel >= sg.length) suggSel = -1;
+  box.textContent = "";
+  sg.forEach(([w, sp, val], i) => {
+    const d = el("div", i === suggSel ? "on" : "");
+    d.append(el("span", "w", w), el("span", "s", sp), el("span", "v", val));
+    d.onmousedown = e => { e.preventDefault(); suggSel = i; take(); };
+    box.append(d);
+  });
+  const on = box.querySelector(".on");
+  if (on) on.scrollIntoView({block: "nearest"});
+}
+// the highlighted suggestion into the input line, not sent
+function take() {
+  const [from, sg] = suggest(dec(line.value.slice(0, line.selectionStart)));
+  if (from < 0 || !sg[suggSel]) return false;
+  line.setRangeText(sg[suggSel][0] + " ", from, line.selectionStart, "end");
+  suggSel = -1, comp = null; renderSugg();
+  return true;
+}
+line.addEventListener("input", () => { suggSel = -1; renderSugg(); });
+line.addEventListener("keyup", e => { if (/^(Arrow(Left|Right)|Home|End)$/.test(e.key)) renderSugg(); });
+line.addEventListener("click", renderSugg);
+// a paste with newlines (or formatting) stays in the line as ↵ until Enter; paste_confirm asks then
+line.addEventListener("paste", e => {
+  const t = e.clipboardData && e.clipboardData.getData("text");
+  if (!t || asking() || !/[\x00-\x1f]/.test(t)) return;
+  e.preventDefault(); insert(enc(t.replace(/[\r\n]+$/, "")));
+});
+// mIRC formatting: Ctrl+B bold, Ctrl+C color (without a selection: that's copy), Ctrl+O reset,
+// Ctrl+R reverse, Ctrl+I italic, Ctrl+U underline (Ctrl+] and Ctrl+_ too, like the terminal)
+const FMT = {b: "\x02", c: "\x03", o: "\x0f", r: "\x16", i: "\x1d", "]": "\x1d", u: "\x1f", "_": "\x1f"};
+line.addEventListener("keydown", e => {
+  const inp = line;
+  if (asking()) {
+    if (e.key === "Escape") { e.preventDefault(); inp.value = ""; send({t: "input", buf: active, text: ""}); }
+    else if (/^(Tab|ArrowUp|ArrowDown)$/.test(e.key)) e.preventDefault();  // no history or completion in it
+    return;
+  }
+  if (e.ctrlKey && !e.altKey && !e.metaKey && FMT[e.key.toLowerCase()] && !(e.key.toLowerCase() === "c" && inp.selectionStart !== inp.selectionEnd)) {
+    e.preventDefault(); insert(enc(FMT[e.key.toLowerCase()])); return;
+  }
+  // the suggestion list takes Up/Down while it shows; Enter or Tab on the highlight puts it in the line
+  if (!e.altKey && !e.metaKey && (/^Arrow(Up|Down)$/.test(e.key) || (suggSel >= 0 && /^(Enter|Tab)$/.test(e.key)))) {
+    const [from, sg] = suggest(dec(inp.value.slice(0, inp.selectionStart))), n = sg.length;
+    if (from >= 0 && n) {
+      e.preventDefault();
+      if (e.key === "ArrowDown") suggSel = Math.min(suggSel + 1, n - 1);
+      else if (e.key === "ArrowUp") suggSel = suggSel < 0 ? n - 1 : suggSel - 1;  // above the first: none
+      else take();
+      renderSugg();
+      return;
+    }
+  }
+  if (suggSel >= 0) suggSel = -1, renderSugg();
   if (e.key === "Tab") {
     e.preventDefault();
     const b = bufs.get(active); if (!b) return;
     if (!comp) {
-      const v = inp.value, end = inp.selectionStart, start = v.lastIndexOf(" ", end - 1) + 1, pfx = ircLower(v.slice(start, end));
-      // command names in the first word ("/jo") and after "/help ", nicks elsewhere
-      const help = /^\/help \S*$/i.test(v.slice(0, end)), cmd = start === 0 && v[0] === "/" && v[1] !== "/";
-      if (!pfx && !help && !cmd) return;
-      const list = cmd ? cmds.filter(c => c.startsWith(pfx.slice(1))).map(c => "/" + c + " ")
-        : help ? cmds.filter(c => c.startsWith(pfx)).map(c => c + " ")
-        : b.nicks.map(n => n[1]).filter(n => ircLower(n).startsWith(pfx)).sort((x, y) => ircLower(x).localeCompare(ircLower(y)))
-            .map(n => n + (start === 0 ? ": " : " "));
+      const v = inp.value, end = inp.selectionStart, [from, sg] = suggest(dec(v.slice(0, end)));
+      let start = v.lastIndexOf(" ", end - 1) + 1, list;
+      if (from >= 0) start = from, list = sg.map(g => g[0] + " ");  // a command, a config key
+      else {
+        const pfx = ircLower(v.slice(start, end));
+        if (!pfx) return;
+        list = b.nicks.map(n => n[1]).concat(b.type === "query" ? [b.name] : []).filter(n => ircLower(n).startsWith(pfx))
+          .sort((x, y) => ircLower(x).localeCompare(ircLower(y))).map(n => n + (start === 0 ? ": " : " "));
+      }
       if (!list.length) return;
       comp = {list, i: -1, start, end, v};
     }
@@ -790,36 +950,83 @@ $("#line").addEventListener("keydown", e => {
     const word = comp.list[comp.i];
     inp.value = comp.v.slice(0, comp.start) + word + comp.v.slice(comp.end);
     inp.selectionStart = inp.selectionEnd = comp.start + word.length;
+    renderSugg();
     return;
   }
   comp = null;
-  if (e.key === "ArrowUp" && hpos > 0) { e.preventDefault(); inp.value = hist[--hpos]; }
-  else if (e.key === "ArrowDown" && hpos < hist.length) { e.preventDefault(); inp.value = ++hpos === hist.length ? "" : hist[hpos]; }
+  if (e.key === "ArrowUp" && hpos > 0) { e.preventDefault(); inp.value = hist[--hpos]; renderSugg(); }
+  else if (e.key === "ArrowDown" && hpos < hist.length) { e.preventDefault(); inp.value = ++hpos === hist.length ? "" : hist[hpos]; renderSugg(); }
 });
 $("#input").onsubmit = e => {
   e.preventDefault();
-  const v = $("#line").value; if (!v) return;
-  if (hist[hist.length - 1] !== v) hist.push(v);
+  const raw = line.value, v = dec(raw), b = bufs.get(active);
+  if (asking()) { line.value = ""; send({t: "input", buf: active, text: v}); return; }  // a password: never in the history
+  if (!v || !b) return;
+  // paste_confirm = N (default 5, 0 = off): ask before sending more lines than that
+  const n = v.split("\n").filter(Boolean).length;
+  if (b.pc > 0 && n > b.pc && !confirm("Send " + n + " lines to " + label(b) + "?")) return;  // stays to edit
+  if (hist[hist.length - 1] !== raw) hist.push(raw);
+  if (hist.length > 500) hist.shift();
   hpos = hist.length;
-  if (/^\/about\s*$/i.test(v)) { $("#line").value = ""; openAbout(); return; }  // a dialog here, not a tab
-  if (/^\/set\s*$/i.test(v)) { $("#line").value = ""; $("#setbtn").click(); return; }  // like the terminal: the settings window
+  line.value = ""; suggSel = -1; renderSugg();
+  $("#msgs").scrollTop = $("#msgs").scrollHeight;
+  if (/^\/about\s*$/i.test(v)) { openAbout(); return; }  // a dialog here, not a tab
+  if (/^\/set\s*$/i.test(v)) { $("#setbtn").click(); return; }  // like the terminal: the settings window
   send({t: "input", buf: active, text: v});
-  $("#line").value = "";
 };
+// keys: the terminal's defaults a browser lets through (it keeps Ctrl+W, Ctrl+N, Ctrl+T...; Alt+W and
+// Alt+X stand in for Ctrl+W and Ctrl+X), plus the [keys] section, in the terminal's spelling ("M-Right")
+const KEYS_DEF = {"M-Right": "next_tab", "M-Left": "prev_tab", "M-a": "next_active", "M-x": "next_server", "M-w": "close_tab",
+  "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down"};
+for (let i = 1; i <= 10; i++) KEYS_DEF["M-" + i % 10] = "tab_" + i;
+let keymap = {...KEYS_DEF};
+function keyspec(e) {
+  const NAMES = {ArrowUp: "Up", ArrowDown: "Down", ArrowLeft: "Left", ArrowRight: "Right", PageUp: "PgUp", PageDown: "PgDn", Escape: "Esc"};
+  const mod = e.altKey || e.ctrlKey || e.metaKey;  // Option+L on a Mac types ¬: the key's own letter then
+  const k = mod && /^Key[A-Z]$/.test(e.code) ? e.code[3].toLowerCase() : mod && /^Digit\d$/.test(e.code) ? e.code[5] : NAMES[e.key] || e.key;
+  let s = (e.metaKey ? "D-" : "") + (e.altKey ? "M-" : "");
+  if (/^(Up|Down|Left|Right)$/.test(k)) return s + (e.ctrlKey ? "C-" : "") + (e.shiftKey ? "S-" : "") + k;
+  return s + (e.ctrlKey && /^[a-z]$/.test(k) ? "C-" : "") + k;
+}
+function action(a) {
+  const n = order.indexOf(active), sz = order.length, at = i => order[((i % sz) + sz) % sz];
+  if (a === "next_tab") select(at(n + 1));
+  else if (a === "prev_tab") select(at(n - 1));
+  else if (/^tab_\d+$/.test(a)) { const t = +a.slice(4) - 1; if (t >= 0 && t < sz) select(order[t]); }
+  else if (a === "next_active") {  // the most active of the others, the nearest first
+    let best = null;
+    for (let i = 1; i < sz; i++) { const b = bufs.get(at(n + i)); if (b && b.act > (best ? bufs.get(best).act : 0)) best = at(n + i); }
+    if (best !== null) select(best);
+  } else if (a === "next_server") {
+    for (let i = 1; i < sz; i++) { const b = bufs.get(at(n + i)); if (b && b.type === "status") { select(at(n + i)); break; } }
+  } else if (a === "close_tab") send({t: "input", buf: active, text: "/close"});
+  else if (a === "scroll_up" || a === "scroll_down") { const m = $("#msgs"); m.scrollBy(0, (a === "scroll_up" ? -1 : 1) * m.clientHeight / 2); }
+  else if (a === "toggle_nicklist") $("#nickbtn").click();
+  else if (a === "toggle_topic") {
+    const off = $("#topic").classList.toggle("hide");
+    try { localStorage.setItem("topic", off ? "0" : "1"); } catch (e) {}
+  } else return false;  // detach, toggle_mouse: the terminal's own
+  return true;
+}
+try { if (localStorage.getItem("topic") === "0") $("#topic").classList.add("hide"); } catch (e) {}
 document.addEventListener("keydown", e => {
-  if (!e.altKey) return;
-  const i = order.indexOf(active);
-  if (/^Digit\d$/.test(e.code)) { const n = (+e.code[5] || 10) - 1; if (order[n]) select(order[n]); }
-  else if (e.key === "ArrowRight") select(order[(i + 1) % order.length]);
-  else if (e.key === "ArrowLeft") select(order[(i - 1 + order.length) % order.length]);
-  else if (e.code === "KeyA") {  // next tab with activity, highlights first, like Ctrl+A in the terminal
-    const rest = order.slice(i + 1).concat(order.slice(0, i + 1)).filter(x => bufs.get(x) && bufs.get(x).act);
-    const best = Math.max(0, ...rest.map(x => bufs.get(x).act));
-    if (best) select(rest.find(x => bufs.get(x).act === best));
-  }
-  else return;
-  e.preventDefault();
+  if (e.target.closest && e.target.closest("dialog")) return;
+  if (!e.altKey && !e.ctrlKey && !e.metaKey && e.target !== line && /^.$/.test(e.key)) return;  // typing elsewhere
+  const a = keymap[keyspec(e)];
+  if (a && action(a)) e.preventDefault();
 });
+$("#msgs").addEventListener("scroll", () => { if (moreShown === atBottom()) renderStatus(); });
+// bell_notifications: a short beep, like the terminal's bell (browsers allow sound after a first click or key)
+let actx = null;
+const unlockAudio = () => { try { actx = actx || new AudioContext(); actx.resume(); } catch (e) {} };
+addEventListener("pointerdown", unlockAudio, {once: true});
+addEventListener("keydown", unlockAudio, {once: true});
+function beep() {
+  if (!actx || actx.state !== "running") return;
+  const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+  o.frequency.value = 880; g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
+  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.15);
+}
 // Highlights and private messages you're not looking at: a count in the tab
 // title, plus a desktop notification once the bell is switched on.
 let missed = 0, notifyOn = false;

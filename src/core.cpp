@@ -454,10 +454,11 @@ void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(cons
     pass_buf = b, pass_label = label, pass_done = std::move(done), pass_hidden = hidden;
     pass_title = title, pass_info = std::move(info), pass_web = from_web;
     if (!tty || from_web) print(b, LK::INFO, "Type the " + label + (hidden ? " (hidden; an empty line cancels)" : " (an empty line cancels)"));  // the TUI asks in a dialog
+    notify(Ev::BUFFER, b);  // the webchat's input line turns into a password field
 }
 
 void Core::ring(Server* s) {
-    if (opt_on(s, "bell_notifications", true)) bell = dirty = true;
+    if (opt_on(s, "bell_notifications", true)) bell = dirty = true, notify(Ev::BELL, nullptr);
 }
 
 bool Core::opt_on(const Server* s, const std::string& key, bool def) const {
@@ -648,6 +649,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (b == pass_buf && from_web == pass_web) {  // a password prompt: this line is it, never sent or shown (only from the side that asked)
         auto done = std::move(pass_done);
         pass_buf = nullptr, pass_done = nullptr;
+        notify(Ev::BUFFER, b);  // back to a normal input line (unless done asks again)
         if (in.empty()) print(b, LK::INFO, "Cancelled");
         else done(in);
         return;
