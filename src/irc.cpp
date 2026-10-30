@@ -765,7 +765,8 @@ void Core::handle(Server* s, const Msg& m) {
             } else {
                 time_t now = time(nullptr);
                 std::string rep, note;
-                if (!notice && !self) {
+                // self: our own request echoed back, unless it was sent to us
+                if (!notice && (!self || is_me(tgt))) {
                     if (verb == "VERSION" && opt_on(s, "ctcp_version", true))
                         rep = "VERSION " + ctcp_version();
                     else if (verb == "PING" && opt_on(s, "ctcp_ping", true))
