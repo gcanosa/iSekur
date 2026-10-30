@@ -197,7 +197,7 @@ static Style level_style(const Theme& T, int lv, Style base) {
 }
 
 // the status_info items that are on, in a fixed order, drawn in st
-static std::vector<Row> status_info(const Core& c, Style st) {
+static std::vector<Row> status_info(const Core& c, Style st, bool dcc = true) {
     const Theme& T = c.theme;
     auto on = split(c.opt(nullptr, "status_info", "up"), ' ');
     auto has = [&](const char* k) { return std::find(on.begin(), on.end(), k) != on.end(); };
@@ -207,7 +207,8 @@ static std::vector<Row> status_info(const Core& c, Style st) {
     std::vector<const Dcc*> rx;
     for (auto& d : c.dccs)
         if (d->st == Dcc::RUN) rx.push_back(d.get());
-    if (!rx.empty()) {
+    if (!dcc) {  // the webchat draws its own
+    } else if (!rx.empty()) {
         const Dcc* d = rx[0];
         Style es = info_style(T, "status_bat", st, 0x6c6c6c), bs = level_style(T, 0, st);
         es.bg = bs.bg = st.bg;
@@ -276,6 +277,24 @@ static std::vector<Row> status_info(const Core& c, Style st) {
         out.push_back(r);
     }
     return out;
+}
+
+std::string json_str(const std::string& s);  // web.cpp
+std::string status_info_json(const Core& c) {
+    std::string o = "[";
+    for (auto& r : status_info(c, sty(c.theme, "status_info", "status_hi"), false)) {
+        o += o.size() > 1 ? ",[" : "[";
+        std::string run;
+        const Style* at = nullptr;  // runs of one color: [text, fg, bg]
+        auto put = [&] { if (at) o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(run) + "," + json_str(rgb_hex(at->fg)) + "," + json_str(rgb_hex(at->bg)) + "]"; };
+        for (auto& cl : r) {
+            if (!at || cl.st.fg != at->fg || cl.st.bg != at->bg) put(), run.clear(), at = &cl.st;
+            run += to_utf8(std::u32string(1, (char32_t)cl.cp));
+        }
+        put();
+        o += "]";
+    }
+    return o + "]";
 }
 
 // ---- line layout -----------------------------------------------------------

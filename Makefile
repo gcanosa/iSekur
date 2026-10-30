@@ -95,7 +95,7 @@ build:
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/tui.o build/sysinfo.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:
