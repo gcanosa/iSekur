@@ -182,12 +182,17 @@ int main(int argc, char** argv) {
         size_t term0 = fds.size();
         for (auto& b : c.bufs)
             if (b->term && b->term->fd >= 0) fds.push_back({b->term->fd, POLLIN, 0});
+        size_t dcc0 = fds.size();
+        for (auto& d : c.dccs)
+            if (d->conn.fd >= 0) fds.push_back({d->conn.fd, d->conn.events(), 0});
+            else if (d->lfd >= 0) fds.push_back({d->lfd, POLLIN, 0});
 
         Buffer* about = c.tty && c.active && !c.active->srv && c.active->name == "*about" && c.active->lines.size() >= 6 ? c.active : nullptr;
         bool typing = c.tty && now_ms() < c.typing_until;  // a line is typing itself out: redraw ~30 times a second
         if (wait_fds(fds, anim0 || about || typing ? std::min(c.drain(), 33) : c.drain()) < 0 && errno != EINTR) break;
         if (typing) c.dirty = true;
         c.terms_poll(fds, term0);  // first: nothing has closed a tab yet, so the order still holds
+        c.dccs_poll(fds, dcc0);
         // servers first: their handlers never delete servers, so `polled` stays valid
         for (size_t i = 0; i < polled.size(); i++)
             if (fds[srv0 + i].revents) c.on_readable(polled[i], fds[srv0 + i].revents);

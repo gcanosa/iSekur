@@ -359,6 +359,8 @@ void Core::close(Buffer* b) {
     if (active == b) active = bufs[(size_t)(i > 0 ? i - 1 : 1 % bufs.size())].get();
     bufs.erase(bufs.begin() + i);
     if (active == b) active = bufs.empty() ? nullptr : bufs[0].get();
+    if (drop_server)  // its transfers go with it
+        dccs.erase(std::remove_if(dccs.begin(), dccs.end(), [&](auto& d) { return d->srv == s; }), dccs.end());
     if (drop_server)  // after the buffer: listeners may still read b->srv
         servers.erase(std::remove_if(servers.begin(), servers.end(),
                                      [&](auto& p) { return p.get() == s; }),
@@ -691,6 +693,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
+    if (cmd == "dcc") { dcc_cmd(b, args); return; }
     if (cmd == "shell") { shell_cmd(b); return; }
     if (cmd == "lock") { lock_cmd(b, args); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general

@@ -138,6 +138,14 @@ the chat; `/exec -o uptime` says it in the current channel or query (longer than
 lines needs `-y`). Commands are killed after `exec_timeout` seconds; the webchat can't run them
 unless `exec_web = on`.
 
+Files (DCC): what's sent to you is only offered until you `/dcc get` it; it downloads in the
+background into `dcc_dir` (default `~/Downloads`, on the machine iSekur runs on), and a broken
+download resumes where it stopped. `/dcc send nick file` offers one (behind a router set `dcc_ip`
+and forward `dcc_ports`). Progress shows in the status bar and the webchat; `/dcc` lists the
+transfers, `/dcc close n` refuses or cancels one. With `dcc_web = on` the webchat's Files window
+(⇅) downloads what's in `dcc_dir` to your own computer, seedbox style, so iSekur on a VPS can
+fetch files for you. Passive DCC is not there yet.
+
 `/shell` opens a real terminal in a tab (its own color, `tab_shell` in the theme) after asking
 for this machine's login and password, checked by the system through PAM (`pam_service`,
 default `login`; three wrong ones lock it for a minute). It runs your `$SHELL` as a login shell

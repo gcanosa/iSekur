@@ -159,18 +159,6 @@ int cpu_pct();
 bool mem_free(unsigned long long& avail, unsigned long long& total);
 int battery_pct();
 
-// 512M, 3.2G, 16G, 1.5T: the unit that keeps it under 1024, one decimal below 10
-static std::string human_bytes(unsigned long long n) {
-    const char* u = "BKMGTP";
-    double v = (double)n;
-    while (v >= 1024 && u[1]) v /= 1024, u++;
-    char buf[32];
-    snprintf(buf, sizeof buf, v < 10 && *u != 'B' ? "%.1f%c" : "%.0f%c", v, *u);
-    std::string s = buf;
-    if (s.size() > 3 && s.compare(s.size() - 3, 2, ".0") == 0) s.erase(s.size() - 3, 2);  // 16.0G -> 16G
-    return s;
-}
-
 // uptime as 3d4h22m, seconds below a day
 static std::string fmt_uptime(long up) {
     std::string u;
@@ -215,6 +203,44 @@ static std::vector<Row> status_info(const Core& c, Style st) {
     auto has = [&](const char* k) { return std::find(on.begin(), on.end(), k) != on.end(); };
     std::vector<Row> out;
     auto add = [&](const std::string& s) { out.emplace_back(), cells(out.back(), s, st, false); };
+    // /dcc transfers, always and first (the last items drop): ⇣name ▮▮▮▯▯▯▯▯ 42% 1.2M/s +1 (⇡ sending)
+    std::vector<const Dcc*> rx;
+    for (auto& d : c.dccs)
+        if (d->st == Dcc::RUN) rx.push_back(d.get());
+    if (!rx.empty()) {
+        const Dcc* d = rx[0];
+        Style es = info_style(T, "status_bat", st, 0x6c6c6c), bs = level_style(T, 0, st);
+        es.bg = bs.bg = st.bg;
+        Row r;
+        cells(r, (d->send ? "\u21E1" : "\u21E3") + (mirc_strip(d->file).size() > 16 ? mirc_prefix(d->file, 15) + "\u2026" : d->file) + " ", st, false);
+        if (d->size) {
+            int pct = (int)(d->got * 100 / d->size), full = pct * 8 / 100;
+            for (int i = 0; i < 8; i++) cells(r, i < full ? "\u25AE" : "\u25AF", i < full ? bs : es, false);
+            cells(r, " " + std::to_string(pct) + "%", st, false);
+        } else {
+            cells(r, human_bytes(d->got), st, false);
+        }
+        cells(r, " " + human_bytes(d->rate) + "/s" + (rx.size() > 1 ? " +" + std::to_string(rx.size() - 1) : ""), st, false);
+        out.push_back(r);
+    } else {  // nothing moving: the last one that ended, for 10s (✓ green, ✗ red), else the offers waiting
+        const Dcc* last = nullptr;
+        size_t offers = 0;
+        for (auto& d : c.dccs) {
+            if (d->ended && time(nullptr) - d->ended < 10 && (!last || d->ended >= last->ended)) last = d.get();
+            offers += d->st == Dcc::OFFER;
+        }
+        auto nm = [](const std::string& f) { return mirc_strip(f).size() > 16 ? mirc_prefix(f, 15) + "\u2026" : f; };
+        if (last) {
+            bool ok = last->st == Dcc::DONE;
+            Row r;
+            cells(r, std::string(ok ? "\u2713" : "\u2717") + nm(last->file), level_style(T, ok ? 0 : 3, st), false);
+            cells(r, ok ? " done" : last->err == "cancelled" ? " stopped" : " failed", st, false);
+            out.push_back(r);
+        } else if (offers) {
+            out.emplace_back();
+            cells(out.back(), "\u21E3" + std::to_string(offers) + " offered (/dcc)", sty(T, "hilight", "status_hi"), false);
+        }
+    }
     if (has("up")) add("u:" + fmt_uptime((long)(time(nullptr) - c.started)));
     // label in st, the value in its level's color
     auto leveled = [&](const std::string& label, const std::string& val, const std::string& key, const char* def, int pct) {

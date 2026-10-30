@@ -32,6 +32,9 @@ private:
         std::string frag;  // a fragmented message so far
         int frag_op = 0;
         time_t since = 0;
+        FILE* file = nullptr;  // GET /files/name: streamed into conn.out as it drains
+        unsigned long long left = 0;
+        ~Client() { if (file) fclose(file); }
     };
     int lfd = -1;
     SSL_CTX* ctx = nullptr;
@@ -57,6 +60,11 @@ private:
     std::string lines_json(Buffer* b);
     void flush_buf(Buffer* b);
     std::string theme_json();
+    std::string dcc_json(std::string* sig = nullptr);  // the transfers going on; sig: just which and their states
+    std::string last_dcc, last_dcc_sig;
+    time_t last_dcc_at = 0;
+    void files(Client& cl, const std::string& path, const std::map<std::string, std::string>& h);  // dcc_web
+    void feed(Client& cl);
 };
 
 // exposed for tests and --hash-password

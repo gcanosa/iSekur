@@ -108,6 +108,19 @@ section, also live with
 .BR /me ", " /notice ", " /nick ", " /topic ", " /quiet ", " /close ", " /win " N, " /raw ,
 .BR /ctcp ", " /theme ", " /set " [section.]key [value], " /save ", " /reload ,
 .BR /ignore " [mask], " /unignore " mask, " /hilight " [add|del] word, " /grep " [-all] text, " /clear ", " /quit .
+.B /dcc get
+downloads the newest file sent to you (DCC SEND) into
+.I dcc_dir
+in the background, resuming a broken one;
+.B /dcc send
+nick file offers one;
+.B /dcc
+lists the transfers,
+.B /dcc close
+n refuses or cancels one. With
+.I dcc_web
+on, the webchat downloads what's in
+.IR dcc_dir .
 .B /e2e nick
 asks for a password and starts an encrypted query with another iSekur user, who accepts with
 .B /e2e

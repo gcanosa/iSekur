@@ -156,7 +156,37 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #nicks .away { opacity: .45; }
 @media (min-width: 761px) { #nicks.off { display: none; } }
 #status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
+#status { display: flex; gap: 12px; align-items: center; }
 #status b { color: var(--status_hi-fg, var(--fg)); font-weight: 400; }
+#stl { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+/* /dcc transfers on the right: ⇣name [bar] 42% 1.2M/s; a click opens the Files dialog */
+#dccbar { margin-left: auto; display: flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; color: var(--status_hi-fg, var(--fg)); }
+#dccbar:empty { display: none; }
+progress { appearance: none; -webkit-appearance: none; width: 90px; height: 7px; border: 0; border-radius: 4px; background: var(--line); overflow: hidden; }
+progress::-webkit-progress-bar { background: var(--line); border-radius: 4px; }
+progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
+progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
+/* popups: DCC incoming, complete, failed, stopped */
+#toasts { position: fixed; right: 16px; bottom: 90px; z-index: 20; display: grid; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+.toast { background: var(--menu-bg, var(--panel)); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 9px 12px; font-size: 13px; box-shadow: 0 6px 24px #0007; cursor: pointer; animation: rise .25s ease-out both; }
+.toast.err { border-left-color: var(--error-fg, #ff5f5f); }
+.toast b { display: block; color: var(--accent); font-weight: 700; margin-bottom: 2px; }
+.toast.err b { color: var(--error-fg, #ff5f5f); }
+.toast span { color: var(--fg); overflow-wrap: anywhere; }
+#dfiles { width: min(760px, calc(100vw - 32px)); }
+#dfiles h3 { margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent2); font-weight: 400; }
+#dfiles h3 small { text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
+.flist { display: grid; gap: 2px; max-height: 32vh; overflow-y: auto; font-size: 13px; }
+.flist .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 5px 6px; border-radius: 6px; }
+.flist .r:hover { background: #ffffff0a; }
+.flist .r .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flist .r .n small { color: var(--muted); margin-left: 6px; }
+.flist .r .m { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.flist .r .b { display: flex; gap: 6px; }
+.flist .r .b button, .flist .r .b a { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; color: var(--fg); font-size: 12px; text-decoration: none; }
+.flist .r .b button:hover, .flist .r .b a:hover { border-color: var(--accent); }
+.flist .r progress { width: 100%; grid-column: 1 / -1; }
+.flist .none { color: var(--muted); padding: 6px; }
 #input { grid-area: input; display: flex; gap: 8px; padding: 8px 10px; background: var(--input-bg, var(--bg)); }
 #prompt { color: var(--input_prompt-fg, var(--accent)); align-self: center; white-space: nowrap; }
 #line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
@@ -190,11 +220,11 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 </div>
 <div id="app">
   <nav id="side"></nav>
-  <div id="foot"><button id="addsrv" title="Add a server" aria-label="Add a server">+</button><button id="setbtn" title="Settings" aria-label="Settings">⚙</button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur">ⓘ</button></div>
+  <div id="foot"><button id="addsrv" title="Add a server" aria-label="Add a server">+</button><button id="setbtn" title="Settings" aria-label="Settings">⚙</button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers">⇅</button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur">ⓘ</button></div>
   <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout">logout</button></div>
   <main id="msgs" aria-live="polite"></main>
   <aside id="nicks"></aside>
-  <div id="status"></div>
+  <div id="status"><span id="stl"></span><span id="dccbar" title="Files and transfers"></span></div>
   <form id="input"><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
 </div>
 <dialog id="dsrv"><form method="dialog">
@@ -213,6 +243,16 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
   <div id="setbody"><div id="setnav"></div><div id="setlist"></div></div>
   <div class="hint" id="setmsg">Empty = the default. ● = changed and not saved yet.</div>
   <div class="btns"><button value="cancel" formnovalidate>Close</button><button value="apply">Apply</button><button class="go" value="save">Apply &amp; save</button></div>
+</form></dialog>
+<div id="toasts" aria-live="polite"></div>
+<dialog id="dfiles"><form method="dialog">
+  <h2>Files</h2>
+  <h3>Transfers</h3>
+  <div class="flist" id="dcclist"></div>
+  <h3>On the server <small id="fdir"></small></h3>
+  <div class="flist" id="filelist"></div>
+  <div class="hint" id="fhint"></div>
+  <div class="btns"><button type="button" id="frefresh">Refresh</button><button class="go" value="ok">Close</button></div>
 </form></dialog>
 <dialog id="dabout"><form method="dialog">
   <div id="abox"><div id="abanner"></div><div id="atext"></div></div>
@@ -360,7 +400,7 @@ function renderTopic() {
   t.title = t.textContent;
   $("#prompt").textContent = "[" + label(b) + "]";
   const nick = b.me ? b.me + " · " : "";
-  const st = $("#status"); st.textContent = "";
+  const st = $("#stl"); st.textContent = "";
   const add = (txt, bold) => { const e = document.createElement(bold ? "b" : "span"); e.textContent = txt; st.append(e); };
   add("[" + nick); add(label(b) + (b.modes ? "(+" + b.modes + ")" : ""), true); add("]  ");
   const acts = order.map((id, i) => [i + 1, bufs.get(id)]).filter(([, x]) => x && x.act);
@@ -475,6 +515,13 @@ function onMsg(ev) {
     renderAbout(m);
   } else if (m.t === "settings") {
     renderSettings(m.list);
+  } else if (m.t === "note") {
+    toast(m);
+  } else if (m.t === "dcc") {
+    // the folder changes when dcc_web flips or a transfer starts or ends
+    const sig = x => x.web + x.list.map(d => d.id + d.st).join();
+    const changed = sig(dcc) !== sig(m); dcc = m; renderDcc();
+    if (dfiles.open && changed) loadFiles();
   }
 }
 
@@ -520,6 +567,70 @@ dsrv.onclose = () => {
   send({t: "input", buf: active, text: cmd});
   if (fs.save.checked) send({t: "input", buf: active, text: "/save"});
 };
+// ⇅ : /dcc transfers (also in the status line) and, with dcc_web on, dcc_dir's files to download
+let dcc = {list: [], web: false};
+const dfiles = $("#dfiles");
+function hb(n) { const u = "BKMGTP"; let i = 0; while (n >= 1024 && i < 5) { n /= 1024; i++; } return (n < 10 && i ? n.toFixed(1) : Math.round(n)) + u[i]; }
+function dccCmd(t) { send({t: "input", buf: active, text: t}); }
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text !== undefined) e.textContent = text; return e; }
+function btn(text, f) { const b = el("button", "", text); b.type = "button"; b.onclick = f; return b; }
+function bar(d) { const p = el("progress"); if (d.size) { p.max = d.size; p.value = d.got; } return p; }
+function renderDcc() {
+  const run = dcc.list.filter(d => d.st === "run"), offers = dcc.list.filter(d => d.st === "offer"), sb = $("#dccbar");
+  sb.textContent = "";
+  if (run.length) {
+    const d = run[0], nm = d.file.length > 24 ? d.file.slice(0, 23) + "…" : d.file;
+    sb.append(el("span", "", (d.send ? "⇡" : "⇣") + nm), bar(d),
+      el("span", "", (d.size ? Math.floor(d.got * 100 / d.size) + "% " : hb(d.got) + " ") + hb(d.rate) + "/s" + (run.length > 1 ? " +" + (run.length - 1) : "")));
+  } else if (offers.length) sb.append(el("span", "", "⇣ " + offers.length + " file" + (offers.length > 1 ? "s" : "") + " offered"));
+  if (!dfiles.open) return;
+  const L = $("#dcclist"); L.textContent = "";
+  if (!dcc.list.length) L.append(el("div", "none", "Nothing going on. Files sent to you (DCC) show up here; /dcc send nick file offers one."));
+  for (const d of dcc.list) {
+    const r = el("div", "r"), n = el("div", "n", (d.send ? "⇡ " : "⇣ ") + d.file);
+    n.append(el("small", "", (d.send ? "to " : "from ") + d.nick));
+    const what = {offer: "offered", resume: "resuming…", wait: "waiting for them", run: (d.size ? Math.floor(d.got * 100 / d.size) + "% of " + hb(d.size) : hb(d.got)) + " · " + hb(d.rate) + "/s"}[d.st];
+    const b = el("div", "b");
+    if (d.st === "offer") b.append(btn("Get", () => dccCmd("/dcc get " + d.id)), btn("Refuse", () => dccCmd("/dcc close " + d.id)));
+    else b.append(btn("Cancel", () => dccCmd("/dcc close " + d.id)));
+    r.append(n, el("div", "m", what), b);
+    if (d.st === "run") r.append(bar(d));
+    L.append(r);
+  }
+}
+async function loadFiles() {
+  const L = $("#filelist"), hint = $("#fhint"); L.textContent = ""; hint.textContent = ""; $("#fdir").textContent = "";
+  if (!dcc.web) { L.append(el("div", "none", "Downloading from here is off: /set dcc_web on (then /save to keep it) lets this page download what's in dcc_dir.")); return; }
+  const r = await fetch("/files", {credentials: "same-origin"}).catch(() => null);
+  const j = r && r.ok ? await r.json().catch(() => null) : null;
+  if (!j) { L.append(el("div", "none", "Couldn't list the files.")); return; }
+  $("#fdir").textContent = j.dir;
+  if (!j.files.length) L.append(el("div", "none", "Nothing there yet."));
+  for (const f of j.files) {
+    const r2 = el("div", "r"), n = el("div", "n", f.n), b = el("div", "b");
+    if (f.part) n.append(el("small", "", "downloading"));
+    const a = el("a", "", "Download"); a.href = "/files/" + encodeURIComponent(f.n); a.download = f.n;
+    b.append(a, btn("Send…", () => { const who = prompt("Send " + f.n + " to which nick? (on this tab's network)"); if (who && who.trim()) dccCmd("/dcc send " + who.trim() + " " + f.n); }));
+    r2.append(n, el("div", "m", hb(f.s) + " · " + new Date(f.m * 1000).toLocaleString()), b);
+    L.append(r2);
+  }
+  hint.textContent = "Downloads resume where they stopped if the browser asks. Send… offers the file over DCC from the server.";
+}
+// a popup for 8s (a click opens the Files window), and a system notification when the page isn't looked at
+function toast(m) {
+  const t = el("div", "toast" + (m.err ? " err" : "")), x = m.x.replace(/^DCC #\d+: /, "");
+  t.append(el("b", "", m.title), el("span", "", x));
+  t.onclick = () => { t.remove(); openFiles(); };
+  $("#toasts").append(t);
+  setTimeout(() => t.remove(), 8000);
+  if (canNotify() && (document.hidden || !document.hasFocus())) {
+    try { const n = new Notification(m.title, {body: x, tag: "isekur-dcc"}); n.onclick = () => { window.focus(); openFiles(); n.close(); }; } catch (e) {}
+  }
+}
+function openFiles() { $("#side").classList.remove("open"); dfiles.showModal(); renderDcc(); loadFiles(); }
+$("#filesbtn").onclick = openFiles;
+$("#dccbar").onclick = openFiles;
+$("#frefresh").onclick = loadFiles;
 // ⓘ : /about in a dialog; the lines come from iSekur (the same text as the terminal's *about tab)
 const dabout = $("#dabout");
 function openAbout() { $("#side").classList.remove("open"); send({t: "about", buf: active}); dabout.showModal(); }

@@ -2,6 +2,7 @@
 #include "web.h"
 #include <algorithm>
 #include <cstring>
+#include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <openssl/crypto.h>
@@ -318,7 +319,8 @@ void Web::process(const std::vector<pollfd>& v) {
         Client& cl = *clients[k - 1];
         if (!p.revents) continue;
         bool ok = cl.conn.pump(p.revents, cl.in);
-        if (ok && cl.conn.st == Conn::OPEN && !cl.conn.closing) {
+        if (ok && cl.file) feed(cl), cl.since = now;
+        if (ok && cl.conn.st == Conn::OPEN && !cl.conn.closing && !cl.file) {
             if (cl.ws) ws_frames(cl);
             else http(cl);
         }
@@ -334,7 +336,7 @@ void Web::process(const std::vector<pollfd>& v) {
         }
     }
     for (auto& cl : clients)  // idle HTTP (non-WebSocket) connections
-        if (!cl->ws && now - cl->since > 30) dead.push_back(cl.get());
+        if (!cl->ws && now - cl->since > 30) dead.push_back(cl.get());  // a download only once it stops moving
     clients.erase(std::remove_if(clients.begin(), clients.end(),
                                  [&](auto& cl) {
                                      return std::find(dead.begin(), dead.end(), cl.get()) != dead.end();
@@ -449,9 +451,115 @@ void Web::http(Client& cl) {
         cl.ws = true;
         snapshot(cl);
         ws_frames(cl);
+    } else if (method == "GET" && (path == "/files" || path.rfind("/files/", 0) == 0)) {
+        if (!authed) { respond(cl.conn, 403, "Forbidden", "text/plain", "forbidden"); return; }
+        files(cl, path, h);
     } else {
         respond(cl.conn, 404, "Not Found", "text/plain", "not found");
     }
+}
+
+static std::string pct_decode(const std::string& s) {
+    std::string o;
+    for (size_t i = 0; i < s.size(); i++) {
+        if (s[i] == '%' && i + 2 < s.size() && isxdigit((unsigned char)s[i + 1]) && isxdigit((unsigned char)s[i + 2]))
+            o += (char)strtol(s.substr(i + 1, 2).c_str(), nullptr, 16), i += 2;
+        else o += s[i];
+    }
+    return o;
+}
+
+static std::string pct_encode(const std::string& s) {
+    std::string o;
+    char buf[4];
+    for (unsigned char ch : s) {
+        if (isalnum(ch) || strchr("-._~", ch)) o += (char)ch;
+        else snprintf(buf, sizeof buf, "%%%02X", ch), o += buf;
+    }
+    return o;
+}
+
+// dcc_web: dcc_dir in the browser, seedbox style. GET /files lists it, GET /files/name
+// downloads one (Range: a broken download goes on). Plain files right in it only, no dot files.
+void Web::files(Client& cl, const std::string& path, const std::map<std::string, std::string>& h) {
+    if (!c.opt_on(nullptr, "dcc_web", false)) {
+        respond(cl.conn, 403, "Forbidden", "application/json", "{\"off\":true}");
+        return;
+    }
+    std::string dir = c.dcc_dir();
+    if (path == "/files") {
+        std::set<std::string> partial;  // downloads still coming in
+        for (auto& d : c.dccs)
+            if (!d->send && (d->st == Dcc::RUN || d->st == Dcc::RESUME)) partial.insert(d->path);
+        std::vector<std::pair<time_t, std::string>> list;
+        if (DIR* dp = opendir(dir.c_str())) {
+            while (dirent* e = readdir(dp)) {
+                std::string n = e->d_name, fp = dir + "/" + n;
+                struct stat st;
+                if (n[0] == '.' || lstat(fp.c_str(), &st) || !S_ISREG(st.st_mode)) continue;
+                list.push_back({st.st_mtime, "{\"n\":" + json_str(n) + ",\"s\":" + std::to_string(st.st_size) + ",\"m\":" +
+                                                 std::to_string(st.st_mtime) + (partial.count(fp) ? ",\"part\":true" : "") + "}"});
+            }
+            closedir(dp);
+        }
+        std::sort(list.begin(), list.end(), [](auto& a, auto& b) { return a.first > b.first; });  // newest first
+        std::string j = "{\"dir\":" + json_str(dir) + ",\"files\":[";
+        for (size_t i = 0; i < list.size(); i++) j += (i ? "," : "") + list[i].second;
+        respond(cl.conn, 200, "OK", "application/json", j + "]}");
+        return;
+    }
+    std::string name = pct_decode(path.substr(7)), fp = dir + "/" + name;
+    struct stat st;
+    if (name.empty() || name[0] == '.' || name.find('/') != std::string::npos || name.find('\0') != std::string::npos ||
+        lstat(fp.c_str(), &st) || !S_ISREG(st.st_mode)) {
+        respond(cl.conn, 404, "Not Found", "text/plain", "not found");
+        return;
+    }
+    unsigned long long size = (unsigned long long)st.st_size, from = 0;
+    auto r = h.find("range");  // "bytes=N-" (and N-M: taken as N-, the rest comes anyway)
+    bool ranged = r != h.end() && r->second.rfind("bytes=", 0) == 0 && isdigit((unsigned char)r->second[6]);
+    if (ranged) from = strtoull(r->second.c_str() + 6, nullptr, 10);
+    if (ranged && from >= size) {
+        respond(cl.conn, 416, "Range Not Satisfiable", "text/plain", "", "Content-Range: bytes */" + std::to_string(size) + "\r\n");
+        return;
+    }
+    cl.file = fopen(fp.c_str(), "rb");
+    if (!cl.file || fseeko(cl.file, (off_t)from, SEEK_SET)) {
+        respond(cl.conn, 500, "Error", "text/plain", strerror(errno));
+        return;
+    }
+    cl.left = size - from;
+    cl.conn.out += std::string("HTTP/1.1 ") + (ranged ? "206 Partial Content" : "200 OK") +
+                   "\r\nContent-Type: application/octet-stream\r\nContent-Length: " + std::to_string(cl.left) +
+                   (ranged ? "\r\nContent-Range: bytes " + std::to_string(from) + "-" + std::to_string(size - 1) + "/" + std::to_string(size) : "") +
+                   "\r\nContent-Disposition: attachment; filename*=UTF-8''" + pct_encode(name) +
+                   "\r\nAccept-Ranges: bytes\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n";
+    feed(cl);
+}
+
+// keep ~256K of the file in the connection's buffer; done: close once it's out
+void Web::feed(Client& cl) {
+    char buf[65536];
+    while (cl.file && cl.conn.out.size() < (1 << 18)) {
+        size_t n = fread(buf, 1, (size_t)std::min<unsigned long long>(sizeof buf, cl.left), cl.file);
+        cl.conn.out.append(buf, n), cl.left -= n;
+        if (!n || !cl.left) fclose(cl.file), cl.file = nullptr, cl.conn.closing = true;
+    }
+}
+
+std::string Web::dcc_json(std::string* sig) {
+    static const char* sts[] = {"offer", "resume", "wait", "run", "done", "failed"};
+    std::string j = "{\"t\":\"dcc\",\"web\":" + std::string(c.opt_on(nullptr, "dcc_web", false) ? "true" : "false") + ",\"list\":[";
+    bool first = true;
+    for (auto& d : c.dccs) {
+        if (d->st == Dcc::DONE || d->st == Dcc::FAILED) continue;
+        if (sig) *sig += std::to_string(d->id) + sts[d->st] + " ";
+        j += std::string(first ? "" : ",") + "{\"id\":" + std::to_string(d->id) + ",\"send\":" + (d->send ? "true" : "false") +
+             ",\"nick\":" + json_str(d->nick) + ",\"file\":" + json_str(d->file) + ",\"st\":\"" + sts[d->st] +
+             "\",\"got\":" + std::to_string(d->got) + ",\"size\":" + std::to_string(d->size) + ",\"rate\":" + std::to_string(d->rate) + "}";
+        first = false;
+    }
+    return j + "]}";
 }
 
 static Buffer* by_id(Core& c, int id) {
@@ -586,6 +694,7 @@ void Web::snapshot(Client& cl) {
     for (auto& k : commands()) cm += std::string(cm.back() == '[' ? "" : ",") + json_str(k.name);
     send(cm + "]}");
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
+    send(dcc_json());
 }
 
 bool Web::attached() const {
@@ -618,6 +727,10 @@ void Web::flush() {
     pending.clear();
     std::string o = order_json();
     if (o != last_order) broadcast(o), last_order = o;
+    // transfers: a new one or a new state at once, the bytes once a second
+    std::string sig, dj = dcc_json(&sig);
+    time_t now = time(nullptr);
+    if (dj != last_dcc && (sig != last_dcc_sig || now != last_dcc_at)) broadcast(dj), last_dcc = dj, last_dcc_sig = sig, last_dcc_at = now;
 }
 
 void Web::on_event(Ev e, Buffer* b, const Line* l) {
@@ -644,5 +757,9 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::THEME: broadcast(theme_json()); break;
     case Ev::CLEAR: known.erase(b->id), pending.insert(b->id); break;  // its lines go out again, from scratch
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
+    case Ev::NOTE:
+        broadcast("{\"t\":\"note\",\"buf\":" + std::to_string(b->id) + ",\"err\":" + (l->kind == LK::ERROR ? "true" : "false") +
+                  ",\"title\":" + json_str(l->nick) + ",\"x\":" + json_str(l->text) + "}");
+        break;
     }
 }
