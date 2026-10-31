@@ -252,7 +252,8 @@ static const std::vector<CmdInfo> CMDS = {
      "except Alt+Left/Right and Alt+1-9, so Alt+D or /detach typed there detaches it and leaves it "
      "running; the tab then says so, and /attach host again reconnects. If nothing runs there, a "
      "new iSekur starts. Several iSekurs on one machine each run with their own config (isekur -c "
-     "work.conf); config picks one (isekur -c config --attach there) and names the tab host:work. "
+     "work.conf); config picks one (isekur -c config --attach there) and names the tab host:work; "
+     "ssh host isekur --list shows which run there. "
      "The mouse isn't passed on. Terminal only: never from the webchat.",
      {"/attach vps", "/attach me@irc.example.org", "/attach vps ~/.config/isekur/work.conf"}},
     {"lock", "Session", "[on|off]", "Lock the terminal with a password",
@@ -563,7 +564,8 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_KEY("Ctrl+Z") ", " G_KEY("Alt+D") " or " G_CMD("/detach") " gives the terminal back and " BOLD "keeps iSekur connected" RESET ".",
         "  Later, from any terminal or SSH session: " G_CMD("isekur --attach") " (or just " G_CMD("isekur") ").",
         "  On another computer: " G_CMD("/attach ") G_VAL("host") " shows that machine's iSekur in a tab (over ssh).",
-        "  Several at once: one config each, " G_CMD("isekur -c ") G_VAL("work.conf") "; " G_CMD("/attach ") G_VAL("host work.conf") " picks one.",
+        "  Several at once: one config each, " G_CMD("isekur -c ") G_VAL("work.conf") "; " G_CMD("isekur --list") " shows them,",
+        "  " G_CMD("isekur -c ") G_VAL("work.conf") G_CMD(" --attach") " or " G_CMD("/attach ") G_VAL("host work.conf") " picks one.",
         "  Away while detached: you are marked " BOLD "away" RESET " by yourself, and back when you type.",
         "",
         G_TIP "Closing the terminal or losing SSH " BOLD "detaches" RESET " too: nothing is lost.",

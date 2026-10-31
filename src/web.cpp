@@ -1,5 +1,6 @@
 // Built-in webchat: tiny HTTP/1.1 + WebSocket server mirroring the session.
 #include "web.h"
+#include "session.h"
 #include <algorithm>
 #include <cstring>
 #include <dirent.h>
@@ -292,7 +293,9 @@ bool Web::start_(std::string& err) {
         }
         secure = true;
     }
-    sessions_path = c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "web.sessions";
+    // isekur.conf: web.sessions as always; work.conf: work.web.sessions, its own logins
+    std::string base = c.cfg_path.substr(c.cfg_path.rfind('/') + 1);
+    sessions_path = base == "isekur.conf" ? c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "web.sessions" : cfg_side(c.cfg_path, "web.sessions");
     load_sessions();
     lfd = listen_tcp(bind, port, err);
     if (lfd < 0) { err = "web listen " + bind + ":" + std::to_string(port) + ": " + err; return false; }

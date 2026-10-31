@@ -555,7 +555,10 @@ int main() {
 #ifdef __CYGWIN__
     assert(s1.listen(sp, serr) == 0);  // no detaching there
 #else
-    assert(sp == "build/isekur.sock" && s1.listen(sp, serr) == 1 && s2.listen(sp, serr) == -1);
+    // each config its own socket, so several share a folder; isekur.conf keeps isekur.sock
+    assert(sock_path_for("a/isekur.conf") == "a/isekur.sock" && sock_path_for("a/work.conf") == "a/work.sock" &&
+           sock_path_for("a/.conf") == "a/.conf.sock" && sock_path_for("myconf") == "myconf.sock" && cfg_side("a/w.conf", "log") == "a/w.log");
+    assert(sp == "build/isekur-test.sock" && s1.listen(sp, serr) == 1 && s2.listen(sp, serr) == -1);
     s1.close();
     assert(access(sp.c_str(), F_OK) != 0 && s2.listen(sp, serr) == 1);
     s2.close();

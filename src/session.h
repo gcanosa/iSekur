@@ -25,6 +25,9 @@ private:
     size_t first = 0, n = 0;   // our slots in the pollfd vector
 };
 
-std::string sock_path_for(const std::string& cfg_path);  // <config dir>/isekur.sock
+std::string cfg_side(const std::string& cfg_path, const std::string& ext);  // <dir>/<name>.conf -> <dir>/<name>.ext
+std::string sock_path_for(const std::string& cfg_path);  // <dir>/<name>.sock
+// --list: the running ones whose sockets are in dirs, each with the command that attaches it
+int list_main(const std::vector<std::string>& dirs, const std::string& default_cfg);
 // the --attach client; `how` is the command that attaches again, for its messages
 int attach_main(const std::string& sock_path, const std::string& how);

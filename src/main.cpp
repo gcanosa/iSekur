@@ -19,11 +19,12 @@
 static volatile sig_atomic_t g_term = 0;
 
 static int usage() {
-    puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [--web|--no-web] [--hash-password] [-v|--version]\n"
+    puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [-l|--list] [--web|--no-web] [--hash-password] [-v|--version]\n"
          "  -c FILE          config file (default ~/.config/isekur/isekur.conf)\n"
          "  -d, --daemon     run headless in the background; attach with --attach or the webchat\n"
          "  -a, --attach     bring a detached iSekur (Alt+D, /detach, --daemon) back to this terminal;\n"
          "                   with none running, start a new one\n"
+         "  -l, --list       the iSekurs running (one per config) and how to attach each\n"
          "  --web, --no-web  start the webchat or not, whatever [web] autostart says\n"
          "  --hash-password  read a password and print a [web] password_hash value");
     return 1;
@@ -91,7 +92,7 @@ static int wait_fds(std::vector<pollfd>& fds, int timeout_ms) {
 int main(int argc, char** argv) {
     setlocale(LC_ALL, "");
     signal(SIGPIPE, SIG_IGN);
-    bool daemon = false, attach = false;
+    bool daemon = false, attach = false, list = false;
     int web_flag = -1;  // --web / --no-web; -1 = [web] autostart decides
     Core c;
     for (int i = 1; i < argc; i++) {
@@ -99,6 +100,7 @@ int main(int argc, char** argv) {
         if (a == "-c" && i + 1 < argc) c.cfg_path = argv[++i];
         else if (a == "-d" || a == "--daemon") daemon = true;
         else if (a == "-a" || a == "--attach") attach = true;
+        else if (a == "-l" || a == "--list") list = true;
         else if (a == "--web") web_flag = 1;
         else if (a == "--no-web") web_flag = 0;
         else if (a == "--hash-password") return hash_pw_cmd();
@@ -107,6 +109,10 @@ int main(int argc, char** argv) {
     }
     bool own_cfg = !c.cfg_path.empty();
     if (c.cfg_path.empty()) c.cfg_path = default_config_path();
+    if (list) {  // the default config's folder, and -c's
+        auto dir = [](const std::string& p) { return p.find('/') == std::string::npos ? std::string(".") : p.substr(0, p.rfind('/')); };
+        return list_main({dir(default_config_path()), dir(c.cfg_path)}, default_config_path());
+    }
     std::string how = std::string("isekur --attach") + (own_cfg ? " -c " + c.cfg_path : "");
     std::string sock = sock_path_for(c.cfg_path);
     // --attach with nothing running starts one, like plain isekur, and says it's new (below)
@@ -125,7 +131,7 @@ int main(int argc, char** argv) {
     // process lends it the terminal, so detaching (Alt+D, a closed window, a
     // dropped SSH) only ends this side. Without the socket (`local`), the
     // terminal is driven here and there is no detaching.
-    std::string log = c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "isekur.log";
+    std::string log = cfg_side(c.cfg_path, "log");  // isekur.conf: isekur.log
     bool local = !daemon && ls == 0;
     if (!local) {
         int d = daemonize(log, !daemon);

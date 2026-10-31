@@ -6,7 +6,9 @@
 #include <csignal>
 #include <cstdio>
 #include <cstring>
+#include <dirent.h>
 #include <fcntl.h>
+#include <set>
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -18,9 +20,16 @@ static const char* HELLO = "isekur-attach 1\n";
 // what the terminal's side decides: terminfo, truecolor, character widths
 static const char* ENV_KEYS[] = {"TERM", "COLORTERM", "LANG", "LC_ALL", "LC_CTYPE"};
 
-std::string sock_path_for(const std::string& cfg_path) {
-    return cfg_path.substr(0, cfg_path.rfind('/') + 1) + "isekur.sock";
+// <dir>/<name>.<ext> beside <dir>/<name>.conf: each config its own socket and log,
+// so several iSekurs can share ~/.config/isekur (isekur.conf keeps isekur.sock)
+std::string cfg_side(const std::string& cfg_path, const std::string& ext) {
+    std::string p = cfg_path;
+    size_t n = p.size();
+    if (n > 5 && p.compare(n - 5, 5, ".conf") == 0 && p[n - 6] != '/') p.resize(n - 5);
+    return p + "." + ext;
 }
+
+std::string sock_path_for(const std::string& cfg_path) { return cfg_side(cfg_path, "sock"); }
 
 static bool sock_addr(const std::string& path, sockaddr_un& a) {
     a = sockaddr_un{};
@@ -233,4 +242,38 @@ int attach_main(const std::string& path, const std::string& how) {
     restore();
     fprintf(stderr, "Lost the connection to iSekur\n");
     return 1;
+}
+
+// ---- --list: the iSekurs running from these config folders ----------------------
+// a socket that answers is a running one; one left by a crash doesn't
+int list_main(const std::vector<std::string>& dirs, const std::string& default_cfg) {
+    std::set<std::string> seen;
+    int n = 0;
+    for (const std::string& dir : dirs) {
+        if (!seen.insert(dir).second) continue;
+        DIR* d = opendir(dir.c_str());
+        if (!d) continue;
+        std::vector<std::string> names;
+        while (dirent* e = readdir(d)) {
+            std::string f = e->d_name;
+            if (f.size() > 5 && f.compare(f.size() - 5, 5, ".sock") == 0) names.push_back(f);
+        }
+        closedir(d);
+        std::sort(names.begin(), names.end());
+        for (const std::string& f : names) {
+            std::string sock = dir + "/" + f;
+            sockaddr_un a;
+            int s = socket(AF_UNIX, SOCK_STREAM, 0);
+            bool up = s >= 0 && sock_addr(sock, a) && connect(s, (sockaddr*)&a, sizeof a) == 0;
+            if (s >= 0) ::close(s);
+            if (!up) continue;
+            std::string stem = sock.substr(0, sock.size() - 5), cfg = stem + ".conf";
+            if (access(cfg.c_str(), F_OK) != 0) cfg = stem;  // a config named without .conf
+            if (!n++) puts("Running iSekurs:");
+            printf("  %-12s %s\n", stem.substr(stem.rfind('/') + 1).c_str(),
+                   (cfg == default_cfg ? std::string("isekur --attach") : "isekur -c " + cfg + " --attach").c_str());
+        }
+    }
+    if (!n) puts("No iSekur is running (isekur starts one)");
+    return 0;
 }

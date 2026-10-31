@@ -7,6 +7,7 @@ isekur \- colorful terminal IRC client with a built-in webchat
 .IR config ]
 .RB [ \-d | \-\-daemon ]
 .RB [ \-a | \-\-attach ]
+.RB [ \-l | \-\-list ]
 .RB [ \-\-web | \-\-no\-web ]
 .RB [ \-\-hash\-password ]
 .RB [ \-v | \-\-version ]
@@ -31,13 +32,23 @@ or the webchat, which this mode always tries to start (it needs
 and
 .BR password_hash "). Output goes to"
 .I isekur.log
-next to the config file.
+next to the config file
+.RI ( work.log
+for
+.IR work.conf ).
 .TP
 .BR \-a ", " \-\-attach
 Bring a detached iSekur back to this terminal. With none running for the
 config, a new one starts (its first window says it's a new session). Starting
 .B isekur
-while one is running with the same config attaches too.
+while one is running with the same config attaches too. Several run side by
+side with one config each
+.RB ( "isekur \-c ~/.config/isekur/work.conf" ).
+.TP
+.BR \-l ", " \-\-list
+List the iSekurs running from the default config's directory (and
+.BR \-c 's),
+each with the command that attaches it.
 .TP
 .BR \-\-web ", " \-\-no\-web
 Start the webchat, or don't, regardless of
@@ -177,12 +188,20 @@ is set; earlier days are kept as
 .I ~/.config/isekur/isekur.sock
 The socket
 .B \-\-attach
-uses, only for your user. Its output in the background goes to
+uses, only for your user, named after the config
+.RI ( work.sock
+for
+.IR work.conf ).
+Its output in the background goes to
 .I isekur.log
+.RI ( work.log )
 in the same directory.
 .TP
 .I ~/.config/isekur/web.sessions
-Hashed webchat login sessions.
+Hashed webchat login sessions
+.RI ( work.web.sessions
+for
+.IR work.conf ).
 .SH SEE ALSO
 https://github.com/gcanosa/iSekur
 .SH LICENSE

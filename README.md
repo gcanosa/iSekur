@@ -88,16 +88,19 @@ only attached to it.
     Alt+D / /detach     # back to the shell; still connected, still in the channels, still logging
     isekur --attach     # back again, from this or any other terminal or SSH login (none running: a new one starts)
     isekur --daemon     # start in the background without attaching
+    isekur --list       # the ones running, and the command that attaches each
     /attach host        # inside iSekur: another machine's iSekur, live in a tab (over ssh)
 
-Several sessions side by side: each runs with its own config, since the socket lives next to it
+Several sessions side by side: one config each, in the same folder or not
 (`isekur -c ~/.config/isekur/work.conf`, Alt+D, then `isekur -c ~/.config/isekur/fun.conf`...).
-`isekur -c work.conf --attach` picks one here, `/attach host ~/.config/isekur/work.conf` one on
-another machine (in a tab named `host:work`).
+`isekur --list` shows which are running; `isekur -c work.conf --attach` picks one here,
+`/attach host ~/.config/isekur/work.conf` one on another machine (in a tab named `host:work`;
+`ssh host isekur --list` shows what runs there).
 
 Closing the terminal or losing the SSH connection detaches too. One terminal is attached at a time;
-`/quit` ends it for real. It works through a socket next to the config (`isekur.sock`, only for your
-user); output from the background goes to `isekur.log` there. On Linux servers where systemd kills
+`/quit` ends it for real. It works through a socket next to the config, named after it
+(`isekur.sock` for `isekur.conf`, `work.sock` for `work.conf`, only for your user); output from the
+background goes to `isekur.log` (`work.log`) there. On Linux servers where systemd kills
 your processes at logout (`KillUserProcesses=yes`), run `loginctl enable-linger $USER` once.
 Not available on Cygwin.
 
