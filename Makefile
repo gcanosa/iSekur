@@ -2,6 +2,7 @@
 #   make          build ./isekur
 #   make test     build + run tests
 #   make debug    ASan+UBSan build
+#   make notwitch build without Twitch chat support (same as make TWITCH=0)
 #   make install  PREFIX=/usr/local (default) DESTDIR= for staging; use the
 #                 same PREFIX for build and install: the themes path is compiled in
 #   make clean
@@ -52,7 +53,7 @@ CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS)
 
-SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp
+SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp
 VTERM := $(wildcard vendor/libvterm/src/*.c)
 OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 
@@ -70,6 +71,16 @@ build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
 # libvterm 0.3.3 (MIT): the screen of /shell's terminal
 build/vterm_%.o: vendor/libvterm/src/%.c | build
 	$(CC) $(CFLAGS) -Ivendor/libvterm/include -w -c -o $@ $<
+
+# TWITCH=0 (make notwitch): twitch.cpp with ISEKUR_NO_TWITCH. The choice is kept in
+# build/twitch.flag, rewritten only when it changes, so switching rebuilds twitch.o
+TWITCH ?= 1
+build/twitch.o: CXXFLAGS += $(if $(filter 0,$(TWITCH)),-DISEKUR_NO_TWITCH)
+build/twitch.o: build/twitch.flag
+build/twitch.flag: FORCE | build
+	@echo $(TWITCH) | cmp -s - $@ || echo $(TWITCH) > $@
+notwitch:
+	$(MAKE) TWITCH=0
 
 # the config template is compiled in too: /set lists its keys and defaults
 build/core.o: build/conf_template.h
@@ -95,7 +106,7 @@ build:
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/tui.o build/sysinfo.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
 	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:
@@ -117,4 +128,4 @@ clean:
 	rm -rf build isekur
 
 -include $(wildcard build/*.d)
-.PHONY: all test debug install uninstall clean FORCE
+.PHONY: all test debug notwitch install uninstall clean FORCE

@@ -113,6 +113,16 @@ autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
 ; nickserv_pass = secret     ; /msg NickServ IDENTIFY on connect, for networks without SASL
 ; e2e_keys  =                ; written by /e2e #chan for autojoin channels (the key, not the password)
 
+# Twitch chat is IRC too: the password is an OAuth token (chat:read chat:edit),
+# "oauth:" is added if you leave it out. Channels are streamer names.
+; [server.twitch]
+; host      = irc.chat.twitch.tv
+; port      = 6697
+; tls       = true
+; nick      = yourlogin
+; password  = oauth:yourtoken
+; autojoin  = #somestreamer
+
 [server.local]
 host      = 127.0.0.1
 port      = 6667

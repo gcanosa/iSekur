@@ -315,6 +315,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         if (it != b->nicks.end() && !it->second.prefix.empty()) pfx = it->second.prefix.substr(0, 1);
         marker = pfx + l.nick;
         ms = l.self ? T.get("msg_self") : nick_style(T, l.nick);
+        if (!l.self && l.color >= 0) ms.fg = l.color;  // Twitch: the color they picked
         if (l.hilight) ms = T.get("hilight"), body = sty(T, "hilight_text", "default");
         break;
     }

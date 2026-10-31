@@ -281,6 +281,8 @@ Server* Core::add_server(const ServerCfg& sc) {
     Server* sp = s.get();
     servers.push_back(std::move(s));
     sp->status = open(sp, BT::STATUS, sc.name);
+    if (sp->twitch())  // a new tab, not each reconnect
+        for (auto& l : twitch_banner()) add(sp->status, Line{time(nullptr), LK::INFO, "", l, false, false, true});
     load_flood(sp);
     for (auto& e : split(ini_get(cfg, "server." + sc.name, "e2e_keys"), ','))  // "#chan:b64key", see e2e_keep
         if (size_t c = e.rfind(':'); c != std::string::npos && unb64(e.substr(c + 1)).size() == 32)
@@ -844,6 +846,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         connect(t);
         return;
     }
+    if (cmd == "twitch") { twitch_cmd(b); return; }  // twitch.cpp
     if (cmd == "disconnect") {
         if (!s) return;
         s->user_quit = true;
@@ -989,6 +992,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "join" || cmd == "j") {
         if (argv.empty()) return;
         std::string ch = s->is_chan(argv[0]) ? argv[0] : "#" + argv[0];
+        if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
         s->send("JOIN " + ch + (argv.size() > 1 ? " " + argv[1] : ""));
         if (argv.size() > 1) s->chan_keys[irc_lower(ch)] = argv[1];
         return;

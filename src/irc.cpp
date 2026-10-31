@@ -239,8 +239,11 @@ void Core::connect(Server* s) {
         return;
     }
     s->state = SS::CONNECTING;
-    if (!s->cfg.pass.empty()) s->send("PASS " + s->cfg.pass);
-    s->send("CAP LS 302");
+    if (s->twitch()) twitch_login(s);  // twitch.cpp
+    else {
+        if (!s->cfg.pass.empty()) s->send("PASS " + s->cfg.pass);
+        s->send("CAP LS 302");
+    }
     s->send("NICK " + s->nick);
     s->send("USER " + s->cfg.user + " 0 * :" + s->cfg.realname);
     notify(Ev::BUFFER, s->status);
@@ -463,6 +466,7 @@ void Core::handle(Server* s, const Msg& m) {
                 std::find_if(chans.begin(), chans.end(), [&](const std::string& c) { return irc_lower(c) == irc_lower(b->name); }) == chans.end())
                 chans.push_back(b->name);
         for (auto& ch : chans) {
+            if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
             auto k = s->chan_keys.find(irc_lower(ch));
             s->send("JOIN " + ch + (k != s->chan_keys.end() ? " " + k->second : ""));
         }
@@ -553,7 +557,7 @@ void Core::handle(Server* s, const Msg& m) {
                         std::to_string(std::min(fetch, 500)));
             }
             line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
-            s->send("MODE " + ch);
+            if (!s->twitch()) s->send("MODE " + ch);  // Twitch: 421 unknown command
             if (fresh) select(b);
             return;
         }
@@ -712,6 +716,7 @@ void Core::handle(Server* s, const Msg& m) {
             return;
         }
     }
+    if (s->twitch() && twitch_handle(s, m, ts)) return;  // twitch.cpp
     if (cmd == "ACCOUNT" || cmd == "SETNAME" ||
         cmd == "TAGMSG")
         return;
@@ -818,7 +823,9 @@ void Core::handle(Server* s, const Msg& m) {
                 if (it->ts == ts && it->nick == who && mirc_strip(it->text) == plain) return;
             hl = false;  // old news: no alerts, no copies to window 1
         }
-        line(b, kind, who, locked ? "\xf0\x9f\x94\x92 " + text : text, self, hl);
+        Line l{ts, kind, who, locked ? "\xf0\x9f\x94\x92 " + text : text, self, hl};
+        if (s->twitch() && !self && !server_msg && twitch_user(b, m, l)) notify(Ev::BUFFER, b);
+        add(b, l);
         if (hl) ring(s);
         return;
     }

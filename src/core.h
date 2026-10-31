@@ -73,6 +73,7 @@ struct Line {
     bool self = false, hilight = false;
     bool nolog = false;  // /grep results: shown, never written to the log
     long long typed_at = 0;  // /typing: when it started typing itself out (ms), 0 = shown at once
+    RGB color = -1;          // the nick's own color (Twitch "color" tag), -1 = theme's
 };
 // /typing: how many of a line's len visible characters show at now; ~30 a second, never over 2s a line
 inline size_t typed_chars(const Line& l, size_t len, long long now) {
@@ -180,6 +181,8 @@ struct Dcc {
 };
 
 struct Core;
+// twitch.cpp; with make notwitch twitch_host() is always false, so none of it runs
+bool twitch_host(const std::string& host);  // irc.chat.twitch.tv and the like
 struct Server {
     ServerCfg cfg;
     Conn conn;
@@ -223,6 +226,8 @@ struct Server {
     void send_now(const std::string& line);  // PING/PONG/QUIT: never wait
     int drain(long long now);                // ms until the next line may go, -1 = idle
     bool is_chan(const std::string& t) const;
+    // Twitch chat is IRC with its own CAPs, tags and commands: irc.chat.twitch.tv
+    bool twitch() const { return twitch_host(cfg.host); }
     int prefix_rank(const std::string& pfx) const;  // lower = higher rank
 };
 
@@ -291,6 +296,8 @@ struct Core {
     void lock_cmd(Buffer* b, const std::string& args);
     void unlock(const std::string& pass);
     bool asking(const Buffer* b) const { return b && pass_buf == b && !pass_web; }  // the TUI's dialog is up on b
+    bool twitch_handle(Server* s, const Msg& m, time_t ts);  // Twitch-only commands; true: handled
+    void twitch_cmd(Buffer* b);  // /twitch
     void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden = true,
                   const std::string& title = "", std::vector<std::string> info = {});
 
@@ -389,6 +396,9 @@ std::vector<std::string> split(const std::string& s, char sep);
 std::string after_words(const std::string& s, size_t n);  // the text after the first n words
 std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double shine = -99);  // the startup banner, theme colors or gray
 // typed: the lines /about types out (the tagline, the support channel)
+std::vector<std::string> twitch_banner();  // twitch.cpp: a Twitch server tab's banner
+void twitch_login(Server* s);  // PASS + Twitch CAPs on connect
+bool twitch_user(Buffer* b, const Msg& m, Line& l);  // a message's Twitch tags; true: nick list changed
 std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool web = false, std::vector<int>* typed = nullptr);  // /about: the banner + version, author, links
 std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf

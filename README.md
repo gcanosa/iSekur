@@ -61,6 +61,7 @@ Needs a C++17 compiler, GNU make, OpenSSL 1.1+/LibreSSL and PAM (libpam0g-dev on
 
     make            # gmake on *BSD
     make test
+    make notwitch   # without Twitch chat support (/twitch then says so)
     ./isekur        # or: ./isekur -c path/to/isekur.conf
     sudo make install            # /usr/local; PREFIX=... must match the build
     man isekur
@@ -132,6 +133,10 @@ dropped instead of showing up as garbage.
 `/theme`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
+
+Twitch chat is IRC: `/twitch` opens its tab and asks for your login and OAuth token if they're missing, or set up a `[server.twitch]` with `host = irc.chat.twitch.tv`, `port = 6697`, `tls = true`,
+`nick = yourlogin` and `password = oauth:yourtoken` (see `iSekur.conf.example`), then `/join #streamer`.
+Display names, name colors, mod/VIP badges (`@`/`+`), subs, raids, timeouts and room modes are shown.
 
 Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/masskick [-yes] [reason]` (asks first), `/lockdown` (+mntsi) and `/unlock` (-msi),

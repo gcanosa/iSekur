@@ -357,7 +357,7 @@ function lineEl(b, l) {
   if (l.k === "msg") {
     const e = b.nickmap && b.nickmap.get(ircLower(l.n));
     nk.textContent = (e && e[0] ? e[0][0] : "") + l.n;
-    if (l.s) nk.className += " self"; else if (!l.h) nk.style.color = nickColor(l.n);
+    if (l.s) nk.className += " self"; else if (!l.h) nk.style.color = l.c || nickColor(l.n);
     mirc(tx, l.x); tx.src_ = l.x;
   } else if (l.k === "action") { nk.textContent = "*"; mirc(tx, tx.src_ = l.n + " " + l.x); }
   else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, tx.src_ = l.x); }

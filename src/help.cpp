@@ -17,8 +17,18 @@ static const std::vector<CmdInfo> CMDS = {
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick). The server is remembered "
      "like /set does, so /save keeps it for the next start. Naming a server you already have "
-     "reconnects it.",
-     {"/server irc.libera.chat 6697 -tls -name libera", "/server irc.example.org", "/server 10.0.0.5 6697 -tls -noverify"}},
+     "reconnects it. Twitch chat works too: /server irc.chat.twitch.tv 6697 -tls -name twitch -nick "
+     "yourlogin, then /set server.twitch.password oauth:yourtoken and /connect twitch; /join #streamer "
+     "(lowercase is done for you). Names, colors, badges, subs, raids, timeouts and room modes show up; "
+     "WHOIS, DCC and Twitch's /ban /timeout don't exist over its IRC.",
+     {"/server irc.libera.chat 6697 -tls -name libera", "/server irc.example.org", "/server 10.0.0.5 6697 -tls -noverify",
+      "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
+    {"twitch", "Connection", "", "Open the Twitch chat tab",
+     "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "
+     "there's none). Already set up: asks to connect. Otherwise it says what's missing (your login and an "
+     "OAuth token with chat:read and chat:edit) and asks for them, so the token never lands in your input "
+     "history. They're kept like /set does: /save writes them to the config. Then /join #streamer.",
+     {"/twitch", "/join #somestreamer"}},
     {"connect", "Connection", "[name]", "Reconnect a configured server",
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect libera"}},

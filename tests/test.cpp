@@ -213,6 +213,43 @@ int main() {
     assert(sent() == "OPER admin :s3cret\r\n" && !core.pass_buf);
     core.exec(chb, "/kb r1 go away");
     assert(sent() == "MODE #c +b *!*@h2\r\nKICK #c r1 :go away\r\n");
+
+    // Twitch: display-name + color tags, badges in the nick list, its own commands, lowercase joins
+    if (!twitch_host("irc.chat.twitch.tv")) {  // make notwitch: /twitch only says so
+        core.exec(home, "/twitch");
+        assert(home->lines.back().text.find("without Twitch support") != std::string::npos && twitch_banner().empty());
+    } else {
+        ServerCfg twc;
+        twc.name = "tw", twc.nick = "me", twc.host = "irc.chat.twitch.tv";
+        Server* tw = core.add_server(twc);
+        assert(tw->twitch() && !ts->twitch());
+        auto tbn = twitch_banner();  // block letters, same width, colors only (no stray bytes)
+        assert(tbn.size() == 8 && mirc_strip(tbn[0]) == u8"████████╗██╗    ██╗██╗████████╗ ██████╗██╗  ██╗");
+        tw->state = SS::CONNECTED, tw->flood_ms = 0;
+        Buffer* tb = core.open(tw, BT::CHANNEL, "#streamer");
+        auto tfeed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(tw, mm); };
+        tfeed("@badges=moderator/1;color=#FF0000;display-name=CoolGuy :coolguy!coolguy@coolguy.tmi.twitch.tv PRIVMSG #streamer :hi");
+        assert(tb->lines.back().nick == "CoolGuy" && tb->lines.back().color == 0xff0000);
+        assert(tb->nicks.at("coolguy").prefix == "@");
+        tfeed("@ban-duration=600 :tmi.twitch.tv CLEARCHAT #streamer :coolguy");
+        assert(tb->lines.back().text == "coolguy was timed out for 600s");
+        tfeed("@emote-only=0;followers-only=-1;r9k=0;room-id=1;slow=0;subs-only=0 :tmi.twitch.tv ROOMSTATE #streamer");
+        assert(tb->lines.back().text == "coolguy was timed out for 600s");  // all off: nothing to say
+        tfeed("@room-id=1;slow=30 :tmi.twitch.tv ROOMSTATE #streamer");
+        assert(tb->lines.back().text == "Room: slow mode 30s");
+        tfeed("@display-name=Bob;login=bob;msg-id=sub;system-msg=Bob\\ssubscribed! :tmi.twitch.tv USERNOTICE #streamer :yay");
+        assert(mirc_strip(tb->lines.back().text) == "\xe2\x98\x85 Bob subscribed! \xe2\x80\x94 Bob: yay");
+        core.exec(tb, "/join #BigName");
+        assert(tw->conn.out == "JOIN #bigname\r\n");
+        // /twitch: no login or token in [server.tw] yet, so it asks for both (cancelled before connecting)
+        tw->state = SS::DISCONNECTED;
+        core.exec(home, "/twitch");
+        assert(core.active == tw->status && core.pass_buf == tw->status && tw->status->lines.size() > 8);
+        core.exec(tw->status, "MyLogin");
+        assert(core.cfg["server.tw"]["nick"] == "mylogin" && core.pass_buf == tw->status && core.pass_hidden);
+        core.exec(tw->status, "");
+        assert(!core.pass_buf && tw->state == SS::DISCONNECTED);
+    }
     core.exec(chb, "/tempban r2 5");  // host unknown: USERHOST first, the 302 finishes it
     assert(sent() == "USERHOST r2\r\n");
     feed(":srv 302 me :zz=+a@b");  // someone else's (/quote USERHOST zz): not the kickban's answer
