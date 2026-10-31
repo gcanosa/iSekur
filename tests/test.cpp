@@ -158,6 +158,16 @@ int main() {
     assert(mirc_strip(home->lines[before].text).rfind("/join #channel [key]", 0) == 0);
     core.exec(home, "/help bogus");
     assert(mirc_strip(home->lines.back().text).find("No such command: /bogus") == 0);
+    // /attach: never an ssh option or more than a host, never from the webchat; no tab opened
+    size_t tabs = core.bufs.size();
+    for (const char* bad : {"/attach", "/attach -oProxyCommand=touch /tmp/x", "/attach a b", "/attach a;b"}) {
+        core.exec(home, bad);
+        assert(home->lines.back().text.find("Usage: /attach host") == 0 && core.bufs.size() == tabs);
+    }
+    core.from_web = true;
+    core.exec(home, "/attach vps");
+    core.from_web = false;
+    assert(home->lines.back().text == "/attach works in the terminal only" && core.bufs.size() == tabs);
 
     // channel op commands against a fake connected server; flood_ms 0 = lines go out at once
     ServerCfg tc;

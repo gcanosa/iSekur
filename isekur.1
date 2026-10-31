@@ -135,6 +135,14 @@ Channel operators also get
 .BR /lockdown ", " /unlock ", " /kickban " (" /kb "), " /tempban ", " /chanstats
 and
 .BR /topicrotate .
+.B /shell
+opens a terminal in a tab after this machine's login;
+.BI /attach " host"
+runs
+.B ssh \-t
+.I host
+.B isekur \-\-attach
+in one, showing that machine's iSekur inside this one (Alt+D there detaches it).
 Other commands are sent to the server unchanged.
 .B /help
 lists them in the client;

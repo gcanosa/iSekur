@@ -88,6 +88,7 @@ only attached to it.
     Alt+D / /detach     # back to the shell; still connected, still in the channels, still logging
     isekur --attach     # back again, from this or any other terminal or SSH login (none running: a new one starts)
     isekur --daemon     # start in the background without attaching
+    /attach host        # inside iSekur: another machine's iSekur, live in a tab (over ssh)
 
 Closing the terminal or losing the SSH connection detaches too. One terminal is attached at a time;
 `/quit` ends it for real. It works through a socket next to the config (`isekur.sock`, only for your
@@ -175,6 +176,14 @@ top. `exit` ends it, Ctrl+W then closes the tab (closing a tab with a running sh
 It is never reachable from the webchat or from IRC: only from the terminal iSekur runs in.
 
 ![/shell asks for the machine's login and password in a dialog box](docs/shell-login.png)
+
+`/attach host` does the same with `ssh -t host` and `isekur --attach` there (run through a login
+shell, so a Homebrew `isekur` is found): the iSekur on that machine shows up live in a tab of this
+one. `host` is a name, `user@host` or a `Host` from `~/.ssh/config` (put ports and keys there);
+ssh asks for its own password or uses your keys, so no system login is asked first. Keys go to
+the remote one except Alt+←/→ and Alt+1-9, so Alt+D or `/detach` typed in the tab detaches it
+and leaves it running; `/attach host` again reconnects. If none runs there, a new one starts. The
+mouse isn't passed on. From a plain terminal, `ssh -t host isekur --attach` is the same thing.
 
 `/lock on` sets a master password (off by default): from then on iSekur shows only a password
 box at startup, on every `--attach` and after `/lock`, before any tab, log or message. It's

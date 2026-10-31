@@ -412,7 +412,8 @@ void Tui::draw() {
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
         else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · q, Esc or Ctrl+W closes";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
-        else if (b->type == BT::SHELL) topic = b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
+        else if (b->type == BT::SHELL) topic = b->term && !b->term->host.empty() ? "Remote iSekur: ssh " + b->term->host + " (/detach inside leaves it running)"
+                    : b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {
             static const char* st[] = {"disconnected", "connecting", "registering", "connected"};
             topic = b->srv->cfg.host + ":" + std::to_string(b->srv->cfg.port) +
@@ -717,7 +718,8 @@ void Tui::draw() {
     }
     if (term && !c.asking(b)) {  // keys go to the shell: the input line only says so
         text(0, y, W, "[" + buf_label(b) + "] ", T.get("hilight"), false);
-        text((int)buf_label(b).size() + 3, y, W, "keys go to the shell · Alt+←/→ or Alt+1-9: other tabs · wheel: scrollback · exit ends it", sty(T, "timestamp", "input"), false);
+        text((int)buf_label(b).size() + 3, y, W, term->host.empty() ? "keys go to the shell · Alt+←/→ or Alt+1-9: other tabs · wheel: scrollback · exit ends it"
+                                                          : "keys go to the remote iSekur · Alt+←/→ or Alt+1-9: other tabs · Alt+D in it detaches it", sty(T, "timestamp", "input"), false);
         VTermPos p;
         vterm_state_get_cursorpos(vterm_obtain_state(term->vt), &p);
         if (term->cursor && b->scroll == 0 && p.row < ch && p.col < cw) tb_set_cursor(p.col, top + p.row);

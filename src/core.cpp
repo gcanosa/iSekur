@@ -711,6 +711,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "dcc") { dcc_cmd(b, args); return; }
     if (cmd == "shell") { shell_cmd(b); return; }
+    if (cmd == "attach") { attach_cmd(b, args); return; }
     if (cmd == "lock") { lock_cmd(b, args); return; }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = secret_key;

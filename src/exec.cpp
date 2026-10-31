@@ -271,11 +271,28 @@ void Core::shell_login(Buffer* sb, const std::string& err) {
     }, false, title, err.empty() ? std::vector<std::string>{} : std::vector<std::string>{"!" + err});
 }
 
-void Core::shell_start(Buffer* sb) {
+// /attach host: ssh runs the other machine's iSekur --attach in a tab like /shell's.
+// No login asked here: ssh asks for (or uses keys for) its own.
+void Core::attach_cmd(Buffer* b, const std::string& args) {
+    if (from_web) { print(b, LK::ERROR, "/attach works in the terminal only"); return; }
+    std::string host = args;
+    while (!host.empty() && host.back() == ' ') host.pop_back();
+    // one word, never an ssh option ("-oProxyCommand=..." would run a command here)
+    bool ok = !host.empty() && host[0] != '-';
+    for (char ch : host) ok = ok && (isalnum((unsigned char)ch) || strchr("@._-:[]", ch));
+    if (!ok) { print(b, LK::ERROR, "Usage: /attach host  (or user@host, a Host from ~/.ssh/config)"); return; }
+    Buffer* ab = open(nullptr, BT::SHELL, host);
+    select(ab);
+    if (ab->term) return;  // already attached there
+    print(ab, LK::INFO, "ssh " + host + ": iSekur --attach there (Alt+D or /detach inside leaves it running)");
+    shell_start(ab, host);
+}
+
+void Core::shell_start(Buffer* sb, const std::string& host) {
     const char* sh = getenv("SHELL");
     std::string path = sh && *sh ? sh : "/bin/sh";
     auto t = std::make_unique<Term>();
-    t->c = this, t->b = sb;
+    t->c = this, t->b = sb, t->host = host;
     winsize ws{(unsigned short)t->rows, (unsigned short)t->cols, 0, 0};
     int fd = -1;
     pid_t pid = forkpty(&fd, nullptr, nullptr, &ws);
@@ -285,6 +302,10 @@ void Core::shell_start(Buffer* sb) {
         for (int f = 3; f < 1024; f++) ::close(f);
         setenv("TERM", "xterm-256color", 1);
         if (const char* home = getenv("HOME")) if (chdir(home)) {}
+        if (!host.empty()) {  // a login shell there, so isekur is on its PATH (Homebrew's too)
+            execlp("ssh", "ssh", "-t", "--", host.c_str(), "sh -c 'exec \"${SHELL:-sh}\" -lc \"isekur --attach\"'", (char*)nullptr);
+            _exit(127);
+        }
         std::string arg0 = "-" + path.substr(path.rfind('/') + 1);  // "-zsh": a login shell
         execl(path.c_str(), arg0.c_str(), (char*)nullptr);
         _exit(127);
@@ -355,8 +376,10 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
         pid_t pid = t->pid;
         t->pid = -1;  // reaped here, not hung up
         std::string end = waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) ? ": exit " + std::to_string(WEXITSTATUS(st)) : "";
+        std::string host = t->host;
         b->term.reset();
-        print(b, LK::INFO, "\x02[shell ended" + end + "]\x02 /shell starts another, Ctrl+W closes the tab");
+        if (host.empty()) print(b, LK::INFO, "\x02[shell ended" + end + "]\x02 /shell starts another, Ctrl+W closes the tab");
+        else print(b, LK::INFO, "\x02[ssh " + host + " ended" + end + "]\x02 /attach " + host + " again, Ctrl+W closes the tab");
     }
     for (size_t i = 0; i < hung_up.size();)
         if (waitpid(hung_up[i], nullptr, WNOHANG) != 0) hung_up.erase(hung_up.begin() + (long)i);
@@ -365,7 +388,7 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
 
 // a line typed in a shell tab with no shell running (before the login, or after it ended)
 void Core::shell_line(Buffer* b, const std::string& l) {
-    print(b, LK::ERROR, from_web ? "The shell works in the terminal only" : "No shell running here: /shell logs in and starts one");
+    print(b, LK::ERROR, from_web ? "The shell works in the terminal only" : "No shell running here: /shell logs in and starts one, /attach host reaches another iSekur");
 }
 
 // ---- /lock: a master password for the terminal -------------------------------
