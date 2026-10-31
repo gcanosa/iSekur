@@ -138,6 +138,16 @@ Twitch chat is IRC: `/twitch` opens its tab and asks for your login and OAuth to
 `nick = yourlogin` and `password = oauth:yourtoken` (see `iSekur.conf.example`), then `/join #streamer`.
 Display names, name colors, mod/VIP badges (`@`/`+`), subs, raids, timeouts and room modes are shown.
 
+Getting a token (`/twitch token` shows these steps too):
+1. At [dev.twitch.tv/console](https://dev.twitch.tv/console) register an application: OAuth Redirect URL
+   `http://localhost` (exactly), Category *Chat Bot*, Client Type *Public*. Copy its **Client ID**.
+2. Open, with your Client ID in place of `YOUR_CLIENT_ID`:
+   `https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=YOUR_CLIENT_ID&redirect_uri=http://localhost&scope=chat:read+chat:edit`
+3. Approve. The browser lands on a localhost page that doesn't load, which is fine: copy what follows
+   `access_token=` in its address, up to the next `&`, and paste it when `/twitch` asks.
+
+A channel is the streamer's name from `twitch.tv/<name>`: `/join name` (the `#` and lowercase are added).
+
 Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/masskick [-yes] [reason]` (asks first), `/lockdown` (+mntsi) and `/unlock` (-msi),
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when

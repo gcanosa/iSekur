@@ -214,6 +214,22 @@ int main() {
     core.exec(chb, "/kb r1 go away");
     assert(sent() == "MODE #c +b *!*@h2\r\nKICK #c r1 :go away\r\n");
 
+    // /part, /close and Ctrl+W: PART (given message, else part_message), the tab closes, the server tab says so
+    {
+        Buffer* pb = core.open(ts, BT::CHANNEL, "#p");
+        pb->joined = true, sent();
+        core.exec(pb, "/part off to bed");
+        assert(sent() == "PART #p :off to bed\r\n" && !core.find(ts, "#p") && ts->status->lines.back().text == "You left #p");
+        pb = core.open(ts, BT::CHANNEL, "#p");
+        pb->joined = true;
+        core.cfg["general"]["part_message"] = "cya";
+        core.close(pb);  // Ctrl+W, /close
+        assert(sent() == "PART #p :cya\r\n" && !core.find(ts, "#p"));
+        core.cfg["general"].erase("part_message");
+        core.exec(chb, "/part #elsewhere");  // no tab for it: just the PART
+        assert(sent().rfind("PART #elsewhere :", 0) == 0 && core.find(ts, "#c"));
+    }
+
     // Twitch: display-name + color tags, badges in the nick list, its own commands, lowercase joins
     if (!twitch_host("irc.chat.twitch.tv")) {  // make notwitch: /twitch only says so
         core.exec(home, "/twitch");
@@ -241,7 +257,14 @@ int main() {
         assert(mirc_strip(tb->lines.back().text) == "\xe2\x98\x85 Bob subscribed! \xe2\x80\x94 Bob: yay");
         core.exec(tb, "/join #BigName");
         assert(tw->conn.out == "JOIN #bigname\r\n");
+        tw->conn.out.clear(), tb->joined = true;
+        core.exec(tb, "/part bye");  // Twitch: the tab goes too, and PART has no message
+        assert(tw->conn.out == "PART #streamer\r\n" && !core.find(tw, "#streamer"));
         // /twitch: no login or token in [server.tw] yet, so it asks for both (cancelled before connecting)
+        core.exec(home, "/twitch token");
+        assert(home->lines.back().text.find("/twitch and paste it") != std::string::npos);
+        tfeed(":tmi.twitch.tv NOTICE * :Login authentication failed");
+        assert(tw->status->lines[tw->status->lines.size() - 2].text.find("/twitch token") != std::string::npos);
         tw->state = SS::DISCONNECTED;
         core.exec(home, "/twitch");
         assert(core.active == tw->status && core.pass_buf == tw->status && tw->status->lines.size() > 8);
@@ -357,11 +380,13 @@ int main() {
     assert(hl("isekur rocks") && !hl("isekurs rock") && hl("hi Gerardo") && !hl("hi roger"));
     core.exec(chb, "/hilight del isekur");
     assert(!hl("isekur rocks") && core.unsaved["general"]["hilight_words"] == "ger*");
-    core.exec(chb, "/part");
+    core.exec(chb, "/part");  // closes the tab: open it again for what follows
     assert(sent() == "PART #c :iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur\r\n");
+    chb = core.open(ts, BT::CHANNEL, "#c"), chb->joined = true;
     core.cfg["server.t"]["part_message"] = "bye";
     core.exec(chb, "/part");
     assert(sent() == "PART #c :bye\r\n");
+    chb = core.open(ts, BT::CHANNEL, "#c"), chb->joined = true;
 
     // autojoin with keys, NickServ when SASL didn't log in, rejoin of open tabs with their key
     core.exec(chb, "/autojoin add");

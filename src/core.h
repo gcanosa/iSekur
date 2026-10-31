@@ -297,7 +297,7 @@ struct Core {
     void unlock(const std::string& pass);
     bool asking(const Buffer* b) const { return b && pass_buf == b && !pass_web; }  // the TUI's dialog is up on b
     bool twitch_handle(Server* s, const Msg& m, time_t ts);  // Twitch-only commands; true: handled
-    void twitch_cmd(Buffer* b);  // /twitch
+    void twitch_cmd(Buffer* b, const std::string& arg);  // /twitch [token]
     void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden = true,
                   const std::string& title = "", std::vector<std::string> info = {});
 
@@ -322,7 +322,7 @@ struct Core {
 
     Buffer* find(Server* s, const std::string& name);
     Buffer* open(Server* s, BT t, const std::string& name);
-    void close(Buffer* b);
+    void close(Buffer* b, const std::string& part_msg = "");  // a channel: PART (part_msg, else part_message) and the tab goes
     void select(Buffer* b);
     int index_of(Buffer* b) const;
     void add(Buffer* b, Line l);

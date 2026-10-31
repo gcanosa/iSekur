@@ -114,7 +114,8 @@ autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
 ; e2e_keys  =                ; written by /e2e #chan for autojoin channels (the key, not the password)
 
 # Twitch chat is IRC too: the password is an OAuth token (chat:read chat:edit),
-# "oauth:" is added if you leave it out. Channels are streamer names.
+# "oauth:" is added if you leave it out; /twitch token shows how to get one.
+# Channels are streamer names: #name for twitch.tv/name.
 ; [server.twitch]
 ; host      = irc.chat.twitch.tv
 ; port      = 6697

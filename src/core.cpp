@@ -343,7 +343,7 @@ Buffer* Core::open(Server* s, BT t, const std::string& name) {
     return bp;
 }
 
-void Core::close(Buffer* b) {
+void Core::close(Buffer* b, const std::string& part_msg) {
     Server* s = b->srv;
     if (b->type == BT::STATUS) {
         if (!s) { print(b, LK::ERROR, "Can't close the main window; use /quit"); return; }
@@ -358,8 +358,10 @@ void Core::close(Buffer* b) {
         // a /server one not saved yet goes too, or a later /save would bring it back on the next start
         std::string sec = "server." + s->cfg.name;
         if (unsaved.count(sec) && unsaved[sec].count("host")) cfg.erase(sec), unsaved.erase(sec);
-    } else if (b->type == BT::CHANNEL && b->joined && s) {
-        s->send("PART " + b->name + " :" + bye(s, "part_message"));
+    } else if (b->type == BT::CHANNEL && b->joined && s) {  // /part, /close and Ctrl+W all end here
+        std::string msg = part_msg.empty() ? bye(s, "part_message") : part_msg;
+        s->send("PART " + b->name + (s->twitch() || msg.empty() ? "" : " :" + msg));  // Twitch has no part messages
+        print(s->status, LK::INFO, "You left " + b->name);
     }
     if (pass_buf == b) pass_buf = nullptr, pass_done = nullptr;
     bool drop_server = s && b->type == BT::STATUS;
@@ -846,7 +848,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         connect(t);
         return;
     }
-    if (cmd == "twitch") { twitch_cmd(b); return; }  // twitch.cpp
+    if (cmd == "twitch") { twitch_cmd(b, args); return; }  // twitch.cpp
     if (cmd == "disconnect") {
         if (!s) return;
         s->user_quit = true;
@@ -1030,7 +1032,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string ch = !argv.empty() && s->is_chan(argv[0]) ? argv[0] : b->name;
         std::string msg = !argv.empty() && s->is_chan(argv[0]) ? rest(1) : args;
         if (!s->is_chan(ch)) { print(b, LK::ERROR, "Not a channel"); return; }
-        s->send("PART " + ch + " :" + (msg.empty() ? bye(s, "part_message") : msg));
+        if (Buffer* cb = find(s, ch)) { close(cb, msg); return; }  // like /close and Ctrl+W: the tab goes too
+        if (s->twitch()) s->send("PART " + irc_lower(ch));
+        else s->send("PART " + ch + " :" + (msg.empty() ? bye(s, "part_message") : msg));
         return;
     }
     if (cmd == "msg" || cmd == "query" || cmd == "notice") {

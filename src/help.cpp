@@ -23,12 +23,15 @@ static const std::vector<CmdInfo> CMDS = {
      "WHOIS, DCC and Twitch's /ban /timeout don't exist over its IRC.",
      {"/server irc.libera.chat 6697 -tls -name libera", "/server irc.example.org", "/server 10.0.0.5 6697 -tls -noverify",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
-    {"twitch", "Connection", "", "Open the Twitch chat tab",
+    {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "
      "there's none). Already set up: asks to connect. Otherwise it says what's missing (your login and an "
      "OAuth token with chat:read and chat:edit) and asks for them, so the token never lands in your input "
-     "history. They're kept like /set does: /save writes them to the config. Then /join #streamer.",
-     {"/twitch", "/join #somestreamer"}},
+     "history. They're kept like /set does: /save writes them to the config. /twitch token shows how to get "
+     "a token: register an app at dev.twitch.tv/console (redirect http://localhost), open Twitch's sign-in "
+     "link with its Client ID, approve, and copy access_token from the address bar. Once connected, "
+     "/join streamer joins the chat of twitch.tv/streamer; /autojoin add #streamer and /save keep it.",
+     {"/twitch", "/twitch token", "/join somestreamer"}},
     {"connect", "Connection", "[name]", "Reconnect a configured server",
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect libera"}},
@@ -57,8 +60,9 @@ static const std::vector<CmdInfo> CMDS = {
      "and writes it to the config at once.",
      {"/autojoin", "/autojoin add", "/autojoin add #private s3cret", "/autojoin del #old", "/autojoin snap"}},
     {"part", "Chat", "[#channel] [message]", "Leave a channel",
-     "Leaves the current channel, or the one you name. The tab stays open with the history; "
-     "/close (or Ctrl+W) closes it.",
+     "Leaves the current channel, or the one you name, and closes its tab, like /close and Ctrl+W. "
+     "The message, or else part_message, goes with it (not on Twitch, which has none); the server's tab "
+     "notes that you left.",
      {"/part", "/part #linux off to bed"}},
     {"msg", "Chat", "target text", "Send a private message",
      "Sends text to a nick or channel without opening a tab. If a tab for the target is "
@@ -168,7 +172,7 @@ static const std::vector<CmdInfo> CMDS = {
      "Same as Alt+1..9 / Alt+0, but works for tabs past 10.",
      {"/win 3", "/win 12"}, "window"},
     {"close", "Windows", "", "Close the current tab",
-     "Parts the channel first. On a server tab it disconnects and closes all of the server's tabs.",
+     "Parts the channel first, like /part (with part_message). On a server tab it disconnects and closes all of the server's tabs.",
      {"/close"}, "wc"},
     {"clear", "Windows", "", "Clear the current tab's scrollback",
      "Only clears what is on screen; logs are untouched.",
@@ -274,7 +278,7 @@ static const std::vector<CmdInfo> CMDS = {
      "Tab completes command names here and after \"/\". New here? /guide walks you through the first steps.",
      {"/help", "/help join", "/help set"}},
     {"guide", "Session", "[page|next|prev|on|off]", "The first steps guide, page by page",
-     "Opens the *guide tab: the first steps (your nick, a server, channels, keys, settings, the webchat, "
+     "Opens the *guide tab: the first steps (your nick, a server, channels, Twitch, keys, settings, the webchat, "
      "safety) on pages you turn with Left/Right (empty input line), a click on Prev/Next, or /guide next "
      "and /guide prev; q or Esc (empty input line) or Ctrl+W closes it. /guide 3 jumps to page 3. It opens by itself at startup while show_guide is on: "
      "the \"Don't show this at startup\" box on each page (or /guide off) turns that off, /guide on back on.",
@@ -454,7 +458,7 @@ static const std::vector<GuidePage> GUIDE = {
     {"Channels and talking", {
         G_HEAD("Channels"),
         "  " G_CMD("/join #channel") "      opens a tab and joins (or " G_CMD("/list") " to browse, double click to join)",
-        "  " G_CMD("/part") "               leaves the channel of this tab, " G_CMD("/close") " closes the tab",
+        "  " G_CMD("/part") "               leaves the channel and closes its tab (so do " G_CMD("/close") " and " G_KEY("Ctrl+W") ")",
         "  " G_CMD("/topic ") G_VAL("text") "         sets the topic (or double click the topic bar)",
         "",
         G_HEAD("Talking"),
@@ -484,6 +488,24 @@ static const std::vector<GuidePage> GUIDE = {
         "  It's " BOLD "written to the config at once" RESET ": no " G_CMD("/save") " needed.",
         "",
         G_TIP "Rearrange your channels for a while, then " G_CMD("/autojoin snap") " again to keep the new set.",
+    }},
+    {"Twitch chat", {
+        "Twitch's chat speaks IRC, so iSekur joins it like any other server, in a tab of its own:",
+        "",
+        "  " G_CMD("/twitch") "               opens the Twitch tab and asks for your login and token",
+        "  " G_CMD("/join ") G_VAL("streamer") "       the chat of " "\x03" "12" "twitch.tv/" RESET G_VAL("streamer") " (# and lowercase are added)",
+        "  " G_CMD("/autojoin add") " + " G_CMD("/save") "  in that channel's tab: rejoined on every start",
+        "",
+        G_HEAD("Getting a token, once"),
+        "  " "\x03" "14" "1." RESET " " "\x03" "12" "\x1f" "dev.twitch.tv/console" RESET ": register an app, OAuth Redirect URL " BOLD "http://localhost" RESET,
+        "  " "\x03" "14" "2." RESET " " G_CMD("/twitch token") " shows the sign-in link: your app's " BOLD "Client ID" RESET " goes in it",
+        "  " "\x03" "14" "3." RESET " approve, then copy what follows " BOLD "access_token=" RESET " in the address bar",
+        "  " "\x03" "14" "4." RESET " " G_CMD("/twitch") " and paste it when it asks (it's typed hidden)",
+        "",
+        G_HEAD("What you'll see"),
+        "  names in their own colors, " BOLD "@" RESET " mods and " BOLD "+" RESET " VIPs, ★ subs and raids, timeouts, slow mode...",
+        "",
+        G_WARN "The token is a password to your Twitch account: never paste it in a chat.",
     }},
     {"Getting around", {
         G_HEAD("Tabs"),

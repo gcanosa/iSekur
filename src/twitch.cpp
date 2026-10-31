@@ -107,12 +107,41 @@ bool Core::twitch_handle(Server* s, const Msg& m, time_t ts) {
         return true;
     }
     if (cmd == "RECONNECT") { disconnect(s, "Twitch asked us to reconnect"); return true; }
-    if (cmd == "USERSTATE" || cmd == "GLOBALUSERSTATE" || cmd == "HOSTTARGET") return true;
+    if (cmd == "GLOBALUSERSTATE") {  // logged in; on a first login with no channels yet: what now
+        for (auto& bp : bufs)
+            if (bp->srv == s && bp->type == BT::CHANNEL) return true;
+        print(s->status, LK::INFO, "Logged in to Twitch. Join a stream's chat with \x02/join streamer\x02, the name in "
+                                   "twitch.tv/streamer (# and lowercase are added for you); /part leaves it and closes its tab");
+        print(s->status, LK::INFO, "\x02/autojoin add #streamer\x02 here, then /save, rejoins it on every start");
+        return true;
+    }
+    if (cmd == "USERSTATE" || cmd == "HOSTTARGET") return true;
+    if (cmd == "NOTICE" && (m.p(1).find("Login authentication failed") != std::string::npos ||
+                            m.p(1).find("Improperly formatted auth") != std::string::npos))
+        print(s->status, LK::ERROR, "Twitch didn't take the token (expired, or not a chat:read chat:edit one): "
+                                    "/twitch token shows how to get one");  // then the NOTICE itself, as usual
     return false;
 }
 
-// /twitch: the Twitch tab (made if needed): connect, or ask for what's missing
-void Core::twitch_cmd(Buffer* b) {
+// how to get an OAuth token: a Twitch app of your own and its sign-in page
+static void token_help(Core& c, Buffer* b) {
+    for (const char* l : {
+             "\x02How to get a Twitch token\x02 (once; Twitch expires it after a while, then do it again):",
+             " 1. https://dev.twitch.tv/console \xe2\x86\x92 Register Your Application: any name, OAuth Redirect URL "
+             "\x02http://localhost\x02 (exactly), Category Chat Bot, Client Type Public",
+             " 2. Copy the app's Client ID and open this, with it in place of YOUR_CLIENT_ID:",
+             "    https://id.twitch.tv/oauth2/authorize?response_type=token&client_id=YOUR_CLIENT_ID"
+             "&redirect_uri=http://localhost&scope=chat:read+chat:edit",
+             " 3. Approve. The browser then lands on a localhost page that doesn't load: that's fine. From its address "
+             "copy what comes after \x02" "access_token=\x02, up to the next &",
+             " 4. /twitch and paste it when it asks for the token (\"oauth:\" is added for you)"})
+        c.print(b, LK::INFO, l);
+}
+
+// /twitch: the Twitch tab (made if needed): connect, or ask for what's missing.
+// /twitch token: how to get a token
+void Core::twitch_cmd(Buffer* b, const std::string& arg) {
+    if (arg == "token") { token_help(*this, b); return; }
     Server* t = nullptr;
     for (auto& sv : servers)
         if (sv->twitch()) { t = sv.get(); break; }
@@ -147,6 +176,7 @@ void Core::twitch_cmd(Buffer* b) {
     if (!has_nick) print(t->status, LK::INFO, "  /set " + sec + ".nick yourlogin");
     if (!has_pass) print(t->status, LK::INFO, "  /set " + sec + ".password oauth:yourtoken");
     print(t->status, LK::INFO, "then /save and /twitch again, or type them in the box now");
+    if (!has_pass) token_help(*this, t->status);
     auto token = [this, t, sec, go]() {
         ask_pass(t->status, "OAuth token", [this, sec, go](const std::string& p) {
             cfg[sec]["password"] = unsaved[sec]["password"] = p;
@@ -166,7 +196,7 @@ void twitch_login(Server*) {}
 std::vector<std::string> twitch_banner() { return {}; }
 bool twitch_user(Buffer*, const Msg&, Line&) { return false; }
 bool Core::twitch_handle(Server*, const Msg&, time_t) { return false; }
-void Core::twitch_cmd(Buffer* b) {
+void Core::twitch_cmd(Buffer* b, const std::string&) {
     print(b, LK::ERROR, "This iSekur was built without Twitch support (make notwitch): build it with plain make for /twitch");
 }
 #endif
