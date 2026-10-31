@@ -412,7 +412,7 @@ void Tui::draw() {
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
         else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · q, Esc or Ctrl+W closes";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
-        else if (b->type == BT::SHELL) topic = b->term && !b->term->host.empty() ? "Remote iSekur: ssh " + b->term->host + " (/detach inside leaves it running)"
+        else if (b->type == BT::SHELL) topic = b->term && !b->term->host.empty() ? "Remote iSekur: ssh " + b->term->host + (b->term->rcfg.empty() ? "" : ", -c " + b->term->rcfg) + " (/detach inside leaves it running)"
                     : b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {
             static const char* st[] = {"disconnected", "connecting", "registering", "connected"};

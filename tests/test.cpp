@@ -160,7 +160,8 @@ int main() {
     assert(mirc_strip(home->lines.back().text).find("No such command: /bogus") == 0);
     // /attach: never an ssh option or more than a host, never from the webchat; no tab opened
     size_t tabs = core.bufs.size();
-    for (const char* bad : {"/attach", "/attach -oProxyCommand=touch /tmp/x", "/attach a b", "/attach a;b"}) {
+    for (const char* bad : {"/attach", "/attach -oProxyCommand=touch /tmp/x", "/attach a b c", "/attach a;b", "/attach a -x",
+                            "/attach a $(id)", "/attach a 'x'", "/attach a x\"y"}) {
         core.exec(home, bad);
         assert(home->lines.back().text.find("Usage: /attach host") == 0 && core.bufs.size() == tabs);
     }

@@ -90,6 +90,11 @@ only attached to it.
     isekur --daemon     # start in the background without attaching
     /attach host        # inside iSekur: another machine's iSekur, live in a tab (over ssh)
 
+Several sessions side by side: each runs with its own config, since the socket lives next to it
+(`isekur -c ~/.config/isekur/work.conf`, Alt+D, then `isekur -c ~/.config/isekur/fun.conf`...).
+`isekur -c work.conf --attach` picks one here, `/attach host ~/.config/isekur/work.conf` one on
+another machine (in a tab named `host:work`).
+
 Closing the terminal or losing the SSH connection detaches too. One terminal is attached at a time;
 `/quit` ends it for real. It works through a socket next to the config (`isekur.sock`, only for your
 user); output from the background goes to `isekur.log` there. On Linux servers where systemd kills
@@ -183,7 +188,8 @@ one. `host` is a name, `user@host` or a `Host` from `~/.ssh/config` (put ports a
 ssh asks for its own password or uses your keys, so no system login is asked first. Keys go to
 the remote one except Alt+←/→ and Alt+1-9, so Alt+D or `/detach` typed in the tab detaches it
 and leaves it running; `/attach host` again reconnects. If none runs there, a new one starts. The
-mouse isn't passed on. From a plain terminal, `ssh -t host isekur --attach` is the same thing.
+mouse isn't passed on. `/attach host config` picks one of several iSekurs there (`isekur -c config
+--attach`). From a plain terminal, `ssh -t host isekur --attach` is the same thing.
 
 `/lock on` sets a master password (off by default): from then on iSekur shows only a password
 box at startup, on every `--attach` and after `/lock`, before any tab, log or message. It's

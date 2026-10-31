@@ -137,12 +137,19 @@ and
 .BR /topicrotate .
 .B /shell
 opens a terminal in a tab after this machine's login;
-.BI /attach " host"
+.BI /attach " host " [ config ]
 runs
 .B ssh \-t
 .I host
-.B isekur \-\-attach
+.B isekur
+.RB [ \-c
+.IR config ]
+.B \-\-attach
 in one, showing that machine's iSekur inside this one (Alt+D there detaches it).
+Several iSekurs run side by side with one config each
+.RB ( "isekur \-c work.conf" );
+.I config
+picks one.
 Other commands are sent to the server unchanged.
 .B /help
 lists them in the client;

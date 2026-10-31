@@ -96,7 +96,7 @@ struct Term {
     VTerm* vt = nullptr;
     int rows = 24, cols = 80;
     bool cursor = true;
-    std::string host;  // /attach host: ssh to another iSekur, "" = /shell
+    std::string host, rcfg;  // /attach host [config]: ssh to another iSekur, "" = /shell
     Core* c = nullptr;
     struct Buffer* b = nullptr;
     ~Term();  // hangs up the shell
@@ -364,8 +364,8 @@ struct Core {
     void exec_cmd(Buffer* b, const std::string& args);
     void shell_cmd(Buffer* b);                       // /shell: asks the system login first
     void shell_login(Buffer* sb, const std::string& err);  // the login dialog, again after a wrong one
-    void shell_start(Buffer* sb, const std::string& host = "");  // host: ssh -t host isekur --attach
-    void attach_cmd(Buffer* b, const std::string& host);  // /attach host: a remote iSekur in a tab
+    void shell_start(Buffer* sb, const std::string& host = "", const std::string& rcfg = "");  // host: ssh -t host isekur [-c rcfg] --attach
+    void attach_cmd(Buffer* b, const std::string& args);  // /attach host [config]: a remote iSekur in a tab
     bool os_login(const std::string& login, const std::string& pass, std::string& why);
     void shell_line(Buffer* b, const std::string& l);  // a line typed in a shell tab with no shell
     void term_resize(Term* t, int rows, int cols);

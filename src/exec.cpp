@@ -275,24 +275,45 @@ void Core::shell_login(Buffer* sb, const std::string& err) {
 // No login asked here: ssh asks for (or uses keys for) its own.
 void Core::attach_cmd(Buffer* b, const std::string& args) {
     if (from_web) { print(b, LK::ERROR, "/attach works in the terminal only"); return; }
-    std::string host = args;
-    while (!host.empty() && host.back() == ' ') host.pop_back();
-    // one word, never an ssh option ("-oProxyCommand=..." would run a command here)
-    bool ok = !host.empty() && host[0] != '-';
-    for (char ch : host) ok = ok && (isalnum((unsigned char)ch) || strchr("@._-:[]", ch));
-    if (!ok) { print(b, LK::ERROR, "Usage: /attach host  (or user@host, a Host from ~/.ssh/config)"); return; }
-    Buffer* ab = open(nullptr, BT::SHELL, host);
+    auto w = split(args, ' ');
+    // words that go into ssh's arguments and the remote shell's command line: never an
+    // option ("-oProxyCommand=..." would run a command here), never a quote or a $
+    auto safe = [](const std::string& x, const char* extra) {
+        bool ok = !x.empty() && x[0] != '-';
+        for (char ch : x) ok = ok && (isalnum((unsigned char)ch) || strchr(extra, ch));
+        return ok;
+    };
+    std::string host = w.empty() ? "" : w[0], rcfg = w.size() > 1 ? w[1] : "";
+    if (w.size() > 2 || !safe(host, "@._-:[]") || (!rcfg.empty() && !safe(rcfg, "/._-~+"))) {
+        print(b, LK::ERROR, "Usage: /attach host [config]  (host: user@host or a Host from ~/.ssh/config; "
+                            "config: that machine's isekur -c file, for one of several iSekurs there)");
+        return;
+    }
+    std::string name = host;  // vps, vps:work for ~/.config/isekur/work.conf, vps:fun for ~/fun/isekur.conf
+    if (!rcfg.empty()) {
+        std::string p = rcfg;
+        while (p.size() > 1 && p.back() == '/') p.pop_back();
+        std::string base = p.substr(p.rfind('/') + 1);
+        if (base.size() > 5 && base.compare(base.size() - 5, 5, ".conf") == 0) base.resize(base.size() - 5);
+        if (base == "isekur" && p.rfind('/') != std::string::npos && p.rfind('/') > 0) {  // the folder tells them apart
+            std::string dir = p.substr(0, p.rfind('/'));
+            base = dir.substr(dir.rfind('/') + 1);
+        }
+        name += ":" + base;
+    }
+    Buffer* ab = open(nullptr, BT::SHELL, name);
     select(ab);
     if (ab->term) return;  // already attached there
-    print(ab, LK::INFO, "ssh " + host + ": iSekur --attach there (Alt+D or /detach inside leaves it running)");
-    shell_start(ab, host);
+    print(ab, LK::INFO, "ssh " + host + ": iSekur --attach there" + (rcfg.empty() ? "" : " with " + rcfg) +
+                            " (Alt+D or /detach inside leaves it running)");
+    shell_start(ab, host, rcfg);
 }
 
-void Core::shell_start(Buffer* sb, const std::string& host) {
+void Core::shell_start(Buffer* sb, const std::string& host, const std::string& rcfg) {
     const char* sh = getenv("SHELL");
     std::string path = sh && *sh ? sh : "/bin/sh";
     auto t = std::make_unique<Term>();
-    t->c = this, t->b = sb, t->host = host;
+    t->c = this, t->b = sb, t->host = host, t->rcfg = rcfg;
     winsize ws{(unsigned short)t->rows, (unsigned short)t->cols, 0, 0};
     int fd = -1;
     pid_t pid = forkpty(&fd, nullptr, nullptr, &ws);
@@ -303,7 +324,8 @@ void Core::shell_start(Buffer* sb, const std::string& host) {
         setenv("TERM", "xterm-256color", 1);
         if (const char* home = getenv("HOME")) if (chdir(home)) {}
         if (!host.empty()) {  // a login shell there, so isekur is on its PATH (Homebrew's too)
-            execlp("ssh", "ssh", "-t", "--", host.c_str(), "sh -c 'exec \"${SHELL:-sh}\" -lc \"isekur --attach\"'", (char*)nullptr);
+            std::string cmd = "sh -c 'exec \"${SHELL:-sh}\" -lc \"isekur " + (rcfg.empty() ? "" : "-c " + rcfg + " ") + "--attach\"'";
+            execlp("ssh", "ssh", "-t", "--", host.c_str(), cmd.c_str(), (char*)nullptr);
             _exit(127);
         }
         std::string arg0 = "-" + path.substr(path.rfind('/') + 1);  // "-zsh": a login shell
@@ -376,7 +398,7 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
         pid_t pid = t->pid;
         t->pid = -1;  // reaped here, not hung up
         std::string end = waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) ? ": exit " + std::to_string(WEXITSTATUS(st)) : "";
-        std::string host = t->host;
+        std::string host = t->host + (t->rcfg.empty() ? "" : " " + t->rcfg);
         b->term.reset();
         if (host.empty()) print(b, LK::INFO, "\x02[shell ended" + end + "]\x02 /shell starts another, Ctrl+W closes the tab");
         else print(b, LK::INFO, "\x02[ssh " + host + " ended" + end + "]\x02 /attach " + host + " again, Ctrl+W closes the tab");
