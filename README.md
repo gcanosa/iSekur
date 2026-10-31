@@ -74,6 +74,10 @@ and write them back with `/save` (comments in the file are kept). Changes apply
 right away; server settings are used on the next `/connect`, `[web]` after `/web stop` + `/web start`. Run
 `./isekur --hash-password` to get the `[web] password_hash` value.
 
+The first start also opens the **first steps guide** (`*guide` tab): your nick, a first server,
+channels, keys, settings, the webchat and safety, on pages you turn with ← → or Prev/Next.
+Its "Don't show this at startup" box sets `show_guide = off`; `/guide` opens it again any time.
+
 ## Detach and attach
 
 iSekur runs like a tmux session: the IRC side lives in a background process and the terminal is
@@ -97,7 +101,7 @@ Not available on Cygwin.
 | Alt+1..9, Alt+0 | go to tab N |
 | Alt+←/→, Ctrl+P/N | previous / next tab |
 | Ctrl+A, Alt+A | next tab with activity |
-| Alt+D (Option+D on a Mac) | detach: iSekur keeps running in the background |
+| Alt+D (Option+D on a Mac), Ctrl+Z | detach: iSekur keeps running in the background |
 | Ctrl+X | next server |
 | Ctrl+W | close tab (parts the channel) |
 | PgUp / PgDn | scroll |
@@ -113,7 +117,7 @@ Not available on Cygwin.
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
 | Cmd+Backspace, Cmd+←/→ | delete to start, start / end (when the terminal forwards Cmd) |
-| Ctrl+B / C / O / V / ] / _ | bold, color, reset, reverse, italic, underline |
+| Ctrl+B / C / O / V / ] / _ | bold, color (shown as ◆ in that color), reset, reverse, italic, underline. Ctrl+C on an empty line doesn't quit: it reminds you of /quit and Ctrl+Z / Alt+D |
 
 Rebind any of the actions in the `[keys]` section (`D-` is Cmd, `M-` Alt, `C-` Ctrl).
 

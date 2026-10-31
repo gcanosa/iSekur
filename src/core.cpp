@@ -51,6 +51,10 @@ void Core::load_config() {
         print(home, LK::INFO, "No config at " + cfg_path +
                                   " - see iSekur.conf.example. Try /server irc.example.org 6697 -tls");
     print(home, LK::INFO, "Welcome to " + version_string() + ". /help lists commands.");
+    print(home, LK::INFO, "\x03" "01,09" "\x02" " NEW HERE? " "\x0f" " Type " "\x03" "11" "\x02" "/guide" "\x0f"
+                          " for a quick tour of the first steps and features");
+    print(home, LK::INFO, "");  // room before what comes next (webchat, connecting...)
+    if (!found || opt_on(nullptr, "show_guide", false)) guide(home, "");  // a new config has show_guide = on
 
     for (auto& [sec, kv] : cfg) {
         if (sec.rfind("server.", 0) != 0) continue;
@@ -594,6 +598,8 @@ void Core::print(Buffer* b, LK k, const std::string& text) {
 
 void Core::notify(Ev e, Buffer* b, const Line* l) {
     if (listener) listener(e, b, l);
+    if (e == Ev::THEME)  // the guide's colors are the theme's
+        if (Buffer* g = find(nullptr, "*guide")) guide(g, "page");
 }
 
 // ---- commands --------------------------------------------------------------
@@ -683,6 +689,7 @@ void Core::exec(Buffer* b, const std::string& input) {
 
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "about") { about(b); return; }
+    if (cmd == "guide") { guide(b, args); return; }
     if (cmd == "typing") {  // /typing [on|off]: like /statusbar, kept until restart unless /save
         if (!args.empty() && args != "on" && args != "off") { print(b, LK::ERROR, "Usage: /typing [on|off]"); return; }
         bool on = args.empty() ? !opt_on(nullptr, "typing_effect", false) : args == "on";

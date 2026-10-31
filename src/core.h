@@ -325,6 +325,8 @@ struct Core {
     void exec(Buffer* b, const std::string& input);  // "/cmd" or text
     void say(Buffer* b, const std::string& text, bool action = false);
     void help(Buffer* b, const std::string& topic);  // help.cpp
+    void guide(Buffer* from, const std::string& arg);  // help.cpp: the *guide tab; "", N, next, prev, on, off, close
+    int guide_page = 0;
     bool chanop(Buffer* b, const std::string& cmd, const std::string& args);  // false: not one
     void kickban(Server* s, Buffer* b, const KickBan& kb, const std::string& userhost);
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate

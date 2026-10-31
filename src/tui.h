@@ -57,7 +57,8 @@ private:
     bool completing = false;
 
     void key(int mod, int key, uint32_t ch);
-    bool shell_keys() const;  // a live shell tab: keys go to it
+    bool shell_keys() const;
+    bool guide_tab() const;  // the *guide tab is shown: Left/Right and clicks turn its pages  // a live shell tab: keys go to it
     void shell_key(int mod, int k, uint32_t ch);
     void draw_term(Term* t, int top, int rows, int cols);
     // a prompt box over the middle of the screen (/shell login, passwords, the lock screen)

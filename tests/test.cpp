@@ -415,6 +415,29 @@ int main() {
         std::swap(core.cfg_path, path);
     }
 
+    // /guide: pages turn and stay in range; the box turns show_guide off, in the file too
+    {
+        std::string path = "build/test-guide.conf";
+        unlink(path.c_str());
+        std::swap(core.cfg_path, path);
+        core.exec(home, "/guide 99");
+        Buffer* g = core.find(nullptr, "*guide");
+        assert(g && core.active == g && core.guide_page > 0);
+        int last = core.guide_page;
+        core.exec(g, "/guide next");
+        assert(core.guide_page == last);
+        core.exec(g, "/guide on"), core.exec(g, "/guide 1"), core.exec(g, "/guide prev");
+        assert(core.guide_page == 0 && g->lines.back().text.find("☐") != std::string::npos);
+        core.exec(g, "/guide off");
+        Ini disk;
+        assert(ini_load(core.cfg_path, disk) && ini_get(disk, "general", "show_guide") == "off");
+        assert(g->lines.back().text.find("☑") != std::string::npos);
+        core.exec(g, "/guide close");
+        assert(!core.find(nullptr, "*guide"));
+        unlink(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
+    }
+
     // every shipped theme loads and colors the main parts
     auto tn = theme_names();
     assert(tn.size() >= 17 && std::find(tn.begin(), tn.end(), "dracula") != tn.end() && std::find(tn.begin(), tn.end(), "catppuccin-latte") != tn.end());

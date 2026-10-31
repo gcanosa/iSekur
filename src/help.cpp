@@ -245,8 +245,8 @@ static const std::vector<CmdInfo> CMDS = {
      {"/web", "/web start", "/web stop"}},
     {"detach", "Session", "", "Leave iSekur running in the background",
      "Gives the terminal back; iSekur stays connected, in the channels, logging. isekur --attach "
-     "(or just isekur) brings it back, from any terminal or SSH session. Alt+D does the same "
-     "(Option+D on a Mac). Closing the terminal or losing SSH detaches too, instead of quitting.",
+     "(or just isekur) brings it back, from any terminal or SSH session. Alt+D (Option+D on a Mac) "
+     "and Ctrl+Z do the same. Closing the terminal or losing SSH detaches too, instead of quitting.",
      {"/detach", "isekur --attach  (from your shell, later)"}},
     {"typing", "Session", "[on|off]", "Messages type themselves out",
      "Other people's messages, actions and notices appear letter by letter with a cursor, about "
@@ -261,8 +261,14 @@ static const std::vector<CmdInfo> CMDS = {
      {"/about"}},
     {"help", "Session", "[command]", "This help",
      "Without arguments lists every command. With a command name shows details and examples. "
-     "Tab completes command names here and after \"/\".",
+     "Tab completes command names here and after \"/\". New here? /guide walks you through the first steps.",
      {"/help", "/help join", "/help set"}},
+    {"guide", "Session", "[page|next|prev|on|off]", "The first steps guide, page by page",
+     "Opens the *guide tab: the first steps (your nick, a server, channels, keys, settings, the webchat, "
+     "safety) on pages you turn with Left/Right (empty input line), a click on Prev/Next, or /guide next "
+     "and /guide prev. /guide 3 jumps to page 3. It opens by itself at startup while show_guide is on: "
+     "the \"Don't show this at startup\" box on each page (or /guide off) turns that off, /guide on back on.",
+     {"/guide", "/guide 5", "/guide next", "/guide off"}},
 
     // ---- Server (sent as typed)
     {"whois", "Server", "nick", "Who is this user",
@@ -339,6 +345,7 @@ void Core::help(Buffer* b, const std::string& topic) {
     if (!q.empty() && q[0] == '/') q.erase(0, 1);
     if (q.empty()) {
         out(BOLD "iSekur commands" RESET C_DIM "  -  /help <command> for details and examples, Tab completes" RESET);
+        out("\x03" "01,09" BOLD " NEW HERE? " RESET " " C_CMD BOLD "/guide" RESET " walks you through the first steps, page by page");
         const char* group = "";
         for (auto& c : CMDS) {
             if (std::string(group) != c.group) {
@@ -370,4 +377,273 @@ void Core::help(Buffer* b, const std::string& topic) {
     out("  " + std::string(c->details));
     out("  " C_GROUP "Examples" RESET);
     for (auto& e : c->examples) out("    " C_EX + std::string(e) + RESET);
+}
+
+// ---- /guide: the first steps, one page at a time in the *guide tab ---------
+// mIRC codes like the rest, so the webchat shows the same colors
+#define G_TITLE "\x03" "00,02" BOLD          // white on blue
+#define G_KEY(k) "\x03" "01,15" " " k " " RESET  // a keycap
+#define G_CMD(x) "\x03" "11" BOLD x RESET     // something to type
+#define G_VAL(x) "\x03" "13" "\x1d" x RESET   // your value: replace it
+#define G_HEAD(x) "\x03" "08" BOLD "▸ " x RESET
+#define G_TIP "\x03" "01,09" BOLD " TIP " RESET " "
+#define G_NOTE "\x03" "01,08" BOLD " NOTE " RESET " "
+#define G_WARN "\x03" "00,04" BOLD " CAREFUL " RESET " "
+#define G_OK "\x03" "09" "✔ " RESET
+
+struct GuidePage { const char* title; std::vector<const char*> lines; };
+static const std::vector<GuidePage> GUIDE = {
+    {"Welcome to iSekur", {
+        "iSekur is a colorful IRC client for the terminal, with " BOLD "many servers at once" RESET " and a",
+        BOLD "built-in webchat" RESET " that mirrors your session in a browser. This guide takes ~5 minutes.",
+        "",
+        G_HEAD("How the screen works"),
+        "  " "\x03" "12" "Top" RESET "     the topic bar, then the " BOLD "tabs" RESET ": one per server, channel and private chat",
+        "  " "\x03" "12" "Middle" RESET "  the chat, and the " BOLD "nick list" RESET " on the right in channels",
+        "  " "\x03" "12" "Bottom" RESET "  the status bar and the " BOLD "input line" RESET ": type text to talk, " G_CMD("/commands") " to act",
+        "",
+        G_HEAD("Turning pages"),
+        "  " G_KEY("←") " " G_KEY("→") "  with the input line empty, or click " "\x03" "00,12" BOLD " ◀ Prev " RESET " and " "\x03" "00,03" BOLD " Next ▶ " RESET " below",
+        "  " G_CMD("/guide 4") " jumps to a page, " G_KEY("Ctrl+W") " closes this tab, " G_CMD("/guide") " brings it back",
+        "",
+        G_TIP "Text in " "\x03" "13" "\x1d" "pink italics" RESET " is yours to replace, e.g. " G_CMD("/nick ") G_VAL("yournick") ".",
+    }},
+    {"Who you are", {
+        "Before connecting, pick the name people will see. These go in " BOLD "[general]" RESET ", for every server:",
+        "",
+        "  " G_CMD("/set nick ") G_VAL("yournick") "          your nickname",
+        "  " G_CMD("/set altnick ") G_VAL("yournick_") "      used if the first one is taken",
+        "  " G_CMD("/set realname ") G_VAL("Your Name") "    shown in /whois",
+        "  " G_CMD("/save") "                       write them to the config file",
+        "",
+        G_HEAD("Saved or not?"),
+        "  " G_CMD("/set") " changes apply " BOLD "right away" RESET " but only for this run. " G_CMD("/save") " keeps them for the",
+        "  next start. Forgot? The settings window marks unsaved keys, and " G_CMD("/save") " any time.",
+        "",
+        G_TIP "Already connected? " G_CMD("/nick ") G_VAL("newnick") " changes it now, and iSekur remembers it.",
+    }},
+    {"Your first server", {
+        "One command connects, opens a tab for the server and remembers it:",
+        "",
+        "  " G_CMD("/server irc.libera.chat 6697 -tls -name libera"),
+        "  " G_CMD("/save") "          so it connects by itself next time",
+        "",
+        G_HEAD("The pieces"),
+        "  " "\x03" "10" "6697 -tls" RESET "     an encrypted connection (use it whenever the network offers it)",
+        "  " "\x03" "10" "-name libera" RESET "  a short name: its settings live in " BOLD "[server.libera]" RESET,
+        "  " "\x03" "10" "-nick " RESET G_VAL("other") "   a different nick on this network only",
+        "",
+        G_HEAD("Registered nick? Log in with SASL"),
+        "  " G_CMD("/set server.libera.sasl_user ") G_VAL("yournick"),
+        "  " G_CMD("/set server.libera.sasl_pass ") G_VAL("secret") "   then " G_CMD("/save") " and " G_CMD("/connect"),
+        "",
+        "  " G_CMD("/disconnect") " leaves a server (tabs stay), " G_CMD("/connect") " comes back, " G_CMD("/quit") " exits iSekur.",
+        G_NOTE "iSekur's own network " BOLD "irc.sekurnet.org" RESET " has " G_CMD("#iSekur") " for help and feedback.",
+    }},
+    {"Channels and talking", {
+        G_HEAD("Channels"),
+        "  " G_CMD("/join #channel") "      opens a tab and joins (or " G_CMD("/list") " to browse, double click to join)",
+        "  " G_CMD("/part") "               leaves the channel of this tab, " G_CMD("/close") " closes the tab",
+        "  " G_CMD("/topic ") G_VAL("text") "         sets the topic (or double click the topic bar)",
+        "",
+        G_HEAD("Talking"),
+        "  Just type and press " G_KEY("Enter") ". " G_CMD("/me waves") " is an action, " G_CMD("/msg ") G_VAL("nick text") " a private message.",
+        "  " G_CMD("/query ") G_VAL("nick") " opens a private tab. " G_KEY("Tab") " completes nicks, commands and settings.",
+        "",
+        G_HEAD("People"),
+        "  Click a nick to talk privately, " BOLD "right click" RESET " it for a menu (whois, op, kick, ignore...).",
+        "  " G_CMD("/whois ") G_VAL("nick") " shows who someone is, " G_CMD("/ignore ") G_VAL("nick") " hides them.",
+        "",
+        G_TIP "While you type a command, the list under the input line shows what fits: " G_KEY("↑") G_KEY("↓") " pick, " G_KEY("Tab") " fills.",
+    }},
+    {"Your channels, every time", {
+        "Each server keeps an " BOLD "autojoin" RESET " list: the channels it joins as soon as it connects.",
+        "",
+        G_HEAD("One by one"),
+        "  " G_CMD("/autojoin") "                    this server's list",
+        "  " G_CMD("/autojoin add") "                add the channel of this tab",
+        "  " G_CMD("/autojoin add #private ") G_VAL("key") "   a channel with a key (the one you gave " G_CMD("/join") " is kept)",
+        "  " G_CMD("/autojoin del #old") "           take one out",
+        "  then " G_CMD("/save") " to keep the changes for the next start",
+        "",
+        G_HEAD("The snapshot: everything at once"),
+        "  Joined all the channels you want? Take a picture of them:",
+        "  " G_CMD("/autojoin snap") "        every server's autojoin = the channels open " BOLD "right now" RESET,
+        "  " G_CMD("/autojoin snap here") "   the same, only for this server",
+        "  It's " BOLD "written to the config at once" RESET ": no " G_CMD("/save") " needed.",
+        "",
+        G_TIP "Rearrange your channels for a while, then " G_CMD("/autojoin snap") " again to keep the new set.",
+    }},
+    {"Getting around", {
+        G_HEAD("Tabs"),
+        "  " G_KEY("Alt+1") ".." G_KEY("Alt+0") "    go to tab 1-10        " G_KEY("Ctrl+N") " " G_KEY("Ctrl+P") "  next / previous tab",
+        "  " G_KEY("Ctrl+A") "           next tab with news    " G_KEY("Ctrl+X") "          next server",
+        "  " G_KEY("Ctrl+W") "           close this tab        " G_KEY("PgUp") " " G_KEY("PgDn") "     scroll the chat",
+        "",
+        G_HEAD("Showing and hiding"),
+        "  " G_KEY("Ctrl+L") " or " G_KEY("F2") "  the nick list     " G_KEY("Ctrl+T") "  the topic bar     " G_KEY("F3") "  the mouse",
+        "",
+        G_HEAD("The mouse"),
+        "  click tabs and the " "\x03" "08" "[Act: 3]" RESET " numbers, wheel scrolls, " BOLD "drag to copy" RESET ", right click a",
+        "  server tab to fold its channels. Tab colors: " "\x03" "10" "news" RESET ", " "\x03" "09" "messages" RESET ", " "\x03" "04" "your nick" RESET ".",
+        "",
+        G_NOTE "On a Mac, Alt is " BOLD "Option" RESET ". If Option keys type symbols, turn on \"Option as Meta\"",
+        "  in your terminal's settings. Keys are yours to change in " BOLD "[keys]" RESET " (" G_CMD("/help set") ").",
+    }},
+    {"Make it yours", {
+        G_HEAD("The settings window"),
+        "  " G_CMD("/set") " alone opens every setting by category: " G_KEY("/") " searches, " G_KEY("e") " edits,",
+        "  " G_KEY("Space") " flips on/off, " G_KEY("d") " puts the default back, " G_KEY("s") " saves, " G_KEY("Esc") " closes.",
+        "",
+        G_HEAD("Colors"),
+        "  " G_CMD("/theme") " lists the themes, " G_CMD("/theme dracula") " tries one live. Some to try:",
+        "  " "\x03" "13" "dracula" RESET "  " "\x03" "12" "tokyonight" RESET "  " "\x03" "06" "catppuccin-mocha" RESET "  " "\x03" "07" "gruvbox" RESET "  " "\x03" "10" "nord" RESET "  " "\x03" "15" "github-light" RESET,
+        "  Keep it with " G_CMD("/set theme ") G_VAL("name") " and " G_CMD("/save") ".",
+        "",
+        G_HEAD("Little extras"),
+        "  " G_CMD("/typing on") "       messages type themselves out, letter by letter",
+        "  " G_CMD("/quiet") "           hide joins, parts and quits in this channel",
+        "  " G_CMD("/statusbar cpu on") " CPU, memory, load or battery in the status bar",
+        "  " G_CMD("/set timestamp %H:%M:%S") "   seconds in the time stamps",
+    }},
+    {"Never miss a thing", {
+        G_HEAD("Highlights"),
+        "  Lines with your nick light up, ring the bell and are copied to tab 1 (" BOLD "hilight_window" RESET ").",
+        "  " G_CMD("/hilight add ") G_VAL("word") " + " G_CMD("/save") " lights up other words too.",
+        "",
+        G_HEAD("Logs"),
+        "  " G_CMD("/set log on") " + " G_CMD("/save") " writes every channel and query to disk; reopened tabs show",
+        "  their last lines again. " G_CMD("/grep ") G_VAL("text") " searches this tab.",
+        "",
+        G_HEAD("Stay online when you leave"),
+        "  " G_KEY("Ctrl+Z") ", " G_KEY("Alt+D") " or " G_CMD("/detach") " gives the terminal back and " BOLD "keeps iSekur connected" RESET ".",
+        "  Later, from any terminal or SSH session: " G_CMD("isekur --attach") " (or just " G_CMD("isekur") ").",
+        "  Away while detached: you are marked " BOLD "away" RESET " by yourself, and back when you type.",
+        "",
+        G_TIP "Closing the terminal or losing SSH " BOLD "detaches" RESET " too: nothing is lost.",
+    }},
+    {"The webchat", {
+        "The same session, live, in a browser (phones too). Set a login once:",
+        "",
+        "  " "\x03" "14" "1." RESET " in your shell: " G_CMD("isekur --hash-password") " and copy what it prints",
+        "  " "\x03" "14" "2." RESET " " G_CMD("/set web.user ") G_VAL("me"),
+        "  " "\x03" "14" "3." RESET " " G_CMD("/set web.password_hash ") G_VAL("the-hash") "   then " G_CMD("/save"),
+        "  " "\x03" "14" "4." RESET " " G_CMD("/web start") " and open " "\x03" "12" "\x1f" "http://127.0.0.1:8443" RESET,
+        "",
+        G_HEAD("From another machine"),
+        "  " G_CMD("/set web.bind 0.0.0.0") ": then it's " BOLD "HTTPS only" RESET " (a self-signed certificate is made,",
+        "  or give " BOLD "web.cert" RESET " and " BOLD "web.key" RESET "). " G_CMD("/set web.autostart on") " starts it with iSekur.",
+        "",
+        G_TIP "Run it on a server with " G_CMD("isekur --daemon") ": always online, chat from anywhere.",
+    }},
+    {"Privacy and safety", {
+        "  " G_CMD("/lock on") "        a password before anything shows (startup, attach, " G_CMD("/lock") ")",
+        "  " G_CMD("/e2e ") G_VAL("nick") "       end-to-end encrypted private chat with another iSekur user",
+        "  " G_CMD("/ignore ") G_VAL("nick") "    never see them again (" G_CMD("/save") " to keep it)",
+        "  " G_CMD("/dcc") "            files sent to you wait for " G_CMD("/dcc get") ": nothing downloads by itself",
+        "",
+        G_WARN "The config file holds your passwords: it is created private (only you can read",
+        "  it). Don't paste it anywhere. Passwords never show in " G_CMD("/set") " or the settings window.",
+        "",
+        G_NOTE "Self-signed server? " G_CMD("/server ") G_VAL("host") " 6697 -tls -noverify" ", only if you trust it.",
+    }},
+    {"You're ready", {
+        G_OK "Set your nick:  " G_CMD("/set nick ") G_VAL("yournick"),
+        G_OK "Connect:        " G_CMD("/server irc.libera.chat 6697 -tls -name libera"),
+        G_OK "Join:           " G_CMD("/join #channel"),
+        G_OK "Every time:     " G_CMD("/autojoin snap"),
+        G_OK "Keep it all:    " G_CMD("/save"),
+        "",
+        G_HEAD("Where to look next"),
+        "  " G_CMD("/help") "            every command, by group",
+        "  " G_CMD("/help ") G_VAL("command") "    details and examples (" G_CMD("/help server") ", " G_CMD("/help set") ")",
+        "  " G_CMD("/set") "             every setting, explained in the config file too",
+        "  " G_CMD("/guide") "           this guide, any time",
+        "",
+        "  Questions? " G_CMD("/server irc.sekurnet.org 6697 -tls") " and " G_CMD("/join #iSekur") ". Have fun!",
+    }},
+};
+
+// the guide's mIRC colors in the theme's: each code stands for a role (title, key, command...);
+// a role the theme leaves at the terminal default keeps the mIRC color
+static std::string themed(const Theme& t, const std::string& s) {
+    auto fg = [&](const char* k) { return t.get(k).fg; };
+    auto bg = [&](const char* k) { RGB c = t.get(k).bg; return c < 0 ? t.get("default").bg : c; };
+    RGB dark = bg("default") < 0 ? 0x000000 : bg("default");  // text on a colored label
+    auto nick = [&](size_t i) { return t.nicks.empty() ? -1 : t.nicks[i % t.nicks.size()]; };
+    const std::map<std::string, std::pair<RGB, RGB>> role = {
+        {"00,02", {fg("tab_active"), bg("tab_active")}},   // the page title
+        {"01,15", {fg("topic"), bg("topic")}},             // a key
+        {"11", {fg("input_prompt"), -1}},                  // a command
+        {"13", {fg("set_value"), -1}},                     // your value
+        {"08", {fg("set_key"), -1}},                       // a heading
+        {"01,09", {dark, fg("join")}},                     // TIP
+        {"01,08", {dark, fg("notice")}},                   // NOTE
+        {"00,04", {dark, fg("error")}},                    // CAREFUL
+        {"00,12", {fg("menu_sel"), bg("menu_sel")}},       // Prev
+        {"00,03", {dark, fg("join")}},                     // Next / Done
+        {"09", {fg("join"), -1}}, {"03", {fg("nicklist_voice"), -1}},
+        {"14", {fg("timestamp"), -1}}, {"15", {fg("nicklist"), -1}},
+        {"12", {fg("info"), -1}}, {"10", {fg("action"), -1}},
+        {"06", {nick(6), -1}}, {"07", {nick(1), -1}},
+    };
+    std::string out;
+    for (size_t i = 0; i < s.size();) {
+        if (s[i] != '\x03' || i + 1 >= s.size() || !isdigit((unsigned char)s[i + 1])) { out += s[i++]; continue; }
+        size_t j = i + 1;
+        while (j < s.size() && j < i + 3 && isdigit((unsigned char)s[j])) j++;
+        if (j + 1 < s.size() && s[j] == ',' && isdigit((unsigned char)s[j + 1])) {
+            j += 2;
+            if (j < s.size() && isdigit((unsigned char)s[j])) j++;
+        }
+        std::string code = s.substr(i + 1, j - i - 1);
+        auto r = role.find(code);
+        if (r == role.end() || r->second.first < 0 || (code.find(',') != std::string::npos && r->second.second < 0)) out += s.substr(i, j - i);
+        else out += "\x04" + rgb_hex(r->second.first).substr(1) + (code.find(',') != std::string::npos ? "," + rgb_hex(r->second.second).substr(1) : "");
+        i = j;
+    }
+    return out;
+}
+
+void Core::guide(Buffer* from, const std::string& arg) {
+    int n = (int)GUIDE.size();
+    if (arg == "on" || arg == "off") {
+        cfg["general"]["show_guide"] = arg;
+        unsaved["general"].erase("show_guide");
+        std::string err;
+        if (!ini_save(cfg_path, Ini{{"general", {{"show_guide", arg}}}}, err)) print(from, LK::ERROR, err);
+        Buffer* g = find(nullptr, "*guide");
+        if (g) guide(g, "page");  // redraw the box
+        if (g != from) print(from, LK::INFO, arg == "on" ? "The guide opens at startup again" : "The guide won't open at startup (/guide shows it)");
+        return;
+    }
+    if (arg == "close") { if (Buffer* g = find(nullptr, "*guide")) close(g); return; }
+    if (arg == "next") guide_page++;
+    else if (arg == "prev") guide_page--;
+    else if (!arg.empty() && isdigit((unsigned char)arg[0])) guide_page = atoi(arg.c_str()) - 1;
+    else if (arg != "page" && !arg.empty()) { print(from, LK::ERROR, "/guide [page|next|prev|on|off]"); return; }
+    guide_page = std::max(0, std::min(guide_page, n - 1));
+    Buffer* b = open(nullptr, BT::QUERY, "*guide");
+    b->lines.clear(), b->scroll = b->unread = 0;
+    notify(Ev::CLEAR, b);
+    auto out = [&](const std::string& t) {
+        Line l{time(nullptr), LK::INFO, "", themed(theme, t)};
+        l.nolog = true;
+        add(b, l);
+    };
+    const GuidePage& p = GUIDE[(size_t)guide_page];
+    std::string dots;
+    for (int i = 0; i < n; i++) dots += i == guide_page ? "\x03" "09●" : i < guide_page ? "\x03" "03●" : "\x03" "14○";
+    out(G_TITLE "  " + std::to_string(guide_page + 1) + ". " + p.title + "  " RESET "  " + dots + RESET);
+    out("");
+    for (auto& l : p.lines) out(l);
+    out("");
+    bool first = guide_page == 0, last = guide_page == n - 1;
+    std::string prev = first ? "\x03" "14" " ◀ Prev " RESET : "\x03" "00,12" BOLD " ◀ Prev " RESET;
+    std::string next = last ? "\x03" "00,03" BOLD " ✔ Done " RESET : "\x03" "00,03" BOLD " Next ▶ " RESET;
+    std::string box = opt_on(nullptr, "show_guide", false) ? "\x03" "15" "☐ Don't show this at startup" RESET
+                                                           : "\x03" "09" "☑" RESET "\x03" "15" " Don't show this at startup" RESET;
+    out(prev + C_DIM "  page " + std::to_string(guide_page + 1) + " of " + std::to_string(n) + "  " RESET + next + "      " + box);
+    if (from != b) select(b);
+    dirty = true;
 }

@@ -411,6 +411,7 @@ function renderTopic() {
   if (!b) return;
   if (b.type === "channel") mirc(t, b.topic || "");
   else if (b.name === "*channels") t.textContent = "Channel list: /list again refreshes it · /join #channel";
+  else if (b.name === "*guide") t.textContent = "First steps guide: click Prev / Next · /guide N jumps to a page";
   else if (b.type === "query") t.textContent = "Query with " + b.name;
   else if (b.type === "shell") t.textContent = "Shell: it runs in iSekur's terminal only";
   else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
@@ -1070,6 +1071,16 @@ $("#msgs").addEventListener("click", e => {
   const b = bufs.get(active), w = wordAt(e);
   if (b && b.name === "*channels" && (w === "Channel" || w === "Users") && e.target.closest(".l.hdr"))
     send({t: "input", buf: active, text: "/list sort " + (w === "Channel" ? "name" : "users")});
+});
+// *guide: its Prev / Next / Done buttons and the "Don't show this at startup" box
+$("#msgs").addEventListener("click", e => {
+  const b = bufs.get(active), row = e.target.closest(".l");
+  if (!b || b.name !== "*guide" || !row) return;
+  const w = wordAt(e), t = row.textContent, go = a => send({t: "input", buf: active, text: "/guide " + a});
+  if (/[☐☑]/.test(t) && ["☐", "☑", "Don't", "show", "this", "at", "startup"].includes(w)) go(t.includes("☑") ? "on" : "off");
+  else if (w === "◀" || w === "Prev") go("prev");
+  else if (w === "Next" || w === "▶") go("next");
+  else if (w === "Done" || w === "✔") go("close");
 });
 // double click a #channel in the chat joins it; in *channels anywhere on its row
 $("#msgs").addEventListener("dblclick", e => {

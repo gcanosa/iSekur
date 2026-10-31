@@ -409,6 +409,7 @@ void Tui::draw() {
         if (b->type == BT::CHANNEL) topic = b->topic;
         else if (b->name == "*channels") topic = "Channel list: /list again refreshes it · /join #channel";
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
+        else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · Ctrl+W closes";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
         else if (b->type == BT::SHELL) topic = b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {
@@ -734,10 +735,17 @@ void Tui::draw() {
     for (size_t i = 0; i < cur; i++) curw += cwidth(input[i]);
     int off = std::max(0, curw - avail);
     int col = 0;
-    for (char32_t ch32 : input) {
+    for (size_t i = 0; i < input.size(); i++) {
+        char32_t ch32 = input[i];
         int w = cwidth(ch32);
         if (col >= off && col - off + w <= avail) {
-            if (ch32 < 0x20) {  // formatting codes show as reverse letters, like irssi
+            if (ch32 == 3) {  // a color code: ◆ in the color its digits pick (dim until there are some)
+                std::string code = "\x03";
+                for (size_t j = i + 1; j < input.size() && j < i + 3 && input[j] >= U'0' && input[j] <= U'9'; j++) code += (char)input[j];
+                Style d = sty(T, "timestamp", "input");
+                if (code.size() > 1) mirc_walk(code + "x", is, [&](uint32_t, const Style& st) { d = is, d.fg = st.fg; });
+                cell(px + col - off, y, U'◆', d);
+            } else if (ch32 < 0x20) {  // other formatting codes show as reverse letters, like irssi
                 Style r = is;
                 r.attr |= A_REV;
                 cell(px + col - off, y, ch32 == U'\n' ? U'↵' : '@' + ch32, r);
@@ -1081,6 +1089,8 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
 }
 
 // ---- shell tabs (/shell) ----------------------------------------------------
+bool Tui::guide_tab() const { return c.active && !c.active->srv && c.active->name == "*guide"; }
+
 // the active tab has a running shell and nothing (menu, y/n question, login) is asking
 bool Tui::shell_keys() const {
     Buffer* b = c.active;
@@ -1182,7 +1192,7 @@ void Tui::load_keys() {
     keymap["C-l"] = keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
     keymap["C-t"] = keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
     keymap["F3"] = "toggle_mouse";
-    keymap["M-d"] = keymap["∂"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"
+    keymap["M-d"] = keymap["∂"] = keymap["C-z"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"; C-z: detach (still connected) where a shell would suspend
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
     if (ks != c.cfg.end())
@@ -1334,8 +1344,8 @@ void Tui::key(int mod, int k, uint32_t ch) {
     case TB_KEY_ENTER: submit(); break;
     case TB_KEY_BACKSPACE: case TB_KEY_BACKSPACE2: if (cur) input.erase(--cur, 1); break;
     case TB_KEY_DELETE: if (cur < input.size()) input.erase(cur, 1); break;
-    case TB_KEY_ARROW_LEFT: if (cur) cur--; break;
-    case TB_KEY_ARROW_RIGHT: if (cur < input.size()) cur++; break;
+    case TB_KEY_ARROW_LEFT: if (input.empty() && guide_tab()) c.guide(c.active, "prev"); else if (cur) cur--; break;
+    case TB_KEY_ARROW_RIGHT: if (input.empty() && guide_tab()) c.guide(c.active, "next"); else if (cur < input.size()) cur++; break;
     case TB_KEY_HOME: cur = 0; break;  // Ctrl+A is next_active
     // Ctrl+U, and Cmd+Backspace (Ghostty and others send it as ^U)
     case TB_KEY_CTRL_U: input.erase(0, cur); cur = 0; break;
@@ -1353,7 +1363,19 @@ void Tui::key(int mod, int k, uint32_t ch) {
         break;
     case TB_KEY_TAB: complete(); break;
     // mIRC formatting: bold, color, reset, reverse, italic, underline
-    case TB_KEY_CTRL_B: case TB_KEY_CTRL_C: case TB_KEY_CTRL_O: case TB_KEY_CTRL_V:
+    case TB_KEY_CTRL_C:  // on an empty line it's the "how do I quit?" key: say so, once in a row
+        if (input.empty()) {
+            const std::string hint = "Ctrl+C doesn't quit iSekur (it's the color key while typing): /quit exits, Ctrl+Z, Alt+D or /detach leave it running";
+            if (c.active->lines.empty() || c.active->lines.back().text != hint) {
+                Line l{time(nullptr), LK::INFO, "", hint};
+                l.nolog = true;
+                c.add(c.active, l);
+            }
+            break;
+        }
+        input.insert(cur++, 1, (char32_t)k);
+        break;
+    case TB_KEY_CTRL_B: case TB_KEY_CTRL_O: case TB_KEY_CTRL_V:
     case TB_KEY_CTRL_RSQ_BRACKET: case TB_KEY_CTRL_UNDERSCORE:
         input.insert(cur++, 1, (char32_t)k);
         break;
@@ -1489,6 +1511,16 @@ void Tui::mouse(int mod, int k, int x, int y) {
         std::string w = word_at(x, y);
         // *channels: a click on the Channel or Users header sorts by it
         if (b->srv && b->name == "*channels" && (w == "Channel" || w == "Users")) { c.list_sort(b, w == "Channel" ? "name" : "users"); return; }
+        if (guide_tab()) {  // its buttons: ◀ Prev, Next ▶ / ✔ Done, and the box from its ☐ on
+            tb_cell* cb = tb_cell_buffer();
+            int box = -1;
+            for (int xx = 0; xx < tb_width() && box < 0; xx++)
+                if (cb[y * tb_width() + xx].ch == 0x2610 || cb[y * tb_width() + xx].ch == 0x2611) box = xx;
+            if (box >= 0 && x >= box) { c.guide(b, c.opt_on(nullptr, "show_guide", false) ? "off" : "on"); return; }
+            if (w == "◀" || w == "Prev") { c.guide(b, "prev"); return; }
+            if (w == "Next" || w == "▶") { c.guide(b, "next"); return; }
+            if (w == "Done" || w == "✔") { c.guide(b, "close"); return; }
+        }
         // double click a #channel (any tab of a server) joins it; in *channels anywhere on its row
         long long now = now_ms();
         bool dbl = now - chat_click_ms < 400 && chat_click_y == y;
