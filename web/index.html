@@ -411,7 +411,7 @@ function renderTopic() {
   if (!b) return;
   if (b.type === "channel") mirc(t, b.topic || "");
   else if (b.name === "*channels") t.textContent = "Channel list: /list again refreshes it · /join #channel";
-  else if (b.name === "*guide") t.textContent = "First steps guide: click Prev / Next · /guide N jumps to a page";
+  else if (b.name === "*guide") t.textContent = "First steps guide: ← → or Prev / Next turn the pages · /guide N jumps · q or Esc closes";
   else if (b.type === "query") t.textContent = "Query with " + b.name;
   else if (b.type === "shell") t.textContent = "Shell: it runs in iSekur's terminal only";
   else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
@@ -914,6 +914,11 @@ line.addEventListener("keydown", e => {
     if (e.key === "Escape") { e.preventDefault(); inp.value = ""; send({t: "input", buf: active, text: ""}); }
     else if (/^(Tab|ArrowUp|ArrowDown)$/.test(e.key)) e.preventDefault();  // no history or completion in it
     return;
+  }
+  // the *guide tab, with the line empty: ← → turn its pages, q or Esc closes it (like the terminal)
+  const gb = bufs.get(active), gk = {ArrowLeft: "prev", ArrowRight: "next", Escape: "close", q: "close", Q: "close"}[e.key];
+  if (gk && gb && gb.name === "*guide" && !inp.value && !e.ctrlKey && !e.altKey && !e.metaKey) {
+    e.preventDefault(); send({t: "input", buf: active, text: "/guide " + gk}); return;
   }
   if (e.ctrlKey && !e.altKey && !e.metaKey && FMT[e.key.toLowerCase()] && !(e.key.toLowerCase() === "c" && inp.selectionStart !== inp.selectionEnd)) {
     e.preventDefault(); insert(enc(FMT[e.key.toLowerCase()])); return;
