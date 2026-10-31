@@ -22,7 +22,8 @@ static int usage() {
     puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [--web|--no-web] [--hash-password] [-v|--version]\n"
          "  -c FILE          config file (default ~/.config/isekur/isekur.conf)\n"
          "  -d, --daemon     run headless in the background; attach with --attach or the webchat\n"
-         "  -a, --attach     bring a detached iSekur (Alt+D, /detach, --daemon) back to this terminal\n"
+         "  -a, --attach     bring a detached iSekur (Alt+D, /detach, --daemon) back to this terminal;\n"
+         "                   with none running, start a new one\n"
          "  --web, --no-web  start the webchat or not, whatever [web] autostart says\n"
          "  --hash-password  read a password and print a [web] password_hash value");
     return 1;
@@ -108,7 +109,7 @@ int main(int argc, char** argv) {
     if (c.cfg_path.empty()) c.cfg_path = default_config_path();
     std::string how = std::string("isekur --attach") + (own_cfg ? " -c " + c.cfg_path : "");
     std::string sock = sock_path_for(c.cfg_path);
-    if (attach) return attach_main(sock, how);
+    // --attach with nothing running starts one, like plain isekur, and says it's new (below)
 
     // One iSekur per config (a second one would join the same channels
     // twice): starting it again attaches to the one that runs.
@@ -139,6 +140,8 @@ int main(int argc, char** argv) {
     c.load_config();
     Buffer* home = c.bufs.front().get();
     if (ls == 0) c.print(home, LK::ERROR, "Detaching is not available: " + err);
+    if (attach && !daemon)
+        c.print(home, LK::INFO, "\x03" "01,08" "\x02" " NEW SESSION " "\x0f" " Nothing was running to attach to: this is a fresh start, not a recovered session");
     Web web(c);
     // --daemon always starts the webchat; it can also be attached from a terminal
     if (daemon || (web_flag < 0 ? Web::autostart(c.cfg) : web_flag == 1)) {

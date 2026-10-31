@@ -266,7 +266,7 @@ static const std::vector<CmdInfo> CMDS = {
     {"guide", "Session", "[page|next|prev|on|off]", "The first steps guide, page by page",
      "Opens the *guide tab: the first steps (your nick, a server, channels, keys, settings, the webchat, "
      "safety) on pages you turn with Left/Right (empty input line), a click on Prev/Next, or /guide next "
-     "and /guide prev. /guide 3 jumps to page 3. It opens by itself at startup while show_guide is on: "
+     "and /guide prev; q or Esc (empty input line) or Ctrl+W closes it. /guide 3 jumps to page 3. It opens by itself at startup while show_guide is on: "
      "the \"Don't show this at startup\" box on each page (or /guide off) turns that off, /guide on back on.",
      {"/guide", "/guide 5", "/guide next", "/guide off"}},
 
@@ -404,7 +404,7 @@ static const std::vector<GuidePage> GUIDE = {
         "",
         G_HEAD("Turning pages"),
         "  " G_KEY("←") " " G_KEY("→") "  with the input line empty, or click " "\x03" "00,12" BOLD " ◀ Prev " RESET " and " "\x03" "00,03" BOLD " Next ▶ " RESET " below",
-        "  " G_CMD("/guide 4") " jumps to a page, " G_KEY("Ctrl+W") " closes this tab, " G_CMD("/guide") " brings it back",
+        "  " G_CMD("/guide 4") " jumps to a page, " G_KEY("q") ", " G_KEY("Esc") " or " G_KEY("Ctrl+W") " closes it, " G_CMD("/guide") " brings it back",
         "",
         G_TIP "Text in " "\x03" "13" "\x1d" "pink italics" RESET " is yours to replace, e.g. " G_CMD("/nick ") G_VAL("yournick") ".",
     }},
@@ -425,20 +425,21 @@ static const std::vector<GuidePage> GUIDE = {
     {"Your first server", {
         "One command connects, opens a tab for the server and remembers it:",
         "",
-        "  " G_CMD("/server irc.libera.chat 6697 -tls -name libera"),
-        "  " G_CMD("/save") "          so it connects by itself next time",
+        "  " G_CMD("/server irc.SekurNet.org 6697 -tls -name sekurnet"),
+        "  " G_CMD("/save") "         so it connects by itself next time",
+        "  " G_CMD("/join #iSekur") " say hi: iSekur's home, with help, news and feedback",
         "",
         G_HEAD("The pieces"),
-        "  " "\x03" "10" "6697 -tls" RESET "     an encrypted connection (use it whenever the network offers it)",
-        "  " "\x03" "10" "-name libera" RESET "  a short name: its settings live in " BOLD "[server.libera]" RESET,
-        "  " "\x03" "10" "-nick " RESET G_VAL("other") "   a different nick on this network only",
+        "  " "\x03" "10" "6697 -tls" RESET "      an encrypted connection (use it whenever the network offers it)",
+        "  " "\x03" "10" "-name sekurnet" RESET " a short name: its settings live in " BOLD "[server.sekurnet]" RESET,
+        "  " "\x03" "10" "-nick " RESET G_VAL("other") "    a different nick on this network only",
         "",
         G_HEAD("Registered nick? Log in with SASL"),
-        "  " G_CMD("/set server.libera.sasl_user ") G_VAL("yournick"),
-        "  " G_CMD("/set server.libera.sasl_pass ") G_VAL("secret") "   then " G_CMD("/save") " and " G_CMD("/connect"),
+        "  " G_CMD("/set server.sekurnet.sasl_user ") G_VAL("yournick"),
+        "  " G_CMD("/set server.sekurnet.sasl_pass ") G_VAL("secret") "   then " G_CMD("/save") " and " G_CMD("/connect"),
         "",
         "  " G_CMD("/disconnect") " leaves a server (tabs stay), " G_CMD("/connect") " comes back, " G_CMD("/quit") " exits iSekur.",
-        G_NOTE "iSekur's own network " BOLD "irc.sekurnet.org" RESET " has " G_CMD("#iSekur") " for help and feedback.",
+        G_NOTE BOLD "irc.SekurNet.org" RESET " is iSekur's own network: any other works the same way.",
     }},
     {"Channels and talking", {
         G_HEAD("Channels"),
@@ -549,8 +550,8 @@ static const std::vector<GuidePage> GUIDE = {
     }},
     {"You're ready", {
         G_OK "Set your nick:  " G_CMD("/set nick ") G_VAL("yournick"),
-        G_OK "Connect:        " G_CMD("/server irc.libera.chat 6697 -tls -name libera"),
-        G_OK "Join:           " G_CMD("/join #channel"),
+        G_OK "Connect:        " G_CMD("/server irc.SekurNet.org 6697 -tls -name sekurnet"),
+        G_OK "Join:           " G_CMD("/join #iSekur"),
         G_OK "Every time:     " G_CMD("/autojoin snap"),
         G_OK "Keep it all:    " G_CMD("/save"),
         "",
@@ -560,7 +561,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/set") "             every setting, explained in the config file too",
         "  " G_CMD("/guide") "           this guide, any time",
         "",
-        "  Questions? " G_CMD("/server irc.sekurnet.org 6697 -tls") " and " G_CMD("/join #iSekur") ". Have fun!",
+        "  Questions, ideas, bugs? " G_CMD("#iSekur") " on " BOLD "irc.SekurNet.org" RESET ": see you there. Have fun!",
     }},
 };
 

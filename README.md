@@ -85,7 +85,7 @@ only attached to it.
 
     isekur              # start (or, if it's already running, attach to it)
     Alt+D / /detach     # back to the shell; still connected, still in the channels, still logging
-    isekur --attach     # back again, from this or any other terminal or SSH login
+    isekur --attach     # back again, from this or any other terminal or SSH login (none running: a new one starts)
     isekur --daemon     # start in the background without attaching
 
 Closing the terminal or losing the SSH connection detaches too. One terminal is attached at a time;

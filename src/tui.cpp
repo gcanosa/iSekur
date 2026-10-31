@@ -409,7 +409,7 @@ void Tui::draw() {
         if (b->type == BT::CHANNEL) topic = b->topic;
         else if (b->name == "*channels") topic = "Channel list: /list again refreshes it · /join #channel";
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
-        else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · Ctrl+W closes";
+        else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · q, Esc or Ctrl+W closes";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
         else if (b->type == BT::SHELL) topic = b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {
@@ -1339,6 +1339,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         return;
     }
     if (mod & TB_MOD_ALT) return;  // unbound Alt combos do nothing
+    if (input.empty() && guide_tab() && ((ch == 'q' || ch == 'Q') || (k == TB_KEY_ESC && !ch))) { c.guide(c.active, "close"); return; }  // q or Esc closes the guide
     if (ch || k == TB_KEY_SPACE) { input.insert(cur++, 1, ch ? (char32_t)ch : U' '); return; }
     switch (k) {
     case TB_KEY_ENTER: submit(); break;
