@@ -580,6 +580,8 @@ int main() {
         }
         assert(d->st == Dcc::DONE && d->got == 11);
         char ab[8];
+        pollfd pp{peer, POLLIN, 0};
+        poll(&pp, 1, 2000);  // BSD/macOS: accept() hands the listener's O_NONBLOCK on, the ack may still be in flight
         assert(read(peer, ab, sizeof ab) >= 4);  // an ack of all 11 bytes, big-endian, comes last
         FILE* f = fopen("build/dcctest/hi there.txt", "rb");
         char fb[32] = "";
