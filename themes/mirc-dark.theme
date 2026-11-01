@@ -1,0 +1,65 @@
+# mIRC classic, dark: black windows, light gray text, the mIRC palette's bright colors so every
+# event reads on black (lime joins, cyan quits, orange notices, pink actions). /theme mirc-dark (light: mirc)
+# mIRC palette: 4 red #ff0000  7 orange #fc7f00  8 yellow #ffff00  9 lime #00fc00  11 cyan #00ffff  13 pink #ff00ff  15 light grey #d2d2d2
+[colors]
+default        = #d2d2d2 #000000
+topic          = #d2d2d2 #2b2b2b
+tabbar         = #d2d2d2 #000000
+tab_server     = #ffffff #000000 bold
+tab_home       = #ffffff #000000 bold
+tab_shell      = #ffffff #000000 bold
+tab_active     = #ffffff #0078d7
+tab_data       = #00ffff #000000
+tab_msg        = #ff0000 #000000
+tab_hilight    = #ffff00 #000000 bold
+tab_quiet      = #7f7f7f #000000 italic
+tab_quiet_act  = #000000 #7f7f7f
+status         = #d2d2d2 #2b2b2b
+status_hi      = #ffffff #2b2b2b
+status_info    = #ffffff #2b2b2b
+status_ok      = #00fc00
+status_warn    = #ffff00
+status_high    = #fc7f00
+status_crit    = #ff0000 bold
+status_bat     = #d2d2d2 #3c3c3c
+input          = #d2d2d2 #000000
+input_prompt   = #00ffff #000000
+set_key        = #00ffff #000000 bold
+set_value      = #fc7f00 #000000
+timestamp      = #d2d2d2 #000000
+separator      = #555555 #000000
+nicklist       = #d2d2d2 #000000
+nicklist_title = #7f7f7f #000000
+nicklist_border= #555555 #000000
+nicklist_op    = #d2d2d2 #000000
+nicklist_voice = #d2d2d2 #000000
+menu           = #d2d2d2 #2b2b2b
+menu_sel       = #ffffff #0078d7
+menu_border    = #555555 #2b2b2b
+msg_self       = #d2d2d2 #000000
+marker         = #ff0000
+hilight        = #ff0000 #000000
+hilight_text   = #ff0000 #000000
+hilight_line   = #ff0000 #000000
+join           = #00fc00 #000000
+part           = #00fc00 #000000
+quit           = #00ffff #000000
+notice         = #fc7f00 #000000
+action         = #ff00ff #000000
+info           = #00ffff #000000
+event          = #00fc00 #000000
+error          = #ff0000 #000000
+
+[nicks]
+# mIRC doesn't color nicks
+palette = #d2d2d2
+
+[layout]
+nicklist       = on
+nicklist_width = 16
+nick_width     = 0
+nick_brackets  = <>
+event_marker   = *
+separator      =
+timestamp      = [%H:%M]
+font           = Fixedsys, "Fixedsys Excelsior 3.01", "Fixedsys Excelsior", ui-monospace, Consolas, monospace

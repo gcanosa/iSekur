@@ -522,7 +522,7 @@ int main() {
         std::string terr;
         assert(load_theme(n, th, terr));
         for (const char* k : {"default", "status", "tab_active", "input", "timestamp", "join", "error"}) assert(th.el.count(k));
-        assert(th.nicks.size() >= 6);
+        assert(th.nicks.size() >= (n.rfind("mirc", 0) == 0 ? 1u : 6u));  // mirc, mirc-dark: one nick color, like mIRC
     }
 
     // mirc_prefix: n visible characters, the codes around them kept

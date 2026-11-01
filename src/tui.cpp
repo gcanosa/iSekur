@@ -314,6 +314,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         auto it = b->nicks.find(irc_lower(l.nick));
         if (it != b->nicks.end() && !it->second.prefix.empty()) pfx = it->second.prefix.substr(0, 1);
         marker = pfx + l.nick;
+        if (auto br = T.lay("nick_brackets", ""); br.size() == 2) marker = br[0] + marker + br[1];  // mirc: <nick>
         ms = l.self ? T.get("msg_self") : nick_style(T, l.nick);
         if (!l.self && l.color >= 0) ms.fg = l.color;  // Twitch: the color they picked
         if (l.hilight) ms = T.get("hilight"), body = sty(T, "hilight_text", "default");
@@ -329,17 +330,21 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     case LK::PART: marker = "<--", ms = body = T.get("part"); break;
     case LK::QUIT: marker = "<--", ms = body = sty(T, "quit", "part"); break;
     case LK::ERROR: marker = "!!", ms = body = T.get("error"); break;
+    case LK::NICK: case LK::MODE: case LK::TOPIC: marker = "--", ms = body = sty(T, "event", "info"); break;  // mirc: green, like joins
     default: marker = "--", ms = body = T.get("info"); break;
     }
+    if (auto em = T.lay("event_marker", ""); !em.empty() && l.kind != LK::MSG && l.kind != LK::NOTICE)  // mirc: "*"
+        marker = l.kind == LK::INFO && !b->srv && b->type != BT::SHELL ? "" : em;  // home tab's banner and welcome: bare
     Row nick;
     cells(nick, marker, ms, false);
-    if (width(nick) > nw) {
+    if (nw > 0 && width(nick) > nw) {  // nick_width 0: no column, the nick as long as it is
         while (!nick.empty() && width(nick) > nw - 1) nick.pop_back();
         nick.push_back({'+', T.get("separator"), 1});
     }
     for (int pad = nw - width(nick); pad > 0; pad--) pre.push_back({' ', T.get("default"), 1});
     pre.insert(pre.end(), nick.begin(), nick.end());
-    cells(pre, " " + T.lay("separator", "│") + " ", T.get("separator"), false);
+    std::string sep = T.lay("separator", "│");
+    if (!marker.empty() || !sep.empty()) cells(pre, sep.empty() ? " " : " " + sep + " ", T.get("separator"), false);
 
     int indent = width(pre), avail = std::max(10, width_ - indent);
     if (l.typed_at) {  // /typing: the part typed so far, and the cursor

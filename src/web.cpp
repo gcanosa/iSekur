@@ -701,6 +701,9 @@ std::string Web::theme_json() {
              ",\"bg\":" + json_str(rgb_hex(st.bg)) + ",\"a\":" + std::to_string(st.attr) + "}";
         first = false;
     }
+    o += "},\"lay\":{";
+    first = true;
+    for (auto& [k, v] : c.theme.layout) o += (first ? "" : ",") + json_str(k) + ":" + json_str(v), first = false;
     o += "},\"nicks\":[";
     for (size_t i = 0; i < c.theme.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(c.theme.nicks[i]));
     return o + "]}";

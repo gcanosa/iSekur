@@ -55,6 +55,17 @@ button, input { font: inherit; color: inherit; }
 #foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1.2; }
 #foot #setbtn { font-size: 27px; line-height: 1; }  /* the gear glyph draws small */
 #foot button:hover { color: var(--fg); border-color: var(--accent); }
+/* ‹ at the top of the tab list folds it to a thin strip (remembered); › opens it again */
+#sidebtn { display: block; margin: -4px 6px 0 auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px; }
+#sidebtn:hover { color: var(--fg); }
+@media (min-width: 761px) {
+  #app.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "side input input"; }
+  #app.noside #side > :not(#sidebtn) { display: none; }
+  #app.noside #sidebtn { margin: 0 auto; }
+  #app.noside #foot { grid-area: side; align-self: end; flex-direction: column; padding: 8px 3px; border-right: 0; background: none; }
+  #app.noside #foot button { flex: none; font-size: 18px; }
+  #app.noside #foot #setbtn { font-size: 21px; }
+}
 /* dialogs: a box with its title on the border, like the terminal's */
 dialog { background: var(--menu-bg, var(--panel)); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
 dialog::backdrop { background: #0009; }
@@ -135,16 +146,23 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 .l .nk { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   border-right: 1px solid var(--separator-fg, var(--line)); padding-right: 10px; }
 .l .tx { white-space: pre-wrap; }
+/* a theme with nick_width = 0 (mirc): "[12:34] <nick> text" on one line, no nick column */
+#msgs.inline .l { display: block; padding: 0 8px; }
+#msgs.inline .l .nk { display: inline; border: 0; padding: 0; text-align: left; }
+#msgs.inline .l .ts::after, #msgs.inline .l .nk:not(:empty)::after { content: " "; }
+#msgs.inline .l.hl .nk { border-radius: 0; }
 .l.hdr .tx { cursor: pointer; }
 .l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
-.l.hl { background: #ff00aa10; }
+.l.hl { background: var(--hilight_line-bg, #ff00aa10); }
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
 #msgs .older { color: var(--muted); text-align: center; font-size: 12px; padding: 4px; }
 #msgs.quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
-.k-part, .k-part .nk, .k-quit, .k-quit .nk { color: var(--part-fg, var(--part)); }
+.k-part, .k-part .nk { color: var(--part-fg, var(--part)); }
+.k-quit, .k-quit .nk { color: var(--quit-fg, var(--part-fg, var(--part))); }
 .k-info .tx, .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-info .nk, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--info-fg, var(--info)); }
+.k-nick .tx, .k-mode .tx, .k-topic .tx, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--event-fg, var(--info-fg, var(--info))); }
 .k-error .tx, .k-error .nk { color: var(--error-fg, var(--err)); }
 .k-notice .nk { color: var(--notice-fg, var(--notice)); }
 .k-action .tx, .k-action .nk { color: var(--action-fg, var(--action)); font-style: italic; }
@@ -216,6 +234,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   #side { display: none; position: fixed; inset: 0 30% 0 0; z-index: 5; box-shadow: 0 0 40px #000; }
   #side.open { display: block; padding-bottom: 56px; }
   #foot { display: none; }
+  #sidebtn { display: none; }
   #side.open ~ #foot { display: flex; position: fixed; left: 0; right: 30%; bottom: 0; z-index: 6; }
   #nicks { display: none; position: fixed; inset: 0 0 0 40%; z-index: 5; width: auto; }
   #nicks.open { display: block; }
@@ -359,11 +378,13 @@ function lineEl(b, l) {
   if (l.k === "msg") {
     const e = b.nickmap && b.nickmap.get(ircLower(l.n));
     nk.textContent = (e && e[0] ? e[0][0] : "") + l.n;
+    const br = (theme.lay || {}).nick_brackets || ""; if ([...br].length === 2) nk.textContent = [...br][0] + nk.textContent + [...br][1];
     if (l.s) nk.className += " self"; else if (!l.h) nk.style.color = l.c || nickColor(l.n);
     mirc(tx, l.x); tx.src_ = l.x;
   } else if (l.k === "action") { nk.textContent = "*"; mirc(tx, tx.src_ = l.n + " " + l.x); }
   else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, tx.src_ = l.x); }
   else { nk.textContent = MARK[l.k] || "--"; mirc(tx, l.x); }
+  if (l.k !== "msg" && l.k !== "notice" && (theme.lay || {}).event_marker) nk.textContent = l.k === "info" && b.home ? "" : theme.lay.event_marker;
   nk.title = l.n;
   if (b.name === "*channels") {  // the /list table: hints, and the header gets a hand on its column names
     if (/^\s+#\s+Channel/.test(tx.textContent)) d.classList.add("hdr"), d.title = "Click Channel or Users to sort";
@@ -379,7 +400,7 @@ function label(b) { return b.type === "status" ? b.srv : b.name; }
 // a folded network (click its name here, or right click its tab in the terminal) lists only its
 // server tab with "+N" in the color of their activity; Alt+arrows and Alt+A still go through them
 function renderSide() {
-  const side = $("#side"); side.textContent = "";
+  const side = $("#side"); side.textContent = ""; side.append(sidebtn);
   let lastSrv = null, st = null;
   order.forEach((id, i) => {
     const b = bufs.get(id); if (!b) return;
@@ -521,6 +542,8 @@ function applyTheme() {
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
   document.documentElement.style.colorScheme = lum > 140 ? "light" : "dark";
   document.documentElement.classList.toggle("light", lum > 140);
+  $("#msgs").classList.toggle("inline", (theme.lay || {}).nick_width === "0");
+  set("--mono", (theme.lay || {}).font);  // mirc: Fixedsys where it's installed
 }
 
 function onMsg(ev) {
@@ -620,6 +643,13 @@ $("#lf").onsubmit = async e => {
 };
 $("#logout").onclick = async () => { await fetch("/logout", {method: "POST", credentials: "same-origin"}); if (ws) { ws.onclose = null; ws.close(); } boot(); };
 $("#menu").onclick = () => $("#side").classList.toggle("open");
+const sidebtn = document.createElement("button"); sidebtn.id = "sidebtn";
+function sideFold(off) {
+  $("#app").classList.toggle("noside", off);
+  sidebtn.textContent = off ? "›" : "‹"; sidebtn.title = off ? "Show the tab list" : "Hide the tab list"; sidebtn.setAttribute("aria-label", sidebtn.title);
+}
+sidebtn.onclick = () => { const off = !$("#app").classList.contains("noside"); sideFold(off); try { localStorage.setItem("side", off ? "0" : "1"); } catch (e) {} };
+try { sideFold(localStorage.getItem("side") === "0"); } catch (e) { sideFold(false); }
 // desktop: hide/show the list (remembered); phone: open/close the overlay
 const narrow = matchMedia("(max-width: 760px)");
 try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"); } catch (e) {}
