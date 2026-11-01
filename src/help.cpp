@@ -35,6 +35,10 @@ static const std::vector<CmdInfo> CMDS = {
     {"connect", "Connection", "[name]", "Reconnect a configured server",
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect libera"}},
+    {"reconnect", "Connection", "[message]", "Drop and connect again",
+     "Quits this server (with the message, else quit_message) and connects again right away; "
+     "the channels are joined again. Also in the menu of a right click on a server tab.",
+     {"/reconnect", "/reconnect brb, new config"}},
     {"disconnect", "Connection", "[message]", "Quit this server, keep the tabs",
      "Sends QUIT to the server of the current tab and does not reconnect. Its tabs stay open; "
      "/connect brings it back and rejoins the channels.",
@@ -188,6 +192,10 @@ static const std::vector<CmdInfo> CMDS = {
      "Closes the second pane from /split; the focused tab stays on screen. Closing the tab that's "
      "in the other pane does it too.",
      {"/unsplit"}, "merge"},
+    {"fold", "Windows", "", "Hide or show a server's channels in the tab bar",
+     "The server's tab shows +N for them, colored like their news; Ctrl+N/P, Ctrl+A and /win still go "
+     "to them. The same as a click on the server's name in the webchat, and in a server tab's right click menu.",
+     {"/fold"}},
     {"clear", "Windows", "", "Clear the current tab's scrollback",
      "Only clears what is on screen; logs are untouched.",
      {"/clear"}},
@@ -548,7 +556,7 @@ static const std::vector<GuidePage> GUIDE = {
         "",
         G_HEAD("The mouse"),
         "  click tabs and the " "\x03" "08" "[Act: 3]" RESET " numbers, wheel scrolls, " BOLD "drag to copy" RESET ", right click a",
-        "  server tab to fold its channels. Tab colors: " "\x03" "10" "news" RESET ", " "\x03" "09" "messages" RESET ", " "\x03" "04" "your nick" RESET ".",
+        "  tab for its menu (autojoin, reconnect, fold). Tab colors: " "\x03" "10" "news" RESET ", " "\x03" "09" "messages" RESET ", " "\x03" "04" "your nick" RESET ".",
         "",
         G_NOTE "On a Mac, Alt is " BOLD "Option" RESET ". If Option keys type symbols, turn on \"Option as Meta\"",
         "  in your terminal's settings. Keys are yours to change in " BOLD "[keys]" RESET " (" G_CMD("/help set") ").",

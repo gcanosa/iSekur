@@ -396,7 +396,17 @@ int main() {
     core.exec(chb, tab_cmd("Add to autojoin"));
     assert(tab_cmd("Remove from autojoin") == "/autojoin del");
     core.exec(chb, "/autojoin del");
-    assert(tab_cmd("Add to autojoin") == "/autojoin add" && core.tab_menu(ts->status).empty());
+    assert(tab_cmd("Add to autojoin") == "/autojoin add");
+    // a server tab's menu: reconnect / disconnect while up, fold, close (asks first)
+    {
+        auto sm = core.tab_menu(ts->status);
+        assert(sm.size() == 5 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
+               sm[4].second.rfind("?Disconnect from ", 0) == 0);
+        core.exec(ts->status, "/fold");
+        assert(ts->status->collapsed && core.tab_menu(ts->status)[2].first == "Show its channels");
+        core.exec(ts->status, "/fold");
+        assert(!ts->status->collapsed);
+    }
 
     // closing a /server tab (Ctrl+W): socket closed, server gone, nothing left for /save
     {

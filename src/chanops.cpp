@@ -264,6 +264,15 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
 std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const {
     std::vector<std::pair<std::string, std::string>> m;
     Server* s = b->srv;
+    if (b->type == BT::STATUS && s) {  // a server tab
+        bool up = s->state != SS::DISCONNECTED;
+        if (up) m.push_back({"Reconnect", "/reconnect"}), m.push_back({"Disconnect", "/disconnect"});
+        else m.push_back({"Connect", "/connect"});
+        m.push_back({b->collapsed ? "Show its channels" : "Hide its channels", "/fold"});
+        m.push_back({"", ""});
+        m.push_back({"Close", up ? "?Disconnect from " + s->cfg.name + " and close all its tabs?\n/close" : "/close"});
+        return m;
+    }
     if (b->type != BT::CHANNEL || !s) return m;
     auto& aj = s->cfg.autojoin;
     bool in_aj = std::any_of(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(b->name); });

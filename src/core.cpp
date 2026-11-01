@@ -907,6 +907,17 @@ void Core::exec(Buffer* b, const std::string& input) {
         disconnect(s, "");
         return;
     }
+    if (cmd == "reconnect") {  // a QUIT (message as given), then straight back in
+        if (!s) { print(b, LK::ERROR, "Not a server's tab: /connect name"); return; }
+        if (s->state != SS::DISCONNECTED) exec(b, "/disconnect " + args);
+        connect(s);
+        return;
+    }
+    if (cmd == "fold") {  // the server's channels out of the tab bar and back (right click a server tab)
+        if (!s) { print(b, LK::ERROR, "Not a server's tab"); return; }
+        fold(s->status);
+        return;
+    }
     if (cmd == "win" || cmd == "window") {
         int n = atoi(args.c_str());
         if (n >= 1 && n <= (int)bufs.size()) select(bufs[(size_t)n - 1].get());

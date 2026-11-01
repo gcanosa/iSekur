@@ -632,7 +632,7 @@ void Web::ws_frames(Client& cl) {
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
             bool tab = m["nick"].empty();
-            std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(tab ? b->name : m["nick"]) + ",\"items\":[";
+            std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(!tab ? m["nick"] : b->type == BT::STATUS && b->srv ? b->srv->cfg.name : b->name) + ",\"items\":[";
             for (auto& [l, cmd] : tab ? c.tab_menu(b) : c.nick_menu(b, m["nick"])) o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(l) + "," + json_str(cmd) + "]";
             cl.conn.out += ws_frame(o + "]}");
         }

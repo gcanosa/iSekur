@@ -452,7 +452,7 @@ function renderSide() {
     t.append(n, nm);
     if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
     t.onclick = () => { select(id); side.classList.remove("open"); };
-    if (b.type === "channel") t.oncontextmenu = e => askMenu(e, "", id);
+    if (b.type === "channel" || (b.type === "status" && !b.home)) t.oncontextmenu = e => askMenu(e, "", id);  // a server tab: connect, fold, close
     side.append(t);
   });
 }

@@ -1515,8 +1515,8 @@ void Tui::mouse(int mod, int k, int x, int y) {
             if (!h.nick.empty()) { open_menu(h.nick, x, y); continue; }
             if (y != top_row() - 1 || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
             Buffer* tb = c.bufs[(size_t)h.tab].get();
-            if (tb->type == BT::STATUS && tb->srv) c.fold(tb);  // a server tab: fold or unfold its channels
-            else if (tb->type == BT::CHANNEL) c.select(tb), menu = Menu{x, y, 0, tb->name, c.tab_menu(tb)}, c.dirty = true;  // its commands run there
+            if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL)  // its commands run there
+                c.select(tb), menu = Menu{x, y, 0, tb->type == BT::STATUS ? tb->srv->cfg.name : tb->name, c.tab_menu(tb)}, c.dirty = true;
         }
         return;
     }

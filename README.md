@@ -27,7 +27,7 @@ that mirrors your live session in a browser, bouncer style.
 - Auto-away when nothing is attached, and catch-up from IRCv3 chathistory on join
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
-- The webchat has the same nick and channel tab menus (right click or long press on a nick or a channel tab), folding networks, Alt+A for the next active tab and the theme's tab colors
+- The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), folding networks, Alt+A for the next active tab and the theme's tab colors
 - It also has the terminal's input line and status bar: live suggestions (`/jo`, `/set key`, `/help k`; Up/Down, Tab), hidden password prompts (`/oper`, `/e2e`; Esc cancels, never in the history), pastes with newlines shown as ↵ and `paste_confirm`, mIRC formatting keys (Ctrl+B, Ctrl+C without a selection, Ctrl+O, Ctrl+R, Ctrl+I, Ctrl+U), clock, user modes, lag, clickable `[Act: ...]`, `-- MORE --` and `status_info`, double click the topic to edit it, the bell, and your `[keys]` bindings (Alt+W closes a tab and Alt+X goes to the next server, since browsers keep Ctrl+W and Ctrl+X)
 - `/set` alone opens a settings window in the terminal: every key by category, `/` to search, `e` to edit in place, Space to switch on/off or step through the themes, `s` saves (the webchat's ⚙ has switches and a theme list)
 - Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about
@@ -121,7 +121,7 @@ Not available on Cygwin.
 | Cmd+click (Ctrl+click on Linux) on a link | opens it: links in messages and the topic are terminal hyperlinks (OSC 8), also when they wrap onto the next line. If your terminal gives the click to iSekur, hold Shift too or turn the mouse off with F3. In tmux: `set -as terminal-features ",*:hyperlinks"` |
 | right click on a nick | menu: query, whois, CTCPs, ignore, op / voice / kick / ban when your rank allows, kill / G-line when you are an IRC operator (Up/Down/Enter or click) |
 | right click on a channel tab | menu: quiet mode on/off, clear, add to or remove from autojoin, close (asks before leaving a joined channel); same in the webchat |
-| right click on a server tab | hide or show its channels and queries in the tab bar ("+N" counts them, colored by their activity); Ctrl+N/P, Ctrl+A and `/win` still reach them; in the webchat click the network name (both stay in sync) |
+| right click on a server tab | menu: connect, or reconnect / disconnect; hide or show its channels and queries in the tab bar ("+N" counts them, colored by their activity; Ctrl+N/P, Ctrl+A and `/win` still reach them; `/fold`, or in the webchat a click on the network name); close (asks while connected); same in the webchat |
 | Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
 | Up / Down while matches are listed | move through them; Enter or Tab puts the highlighted one in the input line without sending |
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
