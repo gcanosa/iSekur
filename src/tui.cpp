@@ -1551,7 +1551,11 @@ void Tui::mouse(int mod, int k, int x, int y) {
             c.print(b, LK::ERROR, b->name + " is +t: only channel operators can change the topic");
             return;
         }
-        input = from_utf8("/topic " + b->topic), cur = input.size(), completing = false;
+        // a dialog with the topic in it to edit; Enter sets it, Esc (or emptying it) leaves it be
+        // (closing the tab drops the dialog and this with it, so b is still there when it runs)
+        c.ask_pass(b, "topic", [this, b](const std::string& t) { c.exec(b, "/topic " + t); },
+                   false, "Topic of " + b->name, {"Enter sets it · Esc leaves it as it is"});
+        input = from_utf8(b->topic), cur = input.size(), completing = false;
         return;
     }
     for (auto& h : hits) {

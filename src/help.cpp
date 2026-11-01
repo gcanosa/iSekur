@@ -94,7 +94,8 @@ static const std::vector<CmdInfo> CMDS = {
      "Notices never trigger automatic replies, which is why bots use them.",
      {"/notice alice the build is green"}},
     {"topic", "Chat", "[text]", "Show or set the channel topic",
-     "Without text, shows the topic. With text, sets it (channels with +t need ops).",
+     "Without text, shows the topic. With text, sets it (channels with +t need ops). A double click "
+     "on the topic bar opens it in a box to edit, in the terminal and the webchat, when you may change it.",
      {"/topic", "/topic Welcome! Rules: be nice | https://example.org"}},
     {"quiet", "Chat", "[on|off]", "Hide joins, parts, quits and nick changes in this tab",
      "Toggles for the current tab only. Hidden lines are still logged and come back with /quiet off. "

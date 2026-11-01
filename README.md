@@ -18,7 +18,7 @@ that mirrors your live session in a browser, bouncer style.
 - Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
 - `--daemon` starts it headless; attach from a terminal or the browser
-- Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click edits it
+- Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click opens it in a box to edit (when you may change it: ops on +t channels)
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
 - Highlights on your nick plus your own words (`/hilight add isekur`, `*` globs), and quit/part messages you can set (`quit_message`, `part_message`)
 - `/grep [-all] text` searches the scrollback

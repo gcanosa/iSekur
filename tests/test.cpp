@@ -266,6 +266,23 @@ int main() {
         core.split_mode = 0, core.close(sp), core.select(chb), sent();
     }
 
+    // rejoin_on_kick: off, a kick just leaves; on, a JOIN right away (with the autojoin key)
+    {
+        Buffer* kb = core.open(ts, BT::CHANNEL, "#k");
+        kb->joined = true, sent();
+        feed(":op!u@h KICK #k me :out");
+        assert(!kb->joined && sent().empty());
+        core.cfg["general"]["rejoin_on_kick"] = "on";
+        ts->cfg.autojoin.push_back("#k sekrit");
+        kb->joined = true;
+        feed(":op!u@h KICK #k me :out again");
+        assert(sent() == "JOIN #k sekrit\r\n");
+        feed(":op!u@h KICK #k someoneelse :not me");
+        assert(sent().empty());
+        core.cfg["general"].erase("rejoin_on_kick"), ts->cfg.autojoin.pop_back();
+        core.close(kb), sent();
+    }
+
     // Twitch: display-name + color tags, badges in the nick list, its own commands, lowercase joins
     if (!twitch_host("irc.chat.twitch.tv")) {  // make notwitch: /twitch only says so
         core.exec(home, "/twitch");

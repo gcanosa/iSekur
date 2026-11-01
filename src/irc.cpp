@@ -585,6 +585,13 @@ void Core::handle(Server* s, const Msg& m) {
         if (is_me(who)) b->joined = false, b->nicks.clear();
         line(b, LK::PART, who, txt, is_me(who));
         notify(Ev::BUFFER, b);
+        if (kick && is_me(who) && opt_on(s, "rejoin_on_kick", false)) {  // a ban makes it fail once (474), no loop
+            std::string key;
+            for (auto& e : s->cfg.autojoin)
+                if (auto w = split(e, ' '); w.size() > 1 && irc_lower(w[0]) == irc_lower(b->name)) key = " " + w[1];
+            print(b, LK::INFO, "Rejoining " + b->name + " (rejoin_on_kick)");
+            s->send("JOIN " + b->name + key);
+        }
         return;
     }
     if (cmd == "QUIT") {

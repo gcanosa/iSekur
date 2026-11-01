@@ -294,6 +294,11 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="status"><span id="stl"></span><span id="sti"></span><span id="dccbar" title="Files and transfers"></span></div>
   <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
 </div>
+<dialog id="dtopic"><form method="dialog">
+  <h2 id="dtopic-h">Topic</h2>
+  <label>Enter sets it, Esc leaves it as it is<input name="t" id="dtopic-t" autocomplete="off" spellcheck="true"></label>
+  <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok">Set topic</button></div>
+</form></dialog>
 <dialog id="dsrv"><form method="dialog">
   <h2>Add a server</h2>
   <div class="row2"><label>Host or IP<input name="host" required placeholder="irc.sekurnet.org"></label><label>Port<input name="port" type="number" min="1" max="65535" value="6697"></label></div>
@@ -758,7 +763,15 @@ $("#topic .t").ondblclick = e => {
   let need = pf.indexOf("%"); if (need < 0) need = pf.indexOf("@");
   if (b.modes.includes("t") && !(r >= 0 && need >= 0 && r <= need)) return localLine(b, b.name + " is +t: only channel operators can change the topic");
   window.getSelection().removeAllRanges();
-  setLine("/topic " + b.topic);
+  // a popup with the topic to edit: Enter or "Set topic" sets it, Esc or Cancel leaves it be
+  const d = $("#dtopic"), t = $("#dtopic-t");
+  $("#dtopic-h").textContent = "Topic of " + b.name;
+  t.value = b.topic; d.returnValue = ""; d.dataset.buf = b.id;
+  d.showModal(); t.focus(); t.select();
+};
+$("#dtopic").onclose = () => {
+  const d = $("#dtopic"), v = $("#dtopic-t").value;
+  if (d.returnValue === "ok" && v.trim() && bufs.has(+d.dataset.buf)) send({t: "input", buf: +d.dataset.buf, text: "/topic " + v});
 };
 // a line only this page shows (the terminal prints these into the tab)
 function localLine(b, text) {

@@ -35,6 +35,9 @@ hilight_words  =
 quit_message =
 part_message =
 
+# Join a channel again right after being kicked from it (with its autojoin key). Per server too.
+rejoin_on_kick = off
+
 # The iSekur banner at startup: in the theme's colors, or white and gray.
 banner_mono = off
 # A light sweeps across it once when iSekur starts in a terminal (not with banner_mono).
