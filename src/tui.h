@@ -60,7 +60,11 @@ private:
     bool shell_keys() const;
     bool guide_tab() const;  // the *guide tab is shown: Left/Right and clicks turn its pages  // a live shell tab: keys go to it
     void shell_key(int mod, int k, uint32_t ch);
-    void draw_term(Term* t, int top, int rows, int cols);
+    void draw_term(Term* t, int top, int rows, int cols, int x0 = 0);
+    void draw_chat(Buffer* b, int x, int y, int w, int h);  // a tab's lines (or its shell) in that box
+    void draw_nicks(Buffer* b, int sx, int top, int xend, int h, bool focus);
+    struct Box { int x = 0, y = 0, w = 0, h = 0; bool in(int px, int py) const { return w && px >= x && px < x + w && py >= y && py < y + h; } };
+    Box other;  // /split: where the unfocused pane was drawn (a click there focuses it, the wheel scrolls it)
     // a prompt box over the middle of the screen (/shell login, passwords, the lock screen)
     void draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
                      bool hidden, const std::u32string& in, size_t at, const std::string& hint);

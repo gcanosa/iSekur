@@ -261,6 +261,12 @@ struct Core {
     std::vector<std::unique_ptr<Server>> servers;
     std::vector<std::unique_ptr<Buffer>> bufs;  // tab order
     Buffer* active = nullptr;
+    // /split: the terminal's second pane shows this tab; focus (F6, Alt+O, a click) swaps it with active,
+    // so input, the nicklist and the topic always follow the focused pane. split_first: it's the left/top one
+    Buffer* split_buf = nullptr;
+    bool split_first = false;
+    int split_mode = 0;  // 0 by the window's width, 1 side by side, 2 one over the other
+    void split_cmd(Buffer* b, const std::string& args);
     int next_id = 1;
     size_t max_lines = 2000;  // [general] scrollback: lines kept per tab
     bool quit = false, dirty = true, cfg_changed = false;  // cfg_changed: the TUI re-reads keys, mouse, colors

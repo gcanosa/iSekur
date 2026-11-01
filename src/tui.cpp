@@ -379,6 +379,73 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
 }
 
 // ---- drawing ---------------------------------------------------------------
+// a channel's nicklist: the separator at column sx, the list right of it up to xend. Only the
+// focused pane's scrolls (nl_scroll); a click on a nick opens a query
+void Tui::draw_nicks(Buffer* b, int sx, int top, int xend, int ch, bool focus) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "nicklist_border", "separator");
+    for (int y = top; y < top + ch; y++) text(sx, y, xend, T.lay("separator", "│"), bs, false);
+    std::vector<const NickEntry*> v;
+    for (auto& kv : b->nicks) v.push_back(&kv.second);
+    Server* s = b->srv;
+    // the map is keyed by irc_lower(nick), so it's already in name order: only rank moves them
+    std::stable_sort(v.begin(), v.end(), [&](const NickEntry* x, const NickEntry* y) {
+        return s->prefix_rank(x->prefix) < s->prefix_rank(y->prefix);
+    });
+    int sc = 0;
+    if (focus) {
+        if (nl_buf != b) nl_buf = b, nl_scroll = 0;
+        sc = nl_scroll = std::max(0, std::min(nl_scroll, (int)v.size() - (ch - 1)));
+    }
+    v.erase(v.begin(), v.begin() + sc);
+    Style hs = sty(T, "nicklist_title", "nicklist");
+    fill(top, sx + 1, xend, hs);
+    text(sx + 2, top, xend, std::to_string(v.size() + (size_t)sc) + " users" + (sc ? " ↑" : ""), hs, false);
+    for (size_t i = 0; i < v.size() && (int)i < ch - 1; i++) {
+        const NickEntry* e = v[i];
+        if (focus) hits.push_back({top + 1 + (int)i, sx + 1, xend, -1, e->nick});
+        Style ns = e->prefix.empty() ? T.get("nicklist")
+                 : e->prefix[0] == '+' ? sty(T, "nicklist_voice", "nicklist")
+                                       : sty(T, "nicklist_op", "nicklist");
+        if (e->away) ns.attr |= A_DIM;
+        fill(top + 1 + (int)i, sx + 1, xend, T.get("nicklist"));
+        text(sx + 2, top + 1 + (int)i, xend, (e->prefix.empty() ? " " : e->prefix.substr(0, 1)) + e->nick, ns, false);
+    }
+    for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, sx + 1, xend, T.get("nicklist"));
+}
+
+void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
+    const Theme& T = c.theme;
+    // a shell tab: its terminal screen, unless scrolled back into what went off the top
+    Term* term = b->term.get();
+    if (term && b->scroll == 0) {
+        c.term_resize(term, h, w);
+        draw_term(term, y, h, w, x);
+        return;
+    }
+    std::vector<Row> rows;  // bottom-up
+    int need = h + b->scroll;
+    size_t n = 0;
+    for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it, ++n) {
+        if (b->unread && n == (size_t)b->unread) {  // read marker above the new lines
+            Row mk;
+            std::string bar = "── new ";
+            for (int k = 7; k < w; k++) bar += "─";
+            cells(mk, bar, sty(T, "marker", "separator"), false);
+            rows.push_back(mk);
+        }
+        if (b->quiet && noise(*it)) continue;
+        auto r = wrap(c, *it, b, w);
+        rows.insert(rows.end(), r.rbegin(), r.rend());
+    }
+    if ((int)rows.size() < need) b->scroll = std::max(0, (int)rows.size() - h);
+    for (int k = 0; k < h; k++) {
+        size_t idx = (size_t)(b->scroll + k);
+        if (idx >= rows.size()) break;
+        draw_row(x, y + h - 1 - k, x + w, rows[idx]);
+    }
+}
+
 int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); }
 
 void Tui::draw() {
@@ -515,70 +582,39 @@ void Tui::draw() {
     if (first) more(0, first, true);
     if (last < nt - 1) more(last + 1, nt, false);
 
-    // nick list
+    // the chat and its nicklist, or /split: two panes, each with its own title row (the focused one in
+    // tab_active) and, for a channel with room, its own nicklist. Side by side when the window is wide
     int top = top_row(), ch = chat_height();
-    int nlw = nicklist && b->type == BT::CHANNEL && W >= 60 ? atoi(T.lay("nicklist_width", "18").c_str()) : 0;
-    int cw = W - (nlw ? nlw + 1 : 0);
-    nl_x = nlw ? cw : -1;
-    if (nlw) {
-        Style bs = sty(T, "nicklist_border", "separator");
-        for (int y = top; y < top + ch; y++) text(cw, y, W, T.lay("separator", "│"), bs, false);
-        std::vector<const NickEntry*> v;
-        for (auto& kv : b->nicks) v.push_back(&kv.second);
-        Server* s = b->srv;
-        // the map is keyed by irc_lower(nick), so it's already in name order: only rank moves them
-        std::stable_sort(v.begin(), v.end(), [&](const NickEntry* x, const NickEntry* y) {
-            return s->prefix_rank(x->prefix) < s->prefix_rank(y->prefix);
-        });
-        if (nl_buf != b) nl_buf = b, nl_scroll = 0;
-        nl_scroll = std::max(0, std::min(nl_scroll, (int)v.size() - (ch - 1)));
-        v.erase(v.begin(), v.begin() + nl_scroll);
-        Style hs = sty(T, "nicklist_title", "nicklist");
-        fill(top, cw + 1, W, hs);
-        text(cw + 2, top, W, std::to_string(v.size() + (size_t)nl_scroll) + " users" + (nl_scroll ? " ↑" : ""), hs, false);
-        for (size_t i = 0; i < v.size() && (int)i < ch - 1; i++) {
-            const NickEntry* e = v[i];
-            hits.push_back({top + 1 + (int)i, cw + 1, W, -1, e->nick});
-            Style ns = e->prefix.empty() ? T.get("nicklist")
-                     : e->prefix[0] == '+' ? sty(T, "nicklist_voice", "nicklist")
-                                           : sty(T, "nicklist_op", "nicklist");
-            if (e->away) ns.attr |= A_DIM;
-            fill(top + 1 + (int)i, cw + 1, W, T.get("nicklist"));
-            text(cw + 2, top + 1 + (int)i, W,
-                 (e->prefix.empty() ? " " : e->prefix.substr(0, 1)) + e->nick, ns, false);
+    int nlw0 = atoi(T.lay("nicklist_width", "18").c_str());
+    Buffer* sb = c.split_buf && c.split_buf != b ? c.split_buf : nullptr;
+    bool two = sb && ch >= 7;
+    nl_x = -1, other = Box{};
+    Box pane{0, top, W, ch};  // where the focused tab's chat went (a shell's cursor goes in it)
+    auto draw_pane = [&](Buffer* pb, Box bx, bool focus) {
+        if (two) {
+            Style hs = focus ? T.get("tab_active") : T.get("tabbar");
+            fill(bx.y, bx.x, bx.x + bx.w, hs);
+            text(bx.x + 1, bx.y, bx.x + bx.w, std::to_string(c.index_of(pb) + 1) + ":" + buf_label(pb) + (focus ? "" : "  (F6 / Alt+O / click: focus)"), hs, false);
+            bx.y++, bx.h--;
         }
-        for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, cw + 1, W, T.get("nicklist"));
+        int nw = nicklist && pb->type == BT::CHANNEL && bx.w >= 60 ? nlw0 : 0, cwp = bx.w - (nw ? nw + 1 : 0);
+        if (nw) draw_nicks(pb, bx.x + cwp, bx.y, bx.x + bx.w, bx.h, focus);
+        if (nw && focus) nl_x = bx.x + cwp;
+        draw_chat(pb, bx.x, bx.y, cwp, bx.h);
+        if (focus) pane = Box{bx.x, bx.y, cwp, bx.h};
+    };
+    if (!two) draw_pane(b, pane, true);
+    else {
+        Box p1{0, top, W, ch}, p2 = p1;
+        if (c.split_mode == 1 || (c.split_mode == 0 && W >= 140)) {  // side by side, a separator column between
+            p1.w = (W - 1) / 2, p2.x = p1.w + 1, p2.w = W - p2.x;
+            for (int y = top; y < top + ch; y++) text(p1.w, y, W, "│", T.get("separator"), false);
+        } else p1.h = ch / 2, p2.y = top + p1.h, p2.h = ch - p1.h;
+        other = c.split_first ? p1 : p2;
+        draw_pane(b, c.split_first ? p2 : p1, true);
+        draw_pane(sb, other, false);
     }
-
-    // a shell tab: its terminal screen, unless scrolled back into what went off the top
-    Term* term = b->term.get();
-    if (term && b->scroll == 0) {
-        c.term_resize(term, ch, cw);
-        draw_term(term, top, ch, cw);
-    } else {
-    // chat
-    std::vector<Row> rows;  // bottom-up
-    int need = ch + b->scroll;
-    size_t n = 0;
-    for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it, ++n) {
-        if (b->unread && n == (size_t)b->unread) {  // read marker above the new lines
-            Row mk;
-            std::string bar = "── new ";
-            for (int k = 7; k < cw; k++) bar += "─";
-            cells(mk, bar, sty(T, "marker", "separator"), false);
-            rows.push_back(mk);
-        }
-        if (b->quiet && noise(*it)) continue;
-        auto r = wrap(c, *it, b, cw);
-        rows.insert(rows.end(), r.rbegin(), r.rend());
-    }
-    if ((int)rows.size() < need) b->scroll = std::max(0, (int)rows.size() - ch);
-    for (int k = 0; k < ch; k++) {
-        size_t idx = (size_t)(b->scroll + k);
-        if (idx >= rows.size()) break;
-        draw_row(0, top + ch - 1 - k, cw, rows[idx]);
-    }
-    }
+    int cw = !two && nl_x >= 0 ? nl_x : W, nlw = !two && nl_x >= 0;  // the status line lines up with a lone nicklist
     if (sel_x0 >= 0) {  // the selection, reversed in place
         tb_cell* cb = tb_cell_buffer();
         for (int yy = top; yy < top + ch; yy++)
@@ -721,13 +757,13 @@ void Tui::draw() {
         present();
         return;
     }
-    if (term && !c.asking(b)) {  // keys go to the shell: the input line only says so
+    if (Term* term = b->term.get(); term && !c.asking(b)) {  // keys go to the shell: the input line only says so
         text(0, y, W, "[" + buf_label(b) + "] ", T.get("hilight"), false);
         text((int)buf_label(b).size() + 3, y, W, term->host.empty() ? "keys go to the shell · Alt+←/→ or Alt+1-9: other tabs · wheel: scrollback · exit ends it"
                                                           : "keys go to the remote iSekur · Alt+←/→ or Alt+1-9: other tabs · Alt+D in it detaches it", sty(T, "timestamp", "input"), false);
         VTermPos p;
         vterm_state_get_cursorpos(vterm_obtain_state(term->vt), &p);
-        if (term->cursor && b->scroll == 0 && p.row < ch && p.col < cw) tb_set_cursor(p.col, top + p.row);
+        if (term->cursor && b->scroll == 0 && p.row < pane.h && p.col < pane.w) tb_set_cursor(pane.x + p.col, pane.y + p.row);
         else tb_hide_cursor();
         present();
         return;
@@ -1144,7 +1180,7 @@ void Tui::shell_key(int mod, int k, uint32_t ch) {
 }
 
 // the shell's screen, cell by cell; its default colors are the theme's
-void Tui::draw_term(Term* t, int top, int rows, int cols) {
+void Tui::draw_term(Term* t, int top, int rows, int cols, int x0) {
     VTermScreen* scr = vterm_obtain_screen(t->vt);
     Style def = c.theme.get("default");
     for (int r = 0; r < rows && r < t->rows; r++)
@@ -1160,7 +1196,7 @@ void Tui::draw_term(Term* t, int top, int rows, int cols) {
             if (!VTERM_COLOR_IS_DEFAULT_BG(&cl.bg)) rgb(cl.bg, st.bg);
             st.attr = (cl.attrs.bold ? A_BOLD : 0) | (cl.attrs.italic ? A_ITALIC : 0) | (cl.attrs.underline ? A_UNDER : 0) | (cl.attrs.reverse ? A_REV : 0);
             uint32_t cp = cl.chars[0];
-            cell(x, top + r, cp < 0x20 || cp == 0x7f ? ' ' : cp, st);  // never a control byte to the real terminal
+            cell(x0 + x, top + r, cp < 0x20 || cp == 0x7f ? ' ' : cp, st);  // never a control byte to the real terminal
         }
 }
 
@@ -1200,6 +1236,7 @@ void Tui::load_keys() {
     keymap["C-l"] = keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
     keymap["C-t"] = keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
     keymap["F3"] = "toggle_mouse";
+    keymap["F6"] = keymap["M-o"] = keymap["ø"] = "other_pane";  // /split; ø: Option+O on a Mac
     keymap["M-d"] = keymap["∂"] = keymap["C-z"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"; C-z: detach (still connected) where a shell would suspend
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
@@ -1250,6 +1287,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "scroll_down") c.active->scroll = std::max(0, c.active->scroll - chat_height() / 2);
     else if (a == "toggle_nicklist") nicklist = !nicklist;
     else if (a == "toggle_topic") topicbar = !topicbar;
+    else if (a == "other_pane") { if (c.split_buf) c.select(c.split_buf); }
     else if (a == "detach") c.detach_req = true;
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
@@ -1453,6 +1491,13 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (mod & TB_MOD_MOTION) return;
+    if (menu.items.empty() && c.split_buf && other.in(x, y)) {  // /split: the other pane
+        if (k == TB_KEY_MOUSE_WHEEL_UP) c.split_buf->scroll += 3;
+        else if (k == TB_KEY_MOUSE_WHEEL_DOWN) c.split_buf->scroll = std::max(0, c.split_buf->scroll - 3);
+        else if (k == TB_KEY_MOUSE_LEFT) c.select(c.split_buf);
+        c.dirty = true;
+        return;
+    }
     if (!menu.items.empty() && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RIGHT)) {  // pick, or close it
         int i = y - menu.y - 1;
         int mw = 0;

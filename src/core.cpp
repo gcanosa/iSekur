@@ -369,6 +369,7 @@ void Core::close(Buffer* b, const std::string& part_msg) {
     if (active == b) active = bufs[(size_t)(i > 0 ? i - 1 : 1 % bufs.size())].get();
     bufs.erase(bufs.begin() + i);
     if (active == b) active = bufs.empty() ? nullptr : bufs[0].get();
+    if (split_buf == b || split_buf == active) split_buf = nullptr;  // its pane closes with it
     if (drop_server)  // its transfers go with it
         dccs.erase(std::remove_if(dccs.begin(), dccs.end(), [&](auto& d) { return d->srv == s; }), dccs.end());
     if (drop_server)  // after the buffer: listeners may still read b->srv
@@ -378,9 +379,53 @@ void Core::close(Buffer* b, const std::string& part_msg) {
     dirty = true;
 }
 
+// /split [N|name|off]: a second pane with another tab, next to the current one
+void Core::split_cmd(Buffer* b, const std::string& args) {
+    auto label = [&](Buffer* t) { return std::to_string(index_of(t) + 1) + ":" + (t->srv && t->type == BT::STATUS ? t->srv->cfg.name : t->name); };
+    // "side", "stack" or "auto" anywhere: the layout; what's left: which tab
+    std::string a;
+    int mode = -1;
+    for (auto& w : split(args, ' ')) {
+        std::string lw = irc_lower(w);
+        if (lw == "side") mode = 1;
+        else if (lw == "stack") mode = 2;
+        else if (lw == "auto") mode = 0;
+        else if (!w.empty()) a += (a.empty() ? "" : " ") + w;
+    }
+    static const char* how[] = {"", " side by side", " one over the other"};
+    if (mode >= 0) split_mode = mode, dirty = true;
+    if (mode >= 0 && a.empty() && split_buf) {  // just the layout
+        print(b, LK::INFO, std::string("Split") + (mode ? how[mode] : " by the window's width") + " now");
+        return;
+    }
+    if (a == "off") {
+        print(b, LK::INFO, split_buf ? "Split closed" : "Not split");
+        split_buf = nullptr, dirty = true;
+        return;
+    }
+    Buffer* t = nullptr;
+    if (a.empty()) {
+        if (split_buf) { print(b, LK::INFO, "Split with " + label(split_buf) + ": F6 or Alt+O switches panes, /unsplit closes it"); return; }
+        if (bufs.size() > 1) t = bufs[(size_t)(index_of(active) + 1) % bufs.size()].get();  // the next tab
+    } else if (a.find_first_not_of("0123456789") == std::string::npos) {
+        int n = atoi(a.c_str());
+        if (n >= 1 && n <= (int)bufs.size()) t = bufs[(size_t)n - 1].get();
+    } else {  // a name: this server's first, then any
+        for (int pass = 0; pass < 2 && !t; pass++)
+            for (auto& o : bufs)
+                if ((pass || o->srv == b->srv) && irc_lower(o->name) == irc_lower(a)) { t = o.get(); break; }
+    }
+    if (!t) { print(b, LK::ERROR, a.empty() ? "Only one tab: nothing to split with" : "No tab " + a + " (/win shows numbers in the tab bar; join or open it first)"); return; }
+    if (t == active) { print(b, LK::ERROR, "That tab is already the one on screen: pick another"); return; }
+    split_buf = t, split_first = false, t->activity = 0, dirty = true;
+    notify(Ev::BUFFER, t);
+    print(b, LK::INFO, "Split" + std::string(how[split_mode]) + " with " + label(t) + ": F6 or Alt+O switches panes (or click one), /unsplit closes it");
+}
+
 void Core::select(Buffer* b) {
     if (!b) return;
     if (active && active != b && active->unread) active->unread = 0, notify(Ev::BUFFER, active);
+    if (b == split_buf) split_buf = active, split_first = !split_first;  // the other pane's tab: focus moves there
     active = b;
     b->activity = 0;
     dirty = true;
@@ -399,8 +444,8 @@ void Core::add(Buffer* b, Line l) {
     const Line& ln = b->lines.back();
     int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : b->quiet && noise(ln) ? 0 : 1;
     // the "new" marker goes above the first message you missed, then counts everything after it
-    if (b->unread || (b != active && lvl >= 2)) b->unread++;
-    if (b != active && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }
+    if (b->unread || (b != active && b != split_buf && lvl >= 2)) b->unread++;
+    if (b != active && b != split_buf && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }  // split: on screen too
     dirty = true;
     log_line(b, ln);
     notify(Ev::LINE, b, &ln);
@@ -868,6 +913,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "close" || cmd == "wc") { close(b); return; }
+    if (cmd == "split") { split_cmd(b, args); return; }
+    if (cmd == "unsplit" || cmd == "merge") { split_cmd(b, "off"); return; }
     if (cmd == "quiet") {  // per tab, until restart
         b->quiet = args == "on" || (args != "off" && !b->quiet);
         b->quiet_typing = false;  // your choice now: /typing off leaves it

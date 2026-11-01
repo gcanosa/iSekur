@@ -244,6 +244,28 @@ int main() {
         assert(sent().rfind("PART #elsewhere :", 0) == 0 && core.find(ts, "#c"));
     }
 
+    // /split: a second pane; picking its tab swaps focus, its lines don't light it up, closing it unsplits
+    {
+        Buffer* sp = core.open(ts, BT::CHANNEL, "#sp");
+        Buffer* sq = core.open(ts, BT::CHANNEL, "#sq");
+        core.select(sq);
+        core.exec(sq, "/split #nope");
+        assert(!core.split_buf && sq->lines.back().kind == LK::ERROR);
+        core.exec(sq, "/split stack #SP");
+        assert(core.split_buf == sp && core.split_mode == 2 && !core.split_first);
+        core.add(sp, Line{0, LK::MSG, "bob", "hi"});
+        assert(sp->activity == 0 && sp->unread == 0);  // on screen in the other pane
+        core.select(sp);  // F6, a click, its tab: the panes stay put, the focus moves
+        assert(core.active == sp && core.split_buf == sq && core.split_first);
+        core.exec(sp, "/split side");  // only the layout
+        assert(core.split_mode == 1 && core.split_buf == sq);
+        core.close(sq);  // the other pane's tab goes: one pane again
+        assert(!core.split_buf && core.active == sp);
+        core.exec(sp, "/split #c"), core.exec(sp, "/unsplit");
+        assert(!core.split_buf);
+        core.split_mode = 0, core.close(sp), core.select(chb), sent();
+    }
+
     // Twitch: display-name + color tags, badges in the nick list, its own commands, lowercase joins
     if (!twitch_host("irc.chat.twitch.tv")) {  // make notwitch: /twitch only says so
         core.exec(home, "/twitch");

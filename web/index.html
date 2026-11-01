@@ -50,6 +50,7 @@ button, input { font: inherit; color: inherit; }
 #side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
 #side .tab.a3 { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
 #side .tab.off { opacity: .55; }
+#side .tab.split { border-left-color: var(--muted); border-left-style: dashed; }  /* in the webchat's other /split pane */
 /* bottom left: add a server, settings, about */
 #foot { grid-area: foot; display: flex; gap: 6px; padding: 8px 10px; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
 #foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1.2; }
@@ -136,7 +137,31 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #ctx .it { padding: 4px 12px; cursor: pointer; white-space: nowrap; }
 #ctx .it:hover { background: var(--menu_sel-bg, var(--accent)); color: var(--menu_sel-fg, #111); }
 #ctx hr { border: 0; border-top: 1px solid var(--menu_border-fg, var(--line)); margin: 4px 0; }
-#msgs { grid-area: msgs; overflow-y: auto; padding: 6px 0; overflow-wrap: anywhere; }
+#msgs, #msgs2 { grid-area: msgs; overflow-y: auto; padding: 6px 0; overflow-wrap: anywhere; }
+/* /split, per browser: a second pane; the focused one (typing, users, topic) is #msgs, the other #msgs2.
+   .flip puts #msgs on the right, so the panes stay where they are when the focus moves */
+#msgs2 { grid-area: msgs2; display: none; cursor: pointer; }
+@media (min-width: 761px) {
+  #app.split { grid-template-columns: 220px 1fr auto 1fr auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "foot input input input input"; }
+  #app.split.flip { grid-template-areas: "side topic topic topic topic" "side msgs2 nicks2 msgs nicks" "side status status status status" "foot input input input input"; }
+  #app.split.noside { grid-template-columns: 34px 1fr auto 1fr auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "side input input input input"; }
+  #app.split.noside.flip { grid-template-areas: "side topic topic topic topic" "side msgs2 nicks2 msgs nicks" "side status status status status" "side input input input input"; }
+  /* /split stack: one over the other (and by the window's width when neither was asked for) */
+  #app.split.stack { grid-template-columns: 220px 1fr auto; grid-template-rows: auto 1fr 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "foot input input"; }
+  #app.split.stack.flip { grid-template-areas: "side topic topic" "side msgs2 nicks2" "side msgs nicks" "side status status" "foot input input"; }
+  #app.split.stack.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "side input input"; }
+  #app.split.stack.noside.flip { grid-template-areas: "side topic topic" "side msgs2 nicks2" "side msgs nicks" "side status status" "side input input"; }
+  #app.split.stack:not(.flip) #nicks2, #app.split.stack.flip #nicks { border-top: 1px solid var(--separator-fg, var(--line)); }
+  #app.split #msgs2 { display: block; }
+  #app.split #nicks2 { display: block; }
+  #app.split:not(.flip) #msgs2, #app.split.flip #msgs { border-left: 1px solid var(--separator-fg, var(--line)); }
+  #app.split.stack #msgs2, #app.split.stack #msgs { border-left: 0; }
+  #app.split.stack:not(.flip) #msgs2, #app.split.stack.flip #msgs { border-top: 1px solid var(--separator-fg, var(--line)); }
+  #app.split #msgs, #app.split #msgs2 { padding-top: 0; }
+  #app.split #msgs::before, #app.split #msgs2::before { content: attr(data-label); display: block; position: sticky; top: 0; z-index: 1; margin-bottom: 4px;
+    padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--tabbar-bg, var(--panel)); color: var(--tabbar-fg, var(--muted)); }
+  #app.split #msgs::before { background: var(--tab_active-bg, var(--accent)); color: var(--tab_active-fg, #fff); }
+}
 .newmark { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: 11px; text-transform: uppercase;
   letter-spacing: .1em; color: var(--marker-fg, #c2185b); }
 .newmark::before, .newmark::after { content: ""; flex: 1; border-top: 1px solid currentColor; }
@@ -147,17 +172,17 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
   border-right: 1px solid var(--separator-fg, var(--line)); padding-right: 10px; }
 .l .tx { white-space: pre-wrap; }
 /* a theme with nick_width = 0 (mirc): "[12:34] <nick> text" on one line, no nick column */
-#msgs.inline .l { display: block; padding: 0 8px; }
-#msgs.inline .l .nk { display: inline; border: 0; padding: 0; text-align: left; }
-#msgs.inline .l .ts::after, #msgs.inline .l .nk:not(:empty)::after { content: " "; }
-#msgs.inline .l.hl .nk { border-radius: 0; }
+.inline .l { display: block; padding: 0 8px; }
+.inline .l .nk { display: inline; border: 0; padding: 0; text-align: left; }
+.inline .l .ts::after, .inline .l .nk:not(:empty)::after { content: " "; }
+.inline .l.hl .nk { border-radius: 0; }
 .l.hdr .tx { cursor: pointer; }
 .l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
 .l.hl { background: var(--hilight_line-bg, #ff00aa10); }
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
 #msgs .older { color: var(--muted); text-align: center; font-size: 12px; padding: 4px; }
-#msgs.quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
+.quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
 .k-part, .k-part .nk { color: var(--part-fg, var(--part)); }
 .k-quit, .k-quit .nk { color: var(--quit-fg, var(--part-fg, var(--part))); }
@@ -168,13 +193,14 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 .k-action .tx, .k-action .nk { color: var(--action-fg, var(--action)); font-style: italic; }
 .l .self { color: var(--msg_self-fg, var(--accent2)); }
 .tx a { color: var(--accent2); }
-#nicks { grid-area: nicks; width: 190px; background: var(--nicklist-bg, var(--panel)); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 0; }
-#nicks .hd { color: var(--muted); padding: 2px 12px 6px; font-size: 12px; }
-#nicks div.u { padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
-#nicks .op { color: var(--nicklist_op-fg, #ff9e64); }
-#nicks .voice { color: var(--nicklist_voice-fg, #9ece6a); }
-#nicks .away { opacity: .45; }
-@media (min-width: 761px) { #nicks.off { display: none; } }
+#nicks, #nicks2 { grid-area: nicks; width: 190px; background: var(--nicklist-bg, var(--panel)); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 0; }
+:is(#nicks, #nicks2) .hd { color: var(--muted); padding: 2px 12px 6px; font-size: 12px; }
+:is(#nicks, #nicks2) div.u { padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+:is(#nicks, #nicks2) .op { color: var(--nicklist_op-fg, #ff9e64); }
+:is(#nicks, #nicks2) .voice { color: var(--nicklist_voice-fg, #9ece6a); }
+:is(#nicks, #nicks2) .away { opacity: .45; }
+@media (min-width: 761px) { #nicks.off, #nicks2.off { display: none !important; } }
+#nicks2 { grid-area: nicks2; display: none; }
 #status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
 #status { display: flex; gap: 12px; align-items: center; }
 #status b { color: var(--status_hi-fg, var(--fg)); font-weight: 400; }
@@ -262,6 +288,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="foot"><button id="addsrv" title="Add a server" aria-label="Add a server">+</button><button id="setbtn" title="Settings" aria-label="Settings">⚙</button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers">⇅</button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur">ⓘ</button></div>
   <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout">logout</button></div>
   <main id="msgs" aria-live="polite"></main>
+  <main id="msgs2" title="Click: type here"></main>
+  <aside id="nicks2"></aside>
   <aside id="nicks"></aside>
   <div id="status"><span id="stl"></span><span id="sti"></span><span id="dccbar" title="Files and transfers"></span></div>
   <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
@@ -416,7 +444,7 @@ function renderSide() {
     if (b === st && st.fold)
       for (const x of order) { const o = bufs.get(x); if (o && o !== b && o.srv === b.srv && x !== active) hid++, act = Math.max(act, o.act); }
     const t = document.createElement("div");
-    t.className = "tab" + (id === active ? " active" : "") + (act ? " a" + act : "") +
+    t.className = "tab" + (id === active ? " active" : id === split ? " split" : "") + (act ? " a" + act : "") +
       (b.home ? " home" : b.type === "status" ? " server" : b.type === "shell" ? " shell" : "") +
       ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
     const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
@@ -471,8 +499,8 @@ function renderStatus() {
 }
 setInterval(renderStatus, 10000);  // the clock
 
-function renderNicks() {
-  const el = $("#nicks"), b = bufs.get(active);
+function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /split pane's
+  const b = bufs.get(id);
   el.style.display = b && b.type === "channel" ? "" : "none";
   el.textContent = "";
   if (!b || b.type !== "channel") return;
@@ -484,7 +512,7 @@ function renderNicks() {
     const d = document.createElement("div");
     d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "");
     d.textContent = (p ? p[0] : " ") + n;
-    d.onclick = () => send({t: "input", buf: active, text: "/query " + n});
+    d.onclick = () => send({t: "input", buf: id, text: "/query " + n});
     d.oncontextmenu = e => askMenu(e, n);
     el.append(d);
   }
@@ -501,7 +529,64 @@ function renderMsgs() {
     frag.append(lineEl(b, l));
   });
   m.append(frag); m.scrollTop = m.scrollHeight;
+  renderPane2();
 }
+
+// /split in the webchat: this browser's own, the server never hears of it
+let split = null, splitMode = 0;  // 0 by the window's width, 1 side by side, 2 one over the other
+function splitLayout() { $("#app").classList.toggle("stack", splitMode === 2 || (splitMode === 0 && innerWidth < 1300)); }
+addEventListener("resize", splitLayout);
+function renderPane2() {
+  const m = $("#msgs2"), b = bufs.get(split), lab = id => (order.indexOf(id) + 1) + ":" + label(bufs.get(id));
+  m.textContent = "";
+  if (!b) { $("#nicks2").textContent = ""; return; }
+  m.classList.toggle("quiet", !!b.q);
+  const frag = document.createDocumentFragment();
+  b.lines.forEach(l => frag.append(lineEl(b, l)));
+  m.append(frag); m.scrollTop = m.scrollHeight;
+  if (bufs.has(active)) $("#msgs").dataset.label = lab(active);
+  m.dataset.label = lab(split) + "   · click, F6 or Alt+O: type here";
+  renderNicks($("#nicks2"), split);
+}
+function renderNicks2() { renderNicks($("#nicks2"), split); }
+function setSplit(id) {  // null: one pane again
+  split = id != null && bufs.has(id) && id !== active ? id : null;
+  if (split === null) $("#app").classList.remove("flip");
+  $("#app").classList.toggle("split", split !== null);
+  splitLayout(); renderPane2(); renderSide();
+}
+function note(text, err) {  // a line only this browser sees, like the terminal's own messages
+  const b = bufs.get(active); if (!b) return;
+  $("#msgs").append(lineEl(b, {ts: Date.now() / 1000, k: err ? "error" : "info", n: "", x: text, s: 0, h: 0}));
+  $("#msgs").scrollTop = $("#msgs").scrollHeight;
+}
+function splitCmd(cmd, a) {
+  const lab = id => (order.indexOf(id) + 1) + ":" + label(bufs.get(id)), how = ["", " side by side", " one over the other"];
+  // "side", "stack" or "auto" anywhere: the layout; what's left: which tab
+  let mode = -1;
+  a = a.split(/\s+/).filter(w => { const m = {side: 1, stack: 2, auto: 0}[w.toLowerCase()]; if (m === undefined) return true; mode = m; return false; }).join(" ");
+  if (mode >= 0) { splitMode = mode; splitLayout(); }
+  if (mode >= 0 && !a && split !== null && cmd === "split") { note("Split" + (mode ? how[mode] : " by the window's width") + " now"); return; }
+  if (cmd !== "split" || a === "off") { note(split !== null ? "Split closed" : "Not split"); setSplit(null); return; }
+  if (narrow.matches) { note("Split needs a wider window", true); return; }
+  let t = null;
+  if (!a) {
+    if (split !== null) { note("Split with " + lab(split) + ": F6, Alt+O or a click switches panes, /unsplit closes it"); return; }
+    if (order.length > 1) t = order[(order.indexOf(active) + 1) % order.length];
+  } else if (/^\d+$/.test(a)) t = order[+a - 1] ?? null;
+  else {  // a name: this server's first, then any
+    const cur = bufs.get(active), ln = ircLower(a);
+    for (const pass of [0, 1]) {
+      if (t !== null) break;
+      for (const id of order) { const o = bufs.get(id); if (o && (pass || o.srv === cur.srv) && ircLower(o.name) === ln) { t = id; break; } }
+    }
+  }
+  if (t === null || !bufs.has(t)) { note(a ? "No tab " + a + " (join or open it first)" : "Only one tab: nothing to split with", true); return; }
+  if (t === active) { note("That tab is already the one on screen: pick another", true); return; }
+  setSplit(t);
+  note("Split" + how[splitMode] + " with " + lab(t) + ": F6, Alt+O or a click switches panes, /unsplit closes it");
+}
+$("#msgs2").addEventListener("click", () => { if (split !== null && (getSelection() || "").toString() === "") select(split); });
 
 // a burst of updates (a netsplit, a busy channel) draws once a frame, and not at all in a hidden tab
 const queued = new Set();
@@ -513,6 +598,7 @@ function later(f) {
 function select(id) {
   if (!bufs.has(id)) return;
   if (active !== id && bufs.has(active)) send({t: "seen", buf: active});
+  if (id === split && id !== active) { split = active; $("#app").classList.toggle("flip"); }  // the other pane's tab: focus moves there
   active = id;
   const b = bufs.get(id);
   if (b.act) { b.act = 0; send({t: "read", buf: id}); }
@@ -542,7 +628,7 @@ function applyTheme() {
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
   document.documentElement.style.colorScheme = lum > 140 ? "light" : "dark";
   document.documentElement.classList.toggle("light", lum > 140);
-  $("#msgs").classList.toggle("inline", (theme.lay || {}).nick_width === "0");
+  for (const p of ["#msgs", "#msgs2"]) $(p).classList.toggle("inline", (theme.lay || {}).nick_width === "0");
   set("--mono", (theme.lay || {}).font);  // mirc: Fixedsys where it's installed
 }
 
@@ -556,12 +642,13 @@ function onMsg(ev) {
     if (fresh) m.nickmap = new Map(m.nicks.map(e => [ircLower(e[1]), e]));
     else m.nicks = old ? old.nicks : [], m.nickmap = old ? old.nickmap : new Map();
     bufs.set(m.id, m);
-    if (m.id === active && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
+    if ((m.id === active || m.id === split) && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
     later(renderSide);
     if (m.id === active) { renderTopic(); if (fresh || !old) later(renderNicks); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
+    if (m.id === split && (fresh || !old)) later(renderNicks2);
   } else if (m.t === "lines") {
     const b = bufs.get(m.buf); if (b) b.lines = m.lines, b.first = m.first, b.noMore = b.loading = false;
-    if (m.buf === active) renderMsgs();
+    if (m.buf === active) renderMsgs(); else if (m.buf === split) renderPane2();
   } else if (m.t === "older") {  // scrolled to the top: the lines before ours
     const b = bufs.get(m.buf); if (!b) return;
     b.loading = false;
@@ -584,10 +671,17 @@ function onMsg(ev) {
       if (m.line.ty) typeOut(el.querySelector(".tx"));
       while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
       if (atBottom) box.scrollTop = box.scrollHeight;
+    } else if (m.buf === split) {
+      const box = $("#msgs2"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
+      box.append(lineEl(b, m.line));
+      while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
+      if (atBottom) box.scrollTop = box.scrollHeight;
     }
   } else if (m.t === "close") {
     bufs.delete(m.buf);
-    if (m.buf === active) { const i = order.indexOf(m.buf); active = order[i > 0 ? i - 1 : i + 1]; select(active); }  // else the closed tab stayed on screen
+    if (m.buf === split) setSplit(null);
+    else if (m.buf === active && split !== null) { const o = split; setSplit(null); select(o); }  // the other pane takes the screen
+    else if (m.buf === active) { const i = order.indexOf(m.buf); active = order[i > 0 ? i - 1 : i + 1]; select(active); }  // else the closed tab stayed on screen
   } else if (m.t === "order") {
     order = m.ids;
     if (!bufs.has(active)) { active = order[0]; select(active); } else later(renderSide);
@@ -652,7 +746,7 @@ sidebtn.onclick = () => { const off = !$("#app").classList.contains("noside"); s
 try { sideFold(localStorage.getItem("side") === "0"); } catch (e) { sideFold(false); }
 // desktop: hide/show the list (remembered); phone: open/close the overlay
 const narrow = matchMedia("(max-width: 760px)");
-try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"); } catch (e) {}
+try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"), $("#nicks2").classList.add("off"); } catch (e) {}
 // click the topic to see all of it
 $("#topic .t").onclick = e => { if (!e.target.closest("a")) e.currentTarget.classList.toggle("full"); };
 // double click: the topic into the input line, if we may set it (+t needs ops)
@@ -884,6 +978,7 @@ dset.querySelector("form").onsubmit = e => {
 $("#nickbtn").onclick = () => {
   if (narrow.matches) return $("#nicks").classList.toggle("open");
   const off = $("#nicks").classList.toggle("off");
+  $("#nicks2").classList.toggle("off", off);
   try { localStorage.setItem("nicks", off ? "0" : "1"); } catch (e) {}
 };
 
@@ -1031,12 +1126,14 @@ $("#input").onsubmit = e => {
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
   if (/^\/about\s*$/i.test(v)) { openAbout(); return; }  // a dialog here, not a tab
   if (/^\/set\s*$/i.test(v)) { $("#setbtn").click(); return; }  // like the terminal: the settings window
+  const sp = /^\/(split|unsplit|merge)(?:\s+(.*))?$/i.exec(v.trim());
+  if (sp) { splitCmd(sp[1].toLowerCase(), (sp[2] || "").trim()); return; }  // this browser's panes
   send({t: "input", buf: active, text: v});
 };
 // keys: the terminal's defaults a browser lets through (it keeps Ctrl+W, Ctrl+N, Ctrl+T...; Alt+W and
 // Alt+X stand in for Ctrl+W and Ctrl+X), plus the [keys] section, in the terminal's spelling ("M-Right")
 const KEYS_DEF = {"M-Right": "next_tab", "M-Left": "prev_tab", "M-a": "next_active", "M-x": "next_server", "M-w": "close_tab",
-  "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down"};
+  "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down", "F6": "other_pane", "M-o": "other_pane"};
 for (let i = 1; i <= 10; i++) KEYS_DEF["M-" + i % 10] = "tab_" + i;
 let keymap = {...KEYS_DEF};
 function keyspec(e) {
@@ -1061,6 +1158,7 @@ function action(a) {
   } else if (a === "close_tab") send({t: "input", buf: active, text: "/close"});
   else if (a === "scroll_up" || a === "scroll_down") { const m = $("#msgs"); m.scrollBy(0, (a === "scroll_up" ? -1 : 1) * m.clientHeight / 2); }
   else if (a === "toggle_nicklist") $("#nickbtn").click();
+  else if (a === "other_pane") { if (split !== null) select(split); }
   else if (a === "toggle_topic") {
     const off = $("#topic").classList.toggle("hide");
     try { localStorage.setItem("topic", off ? "0" : "1"); } catch (e) {}

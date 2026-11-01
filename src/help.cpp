@@ -174,6 +174,20 @@ static const std::vector<CmdInfo> CMDS = {
     {"close", "Windows", "", "Close the current tab",
      "Parts the channel first, like /part (with part_message). On a server tab it disconnects and closes all of the server's tabs.",
      {"/close"}, "wc"},
+    {"split", "Windows", "[side|stack] [N|name|off]", "Show two tabs at once",
+     "Opens a second pane with tab N or the tab named so (this server's first), or the next tab "
+     "when none is given. side puts them side by side, stack one over the other; without either it goes "
+     "by the window's width. /split side or /split stack while split just changes the layout. "
+     "Each channel pane has its own nicklist (hidden when its pane gets too narrow; F2 hides them all). "
+     "Typing and the topic follow the focused pane: F6 or Alt+O switches (the "
+     "[keys] action is other_pane), and so does a click in the other pane or picking its tab. "
+     "Changing tabs changes the focused pane only. In the webchat it works the same, per browser. "
+     "Alone, while split, it says what's in the other pane.",
+     {"/split 3", "/split side #linux", "/split stack 2", "/split stack", "/split off"}},
+    {"unsplit", "Windows", "", "Back to one tab at a time",
+     "Closes the second pane from /split; the focused tab stays on screen. Closing the tab that's "
+     "in the other pane does it too.",
+     {"/unsplit"}, "merge"},
     {"clear", "Windows", "", "Clear the current tab's scrollback",
      "Only clears what is on screen; logs are untouched.",
      {"/clear"}},
@@ -528,6 +542,10 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("Showing and hiding"),
         "  " G_KEY("Ctrl+L") " or " G_KEY("F2") "  the nick list     " G_KEY("Ctrl+T") "  the topic bar     " G_KEY("F3") "  the mouse",
         "",
+        G_HEAD("Two tabs at once"),
+        "  " G_CMD("/split ") G_VAL("3") "   tab 3 too (or " G_CMD("/split ") G_VAL("#chan") ")     " G_KEY("F6") " or " G_KEY("Alt+O") "  switch panes",
+        "  " G_CMD("/split side") " / " G_CMD("stack") "   beside or one over the other     " G_CMD("/unsplit") "  one tab again",
+        "",
         G_HEAD("The mouse"),
         "  click tabs and the " "\x03" "08" "[Act: 3]" RESET " numbers, wheel scrolls, " BOLD "drag to copy" RESET ", right click a",
         "  server tab to fold its channels. Tab colors: " "\x03" "10" "news" RESET ", " "\x03" "09" "messages" RESET ", " "\x03" "04" "your nick" RESET ".",
@@ -581,6 +599,10 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("From another machine"),
         "  " G_CMD("/set web.bind 0.0.0.0") ": then it's " BOLD "HTTPS only" RESET " (a self-signed certificate is made,",
         "  or give " BOLD "web.cert" RESET " and " BOLD "web.key" RESET "). " G_CMD("/set web.autostart on") " starts it with iSekur.",
+        "",
+        G_HEAD("Tabs in the browser"),
+        "  " BOLD "‹" RESET " at the top of the tab list folds it to a strip, " BOLD "›" RESET " opens it. " BOLD "👥" RESET " hides the users.",
+        "  " G_CMD("/split ") G_VAL("3") " and " G_CMD("/unsplit") " work there too, for that browser only.",
         "",
         G_TIP "Run it on a server with " G_CMD("isekur --daemon") ": always online, chat from anywhere.",
     }},
