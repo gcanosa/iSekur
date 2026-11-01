@@ -139,6 +139,8 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 .l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
 .l.hl { background: #ff00aa10; }
+.l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
+#msgs .older { color: var(--muted); text-align: center; font-size: 12px; padding: 4px; }
 #msgs.quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
 .k-part, .k-part .nk, .k-quit, .k-quit .nk { color: var(--part-fg, var(--part)); }
@@ -351,7 +353,7 @@ function lineEl(b, l) {
   const d = document.createElement("div");
   d.className = "l k-" + l.k + (l.h ? " hl" : "") + (!l.s && /^(join|part|quit|nick)$/.test(l.k) ? " noise" : "");
   const ts = document.createElement("span"); ts.className = "ts";
-  const t = new Date(l.ts * 1000); ts.textContent = t.toTimeString().slice(0, 5);
+  ts.textContent = l.tf || new Date(l.ts * 1000).toTimeString().slice(0, 5);  // tf: the [general] timestamp format, done by iSekur
   const nk = document.createElement("span"); nk.className = "nk";
   const tx = document.createElement("span"); tx.className = "tx";
   if (l.k === "msg") {
@@ -413,7 +415,7 @@ function renderTopic() {
   else if (b.name === "*channels") t.textContent = "Channel list: /list again refreshes it · /join #channel";
   else if (b.name === "*guide") t.textContent = "First steps guide: ← → or Prev / Next turn the pages · /guide N jumps · q or Esc closes";
   else if (b.type === "query") t.textContent = "Query with " + b.name;
-  else if (b.type === "shell") t.textContent = "Shell: it runs in iSekur's terminal only";
+  else if (b.type === "shell") t.textContent = b.host ? "Remote iSekur: ssh " + b.host + " (in iSekur's terminal only)" : "Shell: it runs in iSekur's terminal only";
   else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
   else t.textContent = b.srv + " - " + b.state;
   t.title = t.textContent;
@@ -455,7 +457,7 @@ function renderNicks() {
   if (!b || b.type !== "channel") return;
   const pf = b.prefixes || "@+";
   const rank = p => p ? (pf.indexOf(p[0]) < 0 ? pf.length : pf.indexOf(p[0])) : pf.length;
-  const list = [...b.nicks].sort((x, y) => rank(x[0]) - rank(y[0]) || ircLower(x[1]).localeCompare(ircLower(y[1])));
+  const list = [...b.nicks].sort((x, y) => rank(x[0]) - rank(y[0]));  // already in name order, like the terminal's
   const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = list.length + " users"; el.append(hd);
   for (const [p, n, away] of list) {
     const d = document.createElement("div");
@@ -478,6 +480,13 @@ function renderMsgs() {
     frag.append(lineEl(b, l));
   });
   m.append(frag); m.scrollTop = m.scrollHeight;
+}
+
+// a burst of updates (a netsplit, a busy channel) draws once a frame, and not at all in a hidden tab
+const queued = new Set();
+function later(f) {
+  if (!queued.size) requestAnimationFrame(() => { const fs = [...queued]; queued.clear(); fs.forEach(g => g()); });
+  queued.add(f);
 }
 
 function select(id) {
@@ -518,34 +527,47 @@ function onMsg(ev) {
   const m = JSON.parse(ev.data);
   if (m.t === "theme") { theme = m; applyTheme(); renderMsgs(); }
   else if (m.t === "buf") {
-    const old = bufs.get(m.id);
+    const old = bufs.get(m.id), fresh = !!m.nicks;  // no "nicks": unchanged since the last one
     m.lines = old ? old.lines : [];
-    m.nickmap = new Map(m.nicks.map(e => [ircLower(e[1]), e]));
+    if (old) m.first = old.first, m.noMore = old.noMore;
+    if (fresh) m.nickmap = new Map(m.nicks.map(e => [ircLower(e[1]), e]));
+    else m.nicks = old ? old.nicks : [], m.nickmap = old ? old.nickmap : new Map();
     bufs.set(m.id, m);
     if (m.id === active && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
-    renderSide();
-    if (m.id === active) { renderTopic(); renderNicks(); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
+    later(renderSide);
+    if (m.id === active) { renderTopic(); if (fresh || !old) later(renderNicks); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
   } else if (m.t === "lines") {
-    const b = bufs.get(m.buf); if (b) b.lines = m.lines;
+    const b = bufs.get(m.buf); if (b) b.lines = m.lines, b.first = m.first, b.noMore = b.loading = false;
     if (m.buf === active) renderMsgs();
+  } else if (m.t === "older") {  // scrolled to the top: the lines before ours
+    const b = bufs.get(m.buf); if (!b) return;
+    b.loading = false;
+    if (!m.lines.length || m.first >= b.first) { b.noMore = true; return; }
+    m.lines = m.lines.slice(0, b.first - m.first);  // only what we don't have
+    b.lines = m.lines.concat(b.lines); b.first = m.first;
+    if (m.buf !== active) return;
+    const box = $("#msgs"), h = box.scrollHeight, frag = document.createDocumentFragment();
+    for (const l of m.lines) frag.append(lineEl(b, l));
+    box.prepend(frag); box.scrollTop += box.scrollHeight - h;  // what you were reading stays put
   } else if (m.t === "line") {
     const b = bufs.get(m.buf); if (!b) return;
-    b.lines.push(m.line); b.unread = m.u; if (b.lines.length > 2000) b.lines.shift();
+    b.lines.push(m.line); b.unread = m.u;
+    while (b.lines.length > (theme.sb || 2000)) b.lines.shift(), b.first++;
     alertFor(b, m.buf, m.line);
     if (m.buf === active) {
       const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       const el = lineEl(b, m.line);
       box.append(el);
       if (m.line.ty) typeOut(el.querySelector(".tx"));
-      while (box.childElementCount > 2000) box.firstChild.remove();
+      while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
       if (atBottom) box.scrollTop = box.scrollHeight;
     }
   } else if (m.t === "close") {
     bufs.delete(m.buf);
-    if (m.buf === active) { const i = order.indexOf(m.buf); active = order[i > 0 ? i - 1 : 1] || order[0]; }
+    if (m.buf === active) { const i = order.indexOf(m.buf); active = order[i > 0 ? i - 1 : i + 1]; select(active); }  // else the closed tab stayed on screen
   } else if (m.t === "order") {
     order = m.ids;
-    if (!bufs.has(active)) { active = order[0]; select(active); } else renderSide();
+    if (!bufs.has(active)) { active = order[0]; select(active); } else later(renderSide);
   } else if (m.t === "active") {
     select(m.buf);
   } else if (m.t === "cmds") {
@@ -577,6 +599,7 @@ function onMsg(ev) {
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
   ws.onmessage = onMsg;
+  ws.onopen = () => bufs.clear();  // the snapshot brings them all again: tabs closed while away must not linger
   ws.onclose = () => { ws = null; setTimeout(boot, 3000); };
 }
 
@@ -1021,7 +1044,12 @@ document.addEventListener("keydown", e => {
   const a = keymap[keyspec(e)];
   if (a && action(a)) e.preventDefault();
 });
-$("#msgs").addEventListener("scroll", () => { if (moreShown === atBottom()) renderStatus(); });
+$("#msgs").addEventListener("scroll", () => {
+  if (moreShown === atBottom()) renderStatus();
+  // near the top: ask iSekur for older lines (its scrollback holds more than the 500 a tab starts with)
+  const b = bufs.get(active), box = $("#msgs");
+  if (b && box.scrollTop < 300 && !b.loading && !b.noMore && b.first !== undefined) b.loading = true, send({t: "more", buf: active, before: b.first});
+});
 // bell_notifications: a short beep, like the terminal's bell (browsers allow sound after a first click or key)
 let actx = null;
 const unlockAudio = () => { try { actx = actx || new AudioContext(); actx.resume(); } catch (e) {} };

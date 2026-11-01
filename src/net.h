@@ -22,6 +22,9 @@ struct Conn {
     SSL* ssl = nullptr;
     SSL_CTX* ctx = nullptr;  // owned for client conns
     bool server_side = false, want_write = false;
+    // TLS can need the other direction: a read that must write first (key update), a write that
+    // must read first. Polled for that instead of what we'd normally wait on, so neither stalls nor spins
+    bool read_wants_write = false, write_wants_read = false;
     std::string out, err, host;
     std::vector<sockaddr_storage> addrs;
     std::shared_ptr<Resolve> res;  // while RESOLVING; fd is then the wakeup pipe

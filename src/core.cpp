@@ -11,8 +11,6 @@
 #include "version.h"
 #include "conf_template.h"
 
-static const size_t MAX_LINES = 2000;
-
 std::string default_config_path() {
     if (const char* x = getenv("XDG_CONFIG_HOME")) return std::string(x) + "/isekur/isekur.conf";
     const char* h = getenv("HOME");
@@ -34,6 +32,7 @@ void Core::load_config() {
             found = created && ini_load(cfg_path, cfg);
         }
     }
+    max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
     defaults = ini_parse(conf_template);
     for (auto it = defaults.begin(); it != defaults.end();)
         it = it->first.rfind("server.", 0) == 0 ? defaults.erase(it) : std::next(it);
@@ -394,7 +393,8 @@ void Core::add(Buffer* b, Line l) {
     if (!l.self && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) && opt_on(b->srv, "typing_effect", false))
         l.typed_at = now_ms(), typing_until = std::max(typing_until, l.typed_at + 2100);
     b->lines.push_back(std::move(l));
-    if (b->lines.size() > MAX_LINES) b->lines.pop_front();
+    b->added++;
+    while (b->lines.size() > max_lines) b->lines.pop_front();
     if (b->scroll) b->scroll++;  // keep the scrolled view still
     const Line& ln = b->lines.back();
     int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : b->quiet && noise(ln) ? 0 : 1;
@@ -439,6 +439,7 @@ void Core::reload(Buffer* b) {
     for (auto& [sec, kv] : unsaved)
         for (auto& [k, v] : kv) fresh[sec][k] = v;
     cfg = fresh;
+    max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
     std::string err;
     if (!load_theme(ini_get(cfg, "general", "theme", "default"), theme, err)) print(b, LK::ERROR, err);
     notify(Ev::THEME, nullptr);
@@ -594,6 +595,7 @@ void Core::load_history(Buffer* b) {
         b->lines.push_back(l);  // not add(): history must not be logged again
     }
     b->lines.push_back(Line{time(nullptr), LK::INFO, "", "--- end of log history ---"});
+    b->added += (long long)hist.size() + 1;
 }
 
 void Core::print(Buffer* b, LK k, const std::string& text) {
@@ -745,6 +747,8 @@ void Core::exec(Buffer* b, const std::string& input) {
             load_flood(sv.get());
         }
         if (sec == "keys") cfg_changed = true;
+        if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
+        if (sec == "general" && (key == "timestamp" || key == "scrollback")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         dirty = true;
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +

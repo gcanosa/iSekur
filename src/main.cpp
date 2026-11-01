@@ -198,7 +198,13 @@ int main(int argc, char** argv) {
 
         Buffer* about = c.tty && c.active && !c.active->srv && c.active->name == "*about" && c.active->lines.size() >= 6 ? c.active : nullptr;
         bool typing = c.tty && now_ms() < c.typing_until;  // a line is typing itself out: redraw ~30 times a second
-        if (wait_fds(fds, anim0 || about || typing ? std::min(c.drain(), 33) : c.drain()) < 0 && errno != EINTR) break;
+        int wait = c.drain();
+        if (anim0 || typing) wait = std::min(wait, 33);
+        if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep
+            long long ph = (now_ms() - c.about_t0) % 3500;
+            wait = std::min(wait, ph < 1200 || !c.about_typed.empty() ? 33 : (int)(3500 - ph));
+        }
+        if (wait_fds(fds, wait) < 0 && errno != EINTR) break;
         if (typing) c.dirty = true;
         c.terms_poll(fds, term0);  // first: nothing has closed a tab yet, so the order still holds
         c.dccs_poll(fds, dcc0);
@@ -251,8 +257,7 @@ int main(int argc, char** argv) {
 
         time_t now = time(nullptr);
         c.set_attached(c.tty || web.attached());
-        c.tick(now);
-        if (now != last_sec) last_sec = now, c.dirty = true;  // status bar clock, uptime seconds
+        if (now != last_sec) last_sec = now, c.dirty = true, c.tick(now);  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
         if (anim_due && c.tty && !c.locked) anim_due = false, anim0 = home->lines.size() >= 6 ? now_ms() : 0;
         if (anim0) {
             double t = (now_ms() - anim0) / 1200.0;  // 0..1 over the sweep

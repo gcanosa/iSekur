@@ -246,7 +246,7 @@ void Web::stop() {
     if (ctx) SSL_CTX_free(ctx), ctx = nullptr;
     if (lfd >= 0) close(lfd), lfd = -1;
     secure = false;
-    pending.clear(), known.clear(), last_order.clear();
+    pending.clear(), known.clear(), last_order.clear(), sent_nicks.clear();
     url.clear();
 }
 
@@ -285,6 +285,7 @@ bool Web::start_(std::string& err) {
     if (!crt.empty()) {
         ctx = SSL_CTX_new(TLS_server_method());
         SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
+        SSL_CTX_set_mode(ctx, SSL_MODE_RELEASE_BUFFERS);  // idle browsers hold no record buffers
         if (SSL_CTX_use_certificate_chain_file(ctx, crt.c_str()) != 1 ||
             SSL_CTX_use_PrivateKey_file(ctx, (key.empty() ? crt : key).c_str(), SSL_FILETYPE_PEM) != 1 ||
             SSL_CTX_check_private_key(ctx) != 1) {
@@ -323,6 +324,7 @@ void Web::process(const std::vector<pollfd>& v) {
         if (!p.revents) continue;
         bool ok = cl.conn.pump(p.revents, cl.in);
         if (ok && cl.file) feed(cl), cl.since = now;
+        if (cl.ws && (p.revents & POLLIN)) cl.since = now;
         if (ok && cl.conn.st == Conn::OPEN && !cl.conn.closing && !cl.file) {
             if (cl.ws) ws_frames(cl);
             else http(cl);
@@ -338,8 +340,16 @@ void Web::process(const std::vector<pollfd>& v) {
             clients.push_back(std::move(cl));
         }
     }
-    for (auto& cl : clients)  // idle HTTP (non-WebSocket) connections
-        if (!cl->ws && now - cl->since > 30) dead.push_back(cl.get());  // a download only once it stops moving
+    for (auto& cl : clients) {
+        if (!cl->ws) {  // idle HTTP connections; a download only once it stops moving
+            if (now - cl->since > 30) dead.push_back(cl.get());
+            continue;
+        }
+        // a browser that went away without closing (a phone asleep, Wi-Fi gone) answers no pings: drop it,
+        // or it holds up to MAX_OUT of queued events and keeps auto-away from ever starting
+        if (now - cl->since > 75) dead.push_back(cl.get());
+        else if (now - cl->since >= 30 && now - cl->pinged >= 30) cl->conn.out += ws_frame("", 9), cl->pinged = now;
+    }
     clients.erase(std::remove_if(clients.begin(), clients.end(),
                                  [&](auto& cl) {
                                      return std::find(dead.begin(), dead.end(), cl.get()) != dead.end();
@@ -598,6 +608,11 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "fold") c.fold(b);
+        else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
+            long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;
+            size_t to = (size_t)std::max(0LL, std::min(end, (long long)b->lines.size()));
+            cl.conn.out += ws_frame(lines_json(b, "older", to > BACKLOG ? to - BACKLOG : 0, to));
+        }
         else if (m["t"] == "about") {  // the /about dialog
             std::vector<int> typed;
             std::string o = "{\"t\":\"about\",\"lines\":[";
@@ -629,14 +644,17 @@ void Web::ws_frames(Client& cl) {
 static const char* KIND[] = {"msg", "action", "notice", "join", "part", "quit",
                              "nick", "mode", "topic", "info", "error"};
 
-static std::string line_json(const Line& l) {
-    return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"k\":\"" + KIND[(int)l.kind] +
+// the terminal's time stamp: [general] timestamp, else the theme's
+static std::string ts_fmt(const Core& c) { return ini_get(c.cfg, "general", "timestamp", c.theme.lay("timestamp", "%H:%M")); }
+
+static std::string line_json(const Line& l, const std::string& fmt) {
+    return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"tf\":" + json_str(fmt_time(l.ts, fmt)) + ",\"k\":\"" + KIND[(int)l.kind] +
            "\",\"n\":" + json_str(l.nick) + ",\"x\":" + json_str(l.text) +
            ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") +
            (l.color >= 0 ? ",\"c\":\"" + rgb_hex(l.color) + "\"" : "") + "}";
 }
 
-std::string Web::buf_json(Buffer* b) {
+std::string Web::buf_json(Buffer* b, bool full) {
     static const char* TYPE[] = {"status", "channel", "query", "shell"};
     static const char* STATE[] = {"disconnected", "connecting", "registering", "connected"};
     Server* s = b->srv;
@@ -649,16 +667,24 @@ std::string Web::buf_json(Buffer* b) {
                  (kv.second.away ? "1" : "0") + "]";
     }
     nicks += "]";
+    // most updates are activity, unread counts, lag: the browsers keep the list they have
+    // (a 2000 user channel is ~60K of JSON, and a re-sort and redraw there)
+    if (!full) {
+        std::string& last = sent_nicks[b->id];
+        if (last == nicks) nicks.clear();
+        else last = nicks;
+    }
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
            ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
+           (b->term && !b->term->host.empty() ? ",\"host\":" + json_str(b->term->host) : "") +
            ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(atoi(c.opt(s, "paste_confirm", "5").c_str())) +
            (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +
                                                 ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
-           ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + ",\"nicks\":" + nicks + "}";
+           ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + (nicks.empty() ? "" : ",\"nicks\":" + nicks) + "}";
 }
 
 std::string Web::order_json() {
@@ -668,7 +694,7 @@ std::string Web::order_json() {
 }
 
 std::string Web::theme_json() {
-    std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"el\":{";
+    std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"sb\":" + std::to_string(c.max_lines) + ",\"el\":{";
     bool first = true;
     for (auto& [k, st] : c.theme.el) {
         o += (first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(st.fg)) +
@@ -680,18 +706,25 @@ std::string Web::theme_json() {
     return o + "]}";
 }
 
-std::string Web::lines_json(Buffer* b) {
-    std::string ls = "{\"t\":\"lines\",\"buf\":" + std::to_string(b->id) + ",\"lines\":[";
-    size_t from = b->lines.size() > BACKLOG ? b->lines.size() - BACKLOG : 0;
-    for (size_t i = from; i < b->lines.size(); i++) ls += (i > from ? "," : "") + line_json(b->lines[i]);
+// lines [from, to) of b; "first": the line number of the first (Buffer::added), "older": one before it
+std::string Web::lines_json(Buffer* b, const char* t, size_t from, size_t to) {
+    std::string fmt = ts_fmt(c);
+    long long first = b->added - (long long)b->lines.size() + (long long)from;
+    std::string ls = std::string("{\"t\":\"") + t + "\",\"buf\":" + std::to_string(b->id) + ",\"first\":" + std::to_string(first) + ",\"lines\":[";
+    for (size_t i = from; i < to; i++) ls += (i > from ? "," : "") + line_json(b->lines[i], fmt);
     return ls + "]}";
+}
+
+std::string Web::lines_json(Buffer* b) {
+    return lines_json(b, "lines", b->lines.size() > BACKLOG ? b->lines.size() - BACKLOG : 0, b->lines.size());
 }
 
 void Web::snapshot(Client& cl) {
     auto send = [&](const std::string& j) { cl.conn.out += ws_frame(j); };
     send(theme_json());
+    sent_nicks.clear();  // the next update of each goes out whole to everyone, whatever this one got
     for (auto& b : c.bufs) {
-        send(buf_json(b.get()));
+        send(buf_json(b.get(), true));
         send(lines_json(b.get()));
         known.insert(b->id);
     }
@@ -775,12 +808,12 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
         bool fresh = !known.count(b->id);  // its history (incl. this line) goes out now
         if (fresh || pending.count(b->id)) flush_buf(b);
         if (!fresh) broadcast("{\"t\":\"line\",\"buf\":" + std::to_string(b->id) + ",\"u\":" +
-                             std::to_string(b->unread) + ",\"line\":" + line_json(*l) + "}");
+                             std::to_string(b->unread) + ",\"line\":" + line_json(*l, ts_fmt(c)) + "}");
         break;
     }
     case Ev::BUFFER: pending.insert(b->id); break;
     case Ev::CLOSE: {
-        pending.erase(b->id), known.erase(b->id);
+        pending.erase(b->id), known.erase(b->id), sent_nicks.erase(b->id);
         broadcast("{\"t\":\"close\",\"buf\":" + std::to_string(b->id) + "}");
         std::string o = "{\"t\":\"order\",\"ids\":[";
         bool first = true;
@@ -789,8 +822,11 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
         broadcast(last_order = o + "]}");
         break;
     }
-    case Ev::THEME: broadcast(theme_json()); break;
-    case Ev::CLEAR: known.erase(b->id), pending.insert(b->id); break;  // its lines go out again, from scratch
+    case Ev::THEME:  // also /set timestamp or scrollback: every tab's lines again, in the new format
+        broadcast(theme_json());
+        for (auto& x : c.bufs) known.erase(x->id), pending.insert(x->id);
+        break;
+    case Ev::CLEAR: known.erase(b->id), sent_nicks.erase(b->id), pending.insert(b->id); break;  // its lines go out again, from scratch
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
     case Ev::BELL: broadcast("{\"t\":\"bell\"}"); break;
     case Ev::NOTE:

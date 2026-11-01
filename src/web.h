@@ -31,7 +31,8 @@ private:
         bool ws = false;
         std::string frag;  // a fragmented message so far
         int frag_op = 0;
-        time_t since = 0;
+        time_t since = 0;    // accepted; a WebSocket: last heard from
+        time_t pinged = 0;   // a WebSocket: our last ping
         FILE* file = nullptr;  // GET /files/name: streamed into conn.out as it drains
         unsigned long long left = 0;
         ~Client() { if (file) fclose(file); }
@@ -55,9 +56,11 @@ private:
     void ws_frames(Client& cl);
     void broadcast(const std::string& json);
     void snapshot(Client& cl);
-    std::string buf_json(Buffer* b);
+    std::string buf_json(Buffer* b, bool full = false);  // full: with the nick list even if the browsers have it
+    std::map<int, std::string> sent_nicks;  // buffer id -> the nick list JSON the browsers last got
     std::string order_json();
-    std::string lines_json(Buffer* b);
+    std::string lines_json(Buffer* b);  // the last BACKLOG, for a new tab or browser
+    std::string lines_json(Buffer* b, const char* t, size_t from, size_t to);
     void flush_buf(Buffer* b);
     std::string theme_json();
     std::string dcc_json(std::string* sig = nullptr);  // the transfers going on; sig: just which and their states

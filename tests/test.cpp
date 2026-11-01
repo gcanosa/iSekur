@@ -185,6 +185,9 @@ int main() {
     feed(":XXX!u@h NICK me");
     feed(":srv 005 me MODES :are supported");  // no value: unlimited
     assert(ts->max_modes == 12);
+    feed(":srv 904");  // a bare SASL failure numeric: no params to print, no crash
+    assert(ts->status->lines.back().text == "SASL: 904");
+    ts->cap_done = false, sent();  // it ended CAP negotiation; the 001 test below starts it fresh
     feed(":srv 005 me MODES=3 :are supported");
     feed(":srv 353 me = #c :@me!u@me.host +v1!u@h1 r1!u@h2 %hop!u@h3 @op2!x@h4 r2");
     sent();
@@ -683,6 +686,78 @@ int main() {
         });
         assert(o->st == Dcc::DONE && got == "world");
         close(rcv);
+    }
+
+    {  // the webchat end to end: login, WebSocket, nick lists only when they change, older lines on request
+        core.cfg["web"] = {{"bind", "127.0.0.1"}, {"port", "18799"}, {"user", "u"}, {"password_hash", hash_password("pw")}};
+        std::string path = "build/test-web.conf", werr;
+        std::swap(core.cfg_path, path);
+        Web web(core);
+        assert(web.start(werr));
+        core.listener = [&](Ev e, Buffer* b, const Line* l) { web.on_event(e, b, l); };
+        auto step = [&] {
+            std::vector<pollfd> pf;
+            web.add_fds(pf);
+            poll(pf.data(), pf.size(), 10);
+            web.process(pf), web.flush();
+        };
+        auto talk = [&](const std::string& req, size_t want) {  // send, then read until `want` bytes or a quiet moment
+            int fd = socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in a{};
+            a.sin_family = AF_INET, a.sin_port = htons(18799), a.sin_addr.s_addr = htonl(0x7f000001);
+            assert(connect(fd, (sockaddr*)&a, sizeof a) == 0 && write(fd, req.data(), req.size()) == (ssize_t)req.size());
+            std::string got;
+            for (int quiet = 0; quiet < 20 && got.size() < want;) {
+                step();
+                char rb[65536];
+                ssize_t n = recv(fd, rb, sizeof rb, MSG_DONTWAIT);
+                if (n > 0) got.append(rb, (size_t)n), quiet = 0;
+                else quiet++;
+            }
+            return std::make_pair(fd, got);
+        };
+        auto [lfd2, login] = talk("POST /login HTTP/1.1\r\nHost: x\r\nContent-Length: 24\r\n\r\n{\"user\":\"u\",\"pass\":\"pw\"}", 1);
+        close(lfd2);
+        size_t ck = login.find("isekur_sid=");
+        assert(login.rfind("HTTP/1.1 200", 0) == 0 && ck != std::string::npos);
+        std::string cookie = login.substr(ck, login.find(';', ck) - ck);
+        auto [ws, snap] = talk("GET /ws HTTP/1.1\r\nHost: x\r\nCookie: " + cookie + "\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", 1 << 30);
+        std::string me = "{\"t\":\"buf\",\"id\":" + std::to_string(chb->id) + ",";
+        auto buf_msg = [&](const std::string& all) { size_t at = all.rfind(me); assert(at != std::string::npos); return all.substr(at, all.find("\"t\":\"", at + 5) - at); };
+        assert(snap.find("101 Switching") != std::string::npos && buf_msg(snap).find("\"nicks\":[") != std::string::npos);
+        auto more = [&](const std::string& out) {  // what the server says after we send out
+            if (!out.empty()) assert(write(ws, out.data(), out.size()) == (ssize_t)out.size());
+            std::string got;
+            for (int i = 0; i < 30; i++) {
+                step();
+                char rb[65536];
+                ssize_t n = recv(ws, rb, sizeof rb, MSG_DONTWAIT);
+                if (n > 0) got.append(rb, (size_t)n);
+            }
+            return got;
+        };
+        core.notify(Ev::BUFFER, chb);  // the first update after a browser comes in has it once more,
+        assert(buf_msg(more("")).find("\"nicks\":[") != std::string::npos);
+        core.notify(Ev::BUFFER, chb);  // after that, say an unread count changed: the list stays out
+        std::string upd = more("");
+        assert(buf_msg(upd).find("\"nicks\"") == std::string::npos);
+        feed(":newbie!u@h JOIN #c");  // it changed: in again
+        assert(buf_msg(more("")).find("newbie") != std::string::npos);
+        for (int i = 0; i < 700; i++) core.add(chb, Line{time(nullptr), LK::INFO, "", "fill " + std::to_string(i)});
+        long long base = chb->added - (long long)chb->lines.size(), have = base + (long long)chb->lines.size() - 500;
+        std::string old = more(client_frame("{\"t\":\"more\",\"buf\":" + std::to_string(chb->id) + ",\"before\":" + std::to_string(have) + "}"));
+        size_t at = old.find("{\"t\":\"older\"");
+        assert(at != std::string::npos && old.find("\"first\":" + std::to_string(std::max(base, have - 500)), at) != std::string::npos);
+        assert(old.find("\"tf\":\"", at) != std::string::npos);  // the time stamp, formatted by iSekur
+        close(ws);
+        core.listener = nullptr;
+        web.stop();
+        unlink("build/test-web.web.sessions");
+        std::swap(core.cfg_path, path);
+        core.max_lines = 150;  // /set scrollback: tabs keep that many
+        core.add(chb, Line{time(nullptr), LK::INFO, "", "trim"});
+        assert(chb->lines.size() == 150 && chb->lines.back().text == "trim");
+        core.max_lines = 2000;
     }
 
     Server sv;  // token bucket: 2 at once, then one per second

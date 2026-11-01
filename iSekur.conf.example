@@ -7,6 +7,7 @@ altnick   = mynick_
 realname  = iSekur user
 theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes/)
 timestamp = %H:%M
+scrollback = 2000           ; lines kept in memory per tab (min 100); fewer = less memory
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
 mouse     = on               ; click tabs/nicks, wheel scrolls, drag copies; F3 toggles
 ignore    =                  ; e.g. spammer!*@* *!*@*.bad.host, or use /ignore and /save

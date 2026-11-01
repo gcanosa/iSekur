@@ -51,8 +51,19 @@ int cpu_pct() {
     return last;
 }
 
-// bytes free (available to programs) and total
+// bytes free (available to programs) and total; read at most once a second (every frame draws it)
+static bool mem_read(unsigned long long& avail, unsigned long long& total);
 bool mem_free(unsigned long long& avail, unsigned long long& total) {
+    static unsigned long long a, t;
+    static long long at;
+    static bool ok;
+    long long now = now_ms();
+    if (!at || now - at >= 1000) ok = mem_read(a, t), at = now;
+    avail = a, total = t;
+    return ok;
+}
+
+static bool mem_read(unsigned long long& avail, unsigned long long& total) {
 #ifdef __APPLE__
     size_t len = sizeof total;
     if (sysctlbyname("hw.memsize", &total, &len, nullptr, 0)) return false;
@@ -78,8 +89,18 @@ bool mem_free(unsigned long long& avail, unsigned long long& total) {
 #endif
 }
 
-// battery charge 0-100, -1 without a battery (a desktop, a server)
+// battery charge 0-100, -1 without a battery (a desktop, a server); asked every 30s, it moves slowly
+// and on macOS each ask is a trip to the power daemon
+static int battery_read();
 int battery_pct() {
+    static int last = -1;
+    static long long at;
+    long long now = now_ms();
+    if (!at || now - at >= 30000) last = battery_read(), at = now;
+    return last;
+}
+
+static int battery_read() {
 #ifdef __APPLE__
     int pct = -1;
     CFTypeRef info = IOPSCopyPowerSourcesInfo();

@@ -108,6 +108,7 @@ struct Buffer {
     std::string name;
     Server* srv;
     std::deque<Line> lines;
+    long long added = 0;                     // lines ever put in: lines[i] is line number added - lines.size() + i (the webchat asks for older ones by it)
     std::string topic, modes;
     std::map<std::string, NickEntry> nicks;  // key: irc_lower(nick)
     int activity = 0;                        // 0 none, 1 data, 2 msg, 3 hilight
@@ -261,6 +262,7 @@ struct Core {
     std::vector<std::unique_ptr<Buffer>> bufs;  // tab order
     Buffer* active = nullptr;
     int next_id = 1;
+    size_t max_lines = 2000;  // [general] scrollback: lines kept per tab
     bool quit = false, dirty = true, cfg_changed = false;  // cfg_changed: the TUI re-reads keys, mouse, colors
     // auto-away: nobody attached (daemon, no web client) or no input for a while
     bool attached = true;

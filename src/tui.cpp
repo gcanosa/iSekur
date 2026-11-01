@@ -521,9 +521,9 @@ void Tui::draw() {
         std::vector<const NickEntry*> v;
         for (auto& kv : b->nicks) v.push_back(&kv.second);
         Server* s = b->srv;
-        std::sort(v.begin(), v.end(), [&](const NickEntry* x, const NickEntry* y) {
-            int rx = s->prefix_rank(x->prefix), ry = s->prefix_rank(y->prefix);
-            return rx != ry ? rx < ry : irc_lower(x->nick) < irc_lower(y->nick);
+        // the map is keyed by irc_lower(nick), so it's already in name order: only rank moves them
+        std::stable_sort(v.begin(), v.end(), [&](const NickEntry* x, const NickEntry* y) {
+            return s->prefix_rank(x->prefix) < s->prefix_rank(y->prefix);
         });
         if (nl_buf != b) nl_buf = b, nl_scroll = 0;
         nl_scroll = std::max(0, std::min(nl_scroll, (int)v.size() - (ch - 1)));

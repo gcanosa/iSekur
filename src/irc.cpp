@@ -273,16 +273,19 @@ void Core::disconnect(Server* s, const std::string& why) {
 void Core::on_readable(Server* s, short rev) {
     bool ok = s->conn.pump(rev, s->inbuf);
     if (s->state == SS::CONNECTING && s->conn.st == Conn::OPEN) s->state = SS::REGISTERING;
-    size_t nl;
-    while ((nl = s->inbuf.find('\n')) != std::string::npos) {
-        std::string line = s->inbuf.substr(0, nl);
-        s->inbuf.erase(0, nl + 1);
+    // one erase for the whole read, not one per line: a /list or NAMES burst is thousands of lines
+    size_t at = 0, nl;
+    std::string line;
+    while ((nl = s->inbuf.find('\n', at)) != std::string::npos) {
+        line.assign(s->inbuf, at, nl - at);
+        at = nl + 1;
         if (!line.empty() && line.back() == '\r') line.pop_back();
         Msg m;
         s->last_rx = time(nullptr);
         if (irc_parse(line, m)) handle(s, m);
-        if (s->state == SS::DISCONNECTED) return;  // handler closed it
+        if (s->state == SS::DISCONNECTED) return;  // handler closed it (connect() cleared inbuf)
     }
+    s->inbuf.erase(0, at);
     if (!ok) disconnect(s, s->conn.err);
 }
 
@@ -439,7 +442,7 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "900") { print(s->status, LK::INFO, m.p(3)); return; }
     if (cmd == "903") { print(s->status, LK::INFO, "SASL authentication successful"); s->sasl_ok = true; cap_end(s); return; }
     if (cmd == "902" || cmd == "904" || cmd == "905" || cmd == "906" || cmd == "908") {
-        print(s->status, LK::ERROR, "SASL: " + m.params.back());
+        print(s->status, LK::ERROR, "SASL: " + (m.params.empty() ? cmd : m.params.back()));  // a bare "904" must not crash us
         cap_end(s);
         return;
     }
@@ -651,7 +654,7 @@ void Core::handle(Server* s, const Msg& m) {
         for (char ch : m.p(1)) {
             if (ch == '+' || ch == '-') { add = ch == '+'; continue; }
             size_t pm = s->prefix_modes.find(ch);
-            if (pm != std::string::npos) {
+            if (pm != std::string::npos && pm < s->prefix_chars.size()) {  // a malformed PREFIX= has fewer chars
                 auto it = b->nicks.find(irc_lower(m.p(arg++)));
                 if (it == b->nicks.end()) continue;
                 std::string& pf = it->second.prefix;

@@ -81,26 +81,34 @@ bool Conn::next_addr() {
     return false;
 }
 
-bool Conn::start_tls() {
-    if (!ctx) {
-        ctx = SSL_CTX_new(TLS_client_method());
-        SSL_CTX_set_min_proto_version(ctx, TLS1_2_VERSION);
-        SSL_CTX_set_default_verify_paths(ctx);
+static SSL_CTX* new_client_ctx() {
+    SSL_CTX* c = SSL_CTX_new(TLS_client_method());
+    SSL_CTX_set_min_proto_version(c, TLS1_2_VERSION);
+    SSL_CTX_set_mode(c, SSL_MODE_RELEASE_BUFFERS);  // an idle connection gives back its ~34K of record buffers
+    SSL_CTX_set_default_verify_paths(c);
 #ifdef __APPLE__
-        // release builds link OpenSSL statically: its own cert dir may not exist, macOS ships this bundle
-        SSL_CTX_load_verify_locations(ctx, "/etc/ssl/cert.pem", nullptr);
+    // release builds link OpenSSL statically: its own cert dir may not exist, macOS ships this bundle
+    SSL_CTX_load_verify_locations(c, "/etc/ssl/cert.pem", nullptr);
 #endif
-        SSL_CTX_set_verify(ctx, tls == 1 ? SSL_VERIFY_PEER : SSL_VERIFY_NONE, nullptr);
-        if (!cert.empty()) {
-            if (SSL_CTX_use_certificate_chain_file(ctx, cert.c_str()) != 1 ||
-                SSL_CTX_use_PrivateKey_file(ctx, (key.empty() ? cert : key).c_str(),
-                                            SSL_FILETYPE_PEM) != 1) {
-                err = "client cert: " + ssl_errstr();
-                return false;
-            }
+    return c;
+}
+
+bool Conn::start_tls() {
+    // one context for every server without a client cert: the CA bundle (hundreds of KB) is
+    // parsed once, not per server and again on every reconnect
+    static SSL_CTX* shared = nullptr;
+    SSL_CTX* use = ctx;
+    if (!use && cert.empty()) use = shared ? shared : (shared = new_client_ctx());
+    if (!use) {
+        use = ctx = new_client_ctx();
+        if (SSL_CTX_use_certificate_chain_file(ctx, cert.c_str()) != 1 ||
+            SSL_CTX_use_PrivateKey_file(ctx, (key.empty() ? cert : key).c_str(), SSL_FILETYPE_PEM) != 1) {
+            err = "client cert: " + ssl_errstr();
+            return false;
         }
     }
-    ssl = SSL_new(ctx);
+    ssl = SSL_new(use);
+    SSL_set_verify(ssl, tls == 1 ? SSL_VERIFY_PEER : SSL_VERIFY_NONE, nullptr);
     SSL_set_fd(ssl, fd);
     SSL_set_mode(ssl, SSL_MODE_ENABLE_PARTIAL_WRITE | SSL_MODE_ACCEPT_MOVING_WRITE_BUFFER);
     SSL_set_tlsext_host_name(ssl, host.c_str());
@@ -135,7 +143,7 @@ short Conn::events() const {
     case RESOLVING: return POLLIN;
     case CONNECTING: return POLLOUT;
     case HANDSHAKE: return want_write ? POLLOUT : POLLIN;
-    case OPEN: return POLLIN | (out.empty() && !want_write ? 0 : POLLOUT);
+    case OPEN: return POLLIN | ((!out.empty() && !write_wants_read) || want_write || read_wants_write ? POLLOUT : 0);
     default: return 0;
     }
 }
@@ -177,7 +185,8 @@ bool Conn::pump(short rev, std::string& in) {
         st = OPEN;
     }
     if (st != OPEN) return true;
-    if (rev & (POLLIN | POLLHUP | POLLERR) || (ssl && SSL_pending(ssl))) {
+    if (rev & (POLLIN | POLLHUP | POLLERR) || (read_wants_write && (rev & POLLOUT)) || (ssl && SSL_pending(ssl))) {
+        read_wants_write = false;
         char buf[16384];
         for (;;) {
             ssize_t n;
@@ -186,7 +195,7 @@ bool Conn::pump(short rev, std::string& in) {
                 if (n <= 0) {
                     int e = SSL_get_error(ssl, (int)n);
                     if (e == SSL_ERROR_WANT_READ) break;
-                    if (e == SSL_ERROR_WANT_WRITE) { want_write = true; break; }
+                    if (e == SSL_ERROR_WANT_WRITE) { read_wants_write = true; break; }
                     err = e == SSL_ERROR_ZERO_RETURN ? "connection closed" : ssl_errstr();
                     return false;
                 }
@@ -200,14 +209,15 @@ bool Conn::pump(short rev, std::string& in) {
             if (in.size() > (1 << 20)) { err = "input flood"; return false; }
         }
     }
-    want_write = false;
+    want_write = write_wants_read = false;
     while (!out.empty()) {
         ssize_t n;
         if (ssl) {
             n = SSL_write(ssl, out.data(), (int)out.size());
             if (n <= 0) {
                 int e = SSL_get_error(ssl, (int)n);
-                if (e == SSL_ERROR_WANT_WRITE || e == SSL_ERROR_WANT_READ) { want_write = true; break; }
+                if (e == SSL_ERROR_WANT_WRITE) { want_write = true; break; }
+                if (e == SSL_ERROR_WANT_READ) { write_wants_read = true; break; }  // POLLIN brings us back
                 err = ssl_errstr();
                 return false;
             }
@@ -227,7 +237,7 @@ void Conn::close() {
     if (fd >= 0) ::close(fd), fd = -1;
     res.reset();
     st = NONE;
-    want_write = closing = false;
+    want_write = closing = read_wants_write = write_wants_read = false;
 }
 
 int listen_tcp(const std::string& bind, int port, std::string& err) {
