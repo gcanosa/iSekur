@@ -513,7 +513,7 @@ function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /sp
     d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "");
     d.textContent = (p ? p[0] : " ") + n;
     d.onclick = () => send({t: "input", buf: id, text: "/query " + n});
-    d.oncontextmenu = e => askMenu(e, n);
+    d.oncontextmenu = e => askMenu(e, n, id);  // a /split pane: its own channel, not the focused one
     el.append(d);
   }
 }
