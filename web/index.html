@@ -4,6 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>iSekur Webchat</title>
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon.png">
+<meta name="theme-color" content="#0e0f17">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 16 16%22%3E%3Crect width=%2216%22 height=%2216%22 rx=%224%22 fill=%22%23c792ea%22/%3E%3C/svg%3E">
 <style>
 :root {
@@ -1012,7 +1015,7 @@ function toast(m) {
   $("#toasts").append(t);
   setTimeout(() => t.remove(), 8000);
   if (canNotify() && (document.hidden || !document.hasFocus())) {
-    try { const n = new Notification(m.title, {body: x, tag: "isekur-dcc"}); n.onclick = () => { window.focus(); openFiles(); n.close(); }; } catch (e) {}
+    notify(m.title, x, "isekur-dcc", "files");
   }
 }
 function openFiles() { $("#side").classList.remove("open"); dfiles.showModal(); renderDcc(); loadFiles(); }
@@ -1413,10 +1416,18 @@ function alertFor(b, id, l) {
   if (!personal || (!document.hidden && document.hasFocus() && id === active)) return;
   document.title = "(" + ++missed + ") iSekur Webchat";
   if (!canNotify()) return;
-  try {  // Android Chrome only allows notifications from a service worker: the title count still works
-    const n = new Notification(b.type === "query" ? l.n : l.n + " in " + b.name, {body: l.x.replace(/\x03\d{0,2}(,\d{1,2})?|\x04[0-9a-f]{6}(,[0-9a-f]{6})?|[\x00-\x1f]/gi, ""), tag: "isekur-" + id});
-    n.onclick = () => { window.focus(); select(id); n.close(); };
-  } catch (e) {}
+  notify(b.type === "query" ? l.n : l.n + " in " + b.name, l.x.replace(/\x03\d{0,2}(,\d{1,2})?|\x04[0-9a-f]{6}(,[0-9a-f]{6})?|[\x00-\x1f]/gi, ""), "isekur-" + id, id);
+}
+// The service worker (PWA) is the only way to notify on Android, and iOS only notifies an installed
+// webchat. It registers only over trusted HTTPS or on localhost (not with the self-signed certificate):
+// then plain new Notification() is used, which desktop browsers allow.
+let swReg = null;
+navigator.serviceWorker?.register("/sw.js").then(r => swReg = r, () => {});
+navigator.serviceWorker?.addEventListener("message", e => noteClick(e.data));
+function noteClick(d) { if (d === "files") openFiles(); else select(d); }
+function notify(title, body, tag, data) {
+  if (swReg) return swReg.showNotification(title, {body, tag, data}).catch(() => {});
+  try { const n = new Notification(title, {body, tag}); n.onclick = () => { window.focus(); noteClick(data); n.close(); }; } catch (e) {}
 }
 function seen() { missed = 0; document.title = "iSekur Webchat"; }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) seen(); });

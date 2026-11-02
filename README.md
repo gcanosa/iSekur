@@ -17,6 +17,9 @@ that mirrors your live session in a browser, bouncer style.
 - Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel, `/autojoin snap` saves every open channel), SASL or
   `nickserv_pass` to identify on connect
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout.
+- The webchat installs as an app (PWA: home screen or dock, notifications on Android and on an installed
+  iPhone webchat). That needs a trusted certificate (`cert`/`key` in `[web]`, e.g. Let's Encrypt or
+  `tailscale cert`) or localhost: with the self-signed one it stays a plain web page.
   Off unless you ask: `[web] autostart = on`, `isekur --web`, or `/web start` / `/web stop` while running
 - Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
