@@ -553,7 +553,7 @@ function renderMsgs() {
   renderPane2();
 }
 
-// /split in the webchat: this browser's own, the server never hears of it
+// /split in the webchat: starts like the terminal's (and follows its /split), then this browser's own
 let split = null, splitMode = 0;  // 0 by the window's width, 1 side by side, 2 one over the other
 function splitLayout() { $("#app").classList.toggle("stack", splitMode === 2 || (splitMode === 0 && innerWidth < 1300)); }
 addEventListener("resize", splitLayout);
@@ -730,6 +730,12 @@ function onMsg(ev) {
     if (!bufs.has(active)) { active = order[0]; select(active); } else later(renderSide);
   } else if (m.t === "active") {
     select(m.buf);
+  } else if (m.t === "split") {  // the terminal's /split: on connect and when it changes there
+    splitMode = m.mode;
+    const f = Math.min(0.85, Math.max(0.15, m.pm / 1000));
+    $("#app").style.setProperty("--sa", f + "fr"); $("#app").style.setProperty("--sb", (1 - f) + "fr");
+    setSplit(narrow.matches || m.buf < 0 ? null : m.buf);
+    $("#app").classList.toggle("flip", split !== null && m.first);
   } else if (m.t === "cmds") {
     cmds = m.list;
   } else if (m.t === "keys") {

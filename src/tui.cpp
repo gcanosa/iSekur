@@ -612,10 +612,10 @@ void Tui::draw() {
     else {
         Box p1{0, top, W, ch}, p2 = p1;
         if (c.split_mode == 1 || (c.split_mode == 0 && W >= 140)) {  // side by side, a separator column between
-            p1.w = std::max(10, std::min(W - 11, (W - 1) * split_pm / 1000)), p2.x = p1.w + 1, p2.w = W - p2.x;
+            p1.w = std::max(10, std::min(W - 11, (W - 1) * c.split_pm / 1000)), p2.x = p1.w + 1, p2.w = W - p2.x;
             for (int y = top; y < top + ch; y++) text(p1.w, y, W, "│", T.get("separator"), false);
             div_x = p1.w;
-        } else p1.h = std::max(3, std::min(ch - 3, ch * split_pm / 1000)), p2.y = top + p1.h, p2.h = ch - p1.h, div_y = p2.y;
+        } else p1.h = std::max(3, std::min(ch - 3, ch * c.split_pm / 1000)), p2.y = top + p1.h, p2.h = ch - p1.h, div_y = p2.y;
         other = c.split_first ? p1 : p2;
         draw_pane(b, c.split_first ? p2 : p1, true);
         draw_pane(sb, other, false);
@@ -1604,7 +1604,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (div_drag && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {  // /split: moving the divider
         int W = tb_width(), at = div_x >= 0 ? std::max(10, std::min(W - 11, x)) * 1000 / std::max(1, W - 1)
                                             : std::max(3, std::min(ch - 3, y - top)) * 1000 / std::max(1, ch);
-        if (at != split_pm) split_pm = at, div_moved = true, c.dirty = true;
+        if (at != c.split_pm) c.split_pm = at, div_moved = true, c.dirty = true;
         if (k == TB_KEY_MOUSE_RELEASE) {
             div_drag = false;
             if (!div_moved && other.in(x, y)) c.select(c.split_buf);  // a plain click on the other pane's title

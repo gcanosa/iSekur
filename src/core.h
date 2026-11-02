@@ -212,6 +212,8 @@ struct Server {
     std::map<std::string, std::string> chan_e2e;  // irc_lower(chan) -> key from /e2e #chan, memory only
     std::map<std::string, std::string> chan_keys;  // irc_lower(chan) -> key from /join or autojoin, for rejoins
     time_t last_rx = 0, reconnect_at = 0, ping_at = 0, ctcp_at = 0;
+    std::string to_self;  // echo-message: a message to our own nick comes twice (echo + delivery); the first one's msgid or text
+    time_t to_self_at = 0;
     long long ping_sent_ms = 0;
     double lag = 0;
     bool user_quit = false;
@@ -243,7 +245,7 @@ const std::vector<CmdInfo>& commands();
 const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
 
 // ---- core ------------------------------------------------------------------
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -268,6 +270,7 @@ struct Core {
     Buffer* split_buf = nullptr;
     bool split_first = false;
     int split_mode = 0;  // 0 by the window's width, 1 side by side, 2 one over the other
+    int split_pm = 500;  // the first pane's share, per mille (the divider drag); a browser that connects starts like the terminal
     void split_cmd(Buffer* b, const std::string& args);
     int next_id = 1;
     size_t max_lines = 2000;  // [general] scrollback: lines kept per tab

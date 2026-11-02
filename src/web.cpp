@@ -742,7 +742,13 @@ void Web::snapshot(Client& cl) {
     send(keys_json());
     send(stat_json());
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
+    send(split_json());
     send(dcc_json());
+}
+
+std::string Web::split_json() {
+    return "{\"t\":\"split\",\"buf\":" + std::to_string(c.split_buf ? c.split_buf->id : -1) + ",\"first\":" + (c.split_first ? "true" : "false") +
+           ",\"mode\":" + std::to_string(c.split_mode) + ",\"pm\":" + std::to_string(c.split_pm) + "}";
 }
 
 bool Web::attached() const {
@@ -836,6 +842,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::CLEAR: known.erase(b->id), sent_nicks.erase(b->id), pending.insert(b->id); break;  // its lines go out again, from scratch
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
     case Ev::BELL: broadcast("{\"t\":\"bell\"}"); break;
+    case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
     case Ev::NOTE:
         broadcast("{\"t\":\"note\",\"buf\":" + std::to_string(b->id) + ",\"err\":" + (l->kind == LK::ERROR ? "true" : "false") +
                   ",\"title\":" + json_str(l->nick) + ",\"x\":" + json_str(l->text) + "}");

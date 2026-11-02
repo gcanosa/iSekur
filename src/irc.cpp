@@ -745,6 +745,13 @@ void Core::handle(Server* s, const Msg& m) {
                s->is_chan(tgt.substr(1)))
             tgt.erase(0, 1);
         bool self = is_me(m.nick);
+        if (self && is_me(tgt) && s->caps.count("echo-message")) {  // to ourselves: the echo and the delivery, one message
+            auto id = m.tags.find("msgid");
+            std::string key = id != m.tags.end() ? id->second : cmd + " " + text;
+            time_t now = time(nullptr);
+            if (key == s->to_self && now - s->to_self_at < 2) { s->to_self.clear(); return; }
+            s->to_self = key, s->to_self_at = now;
+        }
         auto bt = m.tags.find("batch");
         bool replay = bt != m.tags.end() && s->hist_batches.count(bt->second);
         bool server_msg = m.prefix.find('!') == std::string::npos && !m.prefix.empty();

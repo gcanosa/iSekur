@@ -396,11 +396,13 @@ void Core::split_cmd(Buffer* b, const std::string& args) {
     if (mode >= 0) split_mode = mode, dirty = true;
     if (mode >= 0 && a.empty() && split_buf) {  // just the layout
         print(b, LK::INFO, std::string("Split") + (mode ? how[mode] : " by the window's width") + " now");
+        notify(Ev::SPLIT, nullptr);
         return;
     }
     if (a == "off") {
         print(b, LK::INFO, split_buf ? "Split closed" : "Not split");
         split_buf = nullptr, dirty = true;
+        notify(Ev::SPLIT, nullptr);
         return;
     }
     Buffer* t = nullptr;
@@ -419,6 +421,7 @@ void Core::split_cmd(Buffer* b, const std::string& args) {
     if (t == active) { print(b, LK::ERROR, "That tab is already the one on screen: pick another"); return; }
     split_buf = t, split_first = false, t->activity = 0, dirty = true;
     notify(Ev::BUFFER, t);
+    notify(Ev::SPLIT, nullptr);
     print(b, LK::INFO, "Split" + std::string(how[split_mode]) + " with " + label(t) + ": F6 or Alt+O switches panes (or click one), /unsplit closes it");
 }
 

@@ -497,6 +497,18 @@ int main() {
     feed(":srv 318 me Erick :End of /WHOIS list.");
     assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
 
+    // echo-message: a CTCP to our own nick arrives twice (echo + delivery): one reply, one line
+    ts->caps.insert("echo-message"), ts->ctcp_at = 0, sent();
+    feed(":me!u@h PRIVMSG me :\x01VERSION\x01");
+    feed(":me!u@h PRIVMSG me :\x01VERSION\x01");
+    std::string vr = sent();
+    assert(vr.rfind("NOTICE me :\x01VERSION ", 0) == 0 && vr.find("\r\n") == vr.size() - 2);  // one reply
+    feed(":me!u@h NOTICE me :\x01VERSION x\x01"), feed(":me!u@h NOTICE me :\x01VERSION x\x01");  // the reply: shown once
+    size_t vn = 0;
+    for (auto& b : core.bufs) for (auto& l : b->lines) vn += l.text.find("reply from me: x") != std::string::npos;
+    assert(vn == 1);
+    ts->caps.erase("echo-message");
+
     // /typing: other people's messages get a typed_at, our own and info lines don't
     chb->quiet = false;
     core.exec(chb, "/typing on");  // quiet comes on with it...
