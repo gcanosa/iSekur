@@ -937,14 +937,14 @@ static void set_view(const std::vector<Core::SetRow>& all, const std::string& q,
     auto match = [&](const Core::SetRow& r) { return q.empty() || lower(full_key(r)).find(q) != std::string::npos || (!r.secret && lower(r.val).find(q) != std::string::npos); };
     cats = {""};
     for (auto& r : all)
-        if (std::find(cats.begin(), cats.end(), r.sec) == cats.end()) cats.push_back(r.sec);
+        if (std::find(cats.begin(), cats.end(), r.cat) == cats.end()) cats.push_back(r.cat);
     counts.assign(cats.size(), 0);
     for (auto& r : all)
-        if (match(r)) counts[0]++, counts[(size_t)(std::find(cats.begin(), cats.end(), r.sec) - cats.begin())]++;
+        if (match(r)) counts[0]++, counts[(size_t)(std::find(cats.begin(), cats.end(), r.cat) - cats.begin())]++;
     if (cat >= (int)cats.size() || (cat > 0 && !counts[(size_t)cat])) cat = 0;  // a search with no hits here: All
     rows.clear();
     for (auto& r : all)
-        if (match(r) && (cat == 0 || r.sec == cats[(size_t)cat])) rows.push_back(&r);
+        if (match(r) && (cat == 0 || r.cat == cats[(size_t)cat])) rows.push_back(&r);
 }
 
 void Tui::draw_settings(int W, int H) {
@@ -984,7 +984,7 @@ void Tui::draw_settings(int W, int H) {
     for (int i = 0; i < (int)cats.size() && i < n; i++) {
         std::string name = cats[(size_t)i].empty() ? "All" : cats[(size_t)i].rfind("server.", 0) == 0 ? "\u21E2 " + cats[(size_t)i].substr(7) : cats[(size_t)i];
         bool on = i == sw.cat, uns = false;
-        for (auto& r : all) uns |= r.unsaved && (i == 0 || r.sec == cats[(size_t)i]);
+        for (auto& r : all) uns |= r.unsaved && (i == 0 || r.cat == cats[(size_t)i]);
         Style st = on ? sel : counts[(size_t)i] ? bs : dim;
         if (on && sw.focus != 0) st = keyst, st.attr |= A_BOLD;  // chosen, but the keys have the focus
         fill(ly + i, x0 + 2, x0 + 2 + nw - 1, on && sw.focus == 0 ? sel : bs);
@@ -1001,7 +1001,7 @@ void Tui::draw_settings(int W, int H) {
     std::string last;
     int sel_line = 0;
     for (size_t i = 0; i < rows.size(); i++) {
-        if (rows[i]->sec != last) lines.push_back({nullptr, "[" + rows[i]->sec + "]"}), last = rows[i]->sec;
+        if (rows[i]->head != last) lines.push_back({nullptr, rows[i]->head}), last = rows[i]->head;
         if ((int)i == sw.sel) sel_line = (int)lines.size();
         lines.push_back({rows[i], ""});
     }
@@ -1345,7 +1345,7 @@ void Tui::settings_mouse(int k, int x, int y) {
     std::string last;
     int line = 0, want = sw.top + i;
     for (int j = 0; j < (int)rows.size(); j++) {
-        if (rows[(size_t)j]->sec != last) last = rows[(size_t)j]->sec, line++;
+        if (rows[(size_t)j]->head != last) last = rows[(size_t)j]->head, line++;
         if (line == want) {
             long long now = now_ms();
             bool again = sw.focus == 1 && sw.sel == j && now - sw.click_ms < 500;

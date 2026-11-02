@@ -257,13 +257,16 @@ enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOC
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
+    Ini set_was;       // /set: a key's value before its first unsaved change; set back to it, it's no longer unsaved
     Ini defaults;      // iSekur.conf.example (compiled in) minus its example servers
     // what /set lists: every key in the config or the template, the config's value winning
     struct Setting { std::string key, val; };  // key: "nick", "web.port", "server.x.host"
     std::vector<Setting> settings() const;
     // every key, for the settings windows (terminal and webchat): val is "" when not set
     // choices: what Space / the webchat's switch or list steps through: on/off (true/false, yes/no), the themes
-    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; };
+    // cat: the settings window's category ([general]: a topic group like "Look", else the section);
+    // head: the header over its rows ("Look", "⇢ libera · Login", "[web]")
+    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; std::string grp, cat, head; };
     std::vector<SetRow> setting_rows() const;
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     bool theme_win = false;     // /theme alone in the terminal: the TUI opens its theme picker

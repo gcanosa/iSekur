@@ -180,7 +180,7 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #setlist input.chg { border-color: var(--accent2); }
 #setlist select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--fg); justify-self: start; min-width: 160px; }
 /* on/off: a switch */
-#setlist .sw { display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--fg); font-size: 13px; padding: 4px 0; }
+#setlist .sw { position: relative; display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--fg); font-size: 13px; padding: 4px 0; }  /* relative: the hidden checkbox stays in it, or focusing it scrolls the whole dialog */
 #setlist .sw input { position: absolute; opacity: 0; pointer-events: none; }
 #setlist .sw i { width: 34px; height: 18px; border-radius: 9px; background: var(--line); position: relative; transition: background .15s; flex: none; }
 #setlist .sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
@@ -1112,17 +1112,24 @@ function renderAbout(m) {
 }
 // ⚙ : every setting, edited in place; changes go out as /set lines (and /save)
 const dset = $("#dset"); let setRows = [];
+// switches and lists apply at once, as a preview: their value before, by key, until Apply keeps them or Close puts them back
+const setLive = new Map();
 $("#setbtn").onclick = () => { $("#side").classList.remove("open"); $("#setlist").textContent = "Loading..."; send({t: "settings", buf: active}); dset.showModal(); };
 let setCat = "";  // "" = All
 function renderSettings(list) {
   const box = $("#setlist"); box.textContent = ""; setRows = [];
-  for (const [sec, k, v, def, uns, secret, choices] of list) {
+  for (const [sec, k, v, def, uns, secret, choices, cat, head] of list) {
     const full = (sec === "general" ? "" : sec + ".") + k;
     const kl = document.createElement("div"); kl.className = "k" + (+uns ? " uns" : ""); kl.textContent = k; kl.title = full;
-    const row = {full, sec, k, kl, uns: +uns};
+    const row = {full, sec, cat, head, k, kl, uns: +uns};
     const now = v || def;  // what's in effect
     // a switch, a list or a text field; switches and lists apply at once (Apply & save keeps them)
-    const live = val => { send({t: "input", buf: active, text: "/set " + full + " " + val}); row.orig = val; kl.classList.add("uns"); $("#setmsg").textContent = full + " = " + val + " (not saved yet: Apply & save, or /save)"; };
+    const live = val => {
+      if (!setLive.has(full)) setLive.set(full, v);
+      send({t: "input", buf: active, text: "/set " + full + " " + val}); row.orig = val; row.uns = 1; kl.classList.add("uns");
+      for (const nb of $("#setnav").children) if (nb.dataset.cat === "" || nb.dataset.cat === cat) nb.classList.add("uns");  // its category's dot, now
+      $("#setmsg").textContent = full + " = " + val + " (Apply keeps it, Close undoes it)";
+    };
     if (choices.length === 2 && k !== "theme") {
       const lab = document.createElement("label"); lab.className = "sw";
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = now === choices[0];
@@ -1150,16 +1157,16 @@ function renderSettings(list) {
 function filterSettings() {
   const q = $("#setq").value.toLowerCase(), box = $("#setlist"), nav = $("#setnav");
   const match = r => !q || r.full.toLowerCase().includes(q) || r.get().toLowerCase().includes(q);
-  const secs = [...new Set(setRows.map(r => r.sec))];
-  const count = s => setRows.filter(r => (!s || r.sec === s) && match(r));
+  const secs = [...new Set(setRows.map(r => r.cat))];  // [general]'s topic groups, then servers, [web]...
+  const count = s => setRows.filter(r => (!s || r.cat === s) && match(r));
   if (setCat && (!secs.includes(setCat) || !count(setCat).length)) setCat = "";  // a search with no hits here shows them all
   nav.textContent = "";
   for (const s of ["", ...secs]) {
     const rows = count(s), b = document.createElement("button");
-    b.type = "button"; b.className = (s === setCat ? "on" : "") + (rows.some(r => r.uns) ? " uns" : "");
+    b.type = "button"; b.className = (s === setCat ? "on" : "") + (rows.some(r => r.uns) ? " uns" : ""); b.dataset.cat = s;
     b.innerHTML = "<span></span><span class=c></span>";
     b.firstChild.textContent = s ? s.replace(/^server\./, "⇢ ") : "All";
-    b.lastChild.textContent = rows.length; b.title = s ? "[" + s + "]" : "Every setting";
+    b.lastChild.textContent = rows.length; b.title = !s ? "Every setting" : /^(server\.|web$|keys$)/.test(s) ? "[" + s + "]" : "[general] " + s;
     b.disabled = s !== "" && !rows.length;
     b.onclick = () => { setCat = s; filterSettings(); box.scrollTop = 0; };
     nav.append(b);
@@ -1168,8 +1175,8 @@ function filterSettings() {
   box.textContent = "";
   let last = null, any = false;
   for (const r of setRows) {
-    if ((setCat && r.sec !== setCat) || !match(r)) continue;
-    if (r.sec !== last) { const h = document.createElement("div"); h.className = "sec"; h.textContent = "[" + r.sec + "]"; box.append(h); last = r.sec; }
+    if ((setCat && r.cat !== setCat) || !match(r)) continue;
+    if (r.head !== last) { const h = document.createElement("div"); h.className = "sec"; h.textContent = r.head; box.append(h); last = r.head; }
     box.append(r.kl, r.el); any = true;
   }
   if (!any) { const n = document.createElement("div"); n.className = "none"; n.textContent = "No key matches \u201c" + q + "\u201d"; box.append(n); }
@@ -1182,10 +1189,16 @@ dset.querySelector("form").onsubmit = e => {
   let n = 0;
   for (const r of setRows)
     if (r.get() !== r.orig) { send({t: "input", buf: active, text: "/set " + r.full + " " + (r.get() === "" ? '""' : r.get())}); n++; }
-  if (how === "save") send({t: "input", buf: active, text: "/save"});
-  $("#setmsg").textContent = n ? n + " changed" + (how === "save" ? " and saved" : " (not saved yet: Apply & save, or /save)") : how === "save" ? "Saved" : "Nothing changed";
+  n += setLive.size, setLive.clear();  // the switches flipped since the last Apply: kept now
+  if (how === "save") { send({t: "input", buf: active, text: "/save"}); dset.close(); return; }
+  $("#setmsg").textContent = n ? n + " applied (not saved yet: Apply & save, or /save)" : "Nothing changed";
   send({t: "settings", buf: active});
 };
+// Close or Esc: what wasn't applied goes away; flipped switches go back to what they were
+dset.addEventListener("close", () => {
+  for (const [full, v] of setLive) send({t: "input", buf: active, text: "/set " + full + " " + (v === "" ? '""' : v)});
+  setLive.clear(); $("#setmsg").textContent = "";
+});
 $("#nickbtn").onclick = () => {
   if (narrow.matches) return $("#nicks").classList.toggle("open");
   const off = $("#nicks").classList.toggle("off");

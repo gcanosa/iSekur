@@ -274,12 +274,31 @@ std::vector<Core::Setting> Core::settings() const {
     return out;
 }
 
-// where a key sits in the settings window: sections and [general]/[web]/[keys] keys in the
-// template's order (it groups them by topic), server keys by what you fill in first; others last, A-Z
-static const char* SERVER_KEYS[] = {"host", "port", "tls", "tls_verify", "autoconnect", "nick", "altnick", "user", "realname",
-                                    "password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key", "autojoin"};
-static std::pair<int, int> set_rank(const std::string& sec, const std::string& key) {
-    static std::map<std::string, int> secs, keys;  // "sec" / "sec\nkey" -> position in the template
+// The settings window's groups, in order, each with its keys in order: [general] by topic (each its own
+// category), a server's keys by what you fill in first. Keys in none of them: "Other", A-Z.
+struct SetGroup { const char* name; std::vector<std::string> keys; };
+static const std::vector<SetGroup> GENERAL_GROUPS = {
+    {"Identity", {"nick", "altnick", "realname"}},
+    {"Look", {"theme", "colors", "timestamp", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
+              "banner_mono", "banner_anim", "show_guide"}},
+    {"Messages", {"hilight_window", "hilight_words", "bell_notifications", "ignore", "paste_confirm", "quit_message", "part_message",
+                  "ctcp_version", "ctcp_time", "ctcp_ping"}},
+    {"Channels", {"rejoin_on_kick", "history_fetch"}},
+    {"Away", {"auto_away", "auto_away_idle", "away_message"}},
+    {"Logs", {"log", "log_dir", "log_history", "log_rotate"}},
+    {"Security", {"lock", "lock_idle", "lock_password_hash", "pam_service", "exec_timeout", "exec_web"}},
+    {"Network", {"flood_burst", "flood_interval_ms"}},
+    {"Files", {"dcc_dir", "dcc_ip", "dcc_ports", "dcc_web"}},
+};
+static const std::vector<SetGroup> SERVER_GROUPS = {
+    {"Connection", {"host", "port", "tls", "tls_verify", "autoconnect"}},
+    {"Identity", {"nick", "altnick", "user", "realname"}},
+    {"Login", {"password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key"}},
+    {"Channels", {"autojoin", "rejoin_on_kick", "e2e_keys"}},
+};
+struct SetPlace { int sec, key; std::string grp; };  // sort keys; the group's name
+static SetPlace set_place(const std::string& sec, const std::string& key) {
+    static std::map<std::string, int> secs, keys;  // other sections: "sec" / "sec\nkey" -> position in the template
     if (secs.empty()) {
         std::istringstream in(conf_template);
         std::string line, cur;
@@ -293,13 +312,16 @@ static std::pair<int, int> set_rank(const std::string& sec, const std::string& k
             if (!k.empty() && k.find(' ') == std::string::npos) keys.emplace(cur + "\n" + k, n++);
         }
     }
-    bool srv = sec.rfind("server.", 0) == 0;
-    int s = srv ? secs["general"] : secs.count(sec) ? secs[sec] : 1 << 20, k = 1 << 20;  // servers right after [general]
-    if (srv) {
-        for (int i = 0; i < (int)(sizeof SERVER_KEYS / sizeof *SERVER_KEYS); i++)
-            if (key == SERVER_KEYS[i]) k = i;
-    } else if (auto it = keys.find(sec + "\n" + key); it != keys.end()) k = it->second;
-    return {srv ? s * 2 + 1 : s * 2, k};
+    bool gen = sec == "general", srv = sec.rfind("server.", 0) == 0;
+    if (gen || srv) {
+        auto& gs = gen ? GENERAL_GROUPS : SERVER_GROUPS;
+        for (size_t g = 0; g < gs.size(); g++)
+            for (size_t k = 0; k < gs[g].keys.size(); k++)
+                if (gs[g].keys[k] == key) return {gen ? 0 : 1, (int)(g * 1000 + k), gs[g].name};
+        return {gen ? 0 : 1, 1 << 20, "Other"};
+    }
+    auto k = keys.find(sec + "\n" + key);
+    return {2 + (secs.count(sec) ? secs[sec] : 1 << 20), k == keys.end() ? 1 << 20 : k->second, ""};
 }
 
 std::vector<Core::SetRow> Core::setting_rows() const {
@@ -323,7 +345,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     auto themes = theme_names();
     for (auto& [sec, kv] : all)
         for (auto& [k, d] : kv) {
-            SetRow r{sec, k, ini_get(cfg, sec, k), d, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}};
+            SetRow r{sec, k, ini_get(cfg, sec, k), d, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}, {}, {}, {}};
             std::string v = r.val.empty() ? d : r.val;
             for (auto& ch : v) ch = (char)tolower((unsigned char)ch);
             if (sec == "general" && k == "theme") r.choices = themes;
@@ -332,9 +354,15 @@ std::vector<Core::SetRow> Core::setting_rows() const {
             else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
             out.push_back(r);
         }
-    std::stable_sort(out.begin(), out.end(), [](const SetRow& a, const SetRow& b) {  // ties (unknown keys, servers): A-Z
-        auto ra = set_rank(a.sec, a.key), rb = set_rank(b.sec, b.key);
-        return ra.first != rb.first ? ra.first < rb.first : a.sec != b.sec ? a.sec < b.sec : ra.second < rb.second;
+    for (auto& r : out) {  // [general]: a category per group; a server, or [web]: one, with a header per group
+        r.grp = set_place(r.sec, r.key).grp;
+        bool srv = r.sec.rfind("server.", 0) == 0;
+        r.cat = r.sec == "general" ? r.grp : r.sec;
+        r.head = r.sec == "general" ? r.grp : srv ? "\u21E2 " + r.sec.substr(7) + " \u00B7 " + r.grp : "[" + r.sec + "]";
+    }
+    std::stable_sort(out.begin(), out.end(), [](const SetRow& a, const SetRow& b) {  // ties (unknown keys): A-Z, as the map had them
+        auto pa = set_place(a.sec, a.key), pb = set_place(b.sec, b.key);
+        return pa.sec != pb.sec ? pa.sec < pb.sec : a.sec != b.sec ? a.sec < b.sec : pa.key < pb.key;
     });
     return out;
 }
@@ -886,7 +914,14 @@ void Core::exec(Buffer* b, const std::string& input) {
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }
-        cfg[sec][key] = unsaved[sec][key] = val;
+        if (!unsaved[sec].count(key)) set_was[sec][key] = cfg[sec][key];
+        // back to what it was (the webchat's Close undoing a switch): nothing to save. Keys made unsaved by
+        // /ignore, /hilight... have no set_was: they stay unsaved
+        if (set_was.count(sec) && set_was[sec].count(key) && set_was[sec][key] == val) {
+            unsaved[sec].erase(key), set_was[sec].erase(key);
+            if (unsaved[sec].empty()) unsaved.erase(sec);
+        } else unsaved[sec][key] = val;
+        cfg[sec][key] = val;
         std::string err;
         if (sec == "general" && key == "theme") {
             if (load_theme(val, theme, err)) notify(Ev::THEME, nullptr);
@@ -955,7 +990,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string err;
         if (unsaved.empty()) { print(b, LK::INFO, "Nothing to save"); return; }
         if (!ini_save(cfg_path, unsaved, err)) { print(b, LK::ERROR, err); return; }
-        unsaved.clear();
+        unsaved.clear(), set_was.clear();
         print(b, LK::INFO, "Saved " + cfg_path);
         return;
     }

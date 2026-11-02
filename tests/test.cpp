@@ -593,6 +593,14 @@ int main() {
         for (auto& r : core.setting_rows())
             if (r.sec == "server." + ts->cfg.name) nick_row |= r.key == "altnick" && !r.def.empty(), tls_row |= r.key == "tls_verify" && r.choices.size() == 2;
         assert(nick_row && tls_row);
+        // /set back to the value it had: no longer unsaved
+        {
+            std::string sv = "server." + ts->cfg.name, was = ini_get(core.cfg, sv, "tls_verify");
+            core.exec(home, "/set " + sv + ".tls_verify " + std::string(was == "false" ? "true" : "false"));
+            assert(core.unsaved.count(sv) && core.unsaved[sv].count("tls_verify"));
+            core.exec(home, "/set " + sv + ".tls_verify " + (was.empty() ? "\"\"" : was));
+            assert(!core.unsaved.count(sv) || !core.unsaved[sv].count("tls_verify"));
+        }
         // ...in a sensible order: [general] first (by the template), then the servers (host first, nick next to
         // altnick, auto_identify among the login keys, unknown keys last)
         {

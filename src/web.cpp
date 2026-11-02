@@ -648,14 +648,14 @@ void Web::ws_frames(Client& cl) {
             o += "],\"typed\":[";
             for (int i : typed) o += std::string(o.back() == '[' ? "" : ",") + std::to_string(i);
             cl.conn.out += ws_frame(o + "]}");
-        } else if (m["t"] == "settings") {  // the settings dialog: [section, key, value, default, unsaved, secret]
+        } else if (m["t"] == "settings") {  // the settings dialog: [section, key, value, default, unsaved, secret, choices, category, header]
             std::string o = "{\"t\":\"settings\",\"list\":[";
             for (auto& r : c.setting_rows()) {  // secrets: only whether they're set; choices: a switch or a list
                 o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(r.sec) + "," + json_str(r.key) + "," +
                      json_str(r.secret ? (r.val.empty() ? "" : "\x01") : r.val) + "," + json_str(r.secret ? "" : r.def) + "," +
                      (r.unsaved ? "1" : "0") + "," + (r.secret ? "1" : "0") + ",[";
                 for (size_t i = 0; i < r.choices.size(); i++) o += (i ? "," : "") + json_str(r.choices[i]);
-                o += "]]";
+                o += "]," + json_str(r.cat) + "," + json_str(r.head) + "]";
             }
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
