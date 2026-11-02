@@ -73,7 +73,12 @@ private:
     bool div_drag = false, div_moved = false;
     // a prompt box over the middle of the screen (/shell login, passwords, the lock screen)
     void draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
-                     bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx = 0, int dy = 0);
+                     bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx = 0, int dy = 0, char kind = 0);
+    // the close button (× or the red dot) drawn this frame, and which box it closes: s settings, t theme, f find,
+    // a a question, c a yes/no, p the paste check (0: none, the lock's are only the look)
+    struct XBtn { int y = -1, x0 = 0, x1 = -1; char kind = 0; };
+    XBtn xbtn;
+    void close_box();
     void draw_lock(int W, int H, long long ms);  // the lock screen; ms: how far into Core::lock_anim
     std::u32string lock_in;  // the lock screen's password, apart from the input line
     std::vector<uint8_t> pass_dots;  // how many dots each typed password character shows

@@ -142,22 +142,30 @@ static void fill(int y, int x0, int x1, Style st) {
 // A box's top row (x0, x1: its corners): the title, and the theme's window buttons like the webchat's dialogs.
 // window = mac: red, yellow and green dots before the title; win95 (mirc): a navy title bar, white bold title,
 // gray _ □ × at the right. Other themes: the title on the border
-static void box_title(const Theme& T, int x0, int x1, int y, const std::string& title, Style hs) {
+// returns the close button's columns ({-1, -1}: none)
+static std::pair<int, int> box_title(const Theme& T, int x0, int x1, int y, const std::string& title, Style hs) {
     std::string ws = T.lay("window", "");
     if (ws == "win95") {
         Style bar{0xffffff, 0x000080, A_BOLD}, btn{0x000000, 0xc0c0c0, A_BOLD};
         for (int x = x0 + 1; x < x1; x++) cell(x, y, U' ', bar);
-        text(x0 + 2, y, x1 - 8, title, bar, false);
-        cell(x1 - 6, y, U'_', btn), cell(x1 - 5, y, U'\u25A1', btn), cell(x1 - 3, y, U'\u00D7', btn);
-        return;
+        // three cells a button, gray, the glyph in the middle: [ _ ][ □ ] [ × ] like Windows. A terminal that draws
+        // □ wider than a cell (Ghostty) spills it into its own gray padding, not onto the next button
+        text(x0 + 2, y, x1 - 12, title, bar, false);
+        int bx[] = {x1 - 11, x1 - 8, x1 - 4};
+        char32_t g[] = {U'_', U'\u25A1', U'\u00D7'};
+        for (int i = 0; i < 3; i++) cell(bx[i], y, U' ', btn), cell(bx[i] + 1, y, g[i], btn), cell(bx[i] + 2, y, U' ', btn);
+        return {bx[2], bx[2] + 2};
     }
     int tx = x0 + 2;
+    std::pair<int, int> close{-1, -1};
     if (ws == "mac") {
+        close = {tx, tx};  // the red one
         Style dot = hs;
         dot.attr = 0;
         for (RGB col : {0xff5f57, 0xfebc2e, 0x28c840}) dot.fg = col, cell(tx, y, U'\u25CF', dot), tx += 2;
     }
     text(tx, y, x1 - 1, " " + title + " ", hs, false);
+    return close;
 }
 
 // WCAG contrast of two colors (1..21), like the webchat's: picks colors that read whatever the theme
@@ -529,6 +537,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
 int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); }
 
 void Tui::draw() {
+    xbtn = XBtn{};
     if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
     if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true, sw.to_servers = c.settings_servers, c.settings_servers = false;
     if (c.theme_win) {
@@ -869,7 +878,7 @@ void Tui::draw() {
     }
     if (!confirm.empty()) {  // a question, in the centered box like every prompt (the webchat's is the same)
         draw_dialog(W, H, confirm_title.empty() ? "iSekur" : confirm_title, wrap_words(confirm.substr(0, confirm.find('\n')), 44), "",
-                    false, U"", 0, "y: yes · n or Esc: no");
+                    false, U"", 0, "y: yes · n or Esc: no", 0, 0, 'c');
         present();
         return;
     }
@@ -877,7 +886,7 @@ void Tui::draw() {
         size_t n = 0;
         for (auto& l : split(paste, '\n')) n += !l.empty();
         draw_dialog(W, H, "Paste", wrap_words("Send " + std::to_string(n) + " lines to " + buf_label(b) + "?", 44), "", false, U"", 0,
-                    "y: send · n or Esc: back to edit it");
+                    "y: send · n or Esc: back to edit it", 0, 0, 'p');
         present();
         return;
     }
@@ -893,7 +902,7 @@ void Tui::draw() {
         return;
     }
     if (c.asking(b)) {  // /shell login, /e2e and /oper passwords: a dialog box
-        draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel");
+        draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel", 0, 0, 'a');
         present();
         return;
     }
@@ -940,7 +949,7 @@ void Tui::draw() {
 //   └────────────────────────────────┘
 // label "": a yes/no box, the info lines and the hint, no field
 void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
-                      bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx, int dy) {
+                      bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx, int dy, char kind) {
     const Theme& T = c.theme;
     Style bs = sty(T, "menu", "nicklist"), fs = T.get("input"), es = T.get("error"), hs = bs, ns = sty(T, "timestamp", "menu"), ls = sty(T, "menu_border", "separator");
     for (Style* st : {&es, &ns, &ls}) st->bg = bs.bg;
@@ -953,7 +962,7 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
     for (int xx = x0; xx < x0 + bw; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(x0, yy, U'│', ls), cell(x0 + bw - 1, yy, U'│', ls);
     cell(x0, y0, U'┌', ls), cell(x0 + bw - 1, y0, U'┐', ls), cell(x0, y0 + bh - 1, U'└', ls), cell(x0 + bw - 1, y0 + bh - 1, U'┘', ls);
-    box_title(T, x0, x0 + bw - 1, y0, title, hs);
+    if (auto cb = box_title(T, x0, x0 + bw - 1, y0, title, hs); cb.first >= 0 && kind) xbtn = {y0, cb.first, cb.second, kind};
     int yy = y0 + 1;
     for (auto& l : info)
         text(x0 + 2, yy++, x0 + 2 + inner, !l.empty() && l[0] == '!' ? l.substr(1) : l, !l.empty() && l[0] == '!' ? es : bs, false);
@@ -1067,7 +1076,7 @@ void Tui::draw_settings(int W, int H) {
     for (int xx = x0; xx <= x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y1, U'─', ls);
     for (int yy = y0; yy <= y1; yy++) cell(x0, yy, U'│', ls), cell(x1, yy, U'│', ls);
     cell(x0, y0, U'┌', ls), cell(x1, y0, U'┐', ls), cell(x0, y1, U'└', ls), cell(x1, y1, U'┘', ls);
-    box_title(T, x0, x1, y0, "Settings", hs);
+    if (auto cb = box_title(T, x0, x1, y0, "Settings", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 's'};
 
     auto all = c.setting_rows();
     std::vector<std::string> cats;
@@ -1299,7 +1308,7 @@ void Tui::draw_themes(int W, int H) {
     for (int xx = tw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(tw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
     cell(tw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(tw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
-    box_title(T, tw.x0, x1 - 1, y0, "Theme", hs);
+    if (auto cb = box_title(T, tw.x0, x1 - 1, y0, "Theme", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 't'};
     int fx = text(tw.x0 + 2, y0 + 1, x1 - 2, "filter: ", hs, false);
     fill(y0 + 1, fx, x1 - 2, fs);
     int ex = text(fx, y0 + 1, x1 - 2, to_utf8(tw.q), fs, false);
@@ -1387,7 +1396,7 @@ void Tui::draw_find(int W, int H) {
     for (int xx = fw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(fw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
     cell(fw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(fw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
-    box_title(T, fw.x0, x1 - 1, y0, "Go to tab", hs);
+    if (auto cb = box_title(T, fw.x0, x1 - 1, y0, "Go to tab", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'f'};
     int fx = text(fw.x0 + 2, y0 + 1, x1 - 2, "find: ", hs, false);
     fill(y0 + 1, fx, x1 - 2, fs);
     int ex = text(fx, y0 + 1, x1 - 2, to_utf8(fw.q), fs, false);
@@ -1870,8 +1879,23 @@ std::string Tui::word_at(int x, int y) const {
 // Wheel scrolls the chat (or the nicklist, or the topic, under the pointer);
 // left click picks a tab or an activity number, opens a query with a nick, or
 // unfolds the topic (double click: edit it); a drag in the chat copies text.
+// the × (or the red dot) of the box on screen: closes it like Esc does
+void Tui::close_box() {
+    switch (xbtn.kind) {
+    case 's': sw.open = false; break;
+    case 't': tw.q.clear(), theme_key(TB_KEY_ESC, 0); break;  // back to the theme it had
+    case 'f': fw.open = false; break;
+    case 'a': input.clear(), cur = 0, c.exec(c.active, ""); break;  // a question: cancelled
+    case 'c': confirm.clear(); break;
+    case 'p': input = from_utf8(paste), cur = input.size(), paste.clear(); break;  // back to edit it
+    }
+    xbtn = XBtn{};
+    c.dirty = true;
+}
+
 void Tui::mouse(int mod, int k, int x, int y) {
     if (c.locked) return;
+    if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) { close_box(); return; }
     if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
     if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
