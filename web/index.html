@@ -65,6 +65,9 @@ button, input { font: inherit; color: inherit; }
 #foot #addsrv { display: flex; align-items: center; justify-content: center; }  /* its icon centered like the others' glyphs */
 #foot #setbtn { font-size: 27px; line-height: 1; }  /* the gear glyph draws small */
 #foot button:hover { color: var(--fg); border-color: var(--accent); }
+/* a newer release: ⓘ in the accent color with a small ↑ in its corner, until you update */
+#foot #aboutbtn.upd { color: var(--accent); border-color: var(--accent); position: relative; }
+#foot #aboutbtn.upd::after { content: "↑"; position: absolute; top: 1px; right: 4px; font-size: 11px; font-weight: bold; line-height: 1; }
 /* ‹ at the top of the tab list folds it to a thin strip (remembered); › opens it again */
 /* the tab filter shares the top row with ‹: quiet until focused, Ctrl+G or Alt+J jump to it */
 #sidetop { display: flex; align-items: center; gap: 2px; padding: 0 6px 4px 10px; position: relative; }
@@ -149,7 +152,14 @@ dialog .btns .left { margin-right: auto; }
 #dask { width: min(440px, calc(100vw - 32px)); }
 #dask .dask-t { font-size: 13px; white-space: pre-line; }  /* label.ck's display: flex would show a hidden one */
 @media (max-width: 760px) { #srvbody { grid-template-columns: 1fr; } #srvside { border-right: 0; padding-right: 0; } #srvlist { max-height: 140px; } }
-#abox { font-size: 13px; line-height: 1.4; }
+#abox { font-size: 13px; line-height: 1.4; position: relative; }
+/* a newer release: a badge in the About box's top right corner, to the downloads */
+#aupd { position: absolute; top: 0; right: 0; display: flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--accent);
+  border-radius: 999px; color: var(--accent) !important; font-weight: bold; text-decoration: none; white-space: nowrap; }
+#aupd:hover { background: color-mix(in srgb, var(--accent) 15%, transparent); }
+#aupd[hidden] { display: none; }
+.win-95 #aupd { border-radius: 0; border: 2px solid; border-color: #fff #808080 #808080 #fff; background: #c0c0c0; color: #000 !important; font-weight: normal; }
+.win-95 #aupd:active { border-color: #808080 #fff #fff #808080; }
 #abox a { color: var(--accent2); }
 #abanner { position: relative; display: inline-block; white-space: pre; line-height: 1; margin-bottom: 6px; overflow: hidden; }
 #atext { white-space: pre-wrap; }
@@ -526,7 +536,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok" id="dask-ok">OK</button></div>
 </form></dialog>
 <dialog id="dabout"><form method="dialog">
-  <div id="abox"><div id="abanner"></div><div id="atext"></div></div>
+  <div id="abox"><a id="aupd" hidden target="_blank" rel="noopener" href="https://github.com/gcanosa/iSekur/releases/latest"><span aria-hidden="true">⬆</span><span></span></a><div id="abanner"></div><div id="atext"></div></div>
   <div class="btns"><button class="go" value="ok">Close</button></div>
 </form></dialog>
 <script>
@@ -1011,6 +1021,11 @@ function onMsg(ev) {
     if (!bufs.has(active)) { active = order[0]; select(active); } else later(renderSide);
   } else if (m.t === "active") {
     select(m.buf);
+  } else if (m.t === "update") {  // check_updates: a newer release, "" = none
+    const b = $("#aboutbtn");
+    b.classList.toggle("upd", !!m.ver);
+    b.title = b.ariaLabel = m.ver ? "About iSekur · " + m.ver + " is out" : "About iSekur";
+    const a = $("#aupd"); a.hidden = !m.ver; a.lastChild.textContent = m.ver + " available"; a.title = "Download iSekur " + m.ver;
   } else if (m.t === "lock") {
     lockMsg(m);
   } else if (m.t === "split") {  // the terminal's /split: on connect and when it changes there

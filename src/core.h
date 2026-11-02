@@ -1,6 +1,7 @@
 // Core state shared by every frontend: servers, buffers, theme, commands.
 #pragma once
 #define ISEKUR_VERSION "0.5"
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <ctime>
@@ -256,7 +257,12 @@ const std::vector<CmdInfo>& commands();
 const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
 
 // ---- core ------------------------------------------------------------------
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null)
+// check_updates: the latest release's version, read on a thread; `done` publishes `ver`
+struct UpdateCheck {
+    std::string ver;
+    std::atomic<bool> done{false};
+};
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -374,6 +380,10 @@ struct Core {
     std::vector<std::pair<std::string, std::string>> nick_menu(Buffer* b, const std::string& nick) const;  // label, command
     std::vector<std::pair<std::string, std::string>> tab_menu(Buffer* b) const;  // a channel tab's
     void about(Buffer* from);
+    std::string update_ver;  // a newer release than this one, once check_updates found it (UPDATE: it changed)
+    std::shared_ptr<UpdateCheck> upd;  // while a check runs
+    time_t upd_at = 0;  // the next check
+    void check_update(time_t now);  // tick(): starts one a day, takes in a finished one
     void remember_nick(Server* s, const std::string& nick);  // last_nick, kept in the config for the next start
     int typing_quiet(bool on);  // /typing on|off: quiet mode with it in the channel tabs; returns how many changed  // /about: the *about tab; main.cpp sweeps its banner while it's shown
     long long about_t0 = 0;
@@ -434,7 +444,9 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double 
 std::vector<std::string> twitch_banner();  // twitch.cpp: a Twitch server tab's banner
 void twitch_login(Server* s);  // PASS + Twitch CAPs on connect
 bool twitch_user(Buffer* b, const Msg& m, Line& l);  // a message's Twitch tags; true: nick list changed
-std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool web = false, std::vector<int>* typed = nullptr);  // /about: the banner + version, author, links
+std::string release_tag(const std::string& head);  // "0.6" from a HEAD reply's Location: …/releases/tag/v0.6
+bool version_newer(const std::string& a, const std::string& b);  // a > b, dotted numbers
+std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool web = false, std::vector<int>* typed = nullptr, const std::string& update = "");  // /about: the banner + version, author, links
 std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
 void mkdir_p(const std::string& path);  // 0700

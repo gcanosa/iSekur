@@ -792,6 +792,13 @@ void Tui::draw() {
     } else if (s && s->state != SS::CONNECTED) {
         seg(s->state == SS::DISCONNECTED ? "disconnected" : "connecting", T.get("error"));
     }
+    if (!c.update_ver.empty()) {  // check_updates found a newer release; a click opens /about
+        Style us = sh;
+        us.attr |= A_BOLD;
+        int x0 = x;
+        seg("\u2191v" + c.update_ver, us);
+        hits.push_back({y, x0, x - 1, -2, ""});
+    }
     std::string acts;
     std::vector<std::pair<int, int>> act;
     for (size_t i = 0; i < c.bufs.size(); i++)
@@ -2002,7 +2009,8 @@ void Tui::mouse(int mod, int k, int x, int y) {
     }
     for (auto& h : hits) {
         if (h.y != y || x < h.x0 || x >= h.x1) continue;
-        if (h.tab >= 0 && h.tab < (int)c.bufs.size()) c.select(c.bufs[(size_t)h.tab].get());
+        if (h.tab == -2) c.about(c.active);
+        else if (h.tab >= 0 && h.tab < (int)c.bufs.size()) c.select(c.bufs[(size_t)h.tab].get());
         else if (!h.nick.empty()) c.exec(c.active, "/query " + h.nick);
         return;
     }

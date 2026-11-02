@@ -46,6 +46,10 @@ banner_mono = off
 # A light sweeps across it once when iSekur starts in a terminal (not with banner_mono).
 banner_anim = on
 
+# Once a day, ask github.com for the latest iSekur release; a newer one shows in /about
+# and lights the webchat's ⓘ. The request carries nothing about you.
+check_updates = on
+
 # Right of the status bar: up (iSekur's uptime), cpu (this machine's CPU %),
 # mem (memory free/total), load (load average), bat (battery, laptops only).
 # Or /statusbar cpu on and /save.

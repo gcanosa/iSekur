@@ -8,6 +8,8 @@
 #include <sys/stat.h>
 #include <sys/utsname.h>
 #include "core.h"
+#include "net.h"
+#include <thread>
 #include "version.h"
 #include "conf_template.h"
 
@@ -118,7 +120,48 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine, i
 }
 
 // /about: the banner, then who and where. mIRC codes, so the webchat's dialog shows the same
-std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std::vector<int>* typed) {
+std::string release_tag(const std::string& head) {
+    std::string low = head;
+    for (auto& ch : low) ch = (char)tolower((unsigned char)ch);
+    size_t loc = low.find("\nlocation:");
+    if (loc == std::string::npos) return "";
+    size_t eol = low.find('\r', loc), tag = low.find("/tag/v", loc);
+    if (tag == std::string::npos || tag > eol) return "";
+    std::string v = head.substr(tag + 6, eol - tag - 6);
+    return !v.empty() && v.find_first_not_of("0123456789.") == std::string::npos ? v : "";
+}
+
+bool version_newer(const std::string& a, const std::string& b) {
+    auto pa = split(a, '.'), pb = split(b, '.');
+    for (size_t i = 0; i < std::max(pa.size(), pb.size()); i++) {
+        int x = i < pa.size() ? atoi(pa[i].c_str()) : 0, y = i < pb.size() ? atoi(pb[i].c_str()) : 0;
+        if (x != y) return x > y;
+    }
+    return false;
+}
+
+void Core::check_update(time_t now) {
+    if (upd && upd->done.load(std::memory_order_acquire)) {
+        std::string v = upd->ver;
+        upd.reset();
+        if (version_newer(v, ISEKUR_VERSION) && v != update_ver) {
+            update_ver = v;
+            print(nullptr, LK::INFO, "\x02\u2191 A new release is available: iSekur " + v + "\x02 (you have " ISEKUR_VERSION ")");
+            print(nullptr, LK::INFO, "  Update with \x02" "brew upgrade isekur\x02, or download it from https://github.com/gcanosa/iSekur/releases/latest · /about");
+            if (Buffer* a = find(nullptr, "*about")) if (a == active) about(nullptr);
+            notify(Ev::UPDATE, nullptr);
+        }
+    }
+    if (upd || now < upd_at || !opt_on(nullptr, "check_updates", true)) return;
+    upd_at = now + 86400;
+    upd = std::make_shared<UpdateCheck>();
+    std::thread([u = upd] {
+        u->ver = release_tag(https_head("github.com", "/gcanosa/iSekur/releases/latest"));
+        u->done.store(true, std::memory_order_release);
+    }).detach();
+}
+
+std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std::vector<int>* typed, const std::string& update) {
     auto out = banner_lines(t, false, shine, web && t.lay("window", "") == "win95" ? 1 : -1);  // the webchat's win95 About: gray
     const char* k = "\x03" "14";  // labels gray, values in the text color
     for (std::string l : {std::string(""),
@@ -128,6 +171,7 @@ std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std
                           std::string(k) + "Author     \x0f" "Gerardo Canosa",
                           std::string(k) + "Source     \x0f" "https://github.com/gcanosa/iSekur",
                           std::string(k) + "Download   \x0f" "https://github.com/gcanosa/iSekur/releases/latest",
+                          update.empty() ? std::string("\x01") : std::string(k) + "Update     \x0f\x02iSekur " + update + " is out\x02  brew upgrade isekur, or the Download link",
                           std::string(k) + "License    \x0f" "GPL-3.0-or-later: use it, change it, share it",
                           std::string(""),
                           std::string(k) + "Sponsored  \x0f\x02" "irc.sekurnet.org\x02  the network iSekur calls home",
@@ -135,7 +179,7 @@ std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std
                           std::string(k) + "           \x0f" "/server irc.sekurnet.org 6697 -tls -name sekurnet, then /join #iSekur",
                           std::string(""),
                           std::string(k) + (web ? "/help lists the commands · Esc closes this" : "/help lists the commands · Ctrl+W closes this tab")})
-        out.push_back(l);
+        if (l != "\x01") out.push_back(l);  // \x01: no update line
     if (typed) {
         typed->clear();
         for (size_t i = 0; i < out.size(); i++)
@@ -174,7 +218,7 @@ void Core::about(Buffer* from) {
     Buffer* b = open(nullptr, BT::QUERY, "*about");
     b->lines.clear(), b->scroll = b->unread = 0;
     notify(Ev::CLEAR, b);
-    about_full = about_lines(theme, -99, false, &about_typed);
+    about_full = about_lines(theme, -99, false, &about_typed, update_ver);
     for (size_t i = 0; i < about_full.size(); i++) {
         bool typing = tty && std::find(about_typed.begin(), about_typed.end(), (int)i) != about_typed.end();
         add(b, Line{time(nullptr), LK::INFO, "", typing ? "" : about_full[i], false, false, true});  // main.cpp types them out
@@ -295,6 +339,7 @@ static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Identity", {"nick", "altnick", "realname"}},
     {"Look", {"theme", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
               "banner_mono", "banner_anim", "show_guide"}},
+    {"Updates", {"check_updates"}},
     {"Messages", {"hilight_window", "hilight_words", "bell_notifications", "ignore", "paste_confirm", "quit_message", "part_message",
                   "ctcp_version", "ctcp_time", "ctcp_ping"}},
     {"Channels", {"rejoin_on_kick", "history_fetch"}},

@@ -93,6 +93,26 @@ static SSL_CTX* new_client_ctx() {
     return c;
 }
 
+// Blocking: for a background thread. One HEAD over verified TLS; the reply's headers, or "".
+// ponytail: no timeout, a black-holed network parks the (detached) thread until the OS gives up
+std::string https_head(const std::string& host, const std::string& path) {
+    static SSL_CTX* ctx = new_client_ctx();
+    BIO* b = BIO_new_ssl_connect(ctx);
+    SSL* ssl = nullptr;
+    BIO_get_ssl(b, &ssl);
+    SSL_set_tlsext_host_name(ssl, host.c_str());
+    SSL_set1_host(ssl, host.c_str());
+    SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+    BIO_set_conn_hostname(b, (host + ":443").c_str());
+    std::string req = "HEAD " + path + " HTTP/1.1\r\nHost: " + host + "\r\nUser-Agent: iSekur\r\nConnection: close\r\n\r\n", got;
+    char buf[4096];
+    int n;
+    if (BIO_do_connect(b) == 1 && BIO_write(b, req.data(), (int)req.size()) == (int)req.size())
+        while (got.find("\r\n\r\n") == std::string::npos && got.size() < 65536 && (n = BIO_read(b, buf, sizeof buf)) > 0) got.append(buf, (size_t)n);
+    BIO_free_all(b);
+    return got;
+}
+
 bool Conn::start_tls() {
     // one context for every server without a client cert: the CA bundle (hundreds of KB) is
     // parsed once, not per server and again on every reconnect

@@ -51,3 +51,4 @@ private:
 
 std::string ssl_errstr();
 int listen_tcp(const std::string& bind, int port, std::string& err);
+std::string https_head(const std::string& host, const std::string& path);  // blocking, for a thread

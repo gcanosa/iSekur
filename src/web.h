@@ -67,7 +67,8 @@ private:
     std::string last_dcc, last_dcc_sig;
     time_t last_dcc_at = 0;
     std::string keys_json();  // [keys] for the webchat's own bindings
-    std::string lock_json();   // /lock: on, msg (the box's error line)
+    std::string lock_json();
+    std::string update_json();   // /lock: on, msg (the box's error line)
     std::string split_json();  // the terminal's /split: buf (-1: none), first, mode, pm
     std::string stat_json();  // the status line: per network umodes and lag, status_info
     std::string last_keys, last_stat;

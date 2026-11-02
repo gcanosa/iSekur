@@ -296,6 +296,7 @@ void Core::on_readable(Server* s, short rev) {
 
 void Core::tick(time_t now) {
     dcc_tick(now);
+    check_update(now);
     int lock_idle = atoi(opt(nullptr, "lock_idle", "0").c_str());  // minutes without input, 0 = never
     if (lock_idle > 0 && !locked && now - last_input >= lock_idle * 60 && lock_on()) set_lock(true);
     for (auto& sp : servers) {

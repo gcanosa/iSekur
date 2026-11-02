@@ -646,7 +646,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "about") {  // the /about dialog
             std::vector<int> typed;
             std::string o = "{\"t\":\"about\",\"lines\":[";
-            for (auto& l : about_lines(c.theme, -99, true, &typed)) o += std::string(o.back() == '[' ? "" : ",") + json_str(l);
+            for (auto& l : about_lines(c.theme, -99, true, &typed, c.update_ver)) o += std::string(o.back() == '[' ? "" : ",") + json_str(l);
             o += "],\"typed\":[";
             for (int i : typed) o += std::string(o.back() == '[' ? "" : ",") + std::to_string(i);
             cl.conn.out += ws_frame(o + "]}");
@@ -776,7 +776,10 @@ void Web::snapshot(Client& cl) {
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
     send(split_json());
     send(dcc_json());
+    send(update_json());
 }
+
+std::string Web::update_json() { return "{\"t\":\"update\",\"ver\":" + json_str(c.update_ver) + "}"; }
 
 std::string Web::lock_json() {
     return std::string("{\"t\":\"lock\",\"on\":") + (c.locked ? "true" : "false") + ",\"msg\":" +
@@ -889,6 +892,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::BELL: broadcast("{\"t\":\"bell\"}"); break;
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
     case Ev::LOCK: break;  // above
+    case Ev::UPDATE: broadcast(update_json()); break;
     case Ev::NOTE:
         broadcast("{\"t\":\"note\",\"buf\":" + std::to_string(b->id) + ",\"err\":" + (l->kind == LK::ERROR ? "true" : "false") +
                   ",\"title\":" + json_str(l->nick) + ",\"x\":" + json_str(l->text) + "}");

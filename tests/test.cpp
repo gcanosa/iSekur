@@ -34,6 +34,13 @@ int main() {
     assert(irc_parse("ping", m) && m.cmd == "PING");
     assert(irc_lower("Nick[A]\\~") == "nick{a}|^");
 
+    assert(release_tag("HTTP/1.1 302 Found\r\nLocation: https://github.com/gcanosa/iSekur/releases/tag/v0.6\r\n\r\n") == "0.6");
+    assert(release_tag("HTTP/1.1 302 Found\r\nlocation: https://github.com/x/releases/tag/v1.10.2\r\nServer: gh\r\n\r\n") == "1.10.2");
+    assert(release_tag("HTTP/1.1 302 Found\r\nLocation: https://github.com/x/releases\r\n\r\n").empty());
+    assert(release_tag("").empty());
+    assert(version_newer("0.10", "0.9") && version_newer("0.6", "0.5") && version_newer("1.0", "0.9.9") && version_newer("0.5.1", "0.5"));
+    assert(!version_newer("0.5", "0.5") && !version_newer("0.4", "0.5") && !version_newer("", "0.5"));
+
     assert(mirc_strip("\x02" "bold\x02 \x03" "4,1red\x03 \x04" "ff0000x\x0f.") == "bold red x.");
     Style seen;
     mirc_walk("\x03" "12,04Z", {}, [&](uint32_t cp, const Style& s) { if (cp == 'Z') seen = s; });
