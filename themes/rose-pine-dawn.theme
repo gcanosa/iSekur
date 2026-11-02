@@ -55,3 +55,4 @@ nicklist_width = 18
 nick_width     = 12
 separator      = │
 timestamp      = %H:%M
+window         = mac              ; the webchat dialogs: mac | win95 window buttons
