@@ -743,6 +743,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     auto argv = split(args, ' ');
     auto rest = [&](size_t n) { return after_words(args, n); };
     Server* s = b->srv;
+    if (s) s->typed_in = b->id, s->typed_at = time(nullptr);
     auto need = [&]() {
         if (s && s->state == SS::CONNECTED) return true;
         print(b, LK::ERROR, "Not connected to a server");

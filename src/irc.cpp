@@ -398,7 +398,15 @@ void Core::handle(Server* s, const Msg& m) {
     };
     auto is_me = [&](const std::string& n) { return irc_lower(n) == irc_lower(s->nick); };
     // where server replies go: the active buffer if it's ours, else status
+    // the tab the user typed a command in, for its replies (whois, errors...): within 30s, if still open
+    auto typed_buf = [&]() -> Buffer* {  // ponytail: last command wins; per-command tracking (labeled-response) if two overlap
+        if (time(nullptr) - s->typed_at > 30) return nullptr;
+        for (auto& b : bufs)
+            if (b->id == s->typed_in && b->srv == s) return b.get();
+        return nullptr;
+    };
     auto reply_buf = [&]() {
+        if (Buffer* b = typed_buf()) return b;
         return active && active->srv == s && s->state == SS::CONNECTED ? active : s->status;
     };
     const std::string& cmd = m.cmd;
@@ -933,7 +941,9 @@ void Core::handle(Server* s, const Msg& m) {
         Buffer* b = nullptr;
         if (m.params.size() > 2 && s->is_chan(m.p(1))) b = find(s, m.p(1));
         bool motd = cmd == "372" || cmd == "375" || cmd == "376" || cmd == "422";
-        if (!b) b = motd ? s->status : reply_buf();
+        // not in that channel (join failures 471/473/474/475/477...): where it was typed, else the server tab
+        bool chan = m.params.size() > 2 && s->is_chan(m.p(1));
+        if (!b) b = motd ? s->status : chan ? (typed_buf() ? typed_buf() : s->status) : reply_buf();
         std::string txt;
         size_t from = b->type == BT::CHANNEL && b->name == m.p(1) ? 2 : 1;  // channel is implied
         for (size_t i = from; i < m.params.size(); i++) txt += (i > from ? " " : "") + m.params[i];

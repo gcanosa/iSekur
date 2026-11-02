@@ -283,6 +283,22 @@ int main() {
         core.close(kb), sent();
     }
 
+    // replies go where the command was typed, not the active tab; untyped join failures: the server tab
+    {
+        Buffer* other = core.open(ts, BT::CHANNEL, "#other");
+        core.select(other);
+        core.exec(ts->status, "/join #r"), sent();
+        feed(":srv 477 me #r :Cannot join channel (+r)");
+        assert(ts->status->lines.back().text.find("(+r)") != std::string::npos && other->lines.empty());
+        core.exec(chb, "/whois x"), sent();
+        feed(":srv 401 me x :No such nick");
+        assert(chb->lines.back().text.find("No such nick") != std::string::npos);
+        ts->typed_at = 0;  // long ago (an autojoin): not the active #other
+        feed(":srv 474 me #b :Cannot join channel (+b)");
+        assert(ts->status->lines.back().text.find("(+b)") != std::string::npos && other->lines.empty());
+        core.close(other), core.select(chb), sent();
+    }
+
     // Twitch: display-name + color tags, badges in the nick list, its own commands, lowercase joins
     if (!twitch_host("irc.chat.twitch.tv")) {  // make notwitch: /twitch only says so
         core.exec(home, "/twitch");

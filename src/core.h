@@ -214,6 +214,8 @@ struct Server {
     time_t last_rx = 0, reconnect_at = 0, ping_at = 0, ctcp_at = 0;
     std::string to_self;  // echo-message: a message to our own nick comes twice (echo + delivery); the first one's msgid or text
     time_t to_self_at = 0;
+    int typed_in = 0;      // the buffer id a /command for this server was last typed in: its replies go there
+    time_t typed_at = 0;
     long long ping_sent_ms = 0;
     double lag = 0;
     bool user_quit = false;
