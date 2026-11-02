@@ -8,7 +8,7 @@ realname  = iSekur user
 theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes/)
 web_font      = theme      ; webchat font: theme (its font, else mono) | mono | sans | serif
 web_font_size = 14         ; webchat text size in px
-timestamp = %H:%M
+timestamp =                  ; e.g. %H:%M:%S (empty: the theme's, [%H:%M] in mirc)
 timestamp_align = left      ; left | right (the right edge of the chat, terminal and webchat)
 scrollback = 2000           ; lines kept in memory per tab (min 100); fewer = less memory
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256

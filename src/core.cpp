@@ -257,6 +257,7 @@ size_t input_secret(const std::string& buf, const std::string& line, size_t* end
 
 std::vector<Core::Setting> Core::settings() const {
     Ini all = defaults;
+    all["general"]["timestamp"] = theme.lay("timestamp", "%H:%M");  // empty: the theme's, so that's its default
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv)
             if (!v.empty() || !all[sec].count(k)) all[sec][k] = v;  // "key =" keeps the default
@@ -326,6 +327,7 @@ static SetPlace set_place(const std::string& sec, const std::string& key) {
 
 std::vector<Core::SetRow> Core::setting_rows() const {
     Ini all = defaults;
+    all["general"]["timestamp"] = theme.lay("timestamp", "%H:%M");  // empty: the theme's
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv) all[sec][k];
     // every server shows the keys it can have, with what it uses when they aren't set
