@@ -548,6 +548,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_KEY("Alt+1") ".." G_KEY("Alt+0") "    go to tab 1-10        " G_KEY("Ctrl+N") " " G_KEY("Ctrl+P") "  next / previous tab",
         "  " G_KEY("Ctrl+A") "           next tab with news    " G_KEY("Ctrl+X") "          next server",
         "  " G_KEY("Ctrl+W") "           close this tab        " G_KEY("PgUp") " " G_KEY("PgDn") "     scroll the chat",
+        "  " G_KEY("Ctrl+G") " " G_KEY("Alt+J") "    find a tab by name (channel, query, network)",
         "",
         G_HEAD("Showing and hiding"),
         "  " G_KEY("Ctrl+L") " or " G_KEY("F2") "  the nick list     " G_KEY("Ctrl+T") "  the topic bar     " G_KEY("F3") "  the mouse",

@@ -165,6 +165,7 @@ static Style nick_style(const Theme& t, const std::string& nick) {
 
 // a status tab shows the network (NETWORK= from 005, e.g. OFTC), the config name until then
 static std::string buf_label(const Buffer* b) {
+    if (b->type == BT::STATUS && !b->srv) return "CMD";  // the home tab: capitals, unlike any channel
     return b->type == BT::STATUS && b->srv && !b->srv->network.empty() ? b->srv->network : b->name;
 }
 
@@ -764,6 +765,11 @@ void Tui::draw() {
         present();
         return;
     }
+    if (fw.open) {  // Ctrl+G: the tab finder has the keys
+        draw_find(W, H);
+        present();
+        return;
+    }
     if (sw.open) {  // /set: the settings window has the keys
         draw_settings(W, H);
         present();
@@ -1205,6 +1211,94 @@ void Tui::theme_key(int k, uint32_t ch) {
     if (n && l[(size_t)tw.sel] != c.theme.name) c.use_theme(l[(size_t)tw.sel], err);  // the live preview
 }
 
+// every word typed must be in the tab's name, its network, or its kind ("server", "query"...)
+std::vector<Buffer*> Tui::find_list() const {
+    auto words = split(irc_lower(to_utf8(fw.q)), ' ');
+    std::vector<Buffer*> out;
+    for (auto& bp : c.bufs) {
+        Buffer* b = bp.get();
+        static const char* KIND[] = {"server", "channel", "query", "shell"};
+        std::string hay = irc_lower(buf_label(b) + " " + b->name + " " + (b->srv ? b->srv->cfg.name + " " + b->srv->network : "") +
+                                    " " + (b->type == BT::STATUS && !b->srv ? "cmd console" : KIND[(int)b->type]));
+        bool ok = true;
+        for (auto& w : words) ok = ok && (w.empty() || hay.find(w) != std::string::npos);
+        if (ok) out.push_back(b);
+    }
+    std::stable_partition(out.begin(), out.end(), [&](Buffer* b) {  // the tab's own name first, then network-only matches
+        std::string n = irc_lower(buf_label(b));
+        for (auto& w : words) if (n.find(w) == std::string::npos) return false;
+        return true;
+    });
+    return out;
+}
+
+void Tui::draw_find(int W, int H) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input");
+    for (Style* st : {&ls, &dim}) st->bg = bs.bg;
+    hs.attr |= A_BOLD;
+    auto l = find_list();
+    int n = (int)l.size();
+    fw.rows = std::max(1, std::min({std::max(n, 1), H - 6, 14}));
+    fw.w = std::min(W - 2, 56), fw.x0 = (W - fw.w) / 2;
+    int bh = fw.rows + 4, y0 = std::max(0, (H - bh) / 2 - 1), x1 = fw.x0 + fw.w;
+    fw.list_y = y0 + 2;
+    if (fw.sel >= n) fw.sel = std::max(0, n - 1);
+    if (fw.sel < fw.top) fw.top = fw.sel;
+    if (fw.sel >= fw.top + fw.rows) fw.top = fw.sel - fw.rows + 1;
+    for (int yy = y0; yy < y0 + bh; yy++) fill(yy, fw.x0, x1, bs);
+    for (int xx = fw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
+    for (int yy = y0; yy < y0 + bh; yy++) cell(fw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
+    cell(fw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(fw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
+    text(fw.x0 + 2, y0, x1 - 2, " Go to tab ", hs, false);
+    int fx = text(fw.x0 + 2, y0 + 1, x1 - 2, "find: ", hs, false);
+    fill(y0 + 1, fx, x1 - 2, fs);
+    int ex = text(fx, y0 + 1, x1 - 2, to_utf8(fw.q), fs, false);
+    tb_set_cursor(ex, y0 + 1);
+    if (!n) text(fw.x0 + 2, fw.list_y, x1 - 2, "no tab matches", dim, false);
+    for (int i = 0; i < fw.rows && fw.top + i < n; i++) {
+        Buffer* b = l[(size_t)(fw.top + i)];
+        bool on = fw.top + i == fw.sel;
+        Style st = on ? sel : b->activity == 3 ? T.get("tab_hilight") : b->activity == 2 ? T.get("tab_msg") : bs;
+        if (!on) st.bg = bs.bg;
+        fill(fw.list_y + i, fw.x0 + 1, x1 - 1, on ? sel : bs);
+        std::string where = !b->srv ? "" : b->type == BT::STATUS ? "server" : b->srv->network.empty() ? b->srv->cfg.name : b->srv->network;
+        int wx = x1 - 2 - (int)where.size();
+        text(fw.x0 + 2, fw.list_y + i, wx - 1, (on ? "▸ " : "  ") + std::to_string(c.index_of(b) + 1) + ":" + buf_label(b), st, false);
+        Style d = dim;
+        d.bg = on ? sel.bg : bs.bg;
+        text(wx, fw.list_y + i, x1 - 2, where, d, false);
+    }
+    text(fw.x0 + 2, y0 + bh - 2, x1 - 2, "type: filter · ↑↓ · Enter go · Esc close", dim, false);
+}
+
+void Tui::find_key(int k, uint32_t ch) {
+    auto l = find_list();
+    int n = (int)l.size();
+    if (k == TB_KEY_ESC) { if (!fw.q.empty()) fw.q.clear(), fw.sel = fw.top = 0; else fw.open = false; return; }
+    if (k == TB_KEY_ENTER) { fw.open = false; if (n) c.select(l[(size_t)std::min(fw.sel, n - 1)]); return; }
+    if (ch || k == TB_KEY_SPACE) fw.q += ch ? (char32_t)ch : U' ', fw.sel = fw.top = 0;
+    else if (k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2) { if (!fw.q.empty()) fw.q.pop_back(), fw.sel = fw.top = 0; }
+    else if (k == TB_KEY_CTRL_U) fw.q.clear(), fw.sel = fw.top = 0;
+    else if (k == TB_KEY_ARROW_DOWN || k == TB_KEY_TAB) fw.sel = n ? (fw.sel + 1) % n : 0;
+    else if (k == TB_KEY_ARROW_UP) fw.sel = n ? (fw.sel - 1 + n) % n : 0;
+    else if (k == TB_KEY_PGDN) fw.sel = std::min(n - 1, fw.sel + fw.rows);
+    else if (k == TB_KEY_PGUP) fw.sel = std::max(0, fw.sel - fw.rows);
+    else if (k == TB_KEY_CTRL_G) fw.open = false;  // the same key closes it
+}
+
+// a click goes there; the wheel moves
+void Tui::find_mouse(int k, int x, int y) {
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { find_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
+    int i = y - fw.list_y;
+    if (k != TB_KEY_MOUSE_LEFT) return;
+    if (i < 0 || i >= fw.rows || x <= fw.x0 || x >= fw.x0 + fw.w - 1) { fw.open = false; return; }  // outside: close
+    if (fw.top + i >= (int)find_list().size()) return;
+    fw.sel = fw.top + i;
+    find_key(TB_KEY_ENTER, 0);
+}
+
 // a click previews a theme (again, or a double click: keeps it); the wheel moves
 void Tui::theme_mouse(int k, int x, int y) {
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { theme_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
@@ -1394,6 +1488,7 @@ void Tui::load_keys() {
     keymap["C-l"] = keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
     keymap["C-t"] = keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
     keymap["F3"] = "toggle_mouse";
+    keymap["C-g"] = keymap["M-j"] = keymap["∆"] = "find_tab";  // ∆: Option+J on a Mac
     keymap["F6"] = keymap["M-o"] = keymap["ø"] = "other_pane";  // /split; ø: Option+O on a Mac
     keymap["M-d"] = keymap["∂"] = keymap["C-z"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"; C-z: detach (still connected) where a shell would suspend
     // [keys] action = spec [spec...]
@@ -1414,7 +1509,7 @@ void Tui::on_readable() {
     bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || sw.open || tw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || fw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -1447,6 +1542,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "toggle_topic") topicbar = !topicbar;
     else if (a == "other_pane") { if (c.split_buf) c.select(c.split_buf); }
     else if (a == "detach") c.detach_req = true;
+    else if (a == "find_tab") fw = FindWin{}, fw.open = true, fw.sel = std::max(0, c.index_of(c.active));
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
         tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
@@ -1470,6 +1566,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     }
     if (sw.open) { settings_key(mod, k, ch); return; }
     if (tw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) theme_key(k, ch); return; }
+    if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -1637,6 +1734,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (c.locked) return;
     if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
+    if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && (nl_x < 0 || x < nl_x);
     if (selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {

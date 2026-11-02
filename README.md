@@ -113,6 +113,7 @@ Not available on Cygwin.
 | Ctrl+A, Alt+A | next tab with activity |
 | Alt+D (Option+D on a Mac), Ctrl+Z | detach: iSekur keeps running in the background |
 | Ctrl+X | next server |
+| Ctrl+G, Alt+J | find a tab: type part of a channel, nick or network name, Enter goes there (the webchat's filter box on top of the tab list) |
 | Ctrl+W | close tab (parts the channel) |
 | PgUp / PgDn | scroll |
 | Ctrl+L, Alt+L (Option+L on a Mac), F2 | show / hide the nicklist |

@@ -153,7 +153,8 @@ key           =              ; e.g. /path/privkey.pem
 # Key bindings: <action> = <key> [key...]
 # Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
 # Actions: next_tab prev_tab next_active next_server close_tab scroll_up
-#          scroll_down toggle_nicklist toggle_topic detach toggle_mouse other_pane tab_1 .. tab_10
+#          scroll_down toggle_nicklist toggle_topic detach toggle_mouse other_pane find_tab
+#          tab_1 .. tab_10
 [keys]
 ; next_tab = M-Right C-n
 ; toggle_nicklist = C-l M-l F2

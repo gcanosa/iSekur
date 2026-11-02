@@ -104,6 +104,17 @@ private:
     void draw_themes(int W, int H);
     void theme_key(int k, uint32_t ch);
     void theme_mouse(int k, int x, int y);
+    // Ctrl+G / Alt+J: go to a tab by typing part of its name (channel, query, network)
+    struct FindWin {
+        bool open = false;
+        std::u32string q;
+        int sel = 0, top = 0, x0 = 0, w = 0, list_y = 0, rows = 0;
+    };
+    FindWin fw;
+    std::vector<Buffer*> find_list() const;  // the tabs the filter matches: own name first, then by network
+    void draw_find(int W, int H);
+    void find_key(int k, uint32_t ch);
+    void find_mouse(int k, int x, int y);
     bool action(const std::string& a);
     void complete();
     // live list under the input line: config keys after "/set ", commands while
