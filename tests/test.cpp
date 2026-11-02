@@ -129,6 +129,27 @@ int main() {
     std::string up = ini_update("# top\n[general]\ntheme = default ; old\n\n[server.x]\nhost = h\n", ch);
     assert(up == "# top\n[general]\ntheme = neon    ; old\nlog = on\n\n[server.x]\nhost = h\n\n[web]\nport = 9000\n");
     assert(ini_parse(up)["general"]["log"] == "on" && ini_parse(up)["server.x"]["host"] == "h");
+    {  // passwords sent back as typed: "enc:" in the file, plain in memory; hand-typed ones get encrypted on load
+        char d[] = "/tmp/isekur-enc-XXXXXX";
+        assert(mkdtemp(d));
+        std::string path = std::string(d) + "/c.conf", err;
+        FILE* f = fopen(path.c_str(), "w");
+        fputs("[server.x]\nnickserv_pass = hunter2\n", f), fclose(f);
+        Ini in;
+        assert(ini_load(path, in) && in["server.x"]["nickserv_pass"] == "hunter2");
+        std::string text;
+        { FILE* g = fopen(path.c_str(), "r"); char buf[512]; text.assign(buf, fread(buf, 1, sizeof buf, g)); fclose(g); }
+        assert(text.find("hunter2") == std::string::npos && text.find("nickserv_pass = enc:") != std::string::npos);
+        Ini ch2;
+        ch2["server.x"]["sasl_pass"] = "s3cret";
+        ch2["web"]["password_hash"] = "$hash";
+        assert(ini_save(path, ch2, err));
+        Ini back;
+        assert(ini_load(path, back) && back["server.x"]["sasl_pass"] == "s3cret" && back["web"]["password_hash"] == "$hash");
+        unlink((std::string(d) + "/secret.key").c_str());
+        assert(ini_load(path, back) && back["server.x"]["sasl_pass"].empty());  // no key: as if unset
+        unlink(path.c_str()), rmdir(d);
+    }
 
     Core core;
     core.cfg["general"]["ignore"] = "spam*!*@* *!*@*.Evil.Host";

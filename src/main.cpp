@@ -239,6 +239,7 @@ int main(int argc, char** argv) {
         web.flush();
         if (c.web_req != Core::WebReq::NONE) {
             Buffer* to = c.index_of(c.web_req_buf) >= 0 ? c.web_req_buf : c.bufs.front().get();
+            if (c.web_req == Core::WebReq::RESTART && web.running()) web.stop(), c.web_req = Core::WebReq::START;
             if (c.web_req == Core::WebReq::STOP && web.running()) {
                 web.stop();
                 c.print(to, LK::INFO, "Webchat stopped");

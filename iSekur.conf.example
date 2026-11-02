@@ -112,6 +112,8 @@ port      = 6697
 tls       = true
 tls_verify = true            ; false only for self-signed test servers
 autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
+; sasl_pass, password and nickserv_pass are saved as enc:... (key in secret.key next to this file);
+; type one in plain and iSekur encrypts it on the next start or /reload
 ; auto_identify = true     ; log in with SASL / NickServ on connect and reconnect (false: /msg NickServ yourself)
 ; sasl_user = mynick
 ; sasl_pass = secret

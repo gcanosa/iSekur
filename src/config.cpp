@@ -10,7 +10,9 @@
 #include <cstring>
 #include <set>
 #include <glob.h>
+#include <fcntl.h>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include "core.h"
 
 static std::string trim(const std::string& s) {
@@ -40,12 +42,43 @@ Ini ini_parse(const std::string& text) {
     return ini;
 }
 
+// Passwords iSekur has to send back (nickserv_pass, sasl_pass, password) are kept in the file
+// as "enc:" + AES-256-GCM with a random key in secret.key next to it (0600); hashes stay as they are.
+// ponytail: whoever can read both files can read the passwords: it keeps them out of a glance,
+// a backup of the config alone, or a paste. A master password is the upgrade.
+bool cfg_secret(const std::string& k) { return secret_key(k) && k.find("hash") == std::string::npos; }
+
+static std::string cfg_key(const std::string& path, bool create) {
+    std::string kp = path.substr(0, path.rfind('/') + 1) + "secret.key", k;
+    std::ifstream f(kp, std::ios::binary);
+    if (f) k.assign(std::istreambuf_iterator<char>(f), {});
+    if (k.size() == 32 || !create) return k.size() == 32 ? k : "";
+    unsigned char r[32];
+    RAND_bytes(r, sizeof r);
+    int fd = open(kp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fd < 0 || write(fd, r, sizeof r) != (ssize_t)sizeof r) { if (fd >= 0) close(fd); return ""; }
+    close(fd);
+    return std::string((char*)r, sizeof r);
+}
+
 bool ini_load(const std::string& path, Ini& out) {
     std::ifstream f(path);
     if (!f) return false;
     std::stringstream ss;
     ss << f.rdbuf();
     out = ini_parse(ss.str());
+    std::string key, err;
+    Ini plain;  // typed into the file by hand: encrypted in place right away
+    for (auto& [sec, kv] : out)
+        for (auto& [k, v] : kv)
+            if (!cfg_secret(k) || v.empty()) continue;
+            else if (v.rfind("enc:", 0) != 0) plain[sec][k] = v;
+            else {
+                if (key.empty()) key = cfg_key(path, false);
+                std::string p;
+                v = e2e_open(key, v.substr(4), p) ? p : "";  // no secret.key: as if unset
+            }
+    if (!plain.empty()) ini_save(path, plain, err);
     return true;
 }
 
@@ -100,10 +133,18 @@ bool ini_save(const std::string& path, const Ini& changes, std::string& err) {
     if (f) ss << f.rdbuf();
     std::string dir = path.substr(0, path.rfind('/') + 1), tmp = path + ".tmp";
     if (!dir.empty()) mkdir(dir.c_str(), 0700);
+    Ini sealed = changes;
+    std::string key;
+    for (auto& [sec, kv] : sealed)
+        for (auto& [k, v] : kv)
+            if (cfg_secret(k) && !v.empty() && v.rfind("enc:", 0) != 0) {
+                if (key.empty() && (key = cfg_key(path, true)).empty()) { err = "can't write secret.key next to " + path; return false; }
+                v = "enc:" + e2e_seal(key, v);
+            }
     mode_t old = umask(077);  // the config holds passwords
     std::ofstream o(tmp, std::ios::trunc);
     umask(old);
-    o << ini_update(ss.str(), changes);
+    o << ini_update(ss.str(), sealed);
     o.close();
     if (!o || rename(tmp.c_str(), path.c_str())) {
         err = std::string("can't write ") + path + ": " + strerror(errno);

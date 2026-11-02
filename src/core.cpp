@@ -637,7 +637,7 @@ void Core::reload(Buffer* b) {
     size_t n = 0;
     for (auto& [sec, kv] : unsaved) n += kv.size();
     print(b, LK::INFO, "Reloaded " + cfg_path + (n ? " (" + std::to_string(n) + " unsaved /set changes kept on top)" : "") +
-                           ". Server settings apply on the next /connect, [web] after /web stop and /web start");
+                           ". Server settings apply on the next /connect, [web] after /web restart");
 }
 
 void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden,
@@ -941,7 +941,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         dirty = true;
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
-                                : sec == "web"              ? "  (applies after /web stop and /web start)"
+                                : sec == "web"              ? "  (applies after /web restart)"
                                                             : "") +
                                "  - /save writes it to the config");
         return;
@@ -1107,14 +1107,15 @@ void Core::exec(Buffer* b, const std::string& input) {
         else print(b, LK::ERROR, "No terminal is attached; isekur --attach brings one");
         return;
     }
-    if (cmd == "web") {  // /web [start|stop|status]
+    if (cmd == "web") {  // /web [start|stop|restart|status]
         std::string a = argv.empty() ? "status" : argv[0];
         web_req_buf = b;
         if (a == "start") web_req = WebReq::START;
-        else if (a == "stop" && daemon) print(b, LK::ERROR, "The webchat is the only way into this iSekur; not stopping it");
+        else if ((a == "stop" || a == "restart") && daemon) print(b, LK::ERROR, "The webchat is the only way into this iSekur; not stopping it (restart iSekur instead)");
         else if (a == "stop") web_req = WebReq::STOP;
+        else if (a == "restart") web_req = WebReq::RESTART;
         else if (a == "status") print(b, LK::INFO, web_url.empty() ? "Webchat is stopped (/web start)" : "Webchat on " + web_url);
-        else print(b, LK::ERROR, "Usage: /web [start|stop|status]");
+        else print(b, LK::ERROR, "Usage: /web [start|stop|restart|status]");
         return;
     }
     if (cmd == "away" && s) s->auto_away = false;  // yours now; falls through to the server

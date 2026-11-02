@@ -221,8 +221,8 @@ static const std::vector<CmdInfo> CMDS = {
      {"/set", "/set theme neon", "/set server.libera.autojoin #a,#b", "/set log on"}},
     {"reload", "Settings", "", "Re-read the config file",
      "Applies an edited config without restarting: theme, keys, mouse, colors, bell, logging and "
-     "the rest right away; server settings on the next /connect; [web] after /web stop and /web "
-     "start. Servers added to the file are opened (and connected when autoconnect is on); removed "
+     "the rest right away; server settings on the next /connect; [web] after /web restart. "
+     "Servers added to the file are opened (and connected when autoconnect is on); removed "
      "ones stay until you close their tab. /set changes not yet saved stay on top.",
      {"/reload"}},
     {"save", "Settings", "", "Write changed settings to the config file",
@@ -289,10 +289,10 @@ static const std::vector<CmdInfo> CMDS = {
      "(0, the default: never). Forgot it? Stop iSekur, set lock = off in the config and start "
      "it again. Three wrong tries wait a minute. The config and logs are not encrypted by it.",
      {"/lock", "/lock on", "/lock off", "/set lock_idle 15"}},
-    {"web", "Session", "[start|stop|status]", "Control the built-in webchat",
+    {"web", "Session", "[start|stop|restart|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
-     "(isekur --hash-password prints one).",
-     {"/web", "/web start", "/web stop"}},
+     "(isekur --hash-password prints one). /web restart picks up changed [web] settings.",
+     {"/web", "/web start", "/web stop", "/web restart"}},
     {"detach", "Session", "", "Leave iSekur running in the background",
      "Gives the terminal back; iSekur stays connected, in the channels, logging. isekur --attach "
      "(or just isekur) brings it back, from any terminal or SSH session. Alt+D (Option+D on a Mac) "

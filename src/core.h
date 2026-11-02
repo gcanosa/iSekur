@@ -18,6 +18,7 @@
 // ---- INI (config + themes) -------------------------------------------------
 using Ini = std::map<std::string, std::map<std::string, std::string>>;
 bool secret_key(const std::string& k);  // passwords and hashes: never shown
+bool cfg_secret(const std::string& k);  // passwords sent back as typed: "enc:" in the file (config.cpp)
 // "IDENTIFY pass" (and REGISTER, GHOST...) to NickServ/ChanServ as it is shown and logged: "IDENTIFY ********"
 std::string mask_services(const std::string& tgt, const std::string& text);
 // where that password starts, or npos; *end: where it ends (npos: the end of the text)
@@ -294,9 +295,9 @@ struct Core {
     std::string quit_msg;  // from /quit text; else quit_message
     std::string bye(const Server* s, const std::string& key) const;  // quit_message / part_message
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend
-    // /web start|stop: done by main() after the event pass, since a stop asked
+    // /web start|stop|restart: done by main() after the event pass, since a stop asked
     // from the browser must not tear down the connection it is still reading
-    enum class WebReq { NONE, START, STOP } web_req = WebReq::NONE;
+    enum class WebReq { NONE, START, STOP, RESTART } web_req = WebReq::NONE;
     Buffer* web_req_buf = nullptr;  // where /web was typed: gets the answer
     std::string web_url;  // "" = webchat stopped
     bool daemon = false;      // the webchat is the only way in: /web stop is refused
