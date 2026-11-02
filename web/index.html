@@ -22,7 +22,7 @@
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 75%, transparent); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
 html, body { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--fg); font: 14px/1.45 var(--mono); }
+body { background: var(--bg); color: var(--fg); font: var(--fsize, 14px)/1.45 var(--mono); }
 button, input { font: inherit; color: inherit; }
 #login { display: none; height: 100%; align-items: center; justify-content: center; padding: 16px; }
 #login form { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
@@ -239,6 +239,12 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 .inline .l { display: block; padding: 0 8px; }
 .inline .l .nk { display: inline; border: 0; padding: 0; text-align: left; }
 .inline .l .ts::after, .inline .l .nk:not(:empty)::after { content: " "; }
+/* timestamp_align = right: the time in its own column at the right edge */
+.tsright .l { grid-template-columns: 13ch 1fr auto; }
+.tsright .l .ts { order: 3; }
+.inline.tsright .l { display: flow-root; }  /* an empty line keeps its floated time, not the next line's row */
+.inline.tsright .l .ts { float: right; margin-left: 10px; }
+.inline.tsright .l .ts::after { content: none; }
 .inline .l.hl .nk { border-radius: 0; }
 .l.hdr .tx { cursor: pointer; }
 .l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
@@ -746,8 +752,14 @@ function applyTheme() {
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
   document.documentElement.style.colorScheme = lum > 140 ? "light" : "dark";
   document.documentElement.classList.toggle("light", lum > 140);
-  for (const p of ["#msgs", "#msgs2"]) $(p).classList.toggle("inline", (theme.lay || {}).nick_width === "0");
-  set("--mono", (theme.lay || {}).font);  // mirc: Fixedsys where it's installed
+  for (const p of ["#msgs", "#msgs2"]) {
+    $(p).classList.toggle("inline", (theme.lay || {}).nick_width === "0");
+    $(p).classList.toggle("tsright", theme.tsa === "right");  // /set timestamp_align right
+  }
+  // /set web_font wins; else the theme's (mirc: Fixedsys where it's installed); else ui-monospace...
+  const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim();
+  set("--mono", !uf ? (theme.lay || {}).font : uf in fonts ? fonts[uf] : uf);
+  const fs = parseInt(theme.fsize); set("--fsize", fs >= 8 && fs <= 40 ? fs + "px" : "");
 }
 
 function onMsg(ev) {

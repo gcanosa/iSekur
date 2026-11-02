@@ -722,7 +722,9 @@ std::string Web::order_json() {
 }
 
 std::string Web::theme_json() {
-    std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"sb\":" + std::to_string(c.max_lines) + ",\"el\":{";
+    std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"sb\":" + std::to_string(c.max_lines) +
+                    ",\"font\":" + json_str(ini_get(c.cfg, "general", "web_font")) + ",\"fsize\":" + json_str(ini_get(c.cfg, "general", "web_font_size")) +
+                    ",\"tsa\":" + json_str(ini_get(c.cfg, "general", "timestamp_align")) + ",\"el\":{";
     bool first = true;
     for (auto& [k, st] : c.theme.el) {
         o += (first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(st.fg)) +

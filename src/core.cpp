@@ -279,7 +279,7 @@ std::vector<Core::Setting> Core::settings() const {
 struct SetGroup { const char* name; std::vector<std::string> keys; };
 static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Identity", {"nick", "altnick", "realname"}},
-    {"Look", {"theme", "colors", "timestamp", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
+    {"Look", {"theme", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
               "banner_mono", "banner_anim", "show_guide"}},
     {"Messages", {"hilight_window", "hilight_words", "bell_notifications", "ignore", "paste_confirm", "quit_message", "part_message",
                   "ctcp_version", "ctcp_time", "ctcp_ping"}},
@@ -924,8 +924,12 @@ void Core::exec(Buffer* b, const std::string& input) {
         cfg[sec][key] = val;
         std::string err;
         if (sec == "general" && key == "theme") {
-            if (load_theme(val, theme, err)) notify(Ev::THEME, nullptr);
-            else print(b, LK::ERROR, err);
+            if (load_theme(val, theme, err)) {
+                // a theme with its own font (mirc: Fixedsys) brings it; a /set web_font after this wins again
+                if (!theme.lay("font", "").empty() && !ini_get(cfg, "general", "web_font").empty())
+                    cfg["general"]["web_font"] = unsaved["general"]["web_font"] = "";
+                notify(Ev::THEME, nullptr);
+            } else print(b, LK::ERROR, err);
         }
         // servers pick up host/port/sasl/... on their next connect; flood limits now
         for (auto& sv : servers) {
@@ -936,7 +940,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         if (sec == "keys") cfg_changed = true;
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
-        if (sec == "general" && (key == "timestamp" || key == "scrollback")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
+        if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key.rfind("web_font", 0) == 0)) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         dirty = true;
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +

@@ -318,8 +318,10 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     const Theme& T = c.theme;
     int nw = atoi(T.lay("nick_width", "12").c_str());
     std::string tsfmt = ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
-    Row pre;
-    cells(pre, fmt_time(l.ts, tsfmt) + " ", T.get("timestamp"), false);
+    // timestamp_align = right: the time at the right edge of the first row, the text wraps short of it
+    bool ts_right = ini_get(c.cfg, "general", "timestamp_align") == "right";
+    Row pre, tsr;
+    cells(ts_right ? tsr : pre, fmt_time(l.ts, tsfmt) + (ts_right ? "" : " "), T.get("timestamp"), false);
 
     std::string marker;
     Style ms, body = T.get("default");
@@ -362,7 +364,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     std::string sep = T.lay("separator", "│");
     if (!marker.empty() || !sep.empty()) cells(pre, sep.empty() ? " " : " " + sep + " ", T.get("separator"), false);
 
-    int indent = width(pre), avail = std::max(10, width_ - indent);
+    int tsw = tsr.empty() ? 0 : width(tsr) + 1, indent = width(pre), avail = std::max(10, width_ - indent - tsw);
     if (l.typed_at) {  // /typing: the part typed so far, and the cursor
         size_t len = 0, n;
         for (unsigned char ch : mirc_strip(txt)) len += (ch & 0xc0) != 0x80;  // characters, not bytes
@@ -391,6 +393,11 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         i = j;
     }
     if (rows.empty()) rows.push_back(cur);
+    if (!tsr.empty()) {
+        Row& r0 = rows[0];
+        for (int w = width(r0); w < width_ - (tsw - 1); w++) r0.push_back({' ', T.get("default"), 1});
+        r0.insert(r0.end(), tsr.begin(), tsr.end());
+    }
     return rows;
 }
 
