@@ -35,6 +35,10 @@ static const std::vector<CmdInfo> CMDS = {
     {"connect", "Connection", "[name]", "Reconnect a configured server",
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect libera"}},
+    {"autoconnect", "Connection", "[on|off]", "Connect this server when iSekur starts",
+     "Without arguments, says whether this tab's server connects at startup. on / off change it and write it to "
+     "the config at once ([server.<name>] autoconnect). Also in a server tab's right-click menu.",
+     {"/autoconnect", "/autoconnect off"}},
     {"reconnect", "Connection", "[message]", "Drop and connect again",
      "Quits this server (with the message, else quit_message) and connects again right away; "
      "the channels are joined again. Also in the menu of a right click on a server tab.",
@@ -59,7 +63,7 @@ static const std::vector<CmdInfo> CMDS = {
      {"/join #sekurnet", "/j linux", "/join #private s3cret"}, "j"},
     {"autojoin", "Chat", "[add|del] [#channel [key]] | snap [here]", "Channels joined when the server connects",
      "Without arguments, lists this server's autojoin channels. add / del change the list, the "
-     "current channel when you name none; add keeps the key you gave /join. /save keeps it. "
+     "current channel when you name none; add keeps the key you gave /join. Both are written to the config at once. "
      "snap makes every server's autojoin the channels open right now (here: only this server's) "
      "and writes it to the config at once.",
      {"/autojoin", "/autojoin add", "/autojoin add #private s3cret", "/autojoin del #old", "/autojoin snap"}},

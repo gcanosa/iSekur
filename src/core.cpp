@@ -338,6 +338,18 @@ static SetPlace set_place(const std::string& sec, const std::string& key) {
     return {2 + (secs.count(sec) ? secs[sec] : 1 << 20), k == keys.end() ? 1 << 20 : k->second, ""};
 }
 
+// a [section]'s unsaved keys, written to the config now: the whole section's, since a /server one isn't in the file yet
+static bool save_section(Core& c, const std::string& sec, Buffer* b) {
+    Ini part;
+    part[sec] = c.unsaved[sec];
+    c.unsaved.erase(sec);
+    std::string err;
+    if (ini_save(c.cfg_path, part, err)) return true;
+    c.unsaved[sec].insert(part[sec].begin(), part[sec].end());
+    c.print(b, LK::ERROR, err);
+    return false;
+}
+
 std::vector<Core::SetRow> Core::setting_rows() const {
     Ini all = defaults;
     all["general"]["timestamp"] = theme.lay("timestamp", "%H:%M");  // empty: the theme's
@@ -1220,6 +1232,15 @@ void Core::exec(Buffer* b, const std::string& input) {
         print(b, LK::INFO, "Autojoin saved (" + done + ")");
         return;
     }
+    if (cmd == "autoconnect" && s) {  // /autoconnect [on|off]: connect this server when iSekur starts; written now
+        std::string sec = "server." + s->cfg.name;
+        if (argv.empty()) { print(b, LK::INFO, s->cfg.name + (s->cfg.autoconnect ? " connects" : " doesn't connect") + " when iSekur starts (/autoconnect on|off)"); return; }
+        if (argv[0] != "on" && argv[0] != "off") { print(b, LK::ERROR, "Usage: /autoconnect [on|off]"); return; }
+        s->cfg.autoconnect = argv[0] == "on";
+        cfg[sec]["autoconnect"] = unsaved[sec]["autoconnect"] = s->cfg.autoconnect ? "true" : "false";
+        if (save_section(*this, sec, b)) print(b, LK::INFO, s->cfg.name + (s->cfg.autoconnect ? " connects" : " no longer connects") + " when iSekur starts (saved)");
+        return;
+    }
     if (!need()) return;
     if (cmd == "join" || cmd == "j") {
         if (argv.empty()) return;
@@ -1255,7 +1276,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         for (auto& e : aj) v += (v.empty() ? "" : ",") + e;
         cfg[sec]["autojoin"] = unsaved[sec]["autojoin"] = v;
         e2e_keep(s, false);
-        print(b, LK::INFO, (argv[0] == "add" ? "Added " + ch + " to" : "Removed " + ch + " from") + " autojoin on " + s->cfg.name + " (/save to keep)");
+        // written now, like snap: the tab menu's "Remove from autojoin" must hold at the next start without a /save
+        if (save_section(*this, sec, b))
+            print(b, LK::INFO, (argv[0] == "add" ? "Added " + ch + " to" : "Removed " + ch + " from") + " autojoin on " + s->cfg.name + " (saved)");
         return;
     }
     if (cmd == "part") {

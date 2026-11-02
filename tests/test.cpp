@@ -472,8 +472,28 @@ int main() {
     // a server tab's menu: reconnect / disconnect while up, fold, close (asks first)
     {
         auto sm = core.tab_menu(ts->status);
-        assert(sm.size() == 5 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
-               sm[4].second.rfind("?Disconnect from ", 0) == 0);
+        assert(sm.size() == 6 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
+               sm[5].second.rfind("?Disconnect from ", 0) == 0);
+        // connect at startup or not: flips with the setting and goes to the config at once
+        std::string path = "build/test-autoconnect.conf";
+        remove(path.c_str());
+        std::swap(core.cfg_path, path);
+        bool was = ts->cfg.autoconnect;
+        ts->cfg.autoconnect = true;
+        assert(sm[3].second == "/autoconnect off" || core.tab_menu(ts->status)[3].second == "/autoconnect off");
+        core.exec(ts->status, core.tab_menu(ts->status)[3].second);
+        Ini f;
+        assert(!ts->cfg.autoconnect && ini_load(core.cfg_path, f) && f["server.t"]["autoconnect"] == "false" && !core.unsaved.count("server.t"));
+        assert(core.tab_menu(ts->status)[3] == std::make_pair(std::string("Connect at startup"), std::string("/autoconnect on")));
+        core.exec(ts->status, "/autoconnect on");
+        assert(ts->cfg.autoconnect && ini_load(core.cfg_path, f) && f["server.t"]["autoconnect"] == "true");
+        core.exec(ts->status, "/autojoin add #saved");  // add and del are written at once too, without a /save
+        assert(ini_load(core.cfg_path, f) && f["server.t"]["autojoin"].find("#saved") != std::string::npos);
+        core.exec(ts->status, "/autojoin del #saved");
+        assert(ini_load(core.cfg_path, f) && f["server.t"]["autojoin"].find("#saved") == std::string::npos);
+        ts->cfg.autoconnect = was;
+        remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
         core.exec(ts->status, "/fold");
         assert(ts->status->collapsed && core.tab_menu(ts->status)[2].first == "Show its channels");
         core.exec(ts->status, "/fold");
