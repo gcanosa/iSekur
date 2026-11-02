@@ -1,0 +1,57 @@
+# High contrast dark: pure black, white text, strong colors. /theme contrast-dark
+[colors]
+default        = #ffffff #000000
+topic          = #ffffff #1a1a1a bold
+tabbar         = #b0b0b0 #0a0a0a
+tab_server     = #ff80ff #0a0a0a bold
+tab_home       = #00ffff #0a0a0a bold
+tab_shell      = #ffa500 #0a0a0a bold
+tab_active     = #000000 #ffff00 bold
+tab_data       = #6cb6ff #0a0a0a
+tab_msg        = #ffffff #0a0a0a bold
+tab_hilight    = #ff40ff #0a0a0a bold
+tab_quiet      = #b0b0b0 #0a0a0a italic
+tab_quiet_act  = #000000 #b0b0b0 bold
+status         = #b0b0b0 #0a0a0a
+status_hi      = #ffffff #0a0a0a
+status_info    = #ffffff #0a0a0a
+status_ok      = #00ff00
+status_warn    = #ffff00
+status_high    = #ffa500
+status_crit    = #ff4040 bold
+status_bat     = #b0b0b0 #1a1a1a
+input          = #ffffff #000000
+input_prompt   = #ffff00 #000000 bold
+set_key        = #ffff00 #000000 bold
+set_value      = #ffff00 #000000
+timestamp      = #b0b0b0 #000000
+separator      = #6a6a6a #000000
+nicklist       = #ffffff #000000
+nicklist_title = #b0b0b0 #000000 italic
+nicklist_border= #6a6a6a #000000
+nicklist_op    = #ffa500 #000000 bold
+nicklist_voice = #00ff00 #000000
+menu           = #ffffff #0a0a0a
+menu_sel       = #000000 #ffff00 bold
+menu_border    = #6a6a6a #0a0a0a
+msg_self       = #6cb6ff #000000 bold
+marker         = #ff40ff
+hilight        = #000000 #ff40ff bold
+hilight_text   = #ff40ff #000000
+join           = #00ff00 #000000
+part           = #ffa500 #000000
+quit           = #ff4040 #000000
+notice         = #ffff00 #000000 bold
+action         = #ff80ff #000000 italic
+info           = #00ffff #000000
+error          = #ff4040 #000000 bold
+
+[nicks]
+palette = #ff4040 #ffa500 #ffff00 #00ff00 #00ffff #6cb6ff #ff80ff #ff40ff
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

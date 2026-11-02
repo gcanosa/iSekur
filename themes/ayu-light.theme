@@ -1,0 +1,57 @@
+# Ayu light (a light theme). /theme ayu-light
+[colors]
+default        = #5c6166 #fcfcfc
+topic          = #5c6166 #e7eaed bold
+tabbar         = #8a9199 #f3f4f5
+tab_server     = #a37acc #f3f4f5 bold
+tab_home       = #3e9d7d #f3f4f5 bold
+tab_shell      = #ce7432 #f3f4f5 bold
+tab_active     = #ffffff #3594d8 bold
+tab_data       = #3594d8 #f3f4f5
+tab_msg        = #5c6166 #f3f4f5 bold
+tab_hilight    = #e6508a #f3f4f5 bold
+tab_quiet      = #8a9199 #f3f4f5 italic
+tab_quiet_act  = #ffffff #8a9199 bold
+status         = #8a9199 #f3f4f5
+status_hi      = #5c6166 #f3f4f5
+status_info    = #5c6166 #f3f4f5
+status_ok      = #6d9300
+status_warn    = #b07d33
+status_high    = #ce7432
+status_crit    = #d36363 bold
+status_bat     = #8a9199 #e7eaed
+input          = #5c6166 #fcfcfc
+input_prompt   = #3594d8 #fcfcfc bold
+set_key        = #3594d8 #fcfcfc bold
+set_value      = #b07d33 #fcfcfc
+timestamp      = #8a9199 #fcfcfc
+separator      = #e1e4e8 #fcfcfc
+nicklist       = #6c7380 #fcfcfc
+nicklist_title = #8a9199 #fcfcfc italic
+nicklist_border= #e1e4e8 #fcfcfc
+nicklist_op    = #ce7432 #fcfcfc bold
+nicklist_voice = #6d9300 #fcfcfc
+menu           = #5c6166 #f3f4f5
+menu_sel       = #ffffff #3594d8 bold
+menu_border    = #e1e4e8 #f3f4f5
+msg_self       = #3594d8 #fcfcfc bold
+marker         = #e6508a
+hilight        = #ffffff #e6508a bold
+hilight_text   = #e6508a #fcfcfc
+join           = #6d9300 #fcfcfc
+part           = #ce7432 #fcfcfc
+quit           = #d36363 #fcfcfc
+notice         = #b07d33 #fcfcfc bold
+action         = #a37acc #fcfcfc italic
+info           = #3e9d7d #fcfcfc
+error          = #d36363 #fcfcfc bold
+
+[nicks]
+palette = #d36363 #ce7432 #b07d33 #6d9300 #3e9d7d #3594d8 #a37acc #e6508a
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

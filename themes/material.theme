@@ -1,0 +1,57 @@
+# Material darker. /theme material
+[colors]
+default        = #eeffff #212121
+topic          = #eeffff #2c2c2c bold
+tabbar         = #616161 #1a1a1a
+tab_server     = #c792ea #1a1a1a bold
+tab_home       = #89ddff #1a1a1a bold
+tab_shell      = #f78c6c #1a1a1a bold
+tab_active     = #1a1a1a #80cbc4 bold
+tab_data       = #82aaff #1a1a1a
+tab_msg        = #eeffff #1a1a1a bold
+tab_hilight    = #ff5370 #1a1a1a bold
+tab_quiet      = #616161 #1a1a1a italic
+tab_quiet_act  = #212121 #616161 bold
+status         = #616161 #1a1a1a
+status_hi      = #eeffff #1a1a1a
+status_info    = #eeffff #1a1a1a
+status_ok      = #c3e88d
+status_warn    = #ffcb6b
+status_high    = #f78c6c
+status_crit    = #f07178 bold
+status_bat     = #616161 #2c2c2c
+input          = #eeffff #212121
+input_prompt   = #80cbc4 #212121 bold
+set_key        = #80cbc4 #212121 bold
+set_value      = #ffcb6b #212121
+timestamp      = #616161 #212121
+separator      = #323232 #212121
+nicklist       = #b0bec5 #212121
+nicklist_title = #616161 #212121 italic
+nicklist_border= #323232 #212121
+nicklist_op    = #f78c6c #212121 bold
+nicklist_voice = #c3e88d #212121
+menu           = #eeffff #1a1a1a
+menu_sel       = #1a1a1a #80cbc4 bold
+menu_border    = #323232 #1a1a1a
+msg_self       = #82aaff #212121 bold
+marker         = #ff5370
+hilight        = #212121 #ff5370 bold
+hilight_text   = #ff5370 #212121
+join           = #c3e88d #212121
+part           = #f78c6c #212121
+quit           = #f07178 #212121
+notice         = #ffcb6b #212121 bold
+action         = #c792ea #212121 italic
+info           = #89ddff #212121
+error          = #f07178 #212121 bold
+
+[nicks]
+palette = #f07178 #f78c6c #ffcb6b #c3e88d #89ddff #82aaff #c792ea #ff5370
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

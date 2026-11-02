@@ -1,0 +1,57 @@
+# GitHub Dark. /theme github-dark
+[colors]
+default        = #e6edf3 #0d1117
+topic          = #e6edf3 #161b22 bold
+tabbar         = #7d8590 #010409
+tab_server     = #bc8cff #010409 bold
+tab_home       = #39c5cf #010409 bold
+tab_shell      = #f0883e #010409 bold
+tab_active     = #010409 #58a6ff bold
+tab_data       = #58a6ff #010409
+tab_msg        = #e6edf3 #010409 bold
+tab_hilight    = #db61a2 #010409 bold
+tab_quiet      = #7d8590 #010409 italic
+tab_quiet_act  = #0d1117 #7d8590 bold
+status         = #7d8590 #010409
+status_hi      = #e6edf3 #010409
+status_info    = #e6edf3 #010409
+status_ok      = #3fb950
+status_warn    = #d29922
+status_high    = #f0883e
+status_crit    = #f85149 bold
+status_bat     = #7d8590 #161b22
+input          = #e6edf3 #0d1117
+input_prompt   = #58a6ff #0d1117 bold
+set_key        = #58a6ff #0d1117 bold
+set_value      = #d29922 #0d1117
+timestamp      = #7d8590 #0d1117
+separator      = #30363d #0d1117
+nicklist       = #c9d1d9 #0d1117
+nicklist_title = #7d8590 #0d1117 italic
+nicklist_border= #30363d #0d1117
+nicklist_op    = #f0883e #0d1117 bold
+nicklist_voice = #3fb950 #0d1117
+menu           = #e6edf3 #010409
+menu_sel       = #010409 #58a6ff bold
+menu_border    = #30363d #010409
+msg_self       = #58a6ff #0d1117 bold
+marker         = #db61a2
+hilight        = #0d1117 #db61a2 bold
+hilight_text   = #db61a2 #0d1117
+join           = #3fb950 #0d1117
+part           = #f0883e #0d1117
+quit           = #f85149 #0d1117
+notice         = #d29922 #0d1117 bold
+action         = #bc8cff #0d1117 italic
+info           = #39c5cf #0d1117
+error          = #f85149 #0d1117 bold
+
+[nicks]
+palette = #f85149 #f0883e #d29922 #3fb950 #39c5cf #58a6ff #bc8cff #db61a2
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

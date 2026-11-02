@@ -1,0 +1,57 @@
+# Nord Light: Snow Storm with darker Frost and Aurora (a light theme). /theme nord-light
+[colors]
+default        = #2e3440 #eceff4
+topic          = #2e3440 #d8dee9 bold
+tabbar         = #7b88a1 #e5e9f0
+tab_server     = #8f6b88 #e5e9f0 bold
+tab_home       = #3a7f8c #e5e9f0 bold
+tab_shell      = #b8694a #e5e9f0 bold
+tab_active     = #ffffff #5e81ac bold
+tab_data       = #5e81ac #e5e9f0
+tab_msg        = #2e3440 #e5e9f0 bold
+tab_hilight    = #a8587f #e5e9f0 bold
+tab_quiet      = #7b88a1 #e5e9f0 italic
+tab_quiet_act  = #ffffff #7b88a1 bold
+status         = #7b88a1 #e5e9f0
+status_hi      = #2e3440 #e5e9f0
+status_info    = #2e3440 #e5e9f0
+status_ok      = #688649
+status_warn    = #9e7926
+status_high    = #b8694a
+status_crit    = #bf616a bold
+status_bat     = #7b88a1 #d8dee9
+input          = #2e3440 #eceff4
+input_prompt   = #5e81ac #eceff4 bold
+set_key        = #5e81ac #eceff4 bold
+set_value      = #9e7926 #eceff4
+timestamp      = #7b88a1 #eceff4
+separator      = #d8dee9 #eceff4
+nicklist       = #3b4252 #eceff4
+nicklist_title = #7b88a1 #eceff4 italic
+nicklist_border= #d8dee9 #eceff4
+nicklist_op    = #b8694a #eceff4 bold
+nicklist_voice = #688649 #eceff4
+menu           = #2e3440 #e5e9f0
+menu_sel       = #ffffff #5e81ac bold
+menu_border    = #d8dee9 #e5e9f0
+msg_self       = #5e81ac #eceff4 bold
+marker         = #a8587f
+hilight        = #ffffff #a8587f bold
+hilight_text   = #a8587f #eceff4
+join           = #688649 #eceff4
+part           = #b8694a #eceff4
+quit           = #bf616a #eceff4
+notice         = #9e7926 #eceff4 bold
+action         = #8f6b88 #eceff4 italic
+info           = #3a7f8c #eceff4
+error          = #bf616a #eceff4 bold
+
+[nicks]
+palette = #bf616a #b8694a #9e7926 #688649 #3a7f8c #5e81ac #8f6b88 #a8587f
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

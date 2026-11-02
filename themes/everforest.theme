@@ -1,0 +1,57 @@
+# Everforest dark. /theme everforest
+[colors]
+default        = #d3c6aa #2d353b
+topic          = #d3c6aa #3d484d bold
+tabbar         = #859289 #232a2e
+tab_server     = #d699b6 #232a2e bold
+tab_home       = #83c092 #232a2e bold
+tab_shell      = #e69875 #232a2e bold
+tab_active     = #232a2e #a7c080 bold
+tab_data       = #7fbbb3 #232a2e
+tab_msg        = #d3c6aa #232a2e bold
+tab_hilight    = #d699b6 #232a2e bold
+tab_quiet      = #859289 #232a2e italic
+tab_quiet_act  = #2d353b #859289 bold
+status         = #859289 #232a2e
+status_hi      = #d3c6aa #232a2e
+status_info    = #d3c6aa #232a2e
+status_ok      = #a7c080
+status_warn    = #dbbc7f
+status_high    = #e69875
+status_crit    = #e67e80 bold
+status_bat     = #859289 #3d484d
+input          = #d3c6aa #2d353b
+input_prompt   = #a7c080 #2d353b bold
+set_key        = #a7c080 #2d353b bold
+set_value      = #dbbc7f #2d353b
+timestamp      = #859289 #2d353b
+separator      = #475258 #2d353b
+nicklist       = #c9bc9f #2d353b
+nicklist_title = #859289 #2d353b italic
+nicklist_border= #475258 #2d353b
+nicklist_op    = #e69875 #2d353b bold
+nicklist_voice = #a7c080 #2d353b
+menu           = #d3c6aa #232a2e
+menu_sel       = #232a2e #a7c080 bold
+menu_border    = #475258 #232a2e
+msg_self       = #7fbbb3 #2d353b bold
+marker         = #d699b6
+hilight        = #2d353b #d699b6 bold
+hilight_text   = #d699b6 #2d353b
+join           = #a7c080 #2d353b
+part           = #e69875 #2d353b
+quit           = #e67e80 #2d353b
+notice         = #dbbc7f #2d353b bold
+action         = #d699b6 #2d353b italic
+info           = #83c092 #2d353b
+error          = #e67e80 #2d353b bold
+
+[nicks]
+palette = #e67e80 #e69875 #dbbc7f #a7c080 #83c092 #7fbbb3 #d699b6 #d699b6
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

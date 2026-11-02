@@ -1,0 +1,57 @@
+# Nightfox. /theme nightfox
+[colors]
+default        = #cdcecf #192330
+topic          = #cdcecf #29394f bold
+tabbar         = #71839b #131a24
+tab_server     = #9d79d6 #131a24 bold
+tab_home       = #63cdcf #131a24 bold
+tab_shell      = #f4a261 #131a24 bold
+tab_active     = #131a24 #719cd6 bold
+tab_data       = #719cd6 #131a24
+tab_msg        = #cdcecf #131a24 bold
+tab_hilight    = #d67ad2 #131a24 bold
+tab_quiet      = #71839b #131a24 italic
+tab_quiet_act  = #192330 #71839b bold
+status         = #71839b #131a24
+status_hi      = #cdcecf #131a24
+status_info    = #cdcecf #131a24
+status_ok      = #81b29a
+status_warn    = #dbc074
+status_high    = #f4a261
+status_crit    = #c94f6d bold
+status_bat     = #71839b #29394f
+input          = #cdcecf #192330
+input_prompt   = #719cd6 #192330 bold
+set_key        = #719cd6 #192330 bold
+set_value      = #dbc074 #192330
+timestamp      = #71839b #192330
+separator      = #39506d #192330
+nicklist       = #aeafb0 #192330
+nicklist_title = #71839b #192330 italic
+nicklist_border= #39506d #192330
+nicklist_op    = #f4a261 #192330 bold
+nicklist_voice = #81b29a #192330
+menu           = #cdcecf #131a24
+menu_sel       = #131a24 #719cd6 bold
+menu_border    = #39506d #131a24
+msg_self       = #719cd6 #192330 bold
+marker         = #d67ad2
+hilight        = #192330 #d67ad2 bold
+hilight_text   = #d67ad2 #192330
+join           = #81b29a #192330
+part           = #f4a261 #192330
+quit           = #c94f6d #192330
+notice         = #dbc074 #192330 bold
+action         = #9d79d6 #192330 italic
+info           = #63cdcf #192330
+error          = #c94f6d #192330 bold
+
+[nicks]
+palette = #c94f6d #f4a261 #dbc074 #81b29a #63cdcf #719cd6 #9d79d6 #d67ad2
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

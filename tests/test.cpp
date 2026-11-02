@@ -577,7 +577,7 @@ int main() {
 
     // every shipped theme loads and colors the main parts
     auto tn = theme_names();
-    assert(tn.size() >= 17 && std::find(tn.begin(), tn.end(), "dracula") != tn.end() && std::find(tn.begin(), tn.end(), "catppuccin-latte") != tn.end());
+    assert(tn.size() >= 35 && std::find(tn.begin(), tn.end(), "dracula") != tn.end() && std::find(tn.begin(), tn.end(), "catppuccin-latte") != tn.end());
     for (auto& n : tn) {
         Theme th;
         std::string terr;

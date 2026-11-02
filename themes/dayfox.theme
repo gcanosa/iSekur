@@ -1,0 +1,57 @@
+# Dayfox (a light theme). /theme dayfox
+[colors]
+default        = #3d2b5a #f6f2ee
+topic          = #3d2b5a #e7d2be bold
+tabbar         = #837a72 #e4dcd4
+tab_server     = #6e33ce #e4dcd4 bold
+tab_home       = #287980 #e4dcd4 bold
+tab_shell      = #955f61 #e4dcd4 bold
+tab_active     = #ffffff #2848a9 bold
+tab_data       = #2848a9 #e4dcd4
+tab_msg        = #3d2b5a #e4dcd4 bold
+tab_hilight    = #a440b5 #e4dcd4 bold
+tab_quiet      = #837a72 #e4dcd4 italic
+tab_quiet_act  = #ffffff #837a72 bold
+status         = #837a72 #e4dcd4
+status_hi      = #3d2b5a #e4dcd4
+status_info    = #3d2b5a #e4dcd4
+status_ok      = #396847
+status_warn    = #ac5402
+status_high    = #955f61
+status_crit    = #a5222f bold
+status_bat     = #837a72 #e7d2be
+input          = #3d2b5a #f6f2ee
+input_prompt   = #2848a9 #f6f2ee bold
+set_key        = #2848a9 #f6f2ee bold
+set_value      = #ac5402 #f6f2ee
+timestamp      = #837a72 #f6f2ee
+separator      = #d3c7bb #f6f2ee
+nicklist       = #643f61 #f6f2ee
+nicklist_title = #837a72 #f6f2ee italic
+nicklist_border= #d3c7bb #f6f2ee
+nicklist_op    = #955f61 #f6f2ee bold
+nicklist_voice = #396847 #f6f2ee
+menu           = #3d2b5a #e4dcd4
+menu_sel       = #ffffff #2848a9 bold
+menu_border    = #d3c7bb #e4dcd4
+msg_self       = #2848a9 #f6f2ee bold
+marker         = #a440b5
+hilight        = #ffffff #a440b5 bold
+hilight_text   = #a440b5 #f6f2ee
+join           = #396847 #f6f2ee
+part           = #955f61 #f6f2ee
+quit           = #a5222f #f6f2ee
+notice         = #ac5402 #f6f2ee bold
+action         = #6e33ce #f6f2ee italic
+info           = #287980 #f6f2ee
+error          = #a5222f #f6f2ee bold
+
+[nicks]
+palette = #a5222f #955f61 #ac5402 #396847 #287980 #2848a9 #6e33ce #a440b5
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

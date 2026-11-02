@@ -1,0 +1,57 @@
+# Kanagawa Lotus (a light theme). /theme kanagawa-lotus
+[colors]
+default        = #545464 #f2ecbc
+topic          = #545464 #e5ddb0 bold
+tabbar         = #8a8980 #e7dba0
+tab_server     = #624c83 #e7dba0 bold
+tab_home       = #597b75 #e7dba0 bold
+tab_shell      = #bf6600 #e7dba0 bold
+tab_active     = #ffffff #4d699b bold
+tab_data       = #4d699b #e7dba0
+tab_msg        = #545464 #e7dba0 bold
+tab_hilight    = #b35b79 #e7dba0 bold
+tab_quiet      = #8a8980 #e7dba0 italic
+tab_quiet_act  = #ffffff #8a8980 bold
+status         = #8a8980 #e7dba0
+status_hi      = #545464 #e7dba0
+status_info    = #545464 #e7dba0
+status_ok      = #6f894e
+status_warn    = #77713f
+status_high    = #bf6600
+status_crit    = #c84053 bold
+status_bat     = #8a8980 #e5ddb0
+input          = #545464 #f2ecbc
+input_prompt   = #4d699b #f2ecbc bold
+set_key        = #4d699b #f2ecbc bold
+set_value      = #77713f #f2ecbc
+timestamp      = #8a8980 #f2ecbc
+separator      = #d5cea3 #f2ecbc
+nicklist       = #43436c #f2ecbc
+nicklist_title = #8a8980 #f2ecbc italic
+nicklist_border= #d5cea3 #f2ecbc
+nicklist_op    = #bf6600 #f2ecbc bold
+nicklist_voice = #6f894e #f2ecbc
+menu           = #545464 #e7dba0
+menu_sel       = #ffffff #4d699b bold
+menu_border    = #d5cea3 #e7dba0
+msg_self       = #4d699b #f2ecbc bold
+marker         = #b35b79
+hilight        = #ffffff #b35b79 bold
+hilight_text   = #b35b79 #f2ecbc
+join           = #6f894e #f2ecbc
+part           = #bf6600 #f2ecbc
+quit           = #c84053 #f2ecbc
+notice         = #77713f #f2ecbc bold
+action         = #624c83 #f2ecbc italic
+info           = #597b75 #f2ecbc
+error          = #c84053 #f2ecbc bold
+
+[nicks]
+palette = #c84053 #bf6600 #77713f #6f894e #597b75 #4d699b #624c83 #b35b79
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

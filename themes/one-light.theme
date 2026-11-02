@@ -1,0 +1,57 @@
+# Atom One Light (a light theme). /theme one-light
+[colors]
+default        = #383a42 #fafafa
+topic          = #383a42 #e5e5e6 bold
+tabbar         = #a0a1a7 #f0f0f1
+tab_server     = #a626a4 #f0f0f1 bold
+tab_home       = #0184bc #f0f0f1 bold
+tab_shell      = #986801 #f0f0f1 bold
+tab_active     = #ffffff #4078f2 bold
+tab_data       = #4078f2 #f0f0f1
+tab_msg        = #383a42 #f0f0f1 bold
+tab_hilight    = #ca1243 #f0f0f1 bold
+tab_quiet      = #a0a1a7 #f0f0f1 italic
+tab_quiet_act  = #ffffff #a0a1a7 bold
+status         = #a0a1a7 #f0f0f1
+status_hi      = #383a42 #f0f0f1
+status_info    = #383a42 #f0f0f1
+status_ok      = #4b974a
+status_warn    = #b57c00
+status_high    = #986801
+status_crit    = #e45649 bold
+status_bat     = #a0a1a7 #e5e5e6
+input          = #383a42 #fafafa
+input_prompt   = #4078f2 #fafafa bold
+set_key        = #4078f2 #fafafa bold
+set_value      = #b57c00 #fafafa
+timestamp      = #a0a1a7 #fafafa
+separator      = #d4d4d6 #fafafa
+nicklist       = #4f525e #fafafa
+nicklist_title = #a0a1a7 #fafafa italic
+nicklist_border= #d4d4d6 #fafafa
+nicklist_op    = #986801 #fafafa bold
+nicklist_voice = #4b974a #fafafa
+menu           = #383a42 #f0f0f1
+menu_sel       = #ffffff #4078f2 bold
+menu_border    = #d4d4d6 #f0f0f1
+msg_self       = #4078f2 #fafafa bold
+marker         = #ca1243
+hilight        = #ffffff #ca1243 bold
+hilight_text   = #ca1243 #fafafa
+join           = #4b974a #fafafa
+part           = #986801 #fafafa
+quit           = #e45649 #fafafa
+notice         = #b57c00 #fafafa bold
+action         = #a626a4 #fafafa italic
+info           = #0184bc #fafafa
+error          = #e45649 #fafafa bold
+
+[nicks]
+palette = #e45649 #986801 #b57c00 #4b974a #0184bc #4078f2 #a626a4 #ca1243
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

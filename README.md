@@ -6,9 +6,12 @@ that mirrors your live session in a browser, bouncer style.
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
 - Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
-- 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme neon` switches live): default, neon,
-  dracula, tokyonight, catppuccin-mocha, gruvbox, nord, onedark, rose-pine, kanagawa, solarized, and light ones:
-  tokyonight-day, catppuccin-latte, gruvbox-light, rose-pine-dawn, solarized-light, github-light, and mirc / mirc-dark (classic mIRC look)
+- 35 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme` alone opens a live picker):
+  - dark: default, neon, dracula, tokyonight, catppuccin-mocha, gruvbox, nord, onedark, rose-pine, kanagawa, solarized,
+    github-dark, everforest, ayu, nightfox, night-owl, material, contrast-dark (high contrast)
+  - light: tokyonight-day, catppuccin-latte, gruvbox-light, rose-pine-dawn, solarized-light, github-light, one-light,
+    kanagawa-lotus, nord-light, everforest-light, ayu-light, dayfox, light-owl, material-lighter, contrast-light (high contrast)
+  - mirc / mirc-dark: the classic mIRC look
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join and more
 - Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel, `/autojoin snap` saves every open channel), SASL or

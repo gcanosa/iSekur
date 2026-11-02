@@ -1,0 +1,57 @@
+# Light Owl (a light theme). /theme light-owl
+[colors]
+default        = #403f53 #fbfbfb
+topic          = #403f53 #e0e7ea bold
+tabbar         = #90a7b2 #f0f0f0
+tab_server     = #994cc3 #f0f0f0 bold
+tab_home       = #0c969b #f0f0f0 bold
+tab_shell      = #d26b19 #f0f0f0 bold
+tab_active     = #ffffff #4876d6 bold
+tab_data       = #4876d6 #f0f0f0
+tab_msg        = #403f53 #f0f0f0 bold
+tab_hilight    = #c41a80 #f0f0f0 bold
+tab_quiet      = #90a7b2 #f0f0f0 italic
+tab_quiet_act  = #ffffff #90a7b2 bold
+status         = #90a7b2 #f0f0f0
+status_hi      = #403f53 #f0f0f0
+status_info    = #403f53 #f0f0f0
+status_ok      = #08916a
+status_warn    = #ac7f00
+status_high    = #d26b19
+status_crit    = #de3d3b bold
+status_bat     = #90a7b2 #e0e7ea
+input          = #403f53 #fbfbfb
+input_prompt   = #4876d6 #fbfbfb bold
+set_key        = #4876d6 #fbfbfb bold
+set_value      = #ac7f00 #fbfbfb
+timestamp      = #90a7b2 #fbfbfb
+separator      = #d9d9d9 #fbfbfb
+nicklist       = #4b5a6b #fbfbfb
+nicklist_title = #90a7b2 #fbfbfb italic
+nicklist_border= #d9d9d9 #fbfbfb
+nicklist_op    = #d26b19 #fbfbfb bold
+nicklist_voice = #08916a #fbfbfb
+menu           = #403f53 #f0f0f0
+menu_sel       = #ffffff #4876d6 bold
+menu_border    = #d9d9d9 #f0f0f0
+msg_self       = #4876d6 #fbfbfb bold
+marker         = #c41a80
+hilight        = #ffffff #c41a80 bold
+hilight_text   = #c41a80 #fbfbfb
+join           = #08916a #fbfbfb
+part           = #d26b19 #fbfbfb
+quit           = #de3d3b #fbfbfb
+notice         = #ac7f00 #fbfbfb bold
+action         = #994cc3 #fbfbfb italic
+info           = #0c969b #fbfbfb
+error          = #de3d3b #fbfbfb bold
+
+[nicks]
+palette = #de3d3b #d26b19 #ac7f00 #08916a #0c969b #4876d6 #994cc3 #c41a80
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

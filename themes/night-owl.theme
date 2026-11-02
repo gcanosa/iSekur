@@ -1,0 +1,57 @@
+# Night Owl. /theme night-owl
+[colors]
+default        = #d6deeb #011627
+topic          = #d6deeb #0b2942 bold
+tabbar         = #637777 #01111d
+tab_server     = #c792ea #01111d bold
+tab_home       = #7fdbca #01111d bold
+tab_shell      = #f78c6c #01111d bold
+tab_active     = #01111d #82aaff bold
+tab_data       = #82aaff #01111d
+tab_msg        = #d6deeb #01111d bold
+tab_hilight    = #ff5874 #01111d bold
+tab_quiet      = #637777 #01111d italic
+tab_quiet_act  = #011627 #637777 bold
+status         = #637777 #01111d
+status_hi      = #d6deeb #01111d
+status_info    = #d6deeb #01111d
+status_ok      = #addb67
+status_warn    = #ecc48d
+status_high    = #f78c6c
+status_crit    = #ef5350 bold
+status_bat     = #637777 #0b2942
+input          = #d6deeb #011627
+input_prompt   = #82aaff #011627 bold
+set_key        = #82aaff #011627 bold
+set_value      = #ecc48d #011627
+timestamp      = #637777 #011627
+separator      = #1d3b53 #011627
+nicklist       = #a7bdd2 #011627
+nicklist_title = #637777 #011627 italic
+nicklist_border= #1d3b53 #011627
+nicklist_op    = #f78c6c #011627 bold
+nicklist_voice = #addb67 #011627
+menu           = #d6deeb #01111d
+menu_sel       = #01111d #82aaff bold
+menu_border    = #1d3b53 #01111d
+msg_self       = #82aaff #011627 bold
+marker         = #ff5874
+hilight        = #011627 #ff5874 bold
+hilight_text   = #ff5874 #011627
+join           = #addb67 #011627
+part           = #f78c6c #011627
+quit           = #ef5350 #011627
+notice         = #ecc48d #011627 bold
+action         = #c792ea #011627 italic
+info           = #7fdbca #011627
+error          = #ef5350 #011627 bold
+
+[nicks]
+palette = #ef5350 #f78c6c #ecc48d #addb67 #7fdbca #82aaff #c792ea #ff5874
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

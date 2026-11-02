@@ -1,0 +1,57 @@
+# Ayu dark. /theme ayu
+[colors]
+default        = #bfbdb6 #0b0e14
+topic          = #bfbdb6 #131721 bold
+tabbar         = #565b66 #0d1017
+tab_server     = #d2a6ff #0d1017 bold
+tab_home       = #95e6cb #0d1017 bold
+tab_shell      = #ff8f40 #0d1017 bold
+tab_active     = #0d1017 #e6b450 bold
+tab_data       = #59c2ff #0d1017
+tab_msg        = #bfbdb6 #0d1017 bold
+tab_hilight    = #f29668 #0d1017 bold
+tab_quiet      = #565b66 #0d1017 italic
+tab_quiet_act  = #0b0e14 #565b66 bold
+status         = #565b66 #0d1017
+status_hi      = #bfbdb6 #0d1017
+status_info    = #bfbdb6 #0d1017
+status_ok      = #aad94c
+status_warn    = #e6b450
+status_high    = #ff8f40
+status_crit    = #f07178 bold
+status_bat     = #565b66 #131721
+input          = #bfbdb6 #0b0e14
+input_prompt   = #e6b450 #0b0e14 bold
+set_key        = #e6b450 #0b0e14 bold
+set_value      = #e6b450 #0b0e14
+timestamp      = #565b66 #0b0e14
+separator      = #1e232b #0b0e14
+nicklist       = #acb6bf #0b0e14
+nicklist_title = #565b66 #0b0e14 italic
+nicklist_border= #1e232b #0b0e14
+nicklist_op    = #ff8f40 #0b0e14 bold
+nicklist_voice = #aad94c #0b0e14
+menu           = #bfbdb6 #0d1017
+menu_sel       = #0d1017 #e6b450 bold
+menu_border    = #1e232b #0d1017
+msg_self       = #59c2ff #0b0e14 bold
+marker         = #f29668
+hilight        = #0b0e14 #f29668 bold
+hilight_text   = #f29668 #0b0e14
+join           = #aad94c #0b0e14
+part           = #ff8f40 #0b0e14
+quit           = #f07178 #0b0e14
+notice         = #e6b450 #0b0e14 bold
+action         = #d2a6ff #0b0e14 italic
+info           = #95e6cb #0b0e14
+error          = #f07178 #0b0e14 bold
+
+[nicks]
+palette = #f07178 #ff8f40 #e6b450 #aad94c #95e6cb #59c2ff #d2a6ff #f29668
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

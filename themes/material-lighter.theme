@@ -1,0 +1,57 @@
+# Material lighter (a light theme). /theme material-lighter
+[colors]
+default        = #546e7a #fafafa
+topic          = #546e7a #e7e7e8 bold
+tabbar         = #90a4ae #eeeeee
+tab_server     = #7c4dff #eeeeee bold
+tab_home       = #31989f #eeeeee bold
+tab_shell      = #da5f3e #eeeeee bold
+tab_active     = #ffffff #6182b8 bold
+tab_data       = #6182b8 #eeeeee
+tab_msg        = #546e7a #eeeeee bold
+tab_hilight    = #ef4e69 #eeeeee bold
+tab_quiet      = #90a4ae #eeeeee italic
+tab_quiet_act  = #ffffff #90a4ae bold
+status         = #90a4ae #eeeeee
+status_hi      = #546e7a #eeeeee
+status_info    = #546e7a #eeeeee
+status_ok      = #6f8d44
+status_warn    = #be7e27
+status_high    = #da5f3e
+status_crit    = #e53935 bold
+status_bat     = #90a4ae #e7e7e8
+input          = #546e7a #fafafa
+input_prompt   = #6182b8 #fafafa bold
+set_key        = #6182b8 #fafafa bold
+set_value      = #be7e27 #fafafa
+timestamp      = #90a4ae #fafafa
+separator      = #d3e1e8 #fafafa
+nicklist       = #607d8b #fafafa
+nicklist_title = #90a4ae #fafafa italic
+nicklist_border= #d3e1e8 #fafafa
+nicklist_op    = #da5f3e #fafafa bold
+nicklist_voice = #6f8d44 #fafafa
+menu           = #546e7a #eeeeee
+menu_sel       = #ffffff #6182b8 bold
+menu_border    = #d3e1e8 #eeeeee
+msg_self       = #6182b8 #fafafa bold
+marker         = #ef4e69
+hilight        = #ffffff #ef4e69 bold
+hilight_text   = #ef4e69 #fafafa
+join           = #6f8d44 #fafafa
+part           = #da5f3e #fafafa
+quit           = #e53935 #fafafa
+notice         = #be7e27 #fafafa bold
+action         = #7c4dff #fafafa italic
+info           = #31989f #fafafa
+error          = #e53935 #fafafa bold
+
+[nicks]
+palette = #e53935 #da5f3e #be7e27 #6f8d44 #31989f #6182b8 #7c4dff #ef4e69
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M
