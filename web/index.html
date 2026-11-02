@@ -210,6 +210,10 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 #topic .t.full { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow-y: auto; }
 #topic button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; }
+/* logout: an icon, its name on hover (right away, not the browser's late tooltip), under it and inside the page */
+#logout { position: relative; color: var(--fg); display: inline-flex; align-items: center; align-self: stretch; }
+#logout:hover::after, #logout:focus-visible::after { content: "Logout"; position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; white-space: nowrap;
+  background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
 #menu { display: none; }
 #ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg));
   border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
@@ -377,7 +381,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 <div id="app">
   <nav id="side"></nav>
   <div id="foot"><button id="addsrv" title="Add a server" aria-label="Add a server">+</button><button id="setbtn" title="Settings" aria-label="Settings">⚙</button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers">⇅</button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur">ⓘ</button></div>
-  <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout">logout</button></div>
+  <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout" aria-label="Logout"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4M3 12h11M10 8l4 4-4 4"/></svg></button></div>
   <main id="msgs" aria-live="polite"></main>
   <main id="msgs2" title="Click: type here"></main>
   <aside id="nicks2"></aside>
