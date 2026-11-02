@@ -92,6 +92,38 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
   mix-blend-mode: overlay; animation: shine 3.5s ease-in-out infinite; }
 @keyframes shine { 0% { left: 0; transform: skewX(-25deg) translateX(-200%); } 34%, 100% { left: 100%; transform: skewX(-25deg) translateX(100%); } }
 @media (prefers-reduced-motion: reduce) { #abanner::after { animation: none; display: none; } }
+/* /lock: the whole page behind a padlock. on: drops in, the shackle snaps shut; fail: shakes red;
+   open: the shackle springs up, then a hole grows from the middle and lets the session through */
+@property --r { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
+#lock { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; padding: 16px;
+  background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px) saturate(.5); }
+#lock.on { display: grid; animation: lockfade .3s ease both; }
+#lock .card { display: grid; gap: 12px; justify-items: center; width: min(340px, 100%); padding: 24px 28px 28px;
+  background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 12px; box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent);
+  animation: lockdrop .65s cubic-bezier(.34, 1.56, .64, 1) both; }
+#lock h1 { margin: 0; font-size: 18px; }
+#lock svg { color: var(--menu_border-fg, var(--accent)); overflow: visible; transition: color .2s; }
+#lock .shackle { transform-origin: 14px 26px; transform: translateY(-9px); animation: shut .18s .5s ease-in forwards; }
+#lock input { width: 100%; background: var(--input-bg, var(--bg)); color: var(--input-fg, var(--fg)); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 10px 12px; }
+#lock input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
+#lock button { width: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--menu-bg, var(--panel)); border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
+#lockerr { color: var(--error-fg, var(--err)); min-height: 1.4em; font-size: 13px; }
+#lock.fail .card { animation: shake .45s ease both; }
+#lock.fail svg { color: var(--error-fg, var(--err)); }
+#lock.open svg { color: var(--join-fg, var(--join)); }
+#lock.open .shackle { animation: pop .3s ease-out forwards; }
+#lock.open .card { animation: lockout .35s .25s ease-in forwards; }
+#lock.open { animation: iris .6s .35s ease-in forwards;
+  -webkit-mask-image: radial-gradient(circle at 50% 50%, transparent var(--r), #000 calc(var(--r) + 6%));
+  mask-image: radial-gradient(circle at 50% 50%, transparent var(--r), #000 calc(var(--r) + 6%)); }
+@keyframes lockfade { from { opacity: 0; } }
+@keyframes lockdrop { from { transform: translateY(-70vh); } }
+@keyframes shut { to { transform: none; } }
+@keyframes shake { 15% { transform: translateX(-10px); } 30% { transform: translateX(9px); } 45% { transform: translateX(-6px); } 60% { transform: translateX(4px); } 75% { transform: translateX(-2px); } }
+@keyframes pop { 0% { transform: none; } 60% { transform: translateY(-12px) rotate(-14deg); } 100% { transform: translateY(-10px) rotate(-10deg); } }
+@keyframes lockout { to { transform: scale(.85); opacity: 0; } }
+@keyframes iris { to { --r: 150%; } }
+@media (prefers-reduced-motion: reduce) { #lock, #lock *, #lock.open, #lock.open * { animation-duration: 1ms !important; animation-delay: 0s !important; } }
 #atext > div { animation: rise .5s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
 #dset { width: min(900px, calc(100vw - 32px)); overflow: hidden; }
@@ -303,6 +335,13 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="status"><span id="stl"></span><span id="sti"></span><span id="dccbar" title="Files and transfers"></span></div>
   <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
 </div>
+<div id="lock" role="dialog" aria-modal="true" aria-label="iSekur is locked"><form class="card" id="lockf">
+    <svg viewBox="0 0 48 56" width="52" height="60" aria-hidden="true"><path class="shackle" d="M14 26V16a10 10 0 0 1 20 0v10" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/><rect x="5" y="25" width="38" height="29" rx="7" fill="currentColor"/><circle cx="24" cy="37.5" r="4" fill="var(--menu-bg, var(--panel))"/><rect x="22.5" y="39" width="3" height="7" rx="1.5" fill="var(--menu-bg, var(--panel))"/></svg>
+    <h1>iSekur is locked</h1>
+    <input id="lockp" type="password" placeholder="password" autocomplete="current-password" aria-label="Lock password">
+    <button>Unlock</button>
+    <div id="lockerr" role="alert"></div>
+  </form></div>
 <dialog id="dtopic"><form method="dialog">
   <h2 id="dtopic-h">Topic</h2>
   <label>Enter sets it, Esc leaves it as it is<input name="t" id="dtopic-t" autocomplete="off" spellcheck="true"></label>
@@ -730,6 +769,8 @@ function onMsg(ev) {
     if (!bufs.has(active)) { active = order[0]; select(active); } else later(renderSide);
   } else if (m.t === "active") {
     select(m.buf);
+  } else if (m.t === "lock") {
+    lockMsg(m);
   } else if (m.t === "split") {  // the terminal's /split: on connect and when it changes there
     splitMode = m.mode;
     const f = Math.min(0.85, Math.max(0.15, m.pm / 1000));
@@ -761,6 +802,31 @@ function onMsg(ev) {
     if (dfiles.open && changed) loadFiles();
   }
 }
+
+// /lock: while locked the server sends none of the session and takes only the password; this page
+// drops what it had, and gets it all again on unlock (in the terminal or here)
+let locked = false;
+function lockMsg(m) {
+  const L = $("#lock"), restart = c => { L.classList.remove(c); void L.offsetWidth; L.classList.add(c); };
+  if (m.on) {
+    if (!locked) {
+      locked = true;
+      bufs.clear(); order = []; split = null; $("#app").classList.remove("split", "flip");
+      for (const s of ["#side", "#msgs", "#msgs2", "#nicks", "#nicks2", "#stl", "#sti", "#dccbar", "#topic .t"]) $(s).textContent = "";
+      document.querySelectorAll("dialog[open]").forEach(d => d.close());
+      $("#line").value = ""; $("#lockp").value = "";
+      L.className = ""; restart("on");
+      setTimeout(() => $("#lockp").focus(), 60);
+    }
+    $("#lockerr").textContent = m.msg || "";
+    if (m.msg) restart("fail"), $("#lockp").select();
+  } else if (locked) {
+    locked = false; $("#lockerr").textContent = "";
+    L.classList.remove("fail"); L.classList.add("open"); $("#lockp").blur();
+    setTimeout(() => { if (!locked) L.className = ""; if (!locked && matchMedia("(min-width: 761px)").matches) $("#line").focus(); }, 1000);
+  }
+}
+$("#lockf").onsubmit = e => { e.preventDefault(); const p = $("#lockp").value; if (p) send({t: "unlock", pass: p}); $("#lockp").value = ""; };
 
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
@@ -1255,7 +1321,7 @@ function action(a) {
 }
 try { if (localStorage.getItem("topic") === "0") $("#topic").classList.add("hide"); } catch (e) {}
 document.addEventListener("keydown", e => {
-  if (e.target.closest && e.target.closest("dialog")) return;
+  if (locked || (e.target.closest && e.target.closest("dialog"))) return;
   if (!e.altKey && !e.ctrlKey && !e.metaKey && e.target !== line && /^.$/.test(e.key)) return;  // typing elsewhere
   const a = keymap[keyspec(e)];
   if (a && action(a)) e.preventDefault();

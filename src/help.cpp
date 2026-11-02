@@ -280,15 +280,15 @@ static const std::vector<CmdInfo> CMDS = {
      "ssh host isekur --list shows which run there. "
      "The mouse isn't passed on. Terminal only: never from the webchat.",
      {"/attach vps", "/attach me@irc.example.org", "/attach vps ~/.config/isekur/work.conf"}},
-    {"lock", "Session", "[on|off]", "Lock the terminal with a password",
-     "/lock on sets a password (asked twice) and turns locking on: from then on iSekur shows "
-     "only a password box at startup, on every --attach and after /lock, before anything of "
-     "the session. /lock alone locks now. /lock off asks for the password and turns it off. "
-     "With locking on, /lock on changes the password (the current one first). Forgot it? Stop "
-     "iSekur, set lock = off in the config and start it again. "
-     "Three wrong tries wait a minute. It hides the screen: the config, logs and the webchat "
-     "(it has its own login) are not locked by it. Off by default.",
-     {"/lock on", "/lock", "/lock off"}},
+    {"lock", "Session", "[on|off]", "Lock the session (terminal and webchat) with a password",
+     "/lock locks now: the terminal and every webchat show only a password box, and the webchat "
+     "gets nothing of the session until it's typed (in either one). The first time it asks for "
+     "a password (twice) and keeps it: from then on iSekur also locks at startup and on every "
+     "--attach. /lock on sets or changes it (the current one first) without locking; /lock off "
+     "asks for it and turns locking off. lock_idle = N locks after N minutes without typing "
+     "(0, the default: never). Forgot it? Stop iSekur, set lock = off in the config and start "
+     "it again. Three wrong tries wait a minute. The config and logs are not encrypted by it.",
+     {"/lock", "/lock on", "/lock off", "/set lock_idle 15"}},
     {"web", "Session", "[start|stop|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one).",

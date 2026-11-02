@@ -413,9 +413,9 @@ void Core::shell_line(Buffer* b, const std::string& l) {
     print(b, LK::ERROR, from_web ? "The shell works in the terminal only" : "No shell running here: /shell logs in and starts one, /attach host reaches another iSekur");
 }
 
-// ---- /lock: a master password for the terminal -------------------------------
-// ponytail: hides the session on screen only; the config, logs and webchat are not
-// encrypted or locked by it (the webchat has its own login)
+// ---- /lock: a master password for the terminal and the webchat -------------
+// ponytail: hides the session (the webchat gets none of it while locked); the config
+// and logs are not encrypted by it
 static int unlock_fails = 0;
 static time_t unlock_wait = 0;
 
@@ -427,12 +427,20 @@ void Core::unlock(const std::string& pass) {
     if (time(nullptr) < unlock_wait) {
         lock_msg = "!Too many tries: wait " + std::to_string(unlock_wait - time(nullptr)) + "s";
     } else if (check_password(pass, opt(nullptr, "lock_password_hash", ""))) {
-        locked = false, unlock_fails = 0, lock_msg.clear();
+        unlock_fails = 0, set_lock(false);
+        return;
     } else if (++unlock_fails >= 3) {
         unlock_fails = 0, unlock_wait = time(nullptr) + 60;
         lock_msg = "!Wrong password. Too many tries: wait 60s";
     } else lock_msg = "!Wrong password";
-    dirty = true;
+    lock_anim = 'f', lock_anim_at = now_ms(), dirty = true;
+    notify(Ev::LOCK, nullptr);  // the webchat's box shows it too
+}
+
+void Core::set_lock(bool on) {
+    locked = on, lock_msg.clear(), dirty = true;
+    lock_anim = on ? 'l' : 'u', lock_anim_at = now_ms();
+    notify(Ev::LOCK, nullptr);
 }
 
 static bool save_general(Core& c, const std::map<std::string, std::string>& kv, Buffer* b) {
@@ -444,24 +452,22 @@ static bool save_general(Core& c, const std::map<std::string, std::string>& kv, 
     return false;
 }
 
-// /lock: lock now; /lock on: set the password and lock from now on; /lock off: stop
+// /lock: lock now (no password yet: set one first); /lock on: set the password; /lock off: stop
+// off and a change ask for the current password, so the webchat may run them too
 void Core::lock_cmd(Buffer* b, const std::string& args) {
-    if (from_web && !args.empty()) { print(b, LK::ERROR, "/lock on|off works in the terminal only"); return; }
-    if (args.empty()) {
-        if (!lock_on()) { print(b, LK::ERROR, "Locking is off: /lock on sets a password"); return; }
-        locked = true, lock_msg.clear(), dirty = true;
-        return;
-    }
     const std::string title = "Lock password";
-    if (args == "on") {  // with locking already on, it's a change: the current password first
-        auto set_new = [this, b, title]() {
-            ask_pass(b, "new password", [this, b, title](const std::string& p1) {
-                ask_pass(b, "again", [this, b, p1](const std::string& p2) {
-                    if (p1 != p2) { print(b, LK::ERROR, "The passwords don't match: /lock on to try again"); return; }
-                    if (save_general(*this, {{"lock", "on"}, {"lock_password_hash", hash_password(p1)}}, b))
-                        print(b, LK::INFO, "Locking on: iSekur asks for this password at startup, on every attach and after /lock");
+    if (args.empty() && lock_on()) { set_lock(true); return; }
+    if (args.empty() || args == "on") {  // with locking already on, it's a change: the current password first
+        bool now = args.empty();
+        auto set_new = [this, b, title, now]() {
+            ask_pass(b, "new password", [this, b, title, now](const std::string& p1) {
+                ask_pass(b, "again", [this, b, p1, now](const std::string& p2) {
+                    if (p1 != p2) { print(b, LK::ERROR, std::string("The passwords don't match: ") + (now ? "/lock" : "/lock on") + " to try again"); return; }
+                    if (!save_general(*this, {{"lock", "on"}, {"lock_password_hash", hash_password(p1)}}, b)) return;
+                    print(b, LK::INFO, "Locking on: iSekur asks for this password at startup, on every attach and after /lock");
+                    if (now) set_lock(true);
                 }, true, title, {"Type it again"});
-            }, true, title, {"Asked at startup, on attach and after /lock"});
+            }, true, title, {now ? "Locks the terminal and the webchat now, and at startup and on attach" : "Asked at startup, on attach and after /lock"});
         };
         if (!lock_on()) { set_new(); return; }
         ask_pass(b, "current password", [this, b, set_new](const std::string& p) {

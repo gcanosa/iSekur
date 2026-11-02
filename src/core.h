@@ -245,7 +245,7 @@ const std::vector<CmdInfo>& commands();
 const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
 
 // ---- core ------------------------------------------------------------------
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -302,9 +302,14 @@ struct Core {
     // the TUI asks in a dialog box: pass_title on its border, pass_info above the field ("!..." = an error)
     std::string pass_title;
     std::vector<std::string> pass_info;
-    // lock = on with lock_password_hash: the terminal shows only a password box at
-    // startup, on every attach and after /lock (exec.cpp)
+    // lock = on with lock_password_hash: the terminal and the webchat show only a password box at
+    // startup, on every attach, after /lock and after lock_idle minutes without input (exec.cpp)
     bool locked = false;
+    void set_lock(bool on);
+    // the lock screen's animation, in the terminal (the webchat plays its own off the same events):
+    // 'l' it locks, 'f' a wrong password, 'u' it unlocks; 0 when none is running
+    char lock_anim = 0;
+    long long lock_anim_at = 0;  // both sides at once: the webchat gets nothing of the session while locked
     std::string lock_msg;  // the box's error line ("!...")
     bool lock_on() const;
     void lock_cmd(Buffer* b, const std::string& args);

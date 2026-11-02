@@ -71,7 +71,8 @@ private:
     bool div_drag = false, div_moved = false;
     // a prompt box over the middle of the screen (/shell login, passwords, the lock screen)
     void draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
-                     bool hidden, const std::u32string& in, size_t at, const std::string& hint);
+                     bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx = 0, int dy = 0);
+    void draw_lock(int W, int H, long long ms);  // the lock screen; ms: how far into Core::lock_anim
     std::u32string lock_in;  // the lock screen's password, apart from the input line
     std::vector<uint8_t> pass_dots;  // how many dots each typed password character shows
     void mouse(int mod, int key, int x, int y);

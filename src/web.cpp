@@ -465,7 +465,7 @@ void Web::http(Client& cl) {
         snapshot(cl);
         ws_frames(cl);
     } else if (method == "GET" && (path == "/files" || path.rfind("/files/", 0) == 0)) {
-        if (!authed) { respond(cl.conn, 403, "Forbidden", "text/plain", "forbidden"); return; }
+        if (!authed || c.locked) { respond(cl.conn, 403, "Forbidden", "text/plain", "forbidden"); return; }  // locked: not the files either
         files(cl, path, h);
     } else {
         respond(cl.conn, 404, "Not Found", "text/plain", "not found");
@@ -602,6 +602,10 @@ void Web::ws_frames(Client& cl) {
         }
         if (op != 1) continue;
         auto m = json_flat(p);
+        if (c.locked) {  // only the password: nothing else of the session goes in or out
+            if (m["t"] == "unlock") c.unlock(m["pass"]);
+            continue;
+        }
         Buffer* b = by_id(c, atoi(m["buf"].c_str()));
         if (!b) continue;
         if (m["t"] == "input") c.from_web = true, c.exec(b, m["text"]), c.from_web = false;
@@ -729,6 +733,7 @@ std::string Web::lines_json(Buffer* b) {
 void Web::snapshot(Client& cl) {
     auto send = [&](const std::string& j) { cl.conn.out += ws_frame(j); };
     send(theme_json());
+    if (c.locked) { send(lock_json()); return; }  // the rest once it's unlocked
     sent_nicks.clear();  // the next update of each goes out whole to everyone, whatever this one got
     for (auto& b : c.bufs) {
         send(buf_json(b.get(), true));
@@ -744,6 +749,11 @@ void Web::snapshot(Client& cl) {
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
     send(split_json());
     send(dcc_json());
+}
+
+std::string Web::lock_json() {
+    return std::string("{\"t\":\"lock\",\"on\":") + (c.locked ? "true" : "false") + ",\"msg\":" +
+           json_str(c.lock_msg.empty() ? "" : c.lock_msg.substr(c.lock_msg[0] == '!')) + "}";
 }
 
 std::string Web::split_json() {
@@ -794,7 +804,7 @@ void Web::flush_buf(Buffer* b) {
 // Buffer updates (nicklists!) are coalesced to one per buffer per loop pass,
 // so a netsplit is one message per channel instead of one per quit.
 void Web::flush() {
-    if (lfd < 0 || clients.empty()) { pending.clear(); return; }
+    if (lfd < 0 || clients.empty() || c.locked) { pending.clear(); return; }
     for (auto& b : c.bufs)
         if (pending.count(b->id)) flush_buf(b.get());
     pending.clear();
@@ -816,6 +826,14 @@ void Web::flush() {
 
 void Web::on_event(Ev e, Buffer* b, const Line* l) {
     if (lfd < 0 || clients.empty()) return;
+    if (e == Ev::LOCK) {
+        broadcast(lock_json());
+        if (!c.locked)  // unlocked: every page gets the session again, under its unlock animation
+            for (auto& cl : clients)
+                if (cl->ws && !cl->conn.closing) snapshot(*cl);
+        return;
+    }
+    if (c.locked) return;  // nothing of the session while locked
     switch (e) {
     case Ev::LINE: {
         bool fresh = !known.count(b->id);  // its history (incl. this line) goes out now
@@ -843,6 +861,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
     case Ev::BELL: broadcast("{\"t\":\"bell\"}"); break;
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
+    case Ev::LOCK: break;  // above
     case Ev::NOTE:
         broadcast("{\"t\":\"note\",\"buf\":" + std::to_string(b->id) + ",\"err\":" + (l->kind == LK::ERROR ? "true" : "false") +
                   ",\"title\":" + json_str(l->nick) + ",\"x\":" + json_str(l->text) + "}");

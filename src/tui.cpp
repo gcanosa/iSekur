@@ -55,7 +55,22 @@ extern "C" void isekur_link(int x, int y, int id);
 extern "C" int isekur_present(void);
 static std::vector<std::string> frame_urls;
 
+// unlocking: the session opens from the middle out. g_reveal 0..1, or -1: none
+static double g_reveal = -1;
+static Style g_cover, g_edge;
+
 static void present() {
+    if (g_reveal >= 0) {
+        int W = tb_width(), H = tb_height();
+        for (int y = 0; y < H; y++)
+            for (int x = 0; x < W; x++) {
+                double nx = (x - W / 2.0) / (W / 2.0), ny = (y - H / 2.0) / (H / 2.0);
+                double d = std::sqrt(nx * nx + ny * ny) / 1.4143 + (unsigned)((x * 73856093) ^ (y * 19349663)) % 100 / 800.0;
+                double r = g_reveal * 1.2;  // a ragged ring: the noise keeps it from looking drawn with a compass
+                if (d > r + 0.05) cell(x, y, ' ', g_cover);
+                else if (d > r) cell(x, y, U'░', g_edge);
+            }
+    }
     std::vector<const char*> u;
     for (auto& s : frame_urls) u.push_back(s.c_str());
     isekur_links_urls(u.data(), (int)u.size());
@@ -466,10 +481,11 @@ void Tui::draw() {
     Buffer* b = c.active;
     c.dirty = false;
     hits.clear(), nl_x = -1;
-    if (c.locked) {  // the lock screen: nothing of the session shows until the password
-        std::vector<std::string> info;
-        if (!c.lock_msg.empty()) info.push_back(c.lock_msg);
-        draw_dialog(W, H, "iSekur is locked", info, "password", true, lock_in, lock_in.size(), "Enter: unlock · Alt+D: detach");
+    long long la = c.lock_anim ? now_ms() - c.lock_anim_at : 0;
+    g_reveal = c.lock_anim == 'u' && la >= 350 ? std::min(1.0, (la - 350) / 550.0) : -1;
+    g_cover = def, g_edge = sty(T, "menu_border", "separator"), g_edge.bg = def.bg;
+    if (c.locked || (c.lock_anim == 'u' && la < 350)) {  // the lock screen: nothing of the session shows until the password
+        draw_lock(W, H, la);
         present();
         return;
     }
@@ -819,13 +835,14 @@ void Tui::draw() {
 //   │  Enter: OK · Esc: cancel       │
 //   └────────────────────────────────┘
 void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
-                      bool hidden, const std::u32string& in, size_t at, const std::string& hint) {
+                      bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx, int dy) {
     const Theme& T = c.theme;
     Style bs = sty(T, "menu", "nicklist"), fs = T.get("input"), es = T.get("error"), hs = bs, ns = sty(T, "timestamp", "menu"), ls = sty(T, "menu_border", "separator");
     for (Style* st : {&es, &ns, &ls}) st->bg = bs.bg;
     hs.attr |= A_BOLD;
     int bw = std::min(W - 2, 48), x0 = (W - bw) / 2, inner = bw - 4;
     int bh = 5 + (int)info.size(), y0 = std::max(0, (H - bh) / 2 - 1);
+    x0 += dx, y0 += dy;  // the lock screen's animations move it
     for (int yy = y0; yy < y0 + bh; yy++) fill(yy, x0, x0 + bw, bs);
     for (int xx = x0; xx < x0 + bw; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(x0, yy, U'│', ls), cell(x0 + bw - 1, yy, U'│', ls);
@@ -855,7 +872,39 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
         col += w;
     }
     text(x0 + 2, fy + 2, x0 + 2 + inner, hint, ns, false);
-    tb_set_cursor(fx + curw - off, fy);
+    if (fy >= 0) tb_set_cursor(fx + curw - off, fy);
+    else tb_hide_cursor();
+}
+
+// the lock screen: a padlock over the password box. Core::lock_anim: 'l' both drop in from the top
+// and the shackle snaps shut, 'f' (a wrong password) they shake and flash red, 'u' the shackle
+// springs open (then present() opens the session from the middle out)
+void Tui::draw_lock(int W, int H, long long ms) {
+    const Theme& T = c.theme;
+    std::vector<std::string> info;
+    if (!c.lock_msg.empty()) info.push_back(c.lock_msg);
+    int bh = 5 + (int)info.size(), y0 = std::max(0, (H - bh) / 2 - 1);
+    int dx = 0, dy = 0, lift = 0;
+    bool open = c.lock_anim == 'u', red = false;
+    if (c.lock_anim == 'l' && ms < 650) {
+        double t = ms / 650.0, u = t - 1;
+        double e = 1 + 2.70158 * u * u * u + 1.70158 * u * u;  // ease out back: past the spot a little, then back
+        dy = (int)std::lround((e - 1) * (y0 + bh + 6));
+        lift = t < 0.75 ? 2 : t < 0.9 ? 1 : 0;  // the shackle closes as it lands
+    } else if (c.lock_anim == 'f' && ms < 450) {
+        double t = ms / 450.0;
+        dx = (int)std::lround(3 * std::sin(t * 6 * M_PI) * (1 - t)), red = true;
+    } else if (open) lift = ms < 120 ? 1 : 2;
+    draw_dialog(W, H, "iSekur is locked", info, "password", true, lock_in, lock_in.size(), "Enter: unlock · Alt+D: detach", dx, dy);
+    if (y0 < 7) return;  // no room for the padlock
+    Style def = T.get("default"), ps = red ? T.get("error") : open ? T.get("join") : sty(T, "menu_border", "separator");
+    ps.bg = def.bg, ps.attr |= A_BOLD;
+    int px = (W - 9) / 2 + dx, py = y0 + dy - 6;
+    text(px + 2, py - lift, px + 7, "╭───╮", ps, false);  // the shackle, its legs down to the body
+    for (int y = py - lift + 1; y <= py + 1; y++) text(px + 2, y, px + 7, open && y == py + 1 ? "│    " : "│   │", ps, false);
+    text(px, py + 2, px + 9, open ? "╭─┴─────╮" : "╭─┴───┴─╮", ps, false);
+    text(px, py + 3, px + 9, red ? "│   ✕   │" : open ? "│   ○   │" : "│   ●   │", ps, false);
+    text(px, py + 4, px + 9, "╰───────╯", ps, false);
 }
 
 // ---- the settings window (/set alone) ----------------------------------------

@@ -162,7 +162,7 @@ int main(int argc, char** argv) {
     Tui tui(c);
     if (local && !tui.init(err)) { fprintf(stderr, "terminal: %s\n", err.c_str()); return 1; }
     c.tty = local;
-    c.locked = local && c.lock_on();
+    if (local && c.lock_on()) c.set_lock(true);
     bool hinted = false;
 
     // banner_anim: a light sweeps the banner (home's first 6 lines) once, ~1.2s,
@@ -199,7 +199,7 @@ int main(int argc, char** argv) {
         Buffer* about = c.tty && c.active && !c.active->srv && c.active->name == "*about" && c.active->lines.size() >= 6 ? c.active : nullptr;
         bool typing = c.tty && now_ms() < c.typing_until;  // a line is typing itself out: redraw ~30 times a second
         int wait = c.drain();
-        if (anim0 || typing) wait = std::min(wait, 33);
+        if (anim0 || typing || (c.tty && c.lock_anim)) wait = std::min(wait, 33);
         if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep
             long long ph = (now_ms() - c.about_t0) % 3500;
             wait = std::min(wait, ph < 1200 || !c.about_typed.empty() ? 33 : (int)(3500 - ph));
@@ -232,7 +232,7 @@ int main(int argc, char** argv) {
             }
             else {
                 c.tty = c.dirty = true;
-                c.locked = c.lock_on();  // every attach asks again
+                if (c.lock_on()) c.set_lock(true);  // every attach asks again (the webchat too)
                 if (!hinted) c.print(home, LK::INFO, "Alt+D (Option+D on a Mac) or /detach leaves iSekur running in the background"), hinted = true;
             }
         }
@@ -259,6 +259,10 @@ int main(int argc, char** argv) {
         c.set_attached(c.tty || web.attached());
         if (now != last_sec) last_sec = now, c.dirty = true, c.tick(now);  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
         if (anim_due && c.tty && !c.locked) anim_due = false, anim0 = home->lines.size() >= 6 ? now_ms() : 0;
+        if (c.lock_anim) {  // the lock screen's animations: 900ms at most (tui.cpp draw_lock)
+            if (now_ms() - c.lock_anim_at < 900) c.dirty = true;
+            else c.lock_anim = 0, c.dirty = true;
+        }
         if (anim0) {
             double t = (now_ms() - anim0) / 1200.0;  // 0..1 over the sweep
             bool done = t >= 1 || !c.tty || home->lines.size() < 6;
