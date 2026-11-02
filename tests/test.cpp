@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cassert>
 #include <cstdio>
+#include <fstream>
 #include <csignal>
 #include <cstring>
 #include <functional>
@@ -472,8 +473,9 @@ int main() {
     // a server tab's menu: reconnect / disconnect while up, fold, close (asks first)
     {
         auto sm = core.tab_menu(ts->status);
-        assert(sm.size() == 6 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
-               sm[5].second.rfind("?Disconnect from ", 0) == 0);
+        assert(sm.size() == 7 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
+               sm[5].second.rfind("?Disconnect from ", 0) == 0 && sm[6].second.rfind("?Delete t:", 0) == 0 &&
+               sm[6].second.find("\n/server del t") != std::string::npos);
         // connect at startup or not: flips with the setting and goes to the config at once
         std::string path = "build/test-autoconnect.conf";
         remove(path.c_str());
@@ -498,6 +500,34 @@ int main() {
         assert(ts->status->collapsed && core.tab_menu(ts->status)[2].first == "Show its channels");
         core.exec(ts->status, "/fold");
         assert(!ts->status->collapsed);
+    }
+
+    // /server del: the server, its tabs and its [server.x] go, from memory and from the file; the comments of the
+    // section after it stay
+    {
+        std::string text = "[general]\nnick = me\n\n[server.a]\nhost = a\n; a's note\nport = 1\n\n# the next one\n[server.b]\nhost = b\n";
+        std::string d = ini_drop(text, "server.a");
+        assert(d.find("[server.a]") == std::string::npos && d.find("host = a") == std::string::npos && d.find("a's note") == std::string::npos &&
+               d.find("# the next one\n[server.b]\nhost = b") != std::string::npos && d.find("[general]\nnick = me") != std::string::npos);
+        assert(ini_drop(text, "server.zzz") == text && ini_drop(text, "server.b").find("[server.b]") == std::string::npos);
+        // a new key goes above the comments that end its section (they're the next one's), not between them and it
+        std::string up = ini_update(text, Ini{{"server.a", {{"nick", "x"}}}});
+        assert(up.find("port = 1\nnick = x\n\n# the next one\n[server.b]") != std::string::npos);
+        std::string path = "build/test-serverdel.conf";
+        { std::ofstream f(path); f << "[general]\nnick = me\n\n[server.gone2]\nhost = irc.invalid\nautoconnect = false\n"; }
+        std::swap(core.cfg_path, path);
+        core.cfg["server.gone2"]["host"] = "irc.invalid", core.cfg["server.gone2"]["autoconnect"] = "false";
+        Server* g = core.add_server(core.server_cfg("gone2"));
+        Buffer* gc = core.open(g, BT::CHANNEL, "#x");
+        size_t n = core.servers.size(), nb = core.bufs.size();
+        core.exec(gc, "/server del gone2");  // typed in one of its own tabs
+        Ini f;
+        assert(core.servers.size() == n - 1 && core.bufs.size() == nb - 2 && !core.cfg.count("server.gone2") &&
+               ini_load(core.cfg_path, f) && !f.count("server.gone2") && f["general"]["nick"] == "me");
+        core.exec(home, "/server del gone2");
+        assert(home->lines.back().text == "No server named gone2");
+        remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
     }
 
     // closing a /server tab (Ctrl+W): socket closed, server gone, nothing left for /save

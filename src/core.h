@@ -28,6 +28,8 @@ Ini ini_parse(const std::string& text);
 bool ini_load(const std::string& path, Ini& out);
 std::string ini_update(const std::string& text, const Ini& changes);
 bool ini_save(const std::string& path, const Ini& changes, std::string& err);
+std::string ini_drop(const std::string& text, const std::string& sec);  // text without [sec]
+bool ini_drop_section(const std::string& path, const std::string& sec, std::string& err);
 std::string ini_get(const Ini& ini, const std::string& sec, const std::string& key,
                     const std::string& def = "");
 

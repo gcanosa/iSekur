@@ -90,12 +90,20 @@ std::string ini_update(const std::string& text, const Ini& changes) {
     auto flush_sec = [&](const std::string& sname) {  // keys of sname not yet written
         auto it = changes.find(sname);
         if (it == changes.end()) return;
-        size_t blanks = 0;  // new keys go above the blank lines that end a section
-        while (out.size() > blanks + 1 && out[out.size() - blanks - 2] == '\n') blanks++;
-        out.resize(out.size() - blanks);
+        // new keys go above the blank and comment lines that end a section: those comments are the next section's
+        size_t cut = out.size();
+        while (cut > 0) {
+            size_t ls = cut < 2 ? 0 : out.rfind('\n', cut - 2);
+            ls = ls == std::string::npos || cut < 2 ? 0 : ls + 1;
+            std::string t = trim(out.substr(ls, cut - ls));
+            if (!t.empty() && t[0] != '#' && t[0] != ';') break;  // a key, or the section's own header
+            cut = ls;
+        }
+        std::string tail = out.substr(cut);
+        out.resize(cut);
         for (auto& [k, v] : it->second)
             if (done.insert({sname, k}).second) out += k + " = " + v + "\n";
-        out.append(blanks, '\n');
+        out += tail;
     };
     std::set<std::string> seen;
     std::istringstream in(text);
@@ -127,11 +135,57 @@ std::string ini_update(const std::string& text, const Ini& changes) {
     return out;
 }
 
+// `text` without its [sec]: the header and every line up to the next header, but for the comments right above that
+// header (after the section's last blank line): they describe the next section
+std::string ini_drop(const std::string& text, const std::string& sec) {
+    std::istringstream in(text);
+    std::string out, line, held;
+    bool drop = false;
+    while (std::getline(in, line)) {
+        std::string t = trim(line);
+        if (!t.empty() && t[0] == '[' && t.back() == ']') {
+            if (drop) out += held;
+            held.clear();
+            if ((drop = trim(t.substr(1, t.size() - 2)) == sec)) continue;
+        } else if (drop) {
+            if (!t.empty() && (t[0] == '#' || t[0] == ';')) held += line + "\n";
+            else held.clear();
+            continue;
+        }
+        out += line + "\n";
+    }
+    return out;
+}
+
+// text into path through a temporary file, so a crash never leaves half a config
+static bool write_file(const std::string& path, const std::string& text, std::string& err) {
+    std::string tmp = path + ".tmp";
+    mode_t old = umask(077);  // the config holds passwords
+    std::ofstream o(tmp, std::ios::trunc);
+    umask(old);
+    o << text;
+    o.close();
+    if (!o || rename(tmp.c_str(), path.c_str())) {
+        err = std::string("can't write ") + path + ": " + strerror(errno);
+        unlink(tmp.c_str());
+        return false;
+    }
+    return true;
+}
+
+bool ini_drop_section(const std::string& path, const std::string& sec, std::string& err) {
+    std::ifstream f(path);
+    if (!f) return true;  // no file: nothing to drop
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return write_file(path, ini_drop(ss.str(), sec), err);
+}
+
 bool ini_save(const std::string& path, const Ini& changes, std::string& err) {
     std::ifstream f(path);
     std::stringstream ss;
     if (f) ss << f.rdbuf();
-    std::string dir = path.substr(0, path.rfind('/') + 1), tmp = path + ".tmp";
+    std::string dir = path.substr(0, path.rfind('/') + 1);
     if (!dir.empty()) mkdir(dir.c_str(), 0700);
     Ini sealed = changes;
     std::string key;
@@ -141,17 +195,7 @@ bool ini_save(const std::string& path, const Ini& changes, std::string& err) {
                 if (key.empty() && (key = cfg_key(path, true)).empty()) { err = "can't write secret.key next to " + path; return false; }
                 v = "enc:" + e2e_seal(key, v);
             }
-    mode_t old = umask(077);  // the config holds passwords
-    std::ofstream o(tmp, std::ios::trunc);
-    umask(old);
-    o << ini_update(ss.str(), sealed);
-    o.close();
-    if (!o || rename(tmp.c_str(), path.c_str())) {
-        err = std::string("can't write ") + path + ": " + strerror(errno);
-        unlink(tmp.c_str());
-        return false;
-    }
-    return true;
+    return write_file(path, ini_update(ss.str(), sealed), err);
 }
 
 std::string ini_get(const Ini& ini, const std::string& sec, const std::string& key,

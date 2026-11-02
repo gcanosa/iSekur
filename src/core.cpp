@@ -1036,8 +1036,22 @@ void Core::exec(Buffer* b, const std::string& input) {
         quit = true;
         return;
     }
+    if (cmd == "server" && !argv.empty() && argv[0] == "del") {  // /server del name: out of iSekur and the config
+        if (argv.size() < 2) { print(b, LK::ERROR, "Usage: /server del name"); return; }
+        std::string name = argv[1], sec = "server." + name, err;
+        Server* t = nullptr;
+        for (auto& sv : servers)
+            if (sv->cfg.name == name) t = sv.get();
+        if (!t && !cfg.count(sec)) { print(b, LK::ERROR, "No server named " + name); return; }
+        if (t) close(t->status);  // disconnects and closes its tabs; b may be one of them
+        cfg.erase(sec), unsaved.erase(sec), set_was.erase(sec);
+        Buffer* home = bufs.front().get();
+        if (!cfg_path.empty() && !ini_drop_section(cfg_path, sec, err)) { print(home, LK::ERROR, err); return; }
+        print(home, LK::INFO, "Deleted server " + name + " (and its [" + sec + "] in the config)");
+        return;
+    }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick]"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] | del name"); return; }
         std::string name = argv[0], nick, port;
         bool tls = false, verify = true;
         for (size_t i = 1; i < argv.size(); i++) {

@@ -62,6 +62,7 @@ button, input { font: inherit; color: inherit; }
 /* bottom left: add a server, settings, about */
 #foot { grid-area: foot; display: flex; gap: 6px; padding: 8px 10px; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
 #foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; cursor: pointer; color: var(--fg); font-size: 22px; line-height: 1.2; }
+#foot #addsrv { display: flex; align-items: center; justify-content: center; }  /* its icon centered like the others' glyphs */
 #foot #setbtn { font-size: 27px; line-height: 1; }  /* the gear glyph draws small */
 #foot button:hover { color: var(--fg); border-color: var(--accent); }
 /* ‹ at the top of the tab list folds it to a thin strip (remembered); › opens it again */
@@ -91,10 +92,12 @@ button, input { font: inherit; color: inherit; }
   #app.noside #foot #setbtn { font-size: 21px; }
 }
 /* dialogs: a box with its title on the border, like the terminal's */
-dialog { background: var(--menu-bg, var(--panel)); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
+dialog { background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
+  --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: var(--dlg-sel-bg, #ffffff14); --tab_active-fg: var(--dlg-sel-fg, #d6d8e6);
+  --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
 dialog::backdrop { background: #0009; }
 dialog form { display: grid; gap: 10px; padding: 18px 20px; }
-dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--accent); }
+dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--dlg-title, var(--accent)); }
 /* a theme's [layout] window = mac | win95: window buttons in the dialog's top corner; only the close one does something */
 .wbtns { display: none; position: absolute; top: 10px; gap: 8px; }
 .win-mac :is(dialog form, #lock .card), #login form { padding-top: 34px; }
@@ -123,6 +126,24 @@ dialog .btns button { background: var(--bg); color: var(--fg); border: 1px solid
 dialog .btns button.go { background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111); border: 0; font-weight: 700; }
 dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #dabout { width: min(720px, calc(100vw - 32px)); }
+/* + : the servers, a list to pick one from (or New) and its form */
+#dsrv { width: min(720px, calc(100vw - 32px)); }
+#srvbody { display: grid; grid-template-columns: 180px 1fr; gap: 14px; }
+#srvside { display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--line); padding-right: 12px; min-width: 0; }
+#srvlist { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 320px; flex: 1; }
+#srvlist button { display: flex; gap: 8px; align-items: center; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px;
+  cursor: pointer; color: var(--fg); font-size: 13px; min-width: 0; }
+#srvlist button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#srvlist button:hover { background: #ffffff0a; }
+#srvlist button.on { background: var(--tab_active-bg, #ffffff14); color: var(--tab_active-fg, var(--fg)); }
+#srvlist .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
+#srvlist .dot.up { background: #3fb950; }
+#srvlist .dot.wait { background: #d29922; }
+#srvnew { background: none; border: 1px dashed var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font: inherit; font-size: 13px; }
+#srvform { display: grid; gap: 10px; align-content: start; min-width: 0; }
+dialog .btns .left { margin-right: auto; }
+#dsrv [hidden] { display: none !important; }  /* label.ck's display: flex would show a hidden one */
+@media (max-width: 760px) { #srvbody { grid-template-columns: 1fr; } #srvside { border-right: 0; padding-right: 0; } #srvlist { max-height: 140px; } }
 #abox { font-size: 13px; line-height: 1.4; }
 #abox a { color: var(--accent2); }
 #abanner { position: relative; display: inline-block; white-space: pre; line-height: 1; margin-bottom: 6px; overflow: hidden; }
@@ -388,7 +409,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
   border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 3px 5px; font: inherit; outline: none; }
 .win-95 :is(dialog, #lock) select:not([multiple]) { appearance: none; padding-right: 22px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v14H0z' fill='%23fff'/%3E%3Cpath d='M15 0h1v16H0v-1h15z' fill='%23000'/%3E%3Cpath d='M14 1h1v14H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center / 16px 16px, #fff; }
-.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a) { background: #c0c0c0; color: #000;
+.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, #srvnew) { background: #c0c0c0; color: #000;
   border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
   font: 400 12px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
 .win-95 :is(dialog .btns button, #lock button) { min-width: 75px; }
@@ -400,11 +421,11 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #setlist .sw i::after { display: none; }
 .win-95 dialog input[type=checkbox]:checked, .win-95 #setlist .sw input:checked + i { background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9'%3E%3Cpath d='M1 4.5l2.5 2.5L8 1.5' fill='none' stroke='%23000' stroke-width='1.8'/%3E%3C/svg%3E") center / 9px no-repeat; }
 .win-95 #setlist .sw input:focus-visible + i { outline: 1px dotted #000; outline-offset: 2px; }
-.win-95 :is(#setnav, #thlist, .flist) { background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 2px; gap: 0; }
+.win-95 :is(#setnav, #thlist, .flist, #srvlist) { background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 2px; gap: 0; }
 .win-95 #setnav { margin-right: 0; }
-.win-95 :is(#setnav button, #thlist button, .flist .r) { border-radius: 0; padding: 2px 6px; }
-.win-95 :is(#setnav button, #thlist button):hover { background: none; }
-.win-95 :is(#setnav button.on, #thlist button.on), .win-95 #setnav button.on .c { background: #000080; color: #fff; }
+.win-95 :is(#setnav button, #thlist button, .flist .r, #srvlist button) { border-radius: 0; padding: 2px 6px; }
+.win-95 :is(#setnav button, #thlist button, #srvlist button):hover { background: none; }
+.win-95 :is(#setnav button.on, #thlist button.on, #srvlist button.on), .win-95 #setnav button.on .c { background: #000080; color: #fff; }
 .win-95 #setlist .sec { color: #000; font-weight: 700; letter-spacing: 0; text-transform: none; border-bottom: 1px solid #808080; box-shadow: 0 1px #fff; }
 .win-95 #abox a { color: #00f; }
 .win-95 #abanner { font-family: var(--mono); }  /* box drawing lines up only in a monospaced font, not the dialog's Tahoma */
@@ -430,7 +451,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 </div>
 <div id="app">
   <nav id="side"></nav>
-  <div id="foot"><button id="addsrv" title="Add a server" aria-label="Add a server">+</button><button id="setbtn" title="Settings" aria-label="Settings">⚙</button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers">⇅</button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur">ⓘ</button></div>
+  <div id="foot"><button id="addsrv" title="Servers" aria-label="Servers"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3.5" width="18" height="7" rx="2"/><rect x="3" y="13.5" width="18" height="7" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg></button><button id="setbtn" title="Settings" aria-label="Settings">⚙</button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers">⇅</button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur">ⓘ</button></div>
   <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users">👥</button><button id="bell" aria-label="Notifications">🔕</button><button id="logout" aria-label="Logout"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4M3 12h11M10 8l4 4-4 4"/></svg></button></div>
   <main id="msgs" aria-live="polite"></main>
   <main id="msgs2" title="Click: type here"></main>
@@ -452,14 +473,22 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok">Set topic</button></div>
 </form></dialog>
 <dialog id="dsrv"><form method="dialog">
-  <h2>Add a server</h2>
+  <h2>Servers</h2>
+  <div id="srvbody">
+  <div id="srvside"><div id="srvlist" role="listbox" aria-label="Servers"></div><button type="button" id="srvnew">+ New server</button></div>
+  <div id="srvform">
   <div class="row2"><label>Host or IP<input name="host" required placeholder="irc.sekurnet.org"></label><label>Port<input name="port" type="number" min="1" max="65535" value="6697"></label></div>
   <label>Network name (its [server.name] in the config)<input name="name" pattern="[A-Za-z0-9._\-]+" placeholder="sekurnet" title="letters, digits, . _ and - only"></label>
   <label>Nickname<input name="nick" placeholder="(your default nick)"></label>
+  <label>Autojoin channels<input name="autojoin" placeholder="#channel, #other key" autocomplete="off"></label>
   <label class="ck"><input type="checkbox" name="tls" checked> SSL/TLS</label>
   <label class="ck"><input type="checkbox" name="verify" checked> Verify the certificate (off for self-signed servers)</label>
-  <label class="ck"><input type="checkbox" name="save" checked> Save it to the config (/save)</label>
-  <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok">Connect</button></div>
+  <label class="ck"><input type="checkbox" name="auto" checked> Connect at startup</label>
+  <label class="ck" id="srvsavebox"><input type="checkbox" name="save" checked> Save it to the config (/save)</label>
+  <div class="hint" id="srvhint"></div>
+  </div>
+  </div>
+  <div class="btns"><button type="button" id="srvdel" class="left">Delete</button><button value="cancel" formnovalidate>Close</button><button type="button" id="srvsave">Save</button><button class="go" value="ok" id="srvgo">Connect</button></div>
 </form></dialog>
 <dialog id="dset"><form method="dialog">
   <h2>Settings</h2>
@@ -824,6 +853,9 @@ function applyTheme() {
   set("--accent", (el.input_prompt || {}).fg);
   set("--accent2", (el.msg_self || {}).fg);
   const oa = onAccent((el.input_prompt || {}).fg, (el.msg_self || {}).fg);
+  for (const k of ["--dlg-bg", "--dlg-dim", "--dlg-sel-fg", "--dlg-sel-bg", "--dlg-title"]) r.removeProperty(k);  // measured on the theme's own
+  const dc = dialogColors();
+  set("--dlg-bg", dc.bg), set("--dlg-dim", dc.dim), set("--dlg-sel-fg", dc.selFg), set("--dlg-sel-bg", dc.selBg), set("--dlg-title", dc.title);
   set("--on-accent", oa.text), set("--accent-veil", oa.veil);
   // light or dark by the background's brightness: native controls, scrollbars and hovers match
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
@@ -845,10 +877,30 @@ function applyTheme() {
 // The accent buttons (Apply & save, Connect, Unlock) are a gradient from input_prompt to msg_self: their text,
 // black or white, must read on both ends (WCAG 4.5:1). If neither does (mid-tone accents), the least veil
 // (white under black text, black under white) that makes it read; mirc's navy gets white text and no veil
+// "#rrggbb" -> [r, g, b] (null otherwise); WCAG contrast of two of those; one mixed toward another by k (0..1)
+const rgb = h => { const m = /^#(..)(..)(..)$/i.exec((h || "").trim()); return m && [1, 2, 3].map(i => parseInt(m[i], 16)); };
+const lum = c => { const [r, g, b] = c.map(v => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+const cr = (x, y) => { const a = lum(x), b = lum(y); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+const mixc = (a, b, k) => a.map((x, i) => Math.round(x + (b[i] - x) * k));
+const hexc = c => "#" + c.map(x => x.toString(16).padStart(2, "0")).join("");
+// The dialogs' colors, readable whatever the theme (WCAG 4.5:1): the menu background unless the text doesn't read on
+// it (then the chat's), the dim text (labels, hints, counts) moved toward the text color until it reads, and a
+// selection pair that reads (the selected tab's, the menu selection's, else the text and background swapped).
+// Themes that pass keep their own colors
+function dialogColors() {
+  const st = getComputedStyle(document.documentElement), v = k => rgb(st.getPropertyValue(k));
+  const fg = v("--fg"), bg = v("--bg"), menu = v("--menu-bg") || v("--panel");
+  if (!fg || !bg) return {};
+  const dbg = menu && cr(fg, menu) >= 4.5 ? menu : bg;
+  let dim = v("--muted") || fg, k = 0;
+  while (cr(dim, dbg) < 4.5 && k < 1) dim = mixc(v("--muted") || fg, fg, k += 0.1);
+  let sel = [[v("--tab_active-fg"), v("--tab_active-bg")], [v("--menu_sel-fg"), v("--menu_sel-bg")]].find(([f, b]) => f && b && cr(f, b) >= 4.5);
+  if (!sel) sel = [dbg, fg];
+  let title = v("--accent") || fg;  // the dialogs' titles: the accent, toward the text color until it reads
+  for (k = 0; cr(title, dbg) < 4.5 && k < 1;) title = mixc(v("--accent") || fg, fg, k += 0.1);
+  return {bg: hexc(dbg), dim: hexc(dim), selFg: hexc(sel[0]), selBg: hexc(sel[1]), title: hexc(title)};
+}
 function onAccent(a1, a2) {
-  const rgb = h => { const m = /^#(..)(..)(..)$/i.exec(h || ""); return m && [1, 2, 3].map(i => parseInt(m[i], 16)); };
-  const lum = c => { const [r, g, b] = c.map(v => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
-  const cr = (x, y) => { const a = lum(x), b = lum(y); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
   const ends = [rgb(a1), rgb(a2) || rgb(a1)].filter(Boolean);
   if (!ends.length) return {};
   let best = null;
@@ -888,6 +940,7 @@ function onMsg(ev) {
     bufs.set(m.id, m);
     if ((m.id === active || m.id === split) && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
     later(renderSide);
+    if (dsrv.open && m.type === "status") later(renderSrv);  // the servers' dots follow their state
     if (m.id === active) { renderTopic(); if (fresh || !old) later(renderNicks); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
     if (m.id === split && (fresh || !old)) later(renderNicks2);
   } else if (m.t === "lines") {
@@ -954,6 +1007,7 @@ function onMsg(ev) {
   } else if (m.t === "settings") {
     setCache = m.list;
     if (dset.open) renderSettings(m.list);
+    if (dsrv.open) { srvs = srvRows(m.list); if (srvSel && !srvs.some(x => x.name === srvSel)) srvSel = null; renderSrv(); }
     renderSugg();
   } else if (m.t === "note") {
     toast(m);
@@ -1074,17 +1128,96 @@ function localLine(b, text) {
   if (b.id === active) { $("#msgs").append(lineEl(b, l)); $("#msgs").scrollTop = $("#msgs").scrollHeight; }
 }
 // + : a new server, sent as /server host port [-tls] [-noverify] -name N -nick X
+// + : the servers. The list is the config's [server.*] (from the settings rows) with each one's state from its tab;
+// picking one fills the form: Save writes the changes (/set + /save), Connect also connects, Delete removes it
+// (/server del). New, or no server yet: the form adds one, as /server
 const dsrv = $("#dsrv"), fs = dsrv.querySelector("form").elements;
-$("#addsrv").onclick = () => { $("#side").classList.remove("open"); dsrv.querySelector("form").reset(); dsrv.showModal(); };
+let srvs = [], srvSel = null, srvNote = "";  // srvSel: the [server.x] name being edited, null: a new one; srvNote: "Saved."
+const isOn = v => /^(true|on|yes|1)$/i.test(v || "");
+function srvRows(list) {  // [section, key, value, default, ...] rows -> one object per server: what's in effect
+  const by = new Map();
+  for (const [sec, k, v, def] of list) {
+    if (!sec.startsWith("server.")) continue;
+    const o = by.get(sec) || {name: sec.slice(7)}; by.set(sec, o);
+    o[k] = k === "nick" ? v : v || def;  // the nick's default is [general] nick: the placeholder says so
+  }
+  return [...by.values()].sort((a, z) => a.name.localeCompare(z.name));
+}
+function srvTab(name) { for (const b of bufs.values()) if (b.type === "status" && b.net === name) return b; return null; }
+function renderSrv() {
+  const L = $("#srvlist"); L.textContent = "";
+  if (!srvs.length) L.append(el("div", "hint", "No servers yet: New adds one."));
+  for (const o of srvs) {
+    const t = srvTab(o.name), st = t ? t.state : "disconnected";
+    const b = el("button"); b.type = "button"; b.setAttribute("role", "option");
+    b.className = o.name === srvSel ? "on" : ""; b.title = o.host + ":" + o.port + " · " + st;
+    b.append(el("i", "dot" + (st === "connected" ? " up" : st === "disconnected" ? "" : " wait")), el("span", "", o.name));
+    b.onclick = () => srvPick(o.name);
+    L.append(b);
+  }
+  const o = srvs.find(x => x.name === srvSel), t = o && srvTab(o.name);
+  $("#srvdel").hidden = $("#srvsave").hidden = !o;
+  $("#srvsavebox").hidden = !!o;
+  $("#srvgo").textContent = !o ? "Connect" : t && t.state !== "disconnected" ? "Save & reconnect" : "Save & connect";
+  $("#srvhint").textContent = (srvNote ? srvNote + " " : "") + (!o ? "A new server: Connect adds it and connects." :
+    (t ? t.state[0].toUpperCase() + t.state.slice(1) : "Not connected") + ". Host, port and TLS changes take effect on the next connect.");
+}
+function srvPick(name) {
+  srvSel = name, srvNote = "";
+  const f = dsrv.querySelector("form"); f.reset();
+  const o = srvs.find(x => x.name === name);
+  if (o) {
+    fs.host.value = o.host || ""; fs.port.value = o.port || ""; fs.name.value = o.name; fs.nick.value = o.nick || "";
+    fs.autojoin.value = (o.autojoin || "").split(",").map(x => x.trim()).filter(Boolean).join(", ");
+    fs.tls.checked = isOn(o.tls); fs.verify.checked = isOn(o.tls_verify ?? "true"); fs.auto.checked = isOn(o.autoconnect ?? "true");
+  }
+  fs.name.readOnly = !!o;  // the name is its [server.name]: renaming is a new server
+  fs.verify.disabled = !fs.tls.checked;
+  renderSrv();
+}
+// the /set lines for what changed on the picked server; true when there were any
+function srvApply() {
+  const o = srvs.find(x => x.name === srvSel); if (!o) return false;
+  const want = {host: fs.host.value.trim(), port: fs.port.value.trim(), nick: fs.nick.value.trim(),
+    autojoin: fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(","),
+    tls: fs.tls.checked ? "true" : "false", tls_verify: fs.verify.checked ? "true" : "false", autoconnect: fs.auto.checked ? "true" : "false"};
+  let n = 0;
+  for (const [k, v] of Object.entries(want)) {
+    const was = ["tls", "tls_verify", "autoconnect"].includes(k) ? (isOn(o[k] ?? (k === "tls" ? "false" : "true")) ? "true" : "false") : (o[k] || "").split(",").map(x => x.trim()).filter(Boolean).join(",");
+    if (v === was) continue;
+    send({t: "input", buf: active, text: "/set server." + o.name + "." + k + " " + (v === "" ? '""' : v)}), n++;
+  }
+  if (n) send({t: "input", buf: active, text: "/save"});
+  return n > 0;
+}
+const srvRefresh = () => send({t: "settings", buf: active});
+$("#addsrv").onclick = () => { $("#side").classList.remove("open"); srvSel = null; srvPick(null); srvRefresh(); dsrv.showModal(); };
+$("#srvnew").onclick = () => { srvPick(null); fs.host.focus(); };
+$("#srvsave").onclick = () => { if (!fs.host.reportValidity()) return; srvNote = srvApply() ? "Saved." : "Nothing changed."; renderSrv(); setTimeout(srvRefresh, 300); };
+$("#srvdel").onclick = () => {
+  if (!srvSel || !confirm("Delete " + srvSel + "? It disconnects, its tabs close and its [server." + srvSel + "] leaves the config.")) return;
+  send({t: "input", buf: active, text: "/server del " + srvSel});
+  srvPick(null); setTimeout(srvRefresh, 300);
+};
 fs.tls.onchange = () => { if (fs.port.value === "6667" || fs.port.value === "6697") fs.port.value = fs.tls.checked ? "6697" : "6667"; fs.verify.disabled = !fs.tls.checked; };
 dsrv.onclose = () => {
   if (dsrv.returnValue !== "ok") return;
+  if (srvSel) {  // a configured one: its changes, then connect (or reconnect: host and port count from the next connect)
+    srvApply();
+    const t = srvTab(srvSel);
+    if (t && t.state !== "disconnected") send({t: "input", buf: t.id, text: "/reconnect"});
+    else send({t: "input", buf: active, text: "/connect " + srvSel});
+    return;
+  }
   const host = fs.host.value.trim(), name = fs.name.value.trim(), nick = fs.nick.value.trim();
   let cmd = "/server " + host + " " + (fs.port.value || (fs.tls.checked ? 6697 : 6667));
   if (fs.tls.checked) cmd += " -tls" + (fs.verify.checked ? "" : " -noverify");
   if (name) cmd += " -name " + name;
   if (nick) cmd += " -nick " + nick;
   send({t: "input", buf: active, text: cmd});
+  const sec = "server." + (name || host), aj = fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(",");
+  if (aj) send({t: "input", buf: active, text: "/set " + sec + ".autojoin " + aj});
+  if (!fs.auto.checked) send({t: "input", buf: active, text: "/set " + sec + ".autoconnect false"});
   if (fs.save.checked) send({t: "input", buf: active, text: "/save"});
 };
 // ⇅ : /dcc transfers (also in the status line) and, with dcc_web on, dcc_dir's files to download

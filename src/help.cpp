@@ -12,7 +12,7 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick]", "Connect to a new server",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] | del name", "Connect to a new server, or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick). The server is remembered "
