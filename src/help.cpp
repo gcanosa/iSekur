@@ -53,8 +53,8 @@ static const std::vector<CmdInfo> CMDS = {
      "/connect brings it back and rejoins the channels.",
      {"/disconnect", "/disconnect brb, rebooting"}},
     {"quit", "Connection", "[message]", "Quit every server and exit iSekur",
-     "Sends QUIT everywhere and exits. To keep iSekur running in the background instead, use "
-     "/detach or Alt+D (Option+D on a Mac).",
+     "Sends QUIT everywhere and exits. Alt+Q (Option+Q on a Mac) does it too, after asking. To keep "
+     "iSekur running in the background instead, use /detach or Alt+D (Option+D on a Mac).",
      {"/quit", "/quit see you tomorrow"}},
     {"nick", "Connection", "newnick", "Change your nickname",
      "Changes your nick on the server of the current tab. When disconnected, it is used on the next connect. "
@@ -560,6 +560,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_KEY("Ctrl+A") "           next tab with news    " G_KEY("Ctrl+X") "          next server",
         "  " G_KEY("Ctrl+W") "           close this tab        " G_KEY("PgUp") " " G_KEY("PgDn") "     scroll the chat",
         "  " G_KEY("Ctrl+G") " " G_KEY("Alt+J") "    find a tab by name (channel, query, network)",
+        "  " G_KEY("Alt+Q") "            quit iSekur (asks first; " G_KEY("Alt+D") " detaches instead)",
         "",
         G_HEAD("Showing and hiding"),
         "  " G_KEY("Ctrl+L") " or " G_KEY("F2") "  the nick list     " G_KEY("Ctrl+T") "  the topic bar     " G_KEY("F3") "  the mouse",

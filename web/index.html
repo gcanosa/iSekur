@@ -117,7 +117,8 @@ dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--dlg-title, var(--acce
   box-shadow: inset -1px -1px #808080; font: 700 11px/11px Tahoma, "MS Sans Serif", sans-serif; text-align: center; }
 .win-95 .wbtns:not(#login .wbtns) .c { order: 3; margin-left: 2px; }
 .win-95 .wbtns:not(#login .wbtns):not(.deco) .c:active { border-color: #404040 #fff #fff #404040; box-shadow: inset 1px 1px #808080; }
-.win-95 .wbtns:not(#login .wbtns) .m::after { content: "_"; } .win-95 .wbtns:not(#login .wbtns) .z::after { content: "\25a1"; } .win-95 .wbtns:not(#login .wbtns) .c::after { content: "\00d7"; }
+.win-95 .wbtns:not(#login .wbtns) .m::after { content: "_"; } .win-95 .wbtns:not(#login .wbtns) .c::after { content: "\00d7"; }
+.win-95 .wbtns:not(#login .wbtns) .z { display: none; }  /* no maximize: it did nothing (the terminal's has none either) */
 dialog label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 dialog label.ck { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; }
 dialog input:not([type=checkbox]) { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--fg); min-width: 0; }
@@ -1723,7 +1724,7 @@ $("#input").onsubmit = async e => {
 // Alt+X stand in for Ctrl+W and Ctrl+X), plus the [keys] section, in the terminal's spelling ("M-Right")
 const KEYS_DEF = {"M-Right": "next_tab", "M-Left": "prev_tab", "M-a": "next_active", "M-x": "next_server", "M-w": "close_tab",
   "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down", "F6": "other_pane", "M-o": "other_pane",
-  "C-g": "find_tab", "M-j": "find_tab"};
+  "C-g": "find_tab", "M-j": "find_tab", "M-q": "quit"};
 for (let i = 1; i <= 10; i++) KEYS_DEF["M-" + i % 10] = "tab_" + i;
 let keymap = {...KEYS_DEF};
 function keyspec(e) {
@@ -1736,7 +1737,11 @@ function keyspec(e) {
 }
 function action(a) {
   const n = order.indexOf(active), sz = order.length, at = i => order[((i % sz) + sz) % sz];
-  if (a === "next_tab") select(at(n + 1));
+  if (a === "quit") {  // like the terminal's: asks first
+    askBox({title: "Quit", text: "Quit iSekur? It leaves every network and this webchat closes; nothing keeps running.", ok: "Quit"})
+      .then(v => { if (v !== null) send({t: "input", buf: active, text: "/quit"}); });
+  }
+  else if (a === "next_tab") select(at(n + 1));
   else if (a === "prev_tab") select(at(n - 1));
   else if (/^tab_\d+$/.test(a)) { const t = +a.slice(4) - 1; if (t >= 0 && t < sz) select(order[t]); }
   else if (a === "next_active") {  // the most active of the others, the nearest first

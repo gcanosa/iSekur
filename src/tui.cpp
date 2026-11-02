@@ -148,13 +148,14 @@ static std::pair<int, int> box_title(const Theme& T, int x0, int x1, int y, cons
     if (ws == "win95") {
         Style bar{0xffffff, 0x000080, A_BOLD}, btn{0x000000, 0xc0c0c0, A_BOLD};
         for (int x = x0 + 1; x < x1; x++) cell(x, y, U' ', bar);
-        // three cells a button, gray, the glyph in the middle: [ _ ][ □ ] [ × ] like Windows. A terminal that draws
-        // □ wider than a cell (Ghostty) spills it into its own gray padding, not onto the next button
-        text(x0 + 2, y, x1 - 12, title, bar, false);
-        int bx[] = {x1 - 11, x1 - 8, x1 - 4};
-        char32_t g[] = {U'_', U'\u25A1', U'\u00D7'};
-        for (int i = 0; i < 3; i++) cell(bx[i], y, U' ', btn), cell(bx[i] + 1, y, g[i], btn), cell(bx[i] + 2, y, U' ', btn);
-        return {bx[2], bx[2] + 2};
+        // Minimize and close only (maximize did nothing): two gray buttons, three cells each with the glyph in the
+        // middle, a navy cell between them like Windows' gap before close. Solid faces: edge lines inside a cell read
+        // as dividers, half-blocks made notches, and a maximize □ is two cells wide in fonts like Iosevka
+        text(x0 + 2, y, x1 - 9, title, bar, false);
+        int bx[] = {x1 - 8, x1 - 4};
+        char32_t g[] = {U'_', U'\u00D7'};
+        for (int i = 0; i < 2; i++) cell(bx[i], y, U' ', btn), cell(bx[i] + 1, y, g[i], btn), cell(bx[i] + 2, y, U' ', btn);
+        return {bx[1], bx[1] + 2};
     }
     int tx = x0 + 2;
     std::pair<int, int> close{-1, -1};
@@ -1635,6 +1636,7 @@ void Tui::load_keys() {
     keymap["F3"] = "toggle_mouse";
     keymap["C-g"] = keymap["M-j"] = keymap["∆"] = "find_tab";  // ∆: Option+J on a Mac
     keymap["F6"] = keymap["M-o"] = keymap["ø"] = "other_pane";  // /split; ø: Option+O on a Mac
+    keymap["M-q"] = keymap["œ"] = "quit";  // œ: Option+Q on a Mac without "Option as Meta"; it asks first
     keymap["M-d"] = keymap["∂"] = keymap["C-z"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"; C-z: detach (still connected) where a shell would suspend
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
@@ -1687,6 +1689,10 @@ bool Tui::action(const std::string& a) {
     else if (a == "toggle_topic") topicbar = !topicbar;
     else if (a == "other_pane") { if (c.split_buf) c.select(c.split_buf); }
     else if (a == "detach") c.detach_req = true;
+    else if (a == "quit") {  // asks first, in the yes/no box (y quits; n, Esc or × don't)
+        confirm = "Quit iSekur? You leave every network and the webchat closes. Alt+D detaches instead: iSekur stays connected.\n/quit";
+        confirm_title = "Quit";
+    }
     else if (a == "find_tab") fw = FindWin{}, fw.open = true, fw.sel = std::max(0, c.index_of(c.active));
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
