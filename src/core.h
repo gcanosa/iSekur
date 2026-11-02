@@ -18,6 +18,11 @@
 // ---- INI (config + themes) -------------------------------------------------
 using Ini = std::map<std::string, std::map<std::string, std::string>>;
 bool secret_key(const std::string& k);  // passwords and hashes: never shown
+// "IDENTIFY pass" (and REGISTER, GHOST...) to NickServ/ChanServ as it is shown and logged: "IDENTIFY ********"
+std::string mask_services(const std::string& tgt, const std::string& text);
+// where that password starts, or npos; *end: where it ends (npos: the end of the text)
+size_t services_secret(const std::string& tgt, const std::string& text, size_t* end = nullptr);
+size_t input_secret(const std::string& buf, const std::string& line, size_t* end = nullptr);  // the same in a typed line ("/msg NickServ ...")
 Ini ini_parse(const std::string& text);
 bool ini_load(const std::string& path, Ini& out);
 std::string ini_update(const std::string& text, const Ini& changes);
@@ -214,6 +219,7 @@ struct Server {
     time_t last_rx = 0, reconnect_at = 0, ping_at = 0, ctcp_at = 0;
     std::string to_self;  // echo-message: a message to our own nick comes twice (echo + delivery); the first one's msgid or text
     time_t to_self_at = 0;
+    time_t ident_at = 0;   // our automatic NickServ IDENTIFY: its echo and NickServ's answers go to the server tab for a while
     int typed_in = 0;      // the buffer id a /command for this server was last typed in: its replies go there
     time_t typed_at = 0;
     long long ping_sent_ms = 0;

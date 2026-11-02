@@ -319,6 +319,9 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #prompt { color: var(--input_prompt-fg, var(--accent)); align-self: center; white-space: nowrap; }
 #line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
 #line:focus { outline: none; border-color: var(--accent); }
+/* a NickServ password being typed: the line's text goes invisible and this copy, with *s, sits over it */
+#line.secret { color: transparent; caret-color: var(--input-fg, var(--fg)); }
+#mask { position: absolute; pointer-events: none; overflow: hidden; white-space: pre; border: 1px solid transparent; padding: 8px 10px; color: var(--input-fg, var(--fg)); display: none; }
 @media (max-width: 760px) {
   #app { grid-template-columns: 1fr; grid-template-areas: "topic" "msgs" "status" "input"; }
   #side { display: none; position: fixed; inset: 0 30% 0 0; z-index: 5; box-shadow: 0 0 40px #000; }
@@ -356,7 +359,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <aside id="nicks2"></aside>
   <aside id="nicks"></aside>
   <div id="status"><span id="stl"></span><span id="sti"></span><span id="dccbar" title="Files and transfers"></span></div>
-  <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"></form>
+  <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"><div id="mask" aria-hidden="true"></div></form>
 </div>
 <div id="lock" role="dialog" aria-modal="true" aria-label="iSekur is locked"><form class="card" id="lockf">
     <svg viewBox="0 0 48 56" width="52" height="60" aria-hidden="true"><path class="shackle" d="M14 26V16a10 10 0 0 1 20 0v10" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/><rect x="5" y="25" width="38" height="29" rx="7" fill="currentColor"/><circle cx="24" cy="37.5" r="4" fill="var(--menu-bg, var(--panel))"/><rect x="22.5" y="39" width="3" height="7" rx="1.5" fill="var(--menu-bg, var(--panel))"/></svg>
@@ -1229,7 +1232,50 @@ function suggest(s) {
   if (k) { out.push(["/" + k[0], (k[1] ? " " + k[1] : "") + "  ", k[2]]); return [-2, out]; }
   return [-1, []];
 }
+// where a NickServ/ChanServ password starts and ends in a typed line ([-1] if none), like services_secret()
+// and input_secret() in src/core.cpp: only the password, nicks, channels and emails stay readable
+function servicesSecret(tgt, t) {
+  const ns = /^nickserv/i.test(tgt), cs = /^chanserv/i.test(tgt);
+  if (!ns && !cs) return [-1];
+  const w = [...t.matchAll(/\S+/g)].map(m => [m.index, m.index + m[0].length]);
+  if (!w.length) return [-1];
+  if (t.endsWith(" ")) w.push([t.length, t.length]);
+  const up = k => k < w.length ? t.slice(w[k][0], w[k][1]).toUpperCase() : "";
+  const word = (k, one) => k >= w.length ? [-1] : [w[k][0], one && k + 1 < w.length ? w[k][1] : t.length];
+  const v = up(0);
+  if (ns) {
+    if (v === "IDENTIFY" || v === "ID") return w.length > 1 ? word(w.length - 1) : [-1];
+    if (v === "REGISTER") return word(1, true);
+    if (/^(GHOST|RECOVER|RELEASE|REGAIN)$/.test(v)) return word(2);
+    if (v === "SET" && up(1) === "PASSWORD") return word(2);
+    return [-1];
+  }
+  if (v === "IDENTIFY") return word(2);
+  if (v === "REGISTER") return word(2, true);
+  if (v === "SET" && up(2) === "PASSWORD") return word(3);
+  return [-1];
+}
+function inputSecret(name, v) {
+  if (v[0] !== "/") return servicesSecret(name, v);
+  const m = /^\/(msg|query) +(\S+) /i.exec(v);
+  if (!m) return [-1];
+  const [p, e] = servicesSecret(m[2], v.slice(m[0].length));
+  return p < 0 ? [-1] : [m[0].length + p, m[0].length + e];
+}
+// the *s over the input line while a password is typed in it
+function renderMask() {
+  const b = bufs.get(active), [p, e] = b && !asking() ? inputSecret(b.name, line.value) : [-1], mk = $("#mask");
+  line.classList.toggle("secret", p >= 0);
+  line.spellcheck = p < 0;  // no red underline under the hidden password
+  if (p < 0) { mk.style.display = "none"; return; }
+  mk.textContent = line.value.slice(0, p) + "*".repeat(e - p) + line.value.slice(e);
+  Object.assign(mk.style, {display: "block", left: line.offsetLeft + "px", top: line.offsetTop + "px", width: line.offsetWidth + "px", height: line.offsetHeight + "px",
+                           font: getComputedStyle(line).font});
+  mk.scrollLeft = line.scrollLeft;
+}
+for (const [t, e] of [[line, "scroll"], [line, "keyup"], [line, "select"], [window, "resize"]]) t.addEventListener(e, renderMask);
 function renderSugg() {
+  renderMask();
   const box = $("#sugg"), v = dec(line.value.slice(0, line.selectionStart));
   if (!/^\/set /i.test(v)) setAsked = false;  // the next /set asks for fresh values
   const [, sg] = suggest(v);
@@ -1327,7 +1373,7 @@ $("#input").onsubmit = e => {
   // paste_confirm = N (default 5, 0 = off): ask before sending more lines than that
   const n = v.split("\n").filter(Boolean).length;
   if (b.pc > 0 && n > b.pc && !confirm("Send " + n + " lines to " + label(b) + "?")) return;  // stays to edit
-  if (hist[hist.length - 1] !== raw) hist.push(raw);
+  if (inputSecret(b.name, raw)[0] < 0 && hist[hist.length - 1] !== raw) hist.push(raw);  // a password: not kept for Up
   if (hist.length > 500) hist.shift();
   hpos = hist.length;
   line.value = ""; suggSel = -1; renderSugg();

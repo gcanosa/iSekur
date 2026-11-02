@@ -531,6 +531,27 @@ int main() {
     size_t vn = 0;
     for (auto& b : core.bufs) for (auto& l : b->lines) vn += l.text.find("reply from me: x") != std::string::npos;
     assert(vn == 1);
+    // the automatic IDENTIFY echoed back: masked, in the server tab, and so is NickServ's answer; no NickServ tab
+    assert(mask_services("NickServ", "identify me hunter2") == "identify me ********" && mask_services("#c", "IDENTIFY x") == "IDENTIFY x" &&
+           mask_services("NickServ", "GHOST me pw") == "GHOST me ********" && mask_services("ChanServ", "IDENTIFY #c pw") == "IDENTIFY #c ********" &&
+           mask_services("ChanServ", "REGISTER #c pw My channel") == "REGISTER #c ******** My channel" &&
+           mask_services("ChanServ", "SET #c PASSWORD pw") == "SET #c PASSWORD ********" && mask_services("ChanServ", "OP #c bob") == "OP #c bob" &&
+           mask_services("nickserv", "SET PASSWORD x") == "SET PASSWORD ********" && mask_services("NickServ", "INFO me") == "INFO me");
+    // ...and where the input line starts hiding it (*s while typing, no history)
+    assert(input_secret("#c", "/msg NickServ identify hunter2") == 23 && input_secret("#c", "/MSG nickserv ") == std::string::npos &&
+           input_secret("NickServ", "id hunter2") == 3 && input_secret("#c", "identify x") == std::string::npos &&
+           input_secret("#c", "/query nickserv SET PASSWORD x") == 29 && input_secret("#c", "/msg bob identify x") == std::string::npos);
+    {  // REGISTER <password> <email>: only the password is hidden
+        size_t e;
+        assert(input_secret("#c", "/msg NickServ register pw me@x.org", &e) == 23 && e == 25);
+        assert(mask_services("NickServ", "REGISTER pw me@x.org") == "REGISTER ******** me@x.org");
+    }
+    ts->ident_at = time(nullptr);
+    feed(":me!u@h PRIVMSG NickServ :IDENTIFY hunter2");
+    feed(":NickServ!s@services NOTICE me :You are now identified for me.");
+    assert(!core.find(ts, "NickServ") && ts->status->lines.back().text.find("now identified") != std::string::npos);
+    assert(ts->status->lines[ts->status->lines.size() - 2].text == "IDENTIFY ********");
+    ts->ident_at = 0;
     ts->caps.erase("echo-message");
 
     // /typing: other people's messages get a typed_at, our own and info lines don't

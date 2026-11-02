@@ -473,7 +473,7 @@ void Core::handle(Server* s, const Msg& m) {
         print(s->status, LK::INFO, m.p(1));
         // ponytail: IDENTIFY goes out right before the JOINs, so a +r channel can still beat
         // NickServ; SASL has no such race. Wait for the 900/NOTICE if that bites.
-        if (s->cfg.auto_identify && !s->cfg.nickserv_pass.empty() && !s->sasl_ok) s->send("PRIVMSG NickServ :IDENTIFY " + s->cfg.nickserv_pass);
+        if (s->cfg.auto_identify && !s->cfg.nickserv_pass.empty() && !s->sasl_ok) s->send("PRIVMSG NickServ :IDENTIFY " + s->cfg.nickserv_pass), s->ident_at = time(nullptr);
         std::vector<std::string> chans;  // autojoin, then the channel tabs still open (reconnects)
         for (auto& e : s->cfg.autojoin) {
             auto w = split(e, ' ');
@@ -854,8 +854,11 @@ void Core::handle(Server* s, const Msg& m) {
             b = snote ? open(s, BT::QUERY, "*snotices") : s->status;
         } else {
             std::string peer = self ? tgt : m.nick;
+            if (self) text = mask_services(tgt, text);
             b = find(s, peer);
-            if (!b) b = notice ? reply_buf() : open(s, BT::QUERY, peer);
+            // our automatic IDENTIFY and what NickServ says to it: the server tab, not a new NickServ tab
+            bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && irc_lower(peer) == "nickserv";
+            if (!b) b = ident ? s->status : notice ? reply_buf() : open(s, BT::QUERY, peer);
         }
         bool hl = !self && !snote && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick, opt(s, "hilight_words", "")));
         std::string who = m.nick.empty() ? s->cfg.host : m.nick;

@@ -192,6 +192,69 @@ bool secret_key(const std::string& k) {
     return k.find("pass") != std::string::npos || k.find("hash") != std::string::npos;
 }
 
+// where the password starts in text to NickServ or ChanServ, or npos; *end: where it ends (npos: the end of
+// the text). Only the password: nicks, channels, emails and descriptions stay readable.
+//   NickServ IDENTIFY|ID [account] <pw>      REGISTER <pw> <email>      GHOST|RECOVER|RELEASE|REGAIN <nick> <pw>
+//            SET PASSWORD <pw>
+//   ChanServ IDENTIFY <#chan> <pw>           REGISTER <#chan> <pw> ...  SET <#chan> PASSWORD <pw>  (Anope 1.x)
+size_t services_secret(const std::string& tgt, const std::string& text, size_t* end) {
+    const size_t npos = std::string::npos;
+    if (end) *end = npos;
+    std::string t = irc_lower(tgt);  // also NickServ@services.libera.chat
+    bool ns = t.rfind("nickserv", 0) == 0, cs = t.rfind("chanserv", 0) == 0;
+    if (!ns && !cs) return npos;
+    std::vector<std::pair<size_t, size_t>> w;  // the words; a trailing space starts an empty one (the next, being typed)
+    for (size_t i = 0; i < text.size();) {
+        if (text[i] == ' ') { i++; continue; }
+        size_t j = std::min(text.find(' ', i), text.size());
+        w.push_back({i, j}), i = j;
+    }
+    if (w.empty()) return npos;
+    if (text.back() == ' ') w.push_back({text.size(), text.size()});
+    auto up = [&](size_t k) {
+        std::string v = k < w.size() ? text.substr(w[k].first, w[k].second - w[k].first) : "";
+        for (auto& ch : v) ch = (char)toupper((unsigned char)ch);
+        return v;
+    };
+    auto word = [&](size_t k, bool one) {  // word k on (one: only it)
+        if (k >= w.size()) return npos;
+        if (one && end && k + 1 < w.size()) *end = w[k].second;
+        return w[k].first;
+    };
+    std::string verb = up(0);
+    if (ns) {
+        if (verb == "IDENTIFY" || verb == "ID") return w.size() > 1 ? word(w.size() - 1, false) : npos;
+        if (verb == "REGISTER") return word(1, true);
+        if (verb == "GHOST" || verb == "RECOVER" || verb == "RELEASE" || verb == "REGAIN") return word(2, false);
+        if (verb == "SET" && up(1) == "PASSWORD") return word(2, false);
+        return npos;
+    }
+    if (verb == "IDENTIFY") return word(2, false);
+    if (verb == "REGISTER") return word(2, true);
+    if (verb == "SET" && up(2) == "PASSWORD") return word(3, false);
+    return npos;
+}
+
+std::string mask_services(const std::string& tgt, const std::string& text) {
+    size_t e, p = services_secret(tgt, text, &e);
+    return p == std::string::npos || p >= text.size() || e == p ? text : text.substr(0, p) + "********" + (e == std::string::npos ? "" : text.substr(e));
+}
+
+// the input line as typed in the tab named buf: where a password starts, or npos
+// ("/msg NickServ IDENTIFY x", "/query nickserv id x", or "identify x" in the NickServ tab)
+size_t input_secret(const std::string& buf, const std::string& line, size_t* end) {
+    if (line.empty() || line[0] != '/') return services_secret(buf, line, end);
+    std::string l = irc_lower(line);
+    size_t n = l.rfind("/msg ", 0) == 0 ? 5 : l.rfind("/query ", 0) == 0 ? 7 : 0;
+    if (!n) return std::string::npos;
+    size_t t = line.find_first_not_of(' ', n), e = t == std::string::npos ? t : line.find(' ', t);
+    if (end) *end = std::string::npos;
+    if (e == std::string::npos) return e;
+    size_t p = services_secret(line.substr(t, e - t), line.substr(e + 1), end);
+    if (end && *end != std::string::npos) *end += e + 1;
+    return p == std::string::npos ? p : e + 1 + p;
+}
+
 std::vector<Core::Setting> Core::settings() const {
     Ini all = defaults;
     for (auto& [sec, kv] : cfg)
@@ -726,7 +789,7 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
         std::string body = action ? "\x01" "ACTION " + part + "\x01" : part;
         s->send("PRIVMSG " + b->name + " :" + (enc ? "+iSE " + e2e_seal(key, body, chan ? irc_lower(b->name) : "") : body));
         if (!s->caps.count("echo-message"))
-            add(b, Line{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? "\xf0\x9f\x94\x92 " + part : part, true});
+            add(b, Line{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? "\xf0\x9f\x94\x92 " + part : mask_services(b->name, part), true});
     }
 }
 
@@ -1162,7 +1225,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             s->send((cmd == "msg" ? "PRIVMSG " : "NOTICE ") + argv[0] + " :" + part);
             if (!s->caps.count("echo-message"))
                 add(t ? t : b, Line{time(nullptr), cmd == "msg" ? LK::MSG : LK::NOTICE,
-                                    s->nick, "-> " + argv[0] + ": " + part, true});
+                                    s->nick, "-> " + argv[0] + ": " + mask_services(argv[0], part), true});
         }
         return;
     }

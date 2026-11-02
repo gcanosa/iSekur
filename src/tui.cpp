@@ -808,17 +808,24 @@ void Tui::draw() {
     }
     int px = text(0, y, W, "[" + buf_label(b) + "] ", sty(T, "input_prompt", "input"), false);
     int avail = std::max(1, W - px - 1);
+    std::u32string in = input;  // a NickServ password being typed: *s from where it starts
+    {
+        std::string u = to_utf8(input);
+        size_t e, p = input_secret(b->name, u, &e);
+        if (p != std::string::npos)
+            for (size_t i = from_utf8(u.substr(0, p)).size(), n = e == std::string::npos ? in.size() : from_utf8(u.substr(0, e)).size(); i < n; i++) in[i] = U'*';
+    }
     int curw = 0;
-    for (size_t i = 0; i < cur; i++) curw += cwidth(input[i]);
+    for (size_t i = 0; i < cur; i++) curw += cwidth(in[i]);
     int off = std::max(0, curw - avail);
     int col = 0;
-    for (size_t i = 0; i < input.size(); i++) {
-        char32_t ch32 = input[i];
+    for (size_t i = 0; i < in.size(); i++) {
+        char32_t ch32 = in[i];
         int w = cwidth(ch32);
         if (col >= off && col - off + w <= avail) {
             if (ch32 == 3) {  // a color code: ◆ in the color its digits pick (dim until there are some)
                 std::string code = "\x03";
-                for (size_t j = i + 1; j < input.size() && j < i + 3 && input[j] >= U'0' && input[j] <= U'9'; j++) code += (char)input[j];
+                for (size_t j = i + 1; j < in.size() && j < i + 3 && in[j] >= U'0' && in[j] <= U'9'; j++) code += (char)in[j];
                 Style d = sty(T, "timestamp", "input");
                 if (code.size() > 1) mirc_walk(code + "x", is, [&](uint32_t, const Style& st) { d = is, d.fg = st.fg; });
                 cell(px + col - off, y, U'◆', d);
@@ -1883,7 +1890,8 @@ void Tui::submit() {
         paste = line;
         return;
     }
-    if (hist.empty() || hist.back() != line) hist.push_back(line);
+    bool secret = input_secret(c.active->name, line) != std::string::npos;  // a password: not kept for Up
+    if (!secret && (hist.empty() || hist.back() != line)) hist.push_back(line);
     if (hist.size() > 500) hist.erase(hist.begin());
     hpos = hist.size();
     c.active->scroll = 0;
