@@ -593,7 +593,7 @@ void Tui::draw() {
     int nlw0 = atoi(T.lay("nicklist_width", "18").c_str());
     Buffer* sb = c.split_buf && c.split_buf != b ? c.split_buf : nullptr;
     bool two = sb && ch >= 7;
-    nl_x = -1, other = Box{};
+    nl_x = -1, other = Box{}, div_x = div_y = -1;
     Box pane{0, top, W, ch};  // where the focused tab's chat went (a shell's cursor goes in it)
     auto draw_pane = [&](Buffer* pb, Box bx, bool focus) {
         if (two) {
@@ -612,9 +612,10 @@ void Tui::draw() {
     else {
         Box p1{0, top, W, ch}, p2 = p1;
         if (c.split_mode == 1 || (c.split_mode == 0 && W >= 140)) {  // side by side, a separator column between
-            p1.w = (W - 1) / 2, p2.x = p1.w + 1, p2.w = W - p2.x;
+            p1.w = std::max(10, std::min(W - 11, (W - 1) * split_pm / 1000)), p2.x = p1.w + 1, p2.w = W - p2.x;
             for (int y = top; y < top + ch; y++) text(p1.w, y, W, "│", T.get("separator"), false);
-        } else p1.h = ch / 2, p2.y = top + p1.h, p2.h = ch - p1.h;
+            div_x = p1.w;
+        } else p1.h = std::max(3, std::min(ch - 3, ch * split_pm / 1000)), p2.y = top + p1.h, p2.h = ch - p1.h, div_y = p2.y;
         other = c.split_first ? p1 : p2;
         draw_pane(b, c.split_first ? p2 : p1, true);
         draw_pane(sb, other, false);
@@ -1600,7 +1601,21 @@ void Tui::mouse(int mod, int k, int x, int y) {
         c.dirty = true;
         return;
     }
+    if (div_drag && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {  // /split: moving the divider
+        int W = tb_width(), at = div_x >= 0 ? std::max(10, std::min(W - 11, x)) * 1000 / std::max(1, W - 1)
+                                            : std::max(3, std::min(ch - 3, y - top)) * 1000 / std::max(1, ch);
+        if (at != split_pm) split_pm = at, div_moved = true, c.dirty = true;
+        if (k == TB_KEY_MOUSE_RELEASE) {
+            div_drag = false;
+            if (!div_moved && other.in(x, y)) c.select(c.split_buf);  // a plain click on the other pane's title
+        }
+        return;
+    }
     if (mod & TB_MOD_MOTION) return;
+    if (k == TB_KEY_MOUSE_LEFT && menu.items.empty() && ((div_x >= 0 && x == div_x && y >= top && y < top + ch) || (div_y >= 0 && y == div_y))) {
+        div_drag = true, div_moved = false;
+        return;
+    }
     if (menu.items.empty() && c.split_buf && other.in(x, y)) {  // /split: the other pane
         if (k == TB_KEY_MOUSE_WHEEL_UP) c.split_buf->scroll += 3;
         else if (k == TB_KEY_MOUSE_WHEEL_DOWN) c.split_buf->scroll = std::max(0, c.split_buf->scroll - 3);

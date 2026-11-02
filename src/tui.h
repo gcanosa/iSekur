@@ -65,6 +65,10 @@ private:
     void draw_nicks(Buffer* b, int sx, int top, int xend, int h, bool focus);
     struct Box { int x = 0, y = 0, w = 0, h = 0; bool in(int px, int py) const { return w && px >= x && px < x + w && py >= y && py < y + h; } };
     Box other;  // /split: where the unfocused pane was drawn (a click there focuses it, the wheel scrolls it)
+    // /split: the first (left/top) pane's share in per mille; a drag on the divider (the │ column, or the lower
+    // pane's title row) moves it. div_x / div_y: where the divider was drawn, -1 = none
+    int split_pm = 500, div_x = -1, div_y = -1;
+    bool div_drag = false, div_moved = false;
     // a prompt box over the middle of the screen (/shell login, passwords, the lock screen)
     void draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
                      bool hidden, const std::u32string& in, size_t at, const std::string& hint);

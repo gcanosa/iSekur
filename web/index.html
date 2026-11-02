@@ -149,12 +149,12 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
    .flip puts #msgs on the right, so the panes stay where they are when the focus moves */
 #msgs2 { grid-area: msgs2; display: none; cursor: pointer; }
 @media (min-width: 761px) {
-  #app.split { grid-template-columns: 220px 1fr auto 1fr auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "foot input input input input"; }
+  #app.split { grid-template-columns: 220px minmax(0, var(--sa, 1fr)) auto minmax(0, var(--sb, 1fr)) auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "foot input input input input"; }
   #app.split.flip { grid-template-areas: "side topic topic topic topic" "side msgs2 nicks2 msgs nicks" "side status status status status" "foot input input input input"; }
-  #app.split.noside { grid-template-columns: 34px 1fr auto 1fr auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "side input input input input"; }
+  #app.split.noside { grid-template-columns: 34px minmax(0, var(--sa, 1fr)) auto minmax(0, var(--sb, 1fr)) auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "side input input input input"; }
   #app.split.noside.flip { grid-template-areas: "side topic topic topic topic" "side msgs2 nicks2 msgs nicks" "side status status status status" "side input input input input"; }
   /* /split stack: one over the other (and by the window's width when neither was asked for) */
-  #app.split.stack { grid-template-columns: 220px 1fr auto; grid-template-rows: auto 1fr 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "foot input input"; }
+  #app.split.stack { grid-template-columns: 220px 1fr auto; grid-template-rows: auto minmax(0, var(--sa, 1fr)) minmax(0, var(--sb, 1fr)) auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "foot input input"; }
   #app.split.stack.flip { grid-template-areas: "side topic topic" "side msgs2 nicks2" "side msgs nicks" "side status status" "foot input input"; }
   #app.split.stack.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "side input input"; }
   #app.split.stack.noside.flip { grid-template-areas: "side topic topic" "side msgs2 nicks2" "side msgs nicks" "side status status" "side input input"; }
@@ -167,6 +167,8 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
   #app.split #msgs, #app.split #msgs2 { padding-top: 0; }
   #app.split #msgs::before, #app.split #msgs2::before { content: attr(data-label); display: block; position: sticky; top: 0; z-index: 1; margin-bottom: 4px;
     padding: 2px 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--tabbar-bg, var(--panel)); color: var(--tabbar-fg, var(--muted)); }
+  #app.split.near { cursor: col-resize; } #app.split.stack.near { cursor: row-resize; }
+  #app.split.near * { cursor: inherit; user-select: none; }
   #app.split #msgs::before { background: var(--tab_active-bg, var(--accent)); color: var(--tab_active-fg, #fff); }
 }
 .newmark { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: 11px; text-transform: uppercase;
@@ -605,6 +607,28 @@ function splitCmd(cmd, a) {
   setSplit(t);
   note("Split" + how[splitMode] + " with " + lab(t) + ": F6, Alt+O or a click switches panes, /unsplit closes it");
 }
+// a drag on the line between the panes resizes them (--sa/--sb: the left/top and right/bottom shares)
+let splitDrag = false;
+function splitEdge(e) {  // the divider is the right (or lower) pane's left (or top) edge; null = not near it
+  if (split === null) return null;
+  const app = $("#app"), st = app.classList.contains("stack"), flip = app.classList.contains("flip");
+  const r = $(flip ? "#msgs" : "#msgs2").getBoundingClientRect(), o = $(flip ? "#msgs2" : "#msgs").getBoundingClientRect();
+  const d = st ? e.clientY - r.top : e.clientX - r.left;
+  return {near: Math.abs(d) <= 4, st, f: st ? (e.clientY - o.top) / (r.bottom - o.top) : (e.clientX - o.left) / (r.right - o.left)};
+}
+$("#app").addEventListener("pointermove", e => {
+  const s = splitEdge(e);
+  if (splitDrag && s) {
+    const f = Math.min(0.85, Math.max(0.15, s.f));
+    $("#app").style.setProperty("--sa", f + "fr"); $("#app").style.setProperty("--sb", (1 - f) + "fr");
+  } else $("#app").classList.toggle("near", !!(s && s.near));
+});
+$("#app").addEventListener("pointerdown", e => {
+  const s = splitEdge(e);
+  if (!s || !s.near || e.button !== 0) return;
+  splitDrag = true; $("#app").setPointerCapture(e.pointerId); e.preventDefault();
+});
+$("#app").addEventListener("pointerup", () => { if (splitDrag) splitDrag = false; });
 $("#msgs2").addEventListener("click", () => { if (split !== null && (getSelection() || "").toString() === "") select(split); });
 
 // a burst of updates (a netsplit, a busy channel) draws once a frame, and not at all in a hidden tab
