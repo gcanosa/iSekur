@@ -22,6 +22,7 @@ private:
     size_t cur = 0;
     std::string paste;  // a multi-line paste waiting for y/n
     std::string confirm;  // "question\n/command" from a menu, waiting for y/n
+    std::string confirm_title;  // the menu item that asked
     std::vector<std::string> hist;
     size_t hpos = 0;
     std::map<std::string, std::string> keymap;
@@ -86,6 +87,7 @@ private:
         std::string msg;                           // the last thing done, under the list
         int x0 = 0, y0 = 0, w = 0, h = 0, nav_w = 0, list_y = 0;  // where it was drawn, for the mouse
         long long click_ms = 0;
+        bool to_servers = false;                   // /servers: opens at the first server's category
     };
     SetWin sw;
     struct SetView { std::vector<std::string> cats; std::vector<int> counts; std::vector<const void*> rows; };

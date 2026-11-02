@@ -92,6 +92,8 @@ button, input { font: inherit; color: inherit; }
   #app.noside #foot #setbtn { font-size: 21px; }
 }
 /* dialogs: a box with its title on the border, like the terminal's */
+dialog, #ctx, #lock .card { --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: var(--dlg-sel-bg, #ffffff14); --tab_active-fg: var(--dlg-sel-fg, #d6d8e6);
+  --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); }
 dialog { background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: var(--dlg-sel-bg, #ffffff14); --tab_active-fg: var(--dlg-sel-fg, #d6d8e6);
   --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
@@ -142,7 +144,9 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #srvnew { background: none; border: 1px dashed var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font: inherit; font-size: 13px; }
 #srvform { display: grid; gap: 10px; align-content: start; min-width: 0; }
 dialog .btns .left { margin-right: auto; }
-#dsrv [hidden] { display: none !important; }  /* label.ck's display: flex would show a hidden one */
+#dsrv [hidden], #dask [hidden] { display: none !important; }
+#dask { width: min(440px, calc(100vw - 32px)); }
+#dask .dask-t { font-size: 13px; white-space: pre-line; }  /* label.ck's display: flex would show a hidden one */
 @media (max-width: 760px) { #srvbody { grid-template-columns: 1fr; } #srvside { border-right: 0; padding-right: 0; } #srvlist { max-height: 140px; } }
 #abox { font-size: 13px; line-height: 1.4; }
 #abox a { color: var(--accent2); }
@@ -161,7 +165,7 @@ dialog .btns .left { margin-right: auto; }
   background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px) saturate(.5); }
 #lock.on { display: grid; animation: lockfade .3s ease both; }
 #lock .card { display: grid; gap: 12px; justify-items: center; width: min(340px, 100%); padding: 24px 28px 28px;
-  background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 12px; box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent);
+  background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 12px; box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent);
   animation: lockdrop .65s cubic-bezier(.34, 1.56, .64, 1) both; }
 #lock h1 { margin: 0; font-size: 18px; }
 #lock svg { color: var(--menu_border-fg, var(--accent)); overflow: visible; transition: color .2s; }
@@ -236,7 +240,7 @@ dialog .btns .left { margin-right: auto; }
 #logout:hover::after, #logout:focus-visible::after { content: "Logout"; position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; white-space: nowrap;
   background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
 #menu { display: none; }
-#ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg));
+#ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
 #ctx .hd { padding: 4px 12px; font-weight: 700; }
 #ctx .it { padding: 4px 12px; cursor: pointer; white-space: nowrap; }
@@ -400,7 +404,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 dialog form { padding: 0 9px 10px; gap: 8px; }
 .win-95 #lock .card { padding: 3px 10px 14px; gap: 10px; width: min(320px, 100%); }
 .win-95 dialog h2, .win-95 #dabout form::before, .win-95 #lock .card::before { margin: 0 -9px 2px; padding: 3px 60px 3px 6px; color: #fff; letter-spacing: 0;
-  background: linear-gradient(90deg, #000080, #1084d0); font: 700 12px/16px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+  background: linear-gradient(90deg, #000080, #0f78c0); font: 700 12px/16px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
 .win-95 #dabout form::before { content: "About iSekur"; }  /* no title of its own */
 .win-95 #lock .card::before { content: "iSekur"; justify-self: stretch; margin: 0 -10px 4px; }
 .win-95 #lock h1 { font: 700 14px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; color: #000; }
@@ -513,6 +517,12 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div class="flist" id="filelist"></div>
   <div class="hint" id="fhint"></div>
   <div class="btns"><button type="button" id="frefresh">Refresh</button><button class="go" value="ok">Close</button></div>
+</form></dialog>
+<dialog id="dask"><form method="dialog">
+  <h2 id="dask-h">iSekur</h2>
+  <div id="dask-t" class="dask-t"></div>
+  <label id="dask-l"><span></span><input id="dask-i" autocomplete="off" spellcheck="false"></label>
+  <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok" id="dask-ok">OK</button></div>
 </form></dialog>
 <dialog id="dabout"><form method="dialog">
   <div id="abox"><div id="abanner"></div><div id="atext"></div></div>
@@ -1128,6 +1138,40 @@ function localLine(b, text) {
   if (b.id === active) { $("#msgs").append(lineEl(b, l)); $("#msgs").scrollTop = $("#msgs").scrollHeight; }
 }
 // + : a new server, sent as /server host port [-tls] [-noverify] -name N -nick X
+// One question box for everything that asks, like the terminal's centered dialog: a yes/no (no label), a line to type
+// (label), hidden for passwords. Resolves to the text ("" for a yes/no) or null (Cancel, Esc, the close button). Never
+// the browser's confirm()/prompt(): those ignore the theme and the window buttons
+const dask = $("#dask");
+let askDone = null;
+function askBox({title = "iSekur", text = "", label = "", value = "", hidden = false, ok = "OK"} = {}) {
+  if (askDone) askDone(null);  // a newer question replaces an open one
+  $("#dask-h").textContent = title; $("#dask-t").textContent = text; $("#dask-t").hidden = !text;
+  $("#dask-l").hidden = !label; $("#dask-l span").textContent = label;
+  const i = $("#dask-i"); i.type = hidden ? "password" : "text"; i.autocomplete = hidden ? "new-password" : "off"; i.value = value; i.required = false;
+  $("#dask-ok").textContent = ok;
+  dask.returnValue = "";
+  if (!dask.open) dask.showModal();
+  (label ? i : $("#dask-ok")).focus();
+  return new Promise(res => { askDone = v => { askDone = null; res(v); }; });
+}
+dask.onclose = () => { if (askDone) askDone(dask.returnValue === "ok" ? ($("#dask-l").hidden ? "" : $("#dask-i").value) : null); };
+// iSekur asking for something in a tab (/oper, /e2e, the lock password, a login): the question box, the answer goes
+// back as that tab's input, "" cancels
+let askOpen = "";
+function syncAsk() {
+  const b = bufs.get(active), a = b && b.ask, key = a ? b.id + "\n" + a.title + "\n" + a.label : "";
+  if (key === askOpen) return;
+  askOpen = key;
+  if (!a) { if (dask.open && dask.dataset.srv) { dask.dataset.srv = ""; askDone = null; dask.close(); } return; }
+  const id = b.id;
+  askBox({title: a.title || "iSekur", label: a.label[0].toUpperCase() + a.label.slice(1), hidden: !!a.hidden}).then(v => {
+    dask.dataset.srv = "";
+    if (askOpen === key) askOpen = "";  // asked again (a wrong password): open it again
+    send({t: "input", buf: id, text: v === null ? "" : v});
+  });
+  dask.dataset.srv = "1";
+}
+
 // + : the servers. The list is the config's [server.*] (from the settings rows) with each one's state from its tab;
 // picking one fills the form: Save writes the changes (/set + /save), Connect also connects, Delete removes it
 // (/server del). New, or no server yet: the form adds one, as /server
@@ -1194,8 +1238,8 @@ const srvRefresh = () => send({t: "settings", buf: active});
 $("#addsrv").onclick = () => { $("#side").classList.remove("open"); srvSel = null; srvPick(null); srvRefresh(); dsrv.showModal(); };
 $("#srvnew").onclick = () => { srvPick(null); fs.host.focus(); };
 $("#srvsave").onclick = () => { if (!fs.host.reportValidity()) return; srvNote = srvApply() ? "Saved." : "Nothing changed."; renderSrv(); setTimeout(srvRefresh, 300); };
-$("#srvdel").onclick = () => {
-  if (!srvSel || !confirm("Delete " + srvSel + "? It disconnects, its tabs close and its [server." + srvSel + "] leaves the config.")) return;
+$("#srvdel").onclick = async () => {
+  if (!srvSel || await askBox({title: "Delete server", text: "Delete " + srvSel + "? It disconnects, its tabs close and its [server." + srvSel + "] leaves the config.", ok: "Delete"}) === null) return;
   send({t: "input", buf: active, text: "/server del " + srvSel});
   srvPick(null); setTimeout(srvRefresh, 300);
 };
@@ -1263,7 +1307,7 @@ async function loadFiles() {
     const r2 = el("div", "r"), n = el("div", "n", f.n), b = el("div", "b");
     if (f.part) n.append(el("small", "", "downloading"));
     const a = el("a", "", "Download"); a.href = "/files/" + encodeURIComponent(f.n); a.download = f.n;
-    b.append(a, btn("Send…", () => { const who = prompt("Send " + f.n + " to which nick? (on this tab's network)"); if (who && who.trim()) dccCmd("/dcc send " + who.trim() + " " + f.n); }));
+    b.append(a, btn("Send…", async () => { const who = await askBox({title: "Send a file", text: "Send " + f.n + " to which nick? (on this tab's network)", label: "Nick", ok: "Send"}); if (who && who.trim()) dccCmd("/dcc send " + who.trim() + " " + f.n); }));
     r2.append(n, el("div", "m", hb(f.s) + " · " + new Date(f.m * 1000).toLocaleString()), b);
     L.append(r2);
   }
@@ -1481,6 +1525,7 @@ function applyAsk() {
   line.placeholder = a ? (a.title ? a.title + " · " : "") + "the " + a.label + " (Enter: OK · Esc: cancel)" : "";
   $("#prompt").textContent = b ? "[" + (a ? a.label : label(b)) + "]" : "";
   renderSugg();
+  syncAsk();
 }
 const asking = () => { const b = bufs.get(active); return !!(b && b.ask); };
 // like the terminal's: [from, [[word, sep, value], ...]]; from -1: none, -2: only the command's usage
@@ -1637,14 +1682,14 @@ line.addEventListener("keydown", e => {
   if (e.key === "ArrowUp" && hpos > 0) { e.preventDefault(); inp.value = hist[--hpos]; renderSugg(); }
   else if (e.key === "ArrowDown" && hpos < hist.length) { e.preventDefault(); inp.value = ++hpos === hist.length ? "" : hist[hpos]; renderSugg(); }
 });
-$("#input").onsubmit = e => {
+$("#input").onsubmit = async e => {
   e.preventDefault();
   const raw = line.value, v = dec(raw), b = bufs.get(active);
   if (asking()) { line.value = ""; send({t: "input", buf: active, text: v}); return; }  // a password: never in the history
   if (!v || !b) return;
   // paste_confirm = N (default 5, 0 = off): ask before sending more lines than that
   const n = v.split("\n").filter(Boolean).length;
-  if (b.pc > 0 && n > b.pc && !confirm("Send " + n + " lines to " + label(b) + "?")) return;  // stays to edit
+  if (b.pc > 0 && n > b.pc && await askBox({title: "Paste", text: "Send " + n + " lines to " + label(b) + "?", ok: "Send"}) === null) return;  // stays to edit
   if (inputSecret(b.name, raw)[0] < 0 && hist[hist.length - 1] !== raw) hist.push(raw);  // a password: not kept for Up
   if (hist.length > 500) hist.shift();
   hpos = hist.length;
@@ -1653,6 +1698,7 @@ $("#input").onsubmit = e => {
   if (/^\/about\s*$/i.test(v)) { openAbout(); return; }  // a dialog here, not a tab
   if (/^\/theme\s*$/i.test(v)) { openThemes(); return; }  // like the terminal: the theme picker
   if (/^\/set\s*$/i.test(v)) { $("#setbtn").click(); return; }  // like the terminal: the settings window
+  if (/^\/servers\s*$/i.test(v)) { $("#addsrv").click(); return; }  // the Servers window
   const sp = /^\/(split|unsplit|merge)(?:\s+(.*))?$/i.exec(v.trim());
   if (sp) { splitCmd(sp[1].toLowerCase(), (sp[2] || "").trim()); return; }  // this browser's panes
   send({t: "input", buf: active, text: v});
@@ -1811,7 +1857,8 @@ function showMenu(m) {
       closeMenu();
       if (cmd[0] === "?") {  // "?question\n/command": ask first
         const nl = cmd.indexOf("\n");
-        if (confirm(cmd.slice(1, nl))) send({t: "input", buf: menuBuf, text: cmd.slice(nl + 1)});
+        const mb = menuBuf;
+        askBox({title: label.replace(/\.\.\.$/, ""), text: cmd.slice(1, nl), ok: label.replace(/\.\.\.$/, "")}).then(v => { if (v !== null) send({t: "input", buf: mb, text: cmd.slice(nl + 1)}); });
       } else if (/[ :]$/.test(cmd)) { $("#line").value = cmd; $("#line").focus(); }  // you finish it
       else send({t: "input", buf: menuBuf, text: cmd});
     };

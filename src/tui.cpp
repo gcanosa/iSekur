@@ -138,6 +138,40 @@ static void fill(int y, int x0, int x1, Style st) {
     for (int x = x0; x < x1; x++) cell(x, y, ' ', st);
 }
 
+// A box's top row (x0, x1: its corners): the title, and the theme's window buttons like the webchat's dialogs.
+// window = mac: red, yellow and green dots before the title; win95 (mirc): a navy title bar, white bold title,
+// gray _ □ × at the right. Other themes: the title on the border
+static void box_title(const Theme& T, int x0, int x1, int y, const std::string& title, Style hs) {
+    std::string ws = T.lay("window", "");
+    if (ws == "win95") {
+        Style bar{0xffffff, 0x000080, A_BOLD}, btn{0x000000, 0xc0c0c0, A_BOLD};
+        for (int x = x0 + 1; x < x1; x++) cell(x, y, U' ', bar);
+        text(x0 + 2, y, x1 - 8, title, bar, false);
+        cell(x1 - 6, y, U'_', btn), cell(x1 - 5, y, U'\u25A1', btn), cell(x1 - 3, y, U'\u00D7', btn);
+        return;
+    }
+    int tx = x0 + 2;
+    if (ws == "mac") {
+        Style dot = hs;
+        dot.attr = 0;
+        for (RGB col : {0xff5f57, 0xfebc2e, 0x28c840}) dot.fg = col, cell(tx, y, U'\u25CF', dot), tx += 2;
+    }
+    text(tx, y, x1 - 1, " " + title + " ", hs, false);
+}
+
+// a word-wrapped question for a yes/no box
+static std::vector<std::string> wrap_words(const std::string& s, int w) {
+    std::vector<std::string> out;
+    std::string line;
+    for (auto& word : split(s, ' ')) {
+        if (!line.empty() && (int)(line.size() + 1 + word.size()) > w) out.push_back(line), line.clear();
+        line += (line.empty() ? "" : " ") + word;
+    }
+    if (!line.empty()) out.push_back(line);
+    return out;
+}
+
+
 static std::string to_utf8(const std::u32string& s) {
     std::string o;
     for (char32_t c : s) utf8_put(o, c);
@@ -473,7 +507,7 @@ int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); 
 
 void Tui::draw() {
     if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
-    if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true;
+    if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true, sw.to_servers = c.settings_servers, c.settings_servers = false;
     if (c.theme_win) {
         c.theme_win = false, tw = ThemeWin{}, tw.open = true, tw.orig = c.theme.name;
         auto l = theme_list();
@@ -797,18 +831,17 @@ void Tui::draw() {
         present();
         return;
     }
-    if (!confirm.empty()) {
-        int px = text(0, y, W, confirm.substr(0, confirm.find('\n')) + " (y/n) ", T.get("hilight"), false);
-        tb_set_cursor(px, y);
+    if (!confirm.empty()) {  // a question, in the centered box like every prompt (the webchat's is the same)
+        draw_dialog(W, H, confirm_title.empty() ? "iSekur" : confirm_title, wrap_words(confirm.substr(0, confirm.find('\n')), 44), "",
+                    false, U"", 0, "y: yes · n or Esc: no");
         present();
         return;
     }
     if (!paste.empty()) {
         size_t n = 0;
         for (auto& l : split(paste, '\n')) n += !l.empty();
-        int px = text(0, y, W, "Send " + std::to_string(n) + " lines to " + buf_label(b) + "? (y/n) ",
-                      T.get("hilight"), false);
-        tb_set_cursor(px, y);
+        draw_dialog(W, H, "Paste", wrap_words("Send " + std::to_string(n) + " lines to " + buf_label(b) + "?", 44), "", false, U"", 0,
+                    "y: send · n or Esc: back to edit it");
         present();
         return;
     }
@@ -869,6 +902,7 @@ void Tui::draw() {
 //   │  password: ********            │
 //   │  Enter: OK · Esc: cancel       │
 //   └────────────────────────────────┘
+// label "": a yes/no box, the info lines and the hint, no field
 void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
                       bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx, int dy) {
     const Theme& T = c.theme;
@@ -876,16 +910,22 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
     for (Style* st : {&es, &ns, &ls}) st->bg = bs.bg;
     hs.attr |= A_BOLD;
     int bw = std::min(W - 2, 48), x0 = (W - bw) / 2, inner = bw - 4;
-    int bh = 5 + (int)info.size(), y0 = std::max(0, (H - bh) / 2 - 1);
+    bool field = !label.empty();
+    int bh = (field ? 5 : 4) + (int)info.size(), y0 = std::max(0, (H - bh) / 2 - 1);
     x0 += dx, y0 += dy;  // the lock screen's animations move it
     for (int yy = y0; yy < y0 + bh; yy++) fill(yy, x0, x0 + bw, bs);
     for (int xx = x0; xx < x0 + bw; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(x0, yy, U'│', ls), cell(x0 + bw - 1, yy, U'│', ls);
     cell(x0, y0, U'┌', ls), cell(x0 + bw - 1, y0, U'┐', ls), cell(x0, y0 + bh - 1, U'└', ls), cell(x0 + bw - 1, y0 + bh - 1, U'┘', ls);
-    text(x0 + 2, y0, x0 + bw - 2, " " + title + " ", hs, false);
+    box_title(T, x0, x0 + bw - 1, y0, title, hs);
     int yy = y0 + 1;
     for (auto& l : info)
-        text(x0 + 2, yy++, x0 + 2 + inner, l[0] == '!' ? l.substr(1) : l, l[0] == '!' ? es : bs, false);
+        text(x0 + 2, yy++, x0 + 2 + inner, !l.empty() && l[0] == '!' ? l.substr(1) : l, !l.empty() && l[0] == '!' ? es : bs, false);
+    if (!field) {  // a yes/no: the hint under a blank line
+        text(x0 + 2, yy + 1, x0 + 2 + inner, hint, ns, false);
+        tb_hide_cursor();
+        return;
+    }
     int fy = yy, fx = text(x0 + 2, fy, x0 + 2 + inner, label + ": ", hs, false);
     int avail = std::max(1, x0 + 2 + inner - fx);
     fill(fy, fx, fx + avail, fs);
@@ -969,6 +1009,13 @@ static void set_view(const std::vector<Core::SetRow>& all, const std::string& q,
         if (match(r) && (cat == 0 || r.cat == cats[(size_t)cat])) rows.push_back(&r);
 }
 
+// the server the selected key or category is about ("" for none): its keys, or a "server.x" category
+static std::string set_server(const std::vector<std::string>& cats, int cat, const Core::SetRow* r) {
+    if (r && r->sec.rfind("server.", 0) == 0) return r->sec.substr(7);
+    if (cat > 0 && cat < (int)cats.size() && cats[(size_t)cat].rfind("server.", 0) == 0) return cats[(size_t)cat].substr(7);
+    return "";
+}
+
 void Tui::draw_settings(int W, int H) {
     const Theme& T = c.theme;
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
@@ -984,13 +1031,20 @@ void Tui::draw_settings(int W, int H) {
     for (int xx = x0; xx <= x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y1, U'─', ls);
     for (int yy = y0; yy <= y1; yy++) cell(x0, yy, U'│', ls), cell(x1, yy, U'│', ls);
     cell(x0, y0, U'┌', ls), cell(x1, y0, U'┐', ls), cell(x0, y1, U'└', ls), cell(x1, y1, U'┘', ls);
-    text(x0 + 2, y0, x1, " Settings ", hs, false);
+    box_title(T, x0, x1, y0, "Settings", hs);
 
     auto all = c.setting_rows();
     std::vector<std::string> cats;
     std::vector<int> counts;
     std::vector<const Core::SetRow*> rows;
     set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
+    if (sw.to_servers) {
+        sw.to_servers = false;
+        for (int i = 0; i < (int)cats.size(); i++)
+            if (cats[(size_t)i].rfind("server.", 0) == 0) { sw.cat = i, sw.focus = 0, sw.sel = sw.top = 0; break; }
+        if (sw.cat == 0) sw.msg = "No servers yet: n adds one";
+        set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
+    }
     sw.sel = std::max(0, std::min(sw.sel, (int)rows.size() - 1));
 
     // search line: "/" starts it, letters are commands otherwise
@@ -1069,9 +1123,12 @@ void Tui::draw_settings(int W, int H) {
         }
     }
     // what happened, or what the keys do
+    const Core::SetRow* hr = rows.empty() ? nullptr : rows[(size_t)std::max(0, std::min(sw.sel, (int)rows.size() - 1))];
+    bool on_srv = !set_server(cats, sw.cat, sw.focus == 1 ? hr : nullptr).empty();
     std::string hint = sw.editing     ? "Enter: set it · Esc: cancel · empty = the default"
                        : sw.searching ? "type to search · Enter or \u2193: to the list · Esc: clear it"
-                       : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · /: search · q Esc: close"
+                       : on_srv ? "c: connect · x: delete server · n: new server · e Enter: edit · s: save · q: close"
+                       : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · n: new server · /: search · q Esc: close"
                                        : "\u2191\u2193: move · e Enter: edit · Space: on/off, next choice · d: default · /: search · s: save · q: close";
     text(x0 + 2, y1 - 1, x1 - 1, sw.msg.empty() ? hint : sw.msg, sw.msg.empty() ? dim : mark, false);
 }
@@ -1120,6 +1177,20 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     if (k == TB_KEY_CTRL_S || ch == 's') {
         c.exec(c.active, "/save");
         sw.msg = "Saved to " + c.cfg_path;
+        return;
+    }
+    // servers, like the webchat's Servers window: c connects the selected one, x deletes it (asks first), n adds one
+    std::string srv = set_server(cats, sw.cat, r);
+    if (ch == 'c' && !srv.empty()) { c.exec(c.active, "/connect " + srv); sw.msg = "Connecting " + srv; return; }
+    if (ch == 'x' && !srv.empty()) {
+        sw.open = false;
+        confirm = "Delete " + srv + ": disconnect, close its tabs and remove it from the config?\n/server del " + srv, confirm_title = "Delete server";
+        return;
+    }
+    if (ch == 'n') {
+        sw.open = false;
+        c.ask_pass(c.active, "server", [this](const std::string& v) { if (!v.empty()) c.exec(c.active, "/server " + v); }, false, "New server",
+                   {"host [port] [-tls] [-noverify] [-name name] [-nick nick]", "e.g. irc.libera.chat 6697 -tls -name libera"});
         return;
     }
     if (ch == 'e') k = TB_KEY_ENTER, ch = 0;
@@ -1192,7 +1263,7 @@ void Tui::draw_themes(int W, int H) {
     for (int xx = tw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(tw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
     cell(tw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(tw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
-    text(tw.x0 + 2, y0, x1 - 2, " Theme ", hs, false);
+    box_title(T, tw.x0, x1 - 1, y0, "Theme", hs);
     int fx = text(tw.x0 + 2, y0 + 1, x1 - 2, "filter: ", hs, false);
     fill(y0 + 1, fx, x1 - 2, fs);
     int ex = text(fx, y0 + 1, x1 - 2, to_utf8(tw.q), fs, false);
@@ -1280,7 +1351,7 @@ void Tui::draw_find(int W, int H) {
     for (int xx = fw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(fw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
     cell(fw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(fw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
-    text(fw.x0 + 2, y0, x1 - 2, " Go to tab ", hs, false);
+    box_title(T, fw.x0, x1 - 1, y0, "Go to tab", hs);
     int fx = text(fw.x0 + 2, y0 + 1, x1 - 2, "find: ", hs, false);
     fill(y0 + 1, fx, x1 - 2, fs);
     int ex = text(fx, y0 + 1, x1 - 2, to_utf8(fw.q), fs, false);
@@ -1604,8 +1675,12 @@ void Tui::key(int mod, int k, uint32_t ch) {
             return;
         }
         std::string cmd = k == TB_KEY_ENTER ? menu.items[(size_t)menu.sel].second : "";  // other keys close it
+        std::string it = menu.items[(size_t)menu.sel].first;
         menu.items.clear();
-        if (!cmd.empty() && cmd[0] == '?') confirm = cmd.substr(1);  // asks first
+        if (!cmd.empty() && cmd[0] == '?') {  // asks first, titled like the item ("Delete server...": "Delete server")
+            confirm = cmd.substr(1), confirm_title = it;
+            while (!confirm_title.empty() && confirm_title.back() == '.') confirm_title.pop_back();
+        }
         else if (!cmd.empty() && (cmd.back() == ' ' || cmd.back() == ':')) input = from_utf8(cmd), cur = input.size();  // ends in a space: you finish it
         else if (!cmd.empty()) c.exec(c.active, cmd);
         return;

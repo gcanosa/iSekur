@@ -926,6 +926,15 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "shell") { shell_cmd(b); return; }
     if (cmd == "attach") { attach_cmd(b, args); return; }
     if (cmd == "lock") { lock_cmd(b, args); return; }
+    if (cmd == "servers") {  // the terminal: the settings window at the first server (the webchat opens its Servers window)
+        if (tty && !from_web) { settings_win = settings_servers = dirty = true; return; }
+        if (servers.empty()) { print(b, LK::INFO, "No servers: /server host [port] [-tls] adds one"); return; }
+        for (auto& sv : servers)
+            print(b, LK::INFO, sv->cfg.name + "  " + sv->cfg.host + ":" + std::to_string(sv->cfg.port) + (sv->cfg.tls ? " (TLS)" : "") +
+                                   (sv->state == SS::CONNECTED ? "  connected" : sv->state == SS::DISCONNECTED ? "  not connected" : "  connecting") +
+                                   (sv->cfg.autoconnect ? "" : "  (not at startup)"));
+        return;
+    }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = secret_key;
         if (argv.empty()) {
@@ -953,11 +962,21 @@ void Core::exec(Buffer* b, const std::string& input) {
         } else unsaved[sec][key] = val;
         cfg[sec][key] = val;
         std::string err;
+        bool saved_now = false;
         if (sec == "general" && key == "theme") {
             if (load_theme(val, theme, err)) {
+                Ini part;
+                part["general"]["theme"] = val;
                 // a theme with its own font (mirc: Fixedsys) brings it; a /set web_font after this wins again
                 if (!theme.lay("font", "").empty() && !ini_get(cfg, "general", "web_font").empty())
-                    cfg["general"]["web_font"] = unsaved["general"]["web_font"] = "";
+                    cfg["general"]["web_font"] = part["general"]["web_font"] = "";
+                // a theme you keep sticks: written now, so the next start opens with it, no /save needed
+                for (auto& [k, v] : part["general"]) unsaved["general"].erase(k), set_was["general"].erase(k);
+                if (unsaved["general"].empty()) unsaved.erase("general");
+                if (!cfg_path.empty()) {
+                    if (ini_save(cfg_path, part, err)) saved_now = true;
+                    else print(b, LK::ERROR, err), unsaved["general"].insert(part["general"].begin(), part["general"].end());
+                }
                 notify(Ev::THEME, nullptr);
             } else print(b, LK::ERROR, err);
         }
@@ -973,6 +992,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key.rfind("web_font", 0) == 0)) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         dirty = true;
+        if (saved_now) { print(b, LK::INFO, argv[0] + " = " + val + "  (saved)"); return; }
         print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
                                 : sec == "web"              ? "  (applies after /web restart)"
@@ -1201,8 +1221,11 @@ void Core::exec(Buffer* b, const std::string& input) {
             for (auto& n : theme_names()) l += (l.empty() ? "" : ", ") + n;
             print(b, LK::INFO, "Current theme: " + theme.name + "  (installed: " + l + ")");
         }
-        else if (use_theme(args, err)) print(b, LK::INFO, "Theme: " + args);
-        else print(b, LK::ERROR, err);
+        else {  // like keeping it in a picker: /set theme, so it's written and the next start opens with it
+            Theme t;
+            if (load_theme(args, t, err)) exec(b, "/set theme " + args);
+            else print(b, LK::ERROR, err);
+        }
         return;
     }
     if (cmd == "nick") {
