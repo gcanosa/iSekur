@@ -60,6 +60,12 @@ int main() {
         assert(banner_lines(th)[0].rfind("\x04" "ff0000", 0) == 0);
         th.el["default"].fg = 0xeeeeee;
         assert(banner_lines(th, true)[0].rfind("\x04" "eeeeee", 0) == 0 && banner_lines(th, true)[0].find("808080") != std::string::npos);
+        Theme mirc;  // one nick color (mIRC doesn't color nicks): mIRC's colors for the letters, dark ones on white
+        mirc.nicks = {0x000000};
+        mirc.el["default"] = Style{0x000000, 0xffffff};
+        assert(banner_lines(mirc)[0].rfind("\x04" "ff0000", 0) == 0 && banner_lines(mirc)[1].find("\x04" "00007f") != std::string::npos);
+        mirc.el["default"].bg = 0x000000;  // mirc-dark: the bright ones, unless the dialog is gray (light = 1)
+        assert(banner_lines(mirc)[0].rfind("\x04" "ff5555", 0) == 0 && banner_lines(mirc, false, -99, 1)[0].rfind("\x04" "ff0000", 0) == 0);
     }
     {  // first-run config: every setting, no example servers, no placeholder nick
         Ini f = ini_parse(fresh_config());

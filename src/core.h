@@ -426,7 +426,7 @@ std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
 std::string after_words(const std::string& s, size_t n);  // the text after the first n words
-std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double shine = -99);  // the startup banner, theme colors or gray
+std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double shine = -99, int light = -1);  // the startup banner, theme colors or gray; light: 1 on a light background whatever the theme says
 // typed: the lines /about types out (the tagline, the support channel)
 std::vector<std::string> twitch_banner();  // twitch.cpp: a Twitch server tab's banner
 void twitch_login(Server* s);  // PASS + Twitch CAPs on connect

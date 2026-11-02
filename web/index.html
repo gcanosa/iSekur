@@ -97,7 +97,7 @@ dialog form { display: grid; gap: 10px; padding: 18px 20px; }
 dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--accent); }
 /* a theme's [layout] window = mac | win95: window buttons in the dialog's top corner; only the close one does something */
 .wbtns { display: none; position: absolute; top: 10px; gap: 8px; }
-:is(.win-mac, .win-95) :is(dialog form, #lock .card), #login form { padding-top: 34px; }
+.win-mac :is(dialog form, #lock .card), #login form { padding-top: 34px; }
 #lock .card { position: relative; }
 :is(.win-mac .wbtns, #login .wbtns) { display: flex; left: 14px; }
 :is(.win-mac .wbtns, #login .wbtns) span { width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box; font: 700 10px/10px system-ui, sans-serif; text-align: center; color: transparent; }
@@ -365,6 +365,56 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   .l .nk { display: inline; border: 0; padding: 0 6px 0 0; font-weight: 700; }
   .l.hl .nk { padding: 0 4px; margin-right: 6px; border-radius: 4px; }
 }
+
+/* window = win95 (mirc, mirc-dark): the dialogs and the lock window as Windows 95/98 ones. Gray face, raised frame,
+   a navy title bar with the window buttons on it, beveled buttons (the default one outlined), sunken white fields and
+   lists, a navy selection, check boxes for the switches. The theme's own variables are redefined inside, so everything
+   that uses them (labels, lists, the switches' text) follows; mirc-dark's light text would be lost on the gray */
+.win-95 :is(dialog, #lock .card) { --fg: #000; --muted: #404040; --line: #808080; --bg: #fff; --accent: #000080; --accent2: #000080;
+  --menu-bg: #c0c0c0; --tab_active-bg: #000080; --tab_active-fg: #fff; --menu_sel-bg: #000080; --menu_sel-fg: #fff; --input-bg: #fff; --input-fg: #000;
+  --menu_border-fg: #808080;
+  background: #c0c0c0; color: #000; border-radius: 0; padding: 3px; border: 1px solid; border-color: #dfdfdf #000 #000 #dfdfdf;
+  box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 4px 4px 0 #0006; font: 12px/1.35 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+.win-95 :is(dialog, #lock .card), .win-95 :is(dialog, #lock .card) * { scrollbar-color: #c0c0c0 #e0e0e0; }  /* the page's rule is on every element */
+.win-95 dialog form { padding: 0 9px 10px; gap: 8px; }
+.win-95 #lock .card { padding: 3px 10px 14px; gap: 10px; width: min(320px, 100%); }
+.win-95 dialog h2, .win-95 #dabout form::before, .win-95 #lock .card::before { margin: 0 -9px 2px; padding: 3px 60px 3px 6px; color: #fff; letter-spacing: 0;
+  background: linear-gradient(90deg, #000080, #1084d0); font: 700 12px/16px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+.win-95 #dabout form::before { content: "About iSekur"; }  /* no title of its own */
+.win-95 #lock .card::before { content: "iSekur"; justify-self: stretch; margin: 0 -10px 4px; }
+.win-95 #lock h1 { font: 700 14px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; color: #000; }
+.win-95 .wbtns:not(#login .wbtns) { top: 6px; right: 6px; }  /* on the title bar */
+.win-95 :is(dialog label, dialog .hint, dialog label.ck, #dfiles h3) { color: #000; font-size: 12px; letter-spacing: 0; text-transform: none; }
+.win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
+  border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 3px 5px; font: inherit; outline: none; }
+.win-95 :is(dialog, #lock) select:not([multiple]) { appearance: none; padding-right: 22px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v14H0z' fill='%23fff'/%3E%3Cpath d='M15 0h1v16H0v-1h15z' fill='%23000'/%3E%3Cpath d='M14 1h1v14H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center / 16px 16px, #fff; }
+.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a) { background: #c0c0c0; color: #000;
+  border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
+  font: 400 12px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
+.win-95 :is(dialog .btns button, #lock button) { min-width: 75px; }
+.win-95 :is(dialog .btns button.go, #lock button) { box-shadow: 0 0 0 1px #000, inset -1px -1px #808080, inset 1px 1px #dfdfdf; }  /* the default button */
+.win-95 :is(dialog .btns button, #lock button, .flist .r .b button):active { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; padding: 5px 11px 3px 13px; }
+.win-95 :is(dialog .btns button, #lock button, .flist .r .b button):focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
+.win-95 dialog input[type=checkbox], .win-95 #setlist .sw i { appearance: none; box-sizing: border-box; width: 13px; height: 13px; margin: 0; flex: none;
+  border-radius: 0; background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; transition: none; }
+.win-95 #setlist .sw i::after { display: none; }
+.win-95 dialog input[type=checkbox]:checked, .win-95 #setlist .sw input:checked + i { background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9'%3E%3Cpath d='M1 4.5l2.5 2.5L8 1.5' fill='none' stroke='%23000' stroke-width='1.8'/%3E%3C/svg%3E") center / 9px no-repeat; }
+.win-95 #setlist .sw input:focus-visible + i { outline: 1px dotted #000; outline-offset: 2px; }
+.win-95 :is(#setnav, #thlist, .flist) { background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 2px; gap: 0; }
+.win-95 #setnav { margin-right: 0; }
+.win-95 :is(#setnav button, #thlist button, .flist .r) { border-radius: 0; padding: 2px 6px; }
+.win-95 :is(#setnav button, #thlist button):hover { background: none; }
+.win-95 :is(#setnav button.on, #thlist button.on), .win-95 #setnav button.on .c { background: #000080; color: #fff; }
+.win-95 #setlist .sec { color: #000; font-weight: 700; letter-spacing: 0; text-transform: none; border-bottom: 1px solid #808080; box-shadow: 0 1px #fff; }
+.win-95 #abox a { color: #00f; }
+.win-95 #abanner { font-family: var(--mono); }  /* box drawing lines up only in a monospaced font, not the dialog's Tahoma */
+.win-95 #abox [style*="rgb(127, 127, 127)"] { color: #404040 !important; }  /* mIRC gray 14, set inline: faint on the gray face */
+/* the nick and tab menus, as Windows menus: gray, raised, a navy highlight, etched separators */
+.win-95 #ctx { background: #c0c0c0; color: #000; border-radius: 0; padding: 2px; min-width: 150px; border: 1px solid; border-color: #dfdfdf #000 #000 #dfdfdf;
+  box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 2px 2px 0 #0006; font: 12px/1.35 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+.win-95 #ctx :is(.hd, .it) { padding: 3px 20px; }
+.win-95 #ctx .it:hover { background: #000080; color: #fff; }
+.win-95 #ctx hr { border: 0; border-top: 1px solid #808080; border-bottom: 1px solid #fff; margin: 3px 1px; }
 </style>
 </head>
 <body>

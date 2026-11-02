@@ -66,7 +66,19 @@ void Core::load_config() {
 // shadow in its (dim) timestamp color; mono: the text color and gray.
 // mIRC \x04 colors, so the webchat shows it too. shine: the column a diagonal
 // band of light crosses at the top row (banner_anim), far off = no light.
-std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine) {
+// the letters' colors: the theme's nick colors, or for a theme with one (mirc: mIRC doesn't color nicks) mIRC's own,
+// its dark ones on a light background and its bright ones on a dark one
+static std::vector<RGB> banner_palette(const Theme& t, int light) {
+    if (t.nicks.size() > 1) return t.nicks;
+    if (light < 0) {
+        RGB bg = t.get("default").bg;
+        light = bg >= 0 && ((bg >> 16 & 255) * 299 + (bg >> 8 & 255) * 587 + (bg & 255) * 114) / 1000 > 140;
+    }
+    if (light) return {0xff0000, 0xfc7f00, 0x009300, 0x009393, 0x00007f, 0x9c009c};
+    return {0xff5555, 0xfc7f00, 0x00fc00, 0x00fcfc, 0x5f87ff, 0xff55ff};
+}
+
+std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine, int light) {
     static const char* art[] = {
         u8"██╗███████╗███████╗██╗  ██╗██╗   ██╗██████╗ ",
         u8"██║██╔════╝██╔════╝██║ ██╔╝██║   ██║██╔══██╗",
@@ -76,7 +88,8 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine) {
         u8"╚═╝╚══════╝╚══════╝╚═╝  ╚═╝ ╚═════╝ ╚═╝  ╚═╝"};
     static const int ends[] = {3, 11, 19, 27, 36, 44};  // column after each letter: I S E K U R
     auto code = [](RGB c) { return c < 0 ? std::string("\x0f") : "\x04" + rgb_hex(c).substr(1); };
-    RGB shade = mono ? 0x808080 : t.get("timestamp").fg;
+    RGB shade = mono || light == 1 ? 0x808080 : t.get("timestamp").fg;  // light: a gray dialog, whatever the theme's own shade
+    auto pal = banner_palette(t, light);
     auto lit = [](RGB c, double k) {  // c moved toward white by k (0..1)
         if (c < 0) c = 0xc0c0c0;
         int r = c >> 16 & 255, g = c >> 8 & 255, b = c & 255;
@@ -91,7 +104,7 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine) {
         for (int col = 0, letter = 0; i < s.size(); col++) {
             while (col >= ends[letter] && letter < 5) letter++;
             uint32_t cp = utf8_next(s, i);
-            RGB c = cp != 0x2588 ? shade : mono || t.nicks.empty() ? t.get("default").fg : t.nicks[(size_t)letter * t.nicks.size() / 6];
+            RGB c = cp != 0x2588 ? shade : mono ? t.get("default").fg : pal[(size_t)letter * pal.size() / 6];
             double k = 1 - std::abs(col + y - shine) / 4;  // the band leans: lower rows lag a column each
             if (k > 0 && cp != ' ') c = lit(c, k * (cp == 0x2588 ? 0.85 : 0.5));
             std::string want = cp == ' ' ? cur : code(c);
@@ -106,7 +119,7 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine) {
 
 // /about: the banner, then who and where. mIRC codes, so the webchat's dialog shows the same
 std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std::vector<int>* typed) {
-    auto out = banner_lines(t, false, shine);
+    auto out = banner_lines(t, false, shine, web && t.lay("window", "") == "win95" ? 1 : -1);  // the webchat's win95 About: gray
     const char* k = "\x03" "14";  // labels gray, values in the text color
     for (std::string l : {std::string(""),
                           std::string("\x02iSekur " ISEKUR_VERSION "\x02  a colorful terminal IRC client with a built-in webchat"),
