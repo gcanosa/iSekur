@@ -587,7 +587,7 @@ void Core::handle(Server* s, const Msg& m) {
             }
             line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
             if (!s->twitch()) s->send("MODE " + ch);  // Twitch: 421 unknown command
-            if (fresh) select(b);
+            if (fresh) select(b), notify(Ev::FOCUS, b);  // the webchat follows too
             return;
         }
         Buffer* b = find(s, ch);
