@@ -1052,7 +1052,7 @@ void Tui::draw_settings(int W, int H) {
             continue;
         }
         std::string eff = L.r->val.empty() ? L.r->def : L.r->val;
-        if (L.r->choices.size() == 2 && L.r->key != "theme") {  // on/off: ● on, ○ off, (default) when not set
+        if (L.r->choices.size() == 2 && (L.r->choices[0] == "on" || L.r->choices[0] == "true" || L.r->choices[0] == "yes")) {  // on/off: ● on, ○ off, (default) when not set
             bool yes = eff == L.r->choices[0];
             Style ts = on ? sel : yes ? val : dim;
             int ex = text(vx, yy, vmax, std::string(yes ? "\u25CF " : "\u25CB ") + eff, ts, false);
@@ -1072,7 +1072,7 @@ void Tui::draw_settings(int W, int H) {
     std::string hint = sw.editing     ? "Enter: set it · Esc: cancel · empty = the default"
                        : sw.searching ? "type to search · Enter or \u2193: to the list · Esc: clear it"
                        : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · /: search · q Esc: close"
-                                       : "\u2191\u2193: move · e Enter: edit · Space: on/off, next theme · d: default · /: search · s: save · q: close";
+                                       : "\u2191\u2193: move · e Enter: edit · Space: on/off, next choice · d: default · /: search · s: save · q: close";
     text(x0 + 2, y1 - 1, x1 - 1, sw.msg.empty() ? hint : sw.msg, sw.msg.empty() ? dim : mark, false);
 }
 

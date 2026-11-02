@@ -757,7 +757,7 @@ function applyTheme() {
     $(p).classList.toggle("tsright", theme.tsa === "right");  // /set timestamp_align right
   }
   // /set web_font wins; else the theme's (mirc: Fixedsys where it's installed); else ui-monospace...
-  const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim();
+  const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim().replace(/^theme$/, "");
   set("--mono", !uf ? (theme.lay || {}).font : uf in fonts ? fonts[uf] : uf);
   const fs = parseInt(theme.fsize); set("--fsize", fs >= 8 && fs <= 40 ? fs + "px" : "");
 }
@@ -1142,7 +1142,7 @@ function renderSettings(list) {
       for (const nb of $("#setnav").children) if (nb.dataset.cat === "" || nb.dataset.cat === cat) nb.classList.add("uns");  // its category's dot, now
       $("#setmsg").textContent = full + " = " + val + " (Apply keeps it, Close undoes it)";
     };
-    if (choices.length === 2 && k !== "theme") {
+    if (choices.length === 2 && /^(on|true|yes)$/.test(choices[0])) {  // left/right and the like: a list
       const lab = document.createElement("label"); lab.className = "sw";
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = now === choices[0];
       const t = document.createElement("span"); t.textContent = now + (v ? "" : "  (default)");
@@ -1151,7 +1151,7 @@ function renderSettings(list) {
       Object.assign(row, {el: lab, get: () => cb.checked ? choices[0] : choices[1], orig: now});
     } else if (choices.length) {
       const sel = document.createElement("select");
-      for (const c of choices) sel.append(new Option(c, c, false, c === now));
+      for (const c of choices.includes(now) || !now ? choices : [now, ...choices]) sel.append(new Option(c, c, false, c === now));  // a /set value not in the list stays shown
       sel.onchange = () => live(sel.value);
       Object.assign(row, {el: sel, get: () => sel.value, orig: now});
     } else {

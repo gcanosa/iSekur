@@ -349,6 +349,9 @@ std::vector<Core::SetRow> Core::setting_rows() const {
             std::string v = r.val.empty() ? d : r.val;
             for (auto& ch : v) ch = (char)tolower((unsigned char)ch);
             if (sec == "general" && k == "theme") r.choices = themes;
+            else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
+            else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
+            else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
             else if (v == "on" || v == "off") r.choices = {"on", "off"};
             else if (v == "true" || v == "false") r.choices = {"true", "false"};
             else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
