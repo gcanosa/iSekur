@@ -63,8 +63,14 @@ button, input { font: inherit; color: inherit; }
 #foot button:hover { color: var(--fg); border-color: var(--accent); }
 /* ‹ at the top of the tab list folds it to a thin strip (remembered); › opens it again */
 /* the tab filter shares the top row with ‹: quiet until focused, Ctrl+G or Alt+J jump to it */
-#sidetop { display: flex; align-items: center; gap: 2px; padding: 0 6px 4px 10px; }
-#tabq { flex: 1; min-width: 0; background: transparent; color: var(--fg); font: inherit; font-size: 12px; border: 1px solid transparent; border-radius: 6px; padding: 3px 7px; outline: none; }
+#sidetop { display: flex; align-items: center; gap: 2px; padding: 0 6px 4px 10px; position: relative; }
+#tabq { flex: 1; min-width: 0; background: transparent; color: var(--fg); font: inherit; font-size: 12px; border: 1px solid transparent; border-radius: 6px; padding: 3px 7px 3px 24px; outline: none; }
+/* a magnifying glass in the theme's muted color (a mask, so any theme paints it) */
+#sidetop::before { content: ""; position: absolute; left: 18px; top: calc(50% - 2px - 6px); width: 12px; height: 12px; pointer-events: none;
+  background: var(--muted); opacity: .75; transition: opacity .15s;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.75' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M10 10l4.5 4.5' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+          mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ccircle cx='6.5' cy='6.5' r='4.75' fill='none' stroke='black' stroke-width='1.8'/%3E%3Cpath d='M10 10l4.5 4.5' stroke='black' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat; }
+#sidetop:focus-within::before { opacity: 1; background: var(--accent); }
 #tabq::placeholder { color: var(--muted); opacity: .7; }
 #tabq:hover { border-color: var(--line); }
 #tabq:focus { border-color: var(--menu_border-fg, var(--line)); background: var(--input-bg, var(--bg)); }
@@ -75,6 +81,7 @@ button, input { font: inherit; color: inherit; }
   #app.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "side input input"; }
   #app.noside #side > :not(#sidetop), #app.noside #tabq { display: none; }
   #app.noside #sidetop { padding: 0; }
+  #app.noside #sidetop::before { display: none; }
   #app.noside #sidebtn { margin: 0 auto; }
   #app.noside #foot { grid-area: side; align-self: end; flex-direction: column; padding: 8px 3px; border-right: 0; background: none; }
   #app.noside #foot button { flex: none; font-size: 18px; }
