@@ -405,7 +405,9 @@ void Web::http(Client& cl) {
     bool authed = !token.empty() && sit != sessions.end() && sit->second > now;
     // browsers send Origin on WebSocket and POST: it must be us (blocks CSRF / CSWSH)
     std::string origin = h["origin"];
-    bool same_origin = origin.empty() || origin == (secure ? "https://" : "http://") + h["host"];
+    // plain HTTP behind a TLS proxy (Caddy, nginx): the browser's page is https://host, still us
+    bool same_origin = origin.empty() || origin == (secure ? "https://" : "http://") + h["host"] ||
+                       (!secure && origin == "https://" + h["host"]);
 
     if (method == "GET" && (path == "/" || path == "/index.html")) {
         static const std::string page = [] {
