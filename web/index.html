@@ -95,6 +95,24 @@ dialog { background: var(--menu-bg, var(--panel)); color: var(--fg); border: 1px
 dialog::backdrop { background: #0009; }
 dialog form { display: grid; gap: 10px; padding: 18px 20px; }
 dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--accent); }
+/* a theme's [layout] window = mac | win95: window buttons in the dialog's top corner; only the close one does something */
+.wbtns { display: none; position: absolute; top: 10px; gap: 8px; }
+:is(.win-mac, .win-95) :is(dialog form, #login form, #lock .card) { padding-top: 34px; }
+#lock .card { position: relative; }
+.win-mac .wbtns { display: flex; left: 14px; }
+.win-mac .wbtns span { width: 12px; height: 12px; border-radius: 50%; box-sizing: border-box; font: 700 10px/10px system-ui, sans-serif; text-align: center; color: transparent; }
+.win-mac .wbtns .c { background: #ff5f57; border: 1px solid #e2463f; }
+.wbtns:not(.deco) .c { cursor: pointer; }  /* deco: the login and lock windows, nothing to close */
+.win-mac .wbtns .m { background: #febc2e; border: 1px solid #e1a116; }
+.win-mac .wbtns .z { background: #28c840; border: 1px solid #14ae2c; }
+.win-mac .wbtns:hover span { color: #0009; }  /* the symbols show on hover, as on a Mac */
+.win-mac .wbtns .c::after { content: "\00d7"; } .win-mac .wbtns .m::after { content: "\2212"; } .win-mac .wbtns .z::after { content: "+"; }
+.win-95 .wbtns { display: flex; right: 10px; gap: 2px; }
+.win-95 .wbtns span { width: 16px; height: 14px; box-sizing: border-box; background: #c0c0c0; color: #000; border: 1px solid; border-color: #fff #404040 #404040 #fff;
+  box-shadow: inset -1px -1px #808080; font: 700 11px/11px Tahoma, "MS Sans Serif", sans-serif; text-align: center; }
+.win-95 .wbtns .c { order: 3; margin-left: 2px; }
+.win-95 .wbtns:not(.deco) .c:active { border-color: #404040 #fff #fff #404040; box-shadow: inset 1px 1px #808080; }
+.win-95 .wbtns .m::after { content: "_"; } .win-95 .wbtns .z::after { content: "\25a1"; } .win-95 .wbtns .c::after { content: "\00d7"; }
 dialog label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
 dialog label.ck { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; }
 dialog input:not([type=checkbox]) { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--fg); min-width: 0; }
@@ -764,6 +782,9 @@ function applyTheme() {
   // /set web_font wins; else the theme's (mirc: Fixedsys where it's installed); else ui-monospace...
   const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim().replace(/^theme$/, "");
   set("--mono", !uf ? (theme.lay || {}).font : uf in fonts ? fonts[uf] : uf);
+  const win = (theme.lay || {}).window || "";  // mac | win95: the window buttons
+  winStyle(win);
+  try { localStorage.setItem("isekur-window", win); } catch (e) {}
   const fs = parseInt(theme.fsize); set("--fsize", fs >= 8 && fs <= 40 ? fs + "px" : "");
 }
 
@@ -789,6 +810,19 @@ function onAccent(a1, a2) {
   if (!best) best = {t: [255, 255, 255], a: 0.6, v: 0};  // ponytail: 60% veil always gets there; a guard, not a case
   return {text: best.t[0] > 128 ? "#fff" : "", veil: best.a > 0 ? `rgba(${best.v},${best.v},${best.v},${best.a.toFixed(2)})` : ""};
 }
+
+// window buttons (shown by a theme's window = mac | win95) on every dialog and the login and lock windows: close,
+// minimize, zoom. A dialog's close closes it, like Esc; the login and lock windows' are only the look
+for (const d of document.querySelectorAll("dialog, #login form, #lock .card")) {
+  const w = document.createElement("div"); w.className = "wbtns";
+  for (const k of ["c", "m", "z"]) { const b = document.createElement("span"); b.className = k; w.append(b); }
+  if (d.tagName === "DIALOG") w.firstChild.title = "Close", w.firstChild.onclick = () => d.close();
+  else w.classList.add("deco");
+  d.prepend(w);
+}
+// the login window comes before the theme does: the last one's style, remembered in this browser
+const winStyle = w => { const h = document.documentElement.classList; h.toggle("win-mac", w === "mac"); h.toggle("win-95", w === "win95"); };
+try { winStyle(localStorage.getItem("isekur-window")); } catch (e) {}
 
 function onMsg(ev) {
   const m = JSON.parse(ev.data);

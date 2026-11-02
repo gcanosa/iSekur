@@ -63,3 +63,4 @@ event_marker   = *
 separator      =
 timestamp      = [%H:%M]
 font           = Fixedsys, "Fixedsys Excelsior 3.01", "Fixedsys Excelsior", ui-monospace, Consolas, monospace
+window         = win95            ; the webchat dialogs: mac | win95 window buttons
