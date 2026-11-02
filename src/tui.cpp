@@ -451,6 +451,11 @@ int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); 
 void Tui::draw() {
     if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
     if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true;
+    if (c.theme_win) {
+        c.theme_win = false, tw = ThemeWin{}, tw.open = true, tw.orig = c.theme.name;
+        auto l = theme_list();
+        tw.sel = std::max(0, (int)(std::find(l.begin(), l.end(), tw.orig) - l.begin()) % std::max(1, (int)l.size()));
+    }
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
@@ -737,6 +742,11 @@ void Tui::draw() {
     y = H - 1;
     Style is = T.get("input");
     fill(y, 0, W, is);
+    if (tw.open) {  // /theme: the picker has the keys
+        draw_themes(W, H);
+        present();
+        return;
+    }
     if (sw.open) {  // /set: the settings window has the keys
         draw_settings(W, H);
         present();
@@ -1063,6 +1073,104 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     }
 }
 
+// ---- the theme picker (/theme alone) -------------------------------------------
+//   ┌─ Theme ────────────────────────────────┐
+//   │ filter: mi                             │
+//   │ ▸ mirc                                 │
+//   │   mirc-dark                            │
+//   │ ↑↓ preview · Enter keep · Esc back     │
+//   └────────────────────────────────────────┘
+std::vector<std::string> Tui::theme_list() const {
+    std::string q = lower(to_utf8(tw.q));
+    std::vector<std::string> out;
+    for (auto& n : theme_names())
+        if (lower(n).find(q) != std::string::npos) out.push_back(n);
+    return out;
+}
+
+void Tui::draw_themes(int W, int H) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input");
+    for (Style* st : {&ls, &dim}) st->bg = bs.bg;
+    hs.attr |= A_BOLD;
+    auto l = theme_list();
+    int n = (int)l.size();
+    tw.rows = std::max(1, std::min({std::max(n, 1), H - 6, 14}));
+    tw.w = std::min(W - 2, 56), tw.x0 = (W - tw.w) / 2;
+    int bh = tw.rows + 4, y0 = std::max(0, (H - bh) / 2 - 1), x1 = tw.x0 + tw.w;
+    tw.list_y = y0 + 2;
+    if (tw.sel >= n) tw.sel = std::max(0, n - 1);
+    if (tw.sel < tw.top) tw.top = tw.sel;
+    if (tw.sel >= tw.top + tw.rows) tw.top = tw.sel - tw.rows + 1;
+    for (int yy = y0; yy < y0 + bh; yy++) fill(yy, tw.x0, x1, bs);
+    for (int xx = tw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
+    for (int yy = y0; yy < y0 + bh; yy++) cell(tw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
+    cell(tw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(tw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
+    text(tw.x0 + 2, y0, x1 - 2, " Theme ", hs, false);
+    int fx = text(tw.x0 + 2, y0 + 1, x1 - 2, "filter: ", hs, false);
+    fill(y0 + 1, fx, x1 - 2, fs);
+    int ex = text(fx, y0 + 1, x1 - 2, to_utf8(tw.q), fs, false);
+    tb_set_cursor(ex, y0 + 1);
+    if (!n) text(tw.x0 + 2, tw.list_y, x1 - 2, "no theme matches", dim, false);
+    for (int i = 0; i < tw.rows && tw.top + i < n; i++) {
+        const std::string& name = l[(size_t)(tw.top + i)];
+        bool on = tw.top + i == tw.sel;
+        Style st = on ? sel : bs;
+        fill(tw.list_y + i, tw.x0 + 1, x1 - 1, st);
+        int nx = text(tw.x0 + 2, tw.list_y + i, x1 - 2, (on ? "▸ " : "  ") + name, st, false);
+        if (name == tw.orig) { Style d = dim; d.bg = st.bg; text(nx + 1, tw.list_y + i, x1 - 2, "(was)", d, false); }
+    }
+    text(tw.x0 + 2, y0 + bh - 2, x1 - 2, "↑↓ preview · type: filter · Enter keep · Esc back", dim, false);
+}
+
+void Tui::theme_key(int k, uint32_t ch) {
+    auto l = theme_list();
+    int n = (int)l.size();
+    bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
+    if (k == TB_KEY_ESC) {  // the filter first, then back to the theme it had
+        if (!tw.q.empty()) { tw.q.clear(); l = theme_list(); tw.sel = std::max(0, (int)(std::find(l.begin(), l.end(), c.theme.name) - l.begin())); return; }
+        std::string err;
+        if (c.theme.name != tw.orig) c.use_theme(tw.orig, err);
+        tw.open = false;
+        return;
+    }
+    if (k == TB_KEY_ENTER) {
+        tw.open = false;
+        if (c.theme.name != tw.orig) c.exec(c.active, "/set theme " + c.theme.name);  // /save keeps it
+        return;
+    }
+    if (ch || k == TB_KEY_SPACE) tw.q += ch ? (char32_t)ch : U' ', tw.sel = tw.top = 0;
+    else if (bs) { if (tw.q.empty()) return; tw.q.pop_back(), tw.sel = tw.top = 0; }
+    else if (k == TB_KEY_ARROW_DOWN) tw.sel = std::min(n - 1, tw.sel + 1);
+    else if (k == TB_KEY_ARROW_UP) tw.sel = std::max(0, tw.sel - 1);
+    else if (k == TB_KEY_PGDN) tw.sel = std::min(n - 1, tw.sel + tw.rows);
+    else if (k == TB_KEY_PGUP) tw.sel = std::max(0, tw.sel - tw.rows);
+    else if (k == TB_KEY_HOME) tw.sel = 0;
+    else if (k == TB_KEY_END) tw.sel = n - 1;
+    else return;
+    l = theme_list(), n = (int)l.size();
+    tw.sel = std::max(0, std::min(tw.sel, n - 1));
+    std::string err;
+    if (n && l[(size_t)tw.sel] != c.theme.name) c.use_theme(l[(size_t)tw.sel], err);  // the live preview
+}
+
+// a click previews a theme (again, or a double click: keeps it); the wheel moves
+void Tui::theme_mouse(int k, int x, int y) {
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { theme_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
+    int i = y - tw.list_y;
+    if (k != TB_KEY_MOUSE_LEFT || i < 0 || i >= tw.rows || x <= tw.x0 || x >= tw.x0 + tw.w - 1) return;
+    int j = tw.top + i;
+    if (j >= (int)theme_list().size()) return;
+    long long now = now_ms();
+    bool again = tw.sel == j && now - tw.click_ms < 500;
+    tw.click_ms = now;
+    if (again) { theme_key(TB_KEY_ENTER, 0); return; }
+    int d = j - tw.sel;
+    tw.sel = j - (d > 0 ? 1 : d < 0 ? -1 : 0);  // one step from it, so theme_key's move lands there and previews
+    if (d) theme_key(d > 0 ? TB_KEY_ARROW_DOWN : TB_KEY_ARROW_UP, 0);
+}
+
 // a click picks a category or a key (again, or a double click: edits it); the wheel moves
 void Tui::settings_mouse(int k, int x, int y) {
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) {
@@ -1256,7 +1364,7 @@ void Tui::on_readable() {
     bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || sw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -1311,6 +1419,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         return;
     }
     if (sw.open) { settings_key(mod, k, ch); return; }
+    if (tw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) theme_key(k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -1477,6 +1586,7 @@ std::string Tui::word_at(int x, int y) const {
 void Tui::mouse(int mod, int k, int x, int y) {
     if (c.locked) return;
     if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
+    if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && (nl_x < 0 || x < nl_x);
     if (selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {

@@ -205,6 +205,7 @@ static const std::vector<CmdInfo> CMDS = {
      "the last 50 at most. -all searches every tab.",
      {"/grep http", "/grep -all alice"}},
     {"theme", "Windows", "[name]", "Show or switch the color theme",
+     "Alone: a picker in the terminal and the webchat; type to filter, Up/Down previews live (both), Enter keeps (as /set theme, so /save writes it), Esc goes back. "
      "Themes are files in themes/*.theme. The switch is live; /set theme name + /save keeps it.",
      {"/theme", "/theme dracula", "/theme catppuccin-latte"}},
 

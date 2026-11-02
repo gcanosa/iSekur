@@ -608,6 +608,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "fold") c.fold(b);
+        else if (m["t"] == "theme") { std::string err; c.use_theme(m["name"], err); }  // the theme picker's live preview
         else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
             long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;
             size_t to = (size_t)std::max(0LL, std::min(end, (long long)b->lines.size()));
@@ -706,6 +707,9 @@ std::string Web::theme_json() {
     for (auto& [k, v] : c.theme.layout) o += (first ? "" : ",") + json_str(k) + ":" + json_str(v), first = false;
     o += "},\"nicks\":[";
     for (size_t i = 0; i < c.theme.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(c.theme.nicks[i]));
+    o += "],\"themes\":[";  // installed ones, for the /theme picker
+    first = true;
+    for (auto& n : theme_names()) o += (first ? "" : ",") + json_str(n), first = false;
     return o + "]}";
 }
 

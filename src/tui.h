@@ -86,6 +86,19 @@ private:
     void draw_settings(int W, int H);
     void settings_key(int mod, int k, uint32_t ch);
     void settings_mouse(int k, int x, int y);
+    // /theme alone: the installed themes in a box, a filter on top; moving previews them (the webchat too)
+    struct ThemeWin {
+        bool open = false;
+        std::u32string q;
+        std::string orig;  // Esc goes back to it
+        int sel = 0, top = 0, x0 = 0, w = 0, list_y = 0, rows = 0;
+        long long click_ms = 0;
+    };
+    ThemeWin tw;
+    std::vector<std::string> theme_list() const;  // the installed themes the filter matches
+    void draw_themes(int W, int H);
+    void theme_key(int k, uint32_t ch);
+    void theme_mouse(int k, int x, int y);
     bool action(const std::string& a);
     void complete();
     // live list under the input line: config keys after "/set ", commands while

@@ -478,6 +478,13 @@ std::string Core::opt(const Server* s, const std::string& key, const std::string
 // /reload: the config file again, without restarting. Unsaved /set changes stay
 // on top; servers pick up their settings like /set does (on the next connect),
 // new [server.*] sections are added and connected when autoconnect is on.
+bool Core::use_theme(const std::string& name, std::string& err) {
+    if (!load_theme(name, theme, err)) return false;
+    dirty = true;
+    notify(Ev::THEME, nullptr);
+    return true;
+}
+
 void Core::reload(Buffer* b) {
     Ini fresh;
     if (!ini_load(cfg_path, fresh)) { print(b, LK::ERROR, "Can't read " + cfg_path); return; }
@@ -1003,12 +1010,13 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "reload") { reload(b); return; }
     if (cmd == "theme") {
         std::string err;
+        if (args.empty() && tty && !from_web) { theme_win = dirty = true; return; }  // the terminal's theme picker
         if (args.empty()) {
             std::string l;
             for (auto& n : theme_names()) l += (l.empty() ? "" : ", ") + n;
             print(b, LK::INFO, "Current theme: " + theme.name + "  (installed: " + l + ")");
         }
-        else if (load_theme(args, theme, err)) { dirty = true; notify(Ev::THEME, nullptr); print(b, LK::INFO, "Theme: " + args); }
+        else if (use_theme(args, err)) print(b, LK::INFO, "Theme: " + args);
         else print(b, LK::ERROR, err);
         return;
     }

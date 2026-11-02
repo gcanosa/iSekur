@@ -256,6 +256,8 @@ struct Core {
     struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; };
     std::vector<SetRow> setting_rows() const;
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
+    bool theme_win = false;     // /theme alone in the terminal: the TUI opens its theme picker
+    bool use_theme(const std::string& name, std::string& err);  // switch the theme, terminal and webchat, silently
     std::string cfg_path;
     Theme theme;
     std::vector<std::unique_ptr<Server>> servers;
