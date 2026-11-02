@@ -461,8 +461,8 @@ int main() {
     assert(core.cfg["server.t"]["autojoin"] == "#c,#K s3cret" && core.unsaved["server.t"].count("autojoin"));
     core.open(ts, BT::CHANNEL, "#open");
     ts->cfg.nickserv_pass = "pw";
-    feed(":srv 001 me :Welcome");
-    assert(sent() == "CAP END\r\nPRIVMSG NickServ :IDENTIFY pw\r\nJOIN #c\r\nJOIN #K s3cret\r\nJOIN #open\r\n");
+    feed(":srv 001 me :Welcome");  // CAP never answered: no CAP END to pass upstream (psyBNC)
+    assert(ts->cap_done && sent() == "PRIVMSG NickServ :IDENTIFY pw\r\nJOIN #c\r\nJOIN #K s3cret\r\nJOIN #open\r\n");
     ts->sasl_ok = true;
     feed(":srv 001 me :Welcome");
     assert(sent().find("NickServ") == std::string::npos);
@@ -819,6 +819,43 @@ int main() {
         core.add(chb, Line{time(nullptr), LK::INFO, "", "trim"});
         assert(chb->lines.size() == 150 && chb->lines.back().text == "trim");
         core.max_lines = 2000;
+    }
+
+    {  // a ZNC attach: caps, *playback, its buffer batch, *status, other clients' messages
+        ServerCfg zc;
+        zc.name = "znc", zc.nick = "me", zc.pass = "me/libera:pw";
+        Server* z = core.add_server(zc);
+        z->flood_ms = 0;
+        auto zf = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(z, mm); };
+        auto zs = [&]() { std::string o = z->conn.out; z->conn.out.clear(); return o; };
+        Buffer* zb = core.open(z, BT::CHANNEL, "#c");
+        zb->lines.push_back(Line{1000, LK::MSG, "bob", "old", false, false});
+        zf(":irc.znc.in CAP * LS :znc.in/self-message znc.in/playback server-time batch");
+        assert(zs() == "CAP REQ :batch server-time znc.in/self-message znc.in/playback\r\n");
+        zf(":irc.znc.in CAP * ACK :batch server-time znc.in/self-message znc.in/playback");
+        assert(zs() == "CAP END\r\n");
+        zf(":irc.znc.in 001 me2 :Welcome");
+        std::string o = zs();
+        assert(z->nick == "me2" && o.find("PRIVMSG *playback :PLAY * 1000\r\n") != std::string::npos);
+        zf(":me2!u@h JOIN #c");
+        zs();
+        zf(":irc.znc.in BATCH +b1 znc.in/playback #c");
+        zf("@batch=b1;time=1970-01-01T00:16:40.000Z :bob!u@h PRIVMSG #c :old");          // already have it
+        zf("@batch=b1;time=1970-01-01T00:16:50.000Z :bob!u@h PRIVMSG #c :me2: missed");  // new, no ring
+        zf("@batch=b1;time=1970-01-01T00:16:51.000Z :bob!u@h PRIVMSG me2 :\x01VERSION\x01");
+        zf(":irc.znc.in BATCH -b1");
+        assert(zb->lines.back().text == "me2: missed" && !zb->lines.back().hilight && zs().empty());  // old CTCP: no reply
+        assert(std::count_if(zb->lines.begin(), zb->lines.end(), [](const Line& l) { return l.text == "old"; }) == 1);
+        zf(":me2!u@h PRIVMSG bob :from my phone");  // self-message: goes to bob's tab, as ours
+        Buffer* bob = core.find(z, "bob");
+        assert(bob && bob->lines.back().self && bob->lines.back().nick == "me2");
+        zf(":*status!znc@znc.in PRIVMSG me2 :You have no networks");
+        Buffer* st = core.find(z, "*status");
+        assert(st && st->type == BT::QUERY);
+        core.exec(st, "help");  // a *name query you can talk to
+        assert(zs() == "PRIVMSG *status :help\r\n");
+        zf(":irc.znc.in 464 me2 :Password required");
+        assert(z->status->lines.back().text == "Password required");
     }
 
     Server sv;  // token bucket: 2 at once, then one per second

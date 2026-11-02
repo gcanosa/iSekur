@@ -11,7 +11,10 @@
 static const char* WANT_CAPS[] = {
     "multi-prefix", "away-notify", "account-notify", "extended-join", "chghost",
     "echo-message", "batch", "server-time", "message-tags", "userhost-in-names",
-    "invite-notify", "setname", "cap-notify", "account-tag", "sasl", "draft/chathistory"};
+    "invite-notify", "setname", "cap-notify", "account-tag", "sasl", "draft/chathistory",
+    // ZNC: other clients' messages (self-message), backlog on request (playback, see 001),
+    // and the pre-IRCv3 names of server-time and batch that ZNC 1.6 still offers
+    "znc.in/self-message", "znc.in/playback", "znc.in/server-time-iso", "znc.in/batch"};
 
 // ---- parsing ---------------------------------------------------------------
 const std::string& Msg::p(size_t i) const {
@@ -241,7 +244,9 @@ void Core::connect(Server* s) {
     s->state = SS::CONNECTING;
     if (s->twitch()) twitch_login(s);  // twitch.cpp
     else {
-        if (!s->cfg.pass.empty()) s->send("PASS " + s->cfg.pass);
+        // bouncers: ZNC "user/network:pass", soju "user/network" in user or SASL
+        const std::string& pw = s->cfg.pass;
+        if (!pw.empty()) s->send("PASS " + std::string(pw[0] == ':' || pw.find(' ') != std::string::npos ? ":" : "") + pw);
         s->send("CAP LS 302");
     }
     s->send("NICK " + s->nick);
@@ -455,7 +460,8 @@ void Core::handle(Server* s, const Msg& m) {
         s->nick = m.p(0);
         s->backoff = 0;
         s->ping_at = time(nullptr) + 30;
-        cap_end(s);  // servers that ignored CAP never got here waiting
+        if (s->caps_ls.empty()) s->cap_done = true;  // CAP ignored (psyBNC): a CAP END now would go upstream
+        else cap_end(s);
         print(s->status, LK::INFO, m.p(1));
         // ponytail: IDENTIFY goes out right before the JOINs, so a +r channel can still beat
         // NickServ; SASL has no such race. Wait for the 900/NOTICE if that bites.
@@ -470,6 +476,16 @@ void Core::handle(Server* s, const Msg& m) {
             if (b->srv == s && b->type == BT::CHANNEL &&
                 std::find_if(chans.begin(), chans.end(), [&](const std::string& c) { return irc_lower(c) == irc_lower(b->name); }) == chans.end())
                 chans.push_back(b->name);
+        // ZNC playback module: with the cap ZNC holds the backlog back until asked; ask for
+        // what came after the newest line we have (the same second again: the replay check drops it)
+        if (s->caps.count("znc.in/playback")) {
+            time_t last = 0;
+            for (auto& b : bufs)
+                if (b->srv == s)
+                    for (auto it = b->lines.rbegin(); it != b->lines.rend(); ++it)
+                        if (it->kind == LK::MSG || it->kind == LK::ACTION || it->kind == LK::NOTICE) { last = std::max(last, it->ts); break; }
+            s->send("PRIVMSG *playback :PLAY * " + std::to_string(last));
+        }
         for (auto& ch : chans) {
             if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
             auto k = s->chan_keys.find(irc_lower(ch));
@@ -698,9 +714,9 @@ void Core::handle(Server* s, const Msg& m) {
         dirty = true;
         return;
     }
-    if (cmd == "BATCH") {  // remember chathistory batches: their lines are replays
+    if (cmd == "BATCH") {  // remember chathistory and ZNC buffer batches: their lines are replays
         const std::string& ref = m.p(0);
-        if (ref.size() > 1 && ref[0] == '+' && m.p(1).find("chathistory") != std::string::npos)
+        if (ref.size() > 1 && ref[0] == '+' && (m.p(1).find("chathistory") != std::string::npos || m.p(1) == "znc.in/playback"))
             s->hist_batches.insert(ref.substr(1));
         else if (ref.size() > 1 && ref[0] == '-')
             s->hist_batches.erase(ref.substr(1));
@@ -849,6 +865,8 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "ERROR") { print(s->status, LK::ERROR, m.p(0)); return; }
+    if (cmd == "464")  // then printed as usual
+        print(s->status, LK::INFO, "Server password: password = ... in [server." + s->cfg.name + "] (ZNC: user/network:pass)");
     if (cmd == "WALLOPS") {  // with the server notices: oper chatter in one place
         line(open(s, BT::QUERY, "*snotices"), LK::INFO, "", "\x02!" + (m.nick.empty() ? m.prefix : m.nick) + "!\x02 " + m.p(0));
         return;

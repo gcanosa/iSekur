@@ -116,7 +116,7 @@ autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
 ; sasl_pass = secret
 ; sasl_mech = PLAIN          ; PLAIN | SCRAM-SHA-256 | EXTERNAL (default: PLAIN, or EXTERNAL with cert)
 ; cert      = /path/client.pem  ; client certificate for SASL EXTERNAL / CertFP
-; password  = server-password
+; password  = server-password  ; bouncers: ZNC me/network:pass, psyBNC/sBNC the user password
 ; nickserv_pass = secret     ; /msg NickServ IDENTIFY on connect, for networks without SASL
 ; e2e_keys  =                ; written by /e2e #chan for autojoin channels (the key, not the password)
 

@@ -682,7 +682,8 @@ static std::vector<std::string> chunk(const std::string& t, size_t max) {
 
 void Core::say(Buffer* b, const std::string& text, bool action) {
     Server* s = b->srv;
-    if (!s || b->type == BT::STATUS || b->name[0] == '*') { print(b, LK::ERROR, "Not a channel or query window"); return; }
+    if (!s || b->type == BT::STATUS || b->name == "*channels" || b->name == "*snotices") {  // ours; *status (ZNC) is a real query
+        print(b, LK::ERROR, "Not a channel or query window"); return; }
     if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
     // /e2e: "+iSE " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes
     // (a channel also has its name as AAD, so the 400 bytes count it: long names get less text)
