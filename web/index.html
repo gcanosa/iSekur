@@ -545,7 +545,7 @@ function renderSide() {
     if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
     t.onclick = () => { select(id); side.classList.remove("open"); if (tabq.value) tabq.value = "", renderSide(); };
     if (q.length) { if (picks.length === pick) t.classList.add("pick"); picks.push(id); }
-    if (b.type === "channel" || (b.type === "status" && !b.home)) t.oncontextmenu = e => askMenu(e, "", id);  // a server tab: connect, fold, close
+    if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) t.oncontextmenu = e => askMenu(e, "", id);  // a server tab: connect, fold, close
     side.append(t);
   });
 }

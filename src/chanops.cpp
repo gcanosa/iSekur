@@ -273,6 +273,16 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
         m.push_back({"Close", up ? "?Disconnect from " + s->cfg.name + " and close all its tabs?\n/close" : "/close"});
         return m;
     }
+    if (b->type == BT::QUERY && s) {  // a private chat: the nick's menu (bar Query, Mention), then the tab's own
+        for (auto& it : nick_menu(b, b->name))
+            if (it.first != "Query" && it.first != "Mention" && !(m.empty() && it.first.empty())) m.push_back(it);
+        m.push_back({"", ""});
+        m.push_back({e2e_on(b) ? "Turn off E2E" : "Turn on E2E", e2e_on(b) ? "/e2e off" : "/e2e " + b->name});
+        m.push_back({"Clear", "/clear"});
+        m.push_back({"", ""});
+        m.push_back({"Close", "/close"});
+        return m;
+    }
     if (b->type != BT::CHANNEL || !s) return m;
     auto& aj = s->cfg.autojoin;
     bool in_aj = std::any_of(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(b->name); });

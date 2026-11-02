@@ -422,6 +422,14 @@ int main() {
         for (auto& [lab, cmd] : core.tab_menu(chb)) if (lab == l) return cmd;
         return std::string("-");
     };
+    {  // a private chat tab: the nick's commands (no Query/Mention), then Clear and Close
+        Buffer* q = core.open(ts, BT::QUERY, "NickServ");
+        auto qm = core.tab_menu(q);
+        auto has = [&](const std::string& l) { for (auto& it : qm) if (it.first == l) return it.second; return std::string("-"); };
+        assert(!qm.empty() && !qm[0].first.empty() && has("Whois") == "/whois NickServ" && has("Ignore") == "/ignore NickServ");
+        assert(has("Close") == "/close" && has("Clear") == "/clear" && has("Query") == "-" && has("Mention") == "-");
+        core.close(q);
+    }
     bool joined = chb->joined;
     chb->joined = true;
     assert(tab_cmd("Close")[0] == '?' && tab_cmd("Clear") == "/clear");
