@@ -33,7 +33,7 @@ button, input { font: inherit; color: inherit; }
   -webkit-background-clip: text; background-clip: text; color: transparent; }
 #login input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 #login input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
-#login button { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #111;
+#login button { background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111);
   border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
 #ver { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: var(--muted); opacity: .6; }
 #loginerr { color: var(--err); min-height: 1.4em; font-size: 13px; }
@@ -61,7 +61,7 @@ button, input { font: inherit; color: inherit; }
 #side .tab.split { border-left-color: var(--muted); border-left-style: dashed; }  /* in the webchat's other /split pane */
 /* bottom left: add a server, settings, about */
 #foot { grid-area: foot; display: flex; gap: 6px; padding: 8px 10px; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
-#foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; cursor: pointer; color: var(--muted); font-size: 22px; line-height: 1.2; }
+#foot button { flex: 1; background: none; border: 1px solid var(--line); border-radius: 8px; padding: 4px 0; cursor: pointer; color: var(--fg); font-size: 22px; line-height: 1.2; }
 #foot #setbtn { font-size: 27px; line-height: 1; }  /* the gear glyph draws small */
 #foot button:hover { color: var(--fg); border-color: var(--accent); }
 /* ‹ at the top of the tab list folds it to a thin strip (remembered); › opens it again */
@@ -101,8 +101,8 @@ dialog input:not([type=checkbox]) { background: var(--bg); border: 1px solid var
 dialog input:focus { outline: none; border-color: var(--accent); }
 dialog .row2 { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
 dialog .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
-dialog .btns button { background: none; border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
-dialog .btns button.go { background: linear-gradient(90deg, var(--accent), var(--accent2)); color: #111; border: 0; font-weight: 700; }
+dialog .btns button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
+dialog .btns button.go { background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111); border: 0; font-weight: 700; }
 dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #dabout { width: min(720px, calc(100vw - 32px)); }
 #abox { font-size: 13px; line-height: 1.4; }
@@ -129,7 +129,7 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #lock .shackle { transform-origin: 14px 26px; transform: translateY(-9px); animation: shut .18s .5s ease-in forwards; }
 #lock input { width: 100%; background: var(--input-bg, var(--bg)); color: var(--input-fg, var(--fg)); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 10px 12px; }
 #lock input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
-#lock button { width: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--menu-bg, var(--panel)); border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
+#lock button { width: 100%; background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111); border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
 #lockerr { color: var(--error-fg, var(--err)); min-height: 1.4em; font-size: 13px; }
 #lock.fail .card { animation: shake .45s ease both; }
 #lock.fail svg { color: var(--error-fg, var(--err)); }
@@ -734,6 +734,9 @@ function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
 
 function applyTheme() {
   const r = document.documentElement.style;
+  // the last theme's colors go first: one without a "menu" (default, solarized) must not keep the previous one's
+  for (const k of applyTheme.keys || []) r.removeProperty("--" + k + "-fg"), r.removeProperty("--" + k + "-bg");
+  applyTheme.keys = Object.keys(theme.el || {});
   for (const [k, v] of Object.entries(theme.el || {})) {
     if (v.fg) r.setProperty("--" + k + "-fg", v.fg); else r.removeProperty("--" + k + "-fg");
     if (v.bg) r.setProperty("--" + k + "-bg", v.bg); else r.removeProperty("--" + k + "-bg");
@@ -748,6 +751,8 @@ function applyTheme() {
   set("--muted", (el.timestamp || {}).fg);
   set("--accent", (el.input_prompt || {}).fg);
   set("--accent2", (el.msg_self || {}).fg);
+  const oa = onAccent((el.input_prompt || {}).fg, (el.msg_self || {}).fg);
+  set("--on-accent", oa.text), set("--accent-veil", oa.veil);
   // light or dark by the background's brightness: native controls, scrollbars and hovers match
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
   document.documentElement.style.colorScheme = lum > 140 ? "light" : "dark";
@@ -760,6 +765,29 @@ function applyTheme() {
   const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim().replace(/^theme$/, "");
   set("--mono", !uf ? (theme.lay || {}).font : uf in fonts ? fonts[uf] : uf);
   const fs = parseInt(theme.fsize); set("--fsize", fs >= 8 && fs <= 40 ? fs + "px" : "");
+}
+
+// The accent buttons (Apply & save, Connect, Unlock) are a gradient from input_prompt to msg_self: their text,
+// black or white, must read on both ends (WCAG 4.5:1). If neither does (mid-tone accents), the least veil
+// (white under black text, black under white) that makes it read; mirc's navy gets white text and no veil
+function onAccent(a1, a2) {
+  const rgb = h => { const m = /^#(..)(..)(..)$/i.exec(h || ""); return m && [1, 2, 3].map(i => parseInt(m[i], 16)); };
+  const lum = c => { const [r, g, b] = c.map(v => (v /= 255) <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4); return 0.2126 * r + 0.7152 * g + 0.0722 * b; };
+  const cr = (x, y) => { const a = lum(x), b = lum(y); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
+  const ends = [rgb(a1), rgb(a2) || rgb(a1)].filter(Boolean);
+  if (!ends.length) return {};
+  let best = null;
+  for (const t of [[17, 17, 17], [255, 255, 255]]) {
+    const v = t[0] > 128 ? 0 : 255;  // white text: darken under it; black text: lighten
+    for (let a = 0; a <= 0.6001; a += 0.05) {
+      if (Math.min(...ends.map(e => cr(t, e.map(x => x + (v - x) * a)))) >= 4.5) {
+        if (!best || a < best.a - 1e-9) best = {t, a, v};
+        break;
+      }
+    }
+  }
+  if (!best) best = {t: [255, 255, 255], a: 0.6, v: 0};  // ponytail: 60% veil always gets there; a guard, not a case
+  return {text: best.t[0] > 128 ? "#fff" : "", veil: best.a > 0 ? `rgba(${best.v},${best.v},${best.v},${best.a.toFixed(2)})` : ""};
 }
 
 function onMsg(ev) {
