@@ -320,20 +320,20 @@ dialog .btns .left { margin-right: auto; }
 #nicks2 { grid-area: nicks2; display: none; }
 #status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
 #status { display: flex; gap: 12px; align-items: center; }
-#status b { color: var(--status_hi-fg, var(--fg)); font-weight: 400; }
+#status b { color: var(--sth-fg, var(--status_hi-fg, var(--fg))); font-weight: 400; }
 #stl { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 #stl .act { cursor: pointer; }
 #stl .act.a1 { color: var(--tab_data-fg, #9aa0c0); }
 #stl .act.a2 { color: var(--tab_msg-fg, #ffffff); }
 #stl .act.a3 { color: var(--tab_hilight-fg, #ff6ac1); }
 #stl .err { color: var(--error-fg, #ff5f5f); }
-#stl .more { color: var(--hilight-fg, #ffd75f); }
+#stl .more { color: var(--more-fg, var(--hilight-fg, #ffd75f)); font-weight: 700; }
 #status { overflow: hidden; }
 #app > * { min-width: 0; }  /* grid cells shrink to the phone instead of growing to their text */
-#sti { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 100 auto; color: var(--status_info-fg, var(--status_hi-fg, var(--fg))); }
+#sti { margin-left: auto; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 100 auto; color: var(--status_info-fg, var(--sth-fg, var(--status_hi-fg, var(--fg)))); }
 #topic.hide .t { visibility: hidden; }  /* toggle_topic (Alt+T) */
 /* /dcc transfers on the right: ⇣name [bar] 42% 1.2M/s; a click opens the Files dialog */
-#dccbar { margin-left: auto; display: flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; color: var(--status_hi-fg, var(--fg)); }
+#dccbar { margin-left: auto; display: flex; gap: 6px; align-items: center; white-space: nowrap; cursor: pointer; color: var(--sth-fg, var(--status_hi-fg, var(--fg))); }
 #dccbar:empty { display: none; }
 progress { appearance: none; -webkit-appearance: none; width: 90px; height: 7px; border: 0; border-radius: 4px; background: var(--line); overflow: hidden; }
 progress::-webkit-progress-bar { background: var(--line); border-radius: 4px; }
@@ -863,9 +863,9 @@ function applyTheme() {
   set("--accent", (el.input_prompt || {}).fg);
   set("--accent2", (el.msg_self || {}).fg);
   const oa = onAccent((el.input_prompt || {}).fg, (el.msg_self || {}).fg);
-  for (const k of ["--dlg-bg", "--dlg-dim", "--dlg-sel-fg", "--dlg-sel-bg", "--dlg-title"]) r.removeProperty(k);  // measured on the theme's own
+  for (const k of ["--dlg-bg", "--dlg-dim", "--dlg-sel-fg", "--dlg-sel-bg", "--dlg-title", "--more-fg", "--sth-fg"]) r.removeProperty(k);  // measured on the theme's own
   const dc = dialogColors();
-  set("--dlg-bg", dc.bg), set("--dlg-dim", dc.dim), set("--dlg-sel-fg", dc.selFg), set("--dlg-sel-bg", dc.selBg), set("--dlg-title", dc.title);
+  set("--dlg-bg", dc.bg), set("--dlg-dim", dc.dim), set("--dlg-sel-fg", dc.selFg), set("--dlg-sel-bg", dc.selBg), set("--dlg-title", dc.title), set("--more-fg", dc.more), set("--sth-fg", dc.sth);
   set("--on-accent", oa.text), set("--accent-veil", oa.veil);
   // light or dark by the background's brightness: native controls, scrollbars and hovers match
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
@@ -893,6 +893,17 @@ const lum = c => { const [r, g, b] = c.map(v => (v /= 255) <= 0.03928 ? v / 12.9
 const cr = (x, y) => { const a = lum(x), b = lum(y); return (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05); };
 const mixc = (a, b, k) => a.map((x, i) => Math.round(x + (b[i] - x) * k));
 const hexc = c => "#" + c.map(x => x.toString(16).padStart(2, "0")).join("");
+// the first of the colors that reads on bg (4.5:1); none does: the best one, toward black or white until it does
+function readOn(cands, bg) {
+  const cs = cands.filter(Boolean);
+  if (!cs.length || !bg) return null;
+  const ok = cs.find(c => cr(c, bg) >= 4.5);
+  if (ok) return ok;
+  const best = cs.reduce((a, z) => cr(z, bg) > cr(a, bg) ? z : a), to = lum(bg) > 0.18 ? [0, 0, 0] : [255, 255, 255];
+  let c = best;
+  for (let k = 0.05; cr(c, bg) < 4.5 && k <= 1; k += 0.05) c = mixc(best, to, k);
+  return c;
+}
 // The dialogs' colors, readable whatever the theme (WCAG 4.5:1): the menu background unless the text doesn't read on
 // it (then the chat's), the dim text (labels, hints, counts) moved toward the text color until it reads, and a
 // selection pair that reads (the selected tab's, the menu selection's, else the text and background swapped).
@@ -908,7 +919,12 @@ function dialogColors() {
   if (!sel) sel = [dbg, fg];
   let title = v("--accent") || fg;  // the dialogs' titles: the accent, toward the text color until it reads
   for (k = 0; cr(title, dbg) < 4.5 && k < 1;) title = mixc(v("--accent") || fg, fg, k += 0.1);
-  return {bg: hexc(dbg), dim: hexc(dim), selFg: hexc(sel[0]), selBg: hexc(sel[1]), title: hexc(title)};
+  // the status line's -- MORE --: the highlight's colors where they read on the status bar (github-dark's hilight
+  // text is near-black, made for its pink background), else the bar's bright text
+  const sbg = v("--status-bg") || v("--panel") || bg;
+  const more = readOn([v("--hilight-bg"), v("--hilight-fg"), v("--status_hi-fg"), fg], sbg) || fg;
+  const sth = readOn([v("--status_hi-fg") || fg], sbg) || fg;  // the bar's bright text: time, tab, lag, status_info
+  return {bg: hexc(dbg), dim: hexc(dim), selFg: hexc(sel[0]), selBg: hexc(sel[1]), title: hexc(title), more: hexc(more), sth: hexc(sth)};
 }
 function onAccent(a1, a2) {
   const ends = [rgb(a1), rgb(a2) || rgb(a1)].filter(Boolean);

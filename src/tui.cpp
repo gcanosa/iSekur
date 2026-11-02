@@ -1,6 +1,7 @@
 // Terminal frontend: layout, rendering, keyboard.
 #include "tui.h"
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
@@ -157,6 +158,28 @@ static void box_title(const Theme& T, int x0, int x1, int y, const std::string& 
         for (RGB col : {0xff5f57, 0xfebc2e, 0x28c840}) dot.fg = col, cell(tx, y, U'\u25CF', dot), tx += 2;
     }
     text(tx, y, x1 - 1, " " + title + " ", hs, false);
+}
+
+// WCAG contrast of two colors (1..21), like the webchat's: picks colors that read whatever the theme
+static double contrast(RGB a, RGB b) {
+    auto lum = [](RGB c) {
+        auto ch = [&](int sh) { double v = (c >> sh & 255) / 255.0; return v <= 0.03928 ? v / 12.92 : std::pow((v + 0.055) / 1.055, 2.4); };
+        return 0.2126 * ch(16) + 0.7152 * ch(8) + 0.0722 * ch(0);
+    };
+    double x = lum(a), y = lum(b);
+    return (std::max(x, y) + 0.05) / (std::min(x, y) + 0.05);
+}
+
+// c, or if it doesn't read on bg (4.5:1), c toward black or white until it does (the webchat's readOn)
+static RGB readable(RGB c, RGB bg) {
+    if (c < 0 || bg < 0 || contrast(c, bg) >= 4.5) return c;
+    bool dark = contrast(0x000000, bg) > contrast(0xffffff, bg);
+    RGB to = dark ? 0x000000 : 0xffffff, out = c;
+    for (double k = 0.05; contrast(out, bg) < 4.5 && k <= 1.0; k += 0.05) {
+        auto mix = [&](int sh) { int a = c >> sh & 255, b = to >> sh & 255; return (int)std::lround(a + (b - a) * k) << sh; };
+        out = mix(16) | mix(8) | mix(0);
+    }
+    return out;
 }
 
 // a word-wrapped question for a yes/no box
@@ -738,6 +761,7 @@ void Tui::draw() {
     // status bar
     int y = H - 2, x = 0;
     Style ss = T.get("status"), sh = sty(T, "status_hi", "status");
+    sh.fg = readable(sh.fg, sh.bg >= 0 ? sh.bg : ss.bg);  // the bar's bright text reads whatever the theme (tokyonight-day: 4.0:1)
     fill(y, 0, W, ss);
     auto seg = [&](const std::string& inner, Style is) {
         x = text(x, y, W, "[", ss, false);
@@ -774,7 +798,19 @@ void Tui::draw() {
         }
         x = text(x, y, W, "] ", ss, false);
     }
-    if (b->scroll) seg("-- MORE --", T.get("hilight"));
+    if (b->scroll) {  // -- MORE --: the hilight's colors where they read on the status bar (github-dark's hilight text
+                      // is near-black, made for its pink background), else the bar's bright text; a default bar: hilight
+        Style hl = T.get("hilight"), ms = sh;
+        ms.bg = ss.bg, ms.attr |= A_BOLD;
+        if (ss.bg < 0) ms = hl;
+        else {
+            ms.fg = -1;
+            for (RGB cand : {hl.bg, hl.fg, sh.fg})
+                if (cand >= 0 && contrast(cand, ss.bg) >= 4.5) { ms.fg = cand; break; }
+            if (ms.fg < 0) ms.fg = readable(sh.fg >= 0 ? sh.fg : hl.fg, ss.bg);
+        }
+        seg("-- MORE --", ms);
+    }
     {  // status_info (uptime, cpu, ...), under the nick list (right edge without one); the last ones drop when it won't fit
         Style is = sty(T, "status_info", "status_hi");
         auto parts = status_info(c, is);
