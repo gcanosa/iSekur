@@ -572,6 +572,18 @@ int main() {
         for (auto& r : core.setting_rows())
             if (r.sec == "server." + ts->cfg.name) nick_row |= r.key == "altnick" && !r.def.empty(), tls_row |= r.key == "tls_verify" && r.choices.size() == 2;
         assert(nick_row && tls_row);
+        // ...in a sensible order: [general] first (by the template), then the servers (host first, nick next to
+        // altnick, auto_identify among the login keys, unknown keys last)
+        {
+            std::vector<std::string> ord;
+            for (auto& r : core.setting_rows()) ord.push_back(r.sec + "." + r.key);
+            auto at = [&](const std::string& k) { return std::find(ord.begin(), ord.end(), k) - ord.begin(); };
+            std::string sv = "server." + ts->cfg.name + ".";
+            assert(at("general.nick") < at("general.ignore") && at("general.typing_effect") < at(sv + "host"));
+            assert(at(sv + "host") < at(sv + "nick") && at(sv + "nick") + 1 == at(sv + "altnick"));
+            assert(at(sv + "password") < at(sv + "auto_identify") && at(sv + "auto_identify") < at(sv + "nickserv_pass"));
+            assert(at(sv + "autojoin") < at(sv + "last_nick"));
+        }
         unlink(core.cfg_path.c_str());
         std::swap(core.cfg_path, path);
     }

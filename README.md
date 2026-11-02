@@ -15,7 +15,7 @@ that mirrors your live session in a browser, bouncer style.
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join and more
 - Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel, `/autojoin snap` saves every open channel), SASL or
-  `nickserv_pass` to identify on connect
+  `nickserv_pass` to identify on connect (`auto_identify = false` turns that off)
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout.
 - The webchat installs as an app (PWA: home screen or dock, notifications on Android and on an installed
   iPhone webchat). That needs a trusted certificate (`cert`/`key` in `[web]`, e.g. Let's Encrypt or

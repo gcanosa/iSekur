@@ -154,7 +154,7 @@ static std::string sasl_mech(Server* s) {
 }
 
 static bool sasl_wanted(Server* s) {
-    return !s->cfg.sasl_user.empty() || !s->cfg.cert.empty();
+    return s->cfg.auto_identify && (!s->cfg.sasl_user.empty() || !s->cfg.cert.empty());
 }
 
 static void cap_end(Server* s) {
@@ -473,7 +473,7 @@ void Core::handle(Server* s, const Msg& m) {
         print(s->status, LK::INFO, m.p(1));
         // ponytail: IDENTIFY goes out right before the JOINs, so a +r channel can still beat
         // NickServ; SASL has no such race. Wait for the 900/NOTICE if that bites.
-        if (!s->cfg.nickserv_pass.empty() && !s->sasl_ok) s->send("PRIVMSG NickServ :IDENTIFY " + s->cfg.nickserv_pass);
+        if (s->cfg.auto_identify && !s->cfg.nickserv_pass.empty() && !s->sasl_ok) s->send("PRIVMSG NickServ :IDENTIFY " + s->cfg.nickserv_pass);
         std::vector<std::string> chans;  // autojoin, then the channel tabs still open (reconnects)
         for (auto& e : s->cfg.autojoin) {
             auto w = split(e, ' ');

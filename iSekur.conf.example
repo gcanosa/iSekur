@@ -112,6 +112,7 @@ port      = 6697
 tls       = true
 tls_verify = true            ; false only for self-signed test servers
 autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
+; auto_identify = true     ; log in with SASL / NickServ on connect and reconnect (false: /msg NickServ yourself)
 ; sasl_user = mynick
 ; sasl_pass = secret
 ; sasl_mech = PLAIN          ; PLAIN | SCRAM-SHA-256 | EXTERNAL (default: PLAIN, or EXTERNAL with cert)

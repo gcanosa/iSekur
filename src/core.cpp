@@ -211,6 +211,34 @@ std::vector<Core::Setting> Core::settings() const {
     return out;
 }
 
+// where a key sits in the settings window: sections and [general]/[web]/[keys] keys in the
+// template's order (it groups them by topic), server keys by what you fill in first; others last, A-Z
+static const char* SERVER_KEYS[] = {"host", "port", "tls", "tls_verify", "autoconnect", "nick", "altnick", "user", "realname",
+                                    "password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key", "autojoin"};
+static std::pair<int, int> set_rank(const std::string& sec, const std::string& key) {
+    static std::map<std::string, int> secs, keys;  // "sec" / "sec\nkey" -> position in the template
+    if (secs.empty()) {
+        std::istringstream in(conf_template);
+        std::string line, cur;
+        int n = 0;
+        while (std::getline(in, line)) {
+            if (!line.empty() && line[0] == '[') { cur = line.substr(1, line.find(']') - 1); if (cur.rfind("server.", 0)) secs.emplace(cur, n++); continue; }
+            size_t a = line.find_first_not_of("#; "), e = line.find('=');
+            if (a == std::string::npos || e == std::string::npos || e < a) continue;
+            std::string k = line.substr(a, e - a);
+            while (!k.empty() && k.back() == ' ') k.pop_back();
+            if (!k.empty() && k.find(' ') == std::string::npos) keys.emplace(cur + "\n" + k, n++);
+        }
+    }
+    bool srv = sec.rfind("server.", 0) == 0;
+    int s = srv ? secs["general"] : secs.count(sec) ? secs[sec] : 1 << 20, k = 1 << 20;  // servers right after [general]
+    if (srv) {
+        for (int i = 0; i < (int)(sizeof SERVER_KEYS / sizeof *SERVER_KEYS); i++)
+            if (key == SERVER_KEYS[i]) k = i;
+    } else if (auto it = keys.find(sec + "\n" + key); it != keys.end()) k = it->second;
+    return {srv ? s * 2 + 1 : s * 2, k};
+}
+
 std::vector<Core::SetRow> Core::setting_rows() const {
     Ini all = defaults;
     for (auto& [sec, kv] : cfg)
@@ -223,7 +251,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         std::string gnick = ini_get(cfg, "general", "nick", login ? login : "isekur");  // what nick falls back to
         for (auto& [k, v] : std::map<std::string, std::string>{
                  {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
-                 {"autoconnect", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
+                 {"autoconnect", "true"}, {"auto_identify", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
                  {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
                  {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}})
             if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
@@ -241,6 +269,10 @@ std::vector<Core::SetRow> Core::setting_rows() const {
             else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
             out.push_back(r);
         }
+    std::stable_sort(out.begin(), out.end(), [](const SetRow& a, const SetRow& b) {  // ties (unknown keys, servers): A-Z
+        auto ra = set_rank(a.sec, a.key), rb = set_rank(b.sec, b.key);
+        return ra.first != rb.first ? ra.first < rb.first : a.sec != b.sec ? a.sec < b.sec : ra.second < rb.second;
+    });
     return out;
 }
 
@@ -256,6 +288,7 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.port = atoi(ini_get(cfg, sec, "port", sc.tls ? "6697" : "6667").c_str());
     sc.tls_verify = ini_get(cfg, sec, "tls_verify", "true") == "true";
     sc.autoconnect = ini_get(cfg, sec, "autoconnect", "true") == "true";
+    sc.auto_identify = ini_get(cfg, sec, "auto_identify", "true") == "true";
     sc.nick = ini_get(cfg, sec, "nick", gnick);
     sc.altnick = ini_get(cfg, sec, "altnick", ini_get(cfg, "general", "altnick", sc.nick + "_"));
     sc.user = ini_get(cfg, sec, "user", ini_get(cfg, "general", "user", sc.nick));

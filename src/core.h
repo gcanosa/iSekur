@@ -133,7 +133,7 @@ struct Buffer {
 struct ServerCfg {
     std::string name, host;
     int port = 6667;
-    bool tls = false, tls_verify = true, autoconnect = true;
+    bool tls = false, tls_verify = true, autoconnect = true, auto_identify = true;  // auto_identify: SASL / NickServ on connect
     std::string nick, altnick, user, realname, pass;
     std::string sasl_user, sasl_pass, sasl_mech, cert, key, nickserv_pass;
     std::vector<std::string> autojoin;  // "#chan" or "#chan key"
