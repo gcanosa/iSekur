@@ -28,7 +28,8 @@ private:
     void apply_cfg();  // mouse, colors, keys
     void load_keys();  // defaults + [keys]; again after /set keys.*  // "M-Right" -> "next_tab"
     bool nicklist = true, topicbar = true, truecolor = true, mouse_on = true;
-    int top_row() const { return topicbar ? topic_h + 1 : 1; }  // first chat row, under the topic and tab bars
+    int top_row() const { return (topicbar ? topic_h : 0) + tab_h; }  // first chat row, under the topic and tab bars
+    int tab_h = 1;  // tab bar rows, set by draw()
     // topic bar: wheel scrolls it sideways, a click unfolds it, a double click edits it
     int topic_h = 1, topic_off = 0;
     bool topic_open = false;

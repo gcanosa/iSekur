@@ -545,8 +545,6 @@ void Tui::draw() {
 
     // tab bar
     Style tbs = T.get("tabbar");
-    int ty = top_row() - 1;
-    fill(ty, 0, W, tbs);
     // a collapsed server tab hides its channels and queries (the active one stays), shows "+N"
     // and takes their activity color; Ctrl+N/P, Ctrl+A and /win still go to them
     std::vector<Row> labels;
@@ -573,26 +571,21 @@ void Tui::draw() {
         labels.push_back(r);
         vis.push_back((int)i);
     }
-    // too many tabs: the active one stays in view, "‹N" / "N›" count the hidden ones on each
-    // side (colored like the most urgent of them) and a click on it brings the next one in
-    int nt = (int)labels.size(), total = 0, first = 0, lm = 0, rm = 0;
-    for (auto& l : labels) total += width(l);
-    auto pick = [&] {
-        int span = 0;
-        first = 0;
-        for (int i = 0; i <= av; i++) span += width(labels[(size_t)i]);
-        while (span > W - lm - rm && first < av) span -= width(labels[(size_t)first++]);
-    };
-    if (total > W) rm = 4, pick();
-    if (first) lm = 4, pick();
-    int last = first, tx = lm;
-    for (int i = first; i < nt && (i == first || tx + width(labels[(size_t)i]) <= W - rm); i++) {
-        int x0 = tx;
-        tx = draw_row(tx, ty, W - rm, labels[(size_t)i]);
-        hits.push_back({ty, x0, tx, vis[(size_t)i], ""});
-        last = i;
+    // tabs wrap onto more rows, whole labels only, filled left to right. Past TAB_ROWS the last row
+    // scrolls: the active tab stays in view, "‹N" / "N›" count the hidden ones on each side (colored
+    // like the most urgent of them) and a click on it brings the next one in
+    const int TAB_ROWS = 3;  // ponytail: fixed cap, a setting if anyone wants more
+    int nt = (int)labels.size();
+    std::vector<int> starts{0};  // the first label of each row
+    for (int i = 0, x = 0; i < nt; i++) {
+        int w = width(labels[(size_t)i]);
+        if (x && x + w > W) starts.push_back(i), x = 0;
+        x += w;
     }
-    auto more = [&](int from, int to, bool left) {
+    if ((int)starts.size() > TAB_ROWS) starts.resize(TAB_ROWS);
+    tab_h = (int)starts.size();
+    int ty0 = top_row() - tab_h;
+    auto more = [&](int ty, int from, int to, bool left, int lm) {
         int act = 0;
         for (int i = from; i < to; i++) act = std::max(act, c.bufs[(size_t)vis[(size_t)i]]->activity);
         Style ms = act == 3 ? T.get("tab_hilight") : act == 2 ? T.get("tab_msg") : act == 1 ? T.get("tab_data") : tbs;
@@ -601,8 +594,30 @@ void Tui::draw() {
         text(x0, ty, W, m, ms, false);
         hits.push_back({ty, left ? 0 : x0, left ? lm : W, vis[(size_t)(left ? to - 1 : from)], ""});
     };
-    if (first) more(0, first, true);
-    if (last < nt - 1) more(last + 1, nt, false);
+    for (int r = 0; r < tab_h; r++) {
+        int ty = ty0 + r, from = starts[(size_t)r], to = r + 1 < tab_h ? starts[(size_t)r + 1] : nt;
+        fill(ty, 0, W, tbs);
+        if (from >= to) continue;
+        int a = std::clamp(av, from, to - 1), total = 0, first = from, lm = 0, rm = 0;
+        for (int i = from; i < to; i++) total += width(labels[(size_t)i]);
+        auto pick = [&] {
+            int span = 0;
+            first = from;
+            for (int i = from; i <= a; i++) span += width(labels[(size_t)i]);
+            while (span > W - lm - rm && first < a) span -= width(labels[(size_t)first++]);
+        };
+        if (total > W) rm = 4, pick();
+        if (first > from) lm = 4, pick();
+        int last = first, tx = lm;
+        for (int i = first; i < to && (i == first || tx + width(labels[(size_t)i]) <= W - rm); i++) {
+            int x0 = tx;
+            tx = draw_row(tx, ty, W - rm, labels[(size_t)i]);
+            hits.push_back({ty, x0, tx, vis[(size_t)i], ""});
+            last = i;
+        }
+        if (first > from) more(ty, from, first, true, lm);
+        if (last < to - 1) more(ty, last + 1, to, false, lm);
+    }
 
     // the chat and its nicklist, or /split: two panes, each with its own title row (the focused one in
     // tab_active) and, for a channel with room, its own nicklist. Side by side when the window is wide
@@ -1792,7 +1807,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
         for (auto& h : hits) {
             if (h.y != y || x < h.x0 || x >= h.x1) continue;
             if (!h.nick.empty()) { open_menu(h.nick, x, y); continue; }
-            if (y != top_row() - 1 || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
+            if (y < top_row() - tab_h || y >= top_row() || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
             Buffer* tb = c.bufs[(size_t)h.tab].get();
             if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY)  // its commands run there
                 c.select(tb), menu = Menu{x, y, 0, tb->type == BT::STATUS ? tb->srv->cfg.name : tb->name, c.tab_menu(tb)}, c.dirty = true;
