@@ -469,7 +469,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
 
 // ---- drawing ---------------------------------------------------------------
 // a channel's nicklist: the separator at column sx, the list right of it up to xend. Only the
-// focused pane's scrolls (nl_scroll); a click on a nick opens a query
+// focused pane's scrolls (nl_scroll); a double click on a nick opens a query
 void Tui::draw_nicks(Buffer* b, int sx, int top, int xend, int ch, bool focus) {
     const Theme& T = c.theme;
     Style bs = sty(T, "nicklist_border", "separator");
@@ -1890,7 +1890,7 @@ std::string Tui::word_at(int x, int y) const {
 }
 
 // Wheel scrolls the chat (or the nicklist, or the topic, under the pointer);
-// left click picks a tab or an activity number, opens a query with a nick, or
+// left click picks a tab or an activity number (double click on a nick: a query), or
 // unfolds the topic (double click: edit it); a drag in the chat copies text.
 // the × (or the red dot) of the box on screen: closes it like Esc does
 void Tui::close_box() {
@@ -2011,7 +2011,12 @@ void Tui::mouse(int mod, int k, int x, int y) {
         if (h.y != y || x < h.x0 || x >= h.x1) continue;
         if (h.tab == -2) c.about(c.active);
         else if (h.tab >= 0 && h.tab < (int)c.bufs.size()) c.select(c.bufs[(size_t)h.tab].get());
-        else if (!h.nick.empty()) c.exec(c.active, "/query " + h.nick);
+        else if (!h.nick.empty()) {
+            long long now = now_ms();
+            bool dbl = h.nick == nick_click && now - nick_click_ms < 400;
+            nick_click = h.nick, nick_click_ms = dbl ? 0 : now;
+            if (dbl) c.exec(c.active, "/query " + h.nick);
+        }
         return;
     }
     if (over_chat) {

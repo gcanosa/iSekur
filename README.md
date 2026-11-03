@@ -32,7 +32,7 @@ that mirrors your live session in a browser, bouncer style.
 - Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
 - `--daemon` starts it headless; attach from a terminal or the browser
-- Mouse: click tabs, activity numbers and nicks, wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click opens it in a box to edit (when you may change it: ops on +t channels)
+- Mouse: click tabs and activity numbers, double click a nick for a private chat, wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click opens it in a box to edit (when you may change it: ops on +t channels)
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
 - Highlights on your nick plus your own words (`/hilight add isekur`, `*` globs), and quit/part messages you can set (`quit_message`, `part_message`)
 - `/grep [-all] text` searches the scrollback
@@ -41,7 +41,7 @@ that mirrors your live session in a browser, bouncer style.
 - Auto-away when nothing is attached, and catch-up from IRCv3 chathistory on join
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
-- The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), folding networks, Alt+A for the next active tab and the theme's tab colors
+- The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), a × on the hovered tab to close it (it asks before leaving a channel or disconnecting), folding networks, Alt+A for the next active tab and the theme's tab colors
 - It also has the terminal's input line and status bar: live suggestions (`/jo`, `/set key`, `/help k`; Up/Down, Tab), hidden password prompts (`/oper`, `/e2e`; Esc cancels, never in the history), pastes with newlines shown as ↵ and `paste_confirm`, mIRC formatting keys (Ctrl+B, Ctrl+C without a selection, Ctrl+O, Ctrl+R, Ctrl+I, Ctrl+U), clock, user modes, lag, clickable `[Act: ...]`, `-- MORE --` and `status_info`, double click the topic to edit it, the bell, and your `[keys]` bindings (Alt+W closes a tab and Alt+X goes to the next server, since browsers keep Ctrl+W and Ctrl+X)
 - `/set` alone opens a settings window in the terminal: every key by category, `/` to search, `e` to edit in place, Space to switch on/off or step through the themes, `s` saves (the webchat's ⚙ has switches and a theme list)
 - Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about

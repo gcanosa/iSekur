@@ -53,6 +53,9 @@ button, input { font: inherit; color: inherit; }
 #side .tab.server { color: var(--tab_server-fg, inherit); }
 #side .tab.shell { color: var(--tab_shell-fg, var(--tab_home-fg, inherit)); }
 #side .tab .more { color: var(--muted); }
+#side .tab .x { margin-left: auto; flex-shrink: 0; padding: 0 4px; font-weight: 400; opacity: .4; visibility: hidden; }  /* the tab's own color, faded: fits every theme and the active tab's */
+#side .tab:hover .x { visibility: visible; }
+#side .tab .x:hover { opacity: 1; }
 #side .tab.active { background: var(--tab_active-bg, #ffffff12); color: var(--tab_active-fg, inherit); border-left-color: var(--accent); }
 #side .tab.a1 { color: var(--tab_data-fg, #9aa0c0); }
 #side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
@@ -253,8 +256,10 @@ dialog .btns .left { margin-right: auto; }
 #menu { display: none; }
 #ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
-#ctx .hd { padding: 4px 12px; font-weight: 700; }
-#ctx .it { padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+#ctx .hd { padding: 4px 12px 4px 35px; font-weight: 700; }  /* lined up with the labels, past the icons */
+#ctx .it { display: flex; align-items: center; gap: 9px; padding: 4px 12px; cursor: pointer; white-space: nowrap; }
+#ctx .it svg { width: 14px; height: 14px; flex-shrink: 0; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; opacity: .5; }  /* the text's color, faded: every theme, and the hovered item's */
+#ctx .it:hover svg { opacity: .9; }
 #ctx .it:hover { background: var(--menu_sel-bg, var(--accent)); color: var(--menu_sel-fg, #111); }
 #ctx hr { border: 0; border-top: 1px solid var(--menu_border-fg, var(--line)); margin: 4px 0; }
 #msgs, #msgs2 { grid-area: msgs; overflow-y: auto; padding: 6px 0; overflow-wrap: anywhere; }
@@ -324,7 +329,7 @@ dialog .btns .left { margin-right: auto; }
 a.chan { cursor: context-menu; text-decoration: underline; }
 #nicks, #nicks2 { grid-area: nicks; width: 190px; background: var(--nicklist-bg, var(--panel)); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 0; }
 :is(#nicks, #nicks2) .hd { color: var(--muted); padding: 2px 12px 6px; font-size: 12px; }
-:is(#nicks, #nicks2) div.u { padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+:is(#nicks, #nicks2) div.u { user-select: none; padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 :is(#nicks, #nicks2) .op { color: var(--nicklist_op-fg, #ff9e64); }
 :is(#nicks, #nicks2) .voice { color: var(--nicklist_voice-fg, #9ece6a); }
 :is(#nicks, #nicks2) .away { opacity: .45; }
@@ -454,7 +459,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 /* the nick and tab menus, as Windows menus: gray, raised, a navy highlight, etched separators */
 .win-95 #ctx { background: #c0c0c0; color: #000; border-radius: 0; padding: 2px; min-width: 150px; border: 1px solid; border-color: #dfdfdf #000 #000 #dfdfdf;
   box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 2px 2px 0 #0006; font: 12px/1.35 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
-.win-95 #ctx :is(.hd, .it) { padding: 3px 20px; }
+.win-95 #ctx :is(.hd, .it) { padding: 3px 20px 3px 8px; }
+.win-95 #ctx .hd { padding-left: 31px; }
 .win-95 #ctx .it:hover { background: #000080; color: #fff; }
 .win-95 #ctx hr { border: 0; border-top: 1px solid #808080; border-bottom: 1px solid #fff; margin: 3px 1px; }
 </style>
@@ -683,6 +689,16 @@ function renderSide() {
     if (b.type === "status") t.title = b.home ? "Commands and iSekur's own messages" : b.srv + ": connection, MOTD, notices and replies";
     t.append(n, nm);
     if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
+    if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) {  // the hover ×: same asks as the tab menu's Close
+      const x = document.createElement("span"); x.className = "x"; x.textContent = "×"; x.title = "Close";
+      x.onclick = async e => {
+        e.stopPropagation();
+        const ask = b.type === "channel" && b.joined ? "Leave " + b.name + " and close its tab?"
+                  : b.type === "status" && b.state !== "disconnected" ? "Disconnect from " + b.srv + " and close all its tabs?" : "";
+        if (!ask || await askBox({title: "Close", text: ask, ok: "Close"}) !== null) send({t: "input", buf: id, text: "/close"});
+      };
+      t.append(x);
+    }
     t.onclick = () => { select(id); side.classList.remove("open"); if (tabq.value) tabq.value = "", renderSide(); };
     if (q.length) { if (picks.length === pick) t.classList.add("pick"); picks.push(id); }
     if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) t.oncontextmenu = e => askMenu(e, "", id);  // a server tab: connect, fold, close
@@ -745,7 +761,7 @@ function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /sp
     const d = document.createElement("div");
     d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "");
     d.textContent = (p ? p[0] : " ") + n;
-    d.onclick = () => send({t: "input", buf: id, text: "/query " + n});
+    d.ondblclick = () => send({t: "input", buf: id, text: "/query " + n});  // double: one stray click does nothing
     d.oncontextmenu = e => askMenu(e, n, id);  // a /split pane: its own channel, not the focused one
     el.append(d);
   }
@@ -1918,6 +1934,38 @@ window.addEventListener("focus", () => { const b = bufs.get(active); if (b && b.
 let menuAt = [0, 0], menuBuf = 0;
 function askMenu(e, nick, buf = active) { e.preventDefault(); menuAt = [e.clientX, e.clientY]; menuBuf = buf; send({t: "menu", buf, nick}); }
 function closeMenu() { const o = $("#ctx"); if (o) o.remove(); }
+// the menus' icons (nick, channel, query and server tab menus), matched on the label the core sends; 24×24 line drawings
+const P = d => '<path d="' + d + '"/>', C = (x, y, r) => '<circle cx="' + x + '" cy="' + y + '" r="' + r + '"/>';
+const BELL = P("M18 8a6 6 0 0 0-12 0c0 7-3 9-3 9h18s-3-2-3-9M13.7 21a2 2 0 0 1-3.4 0"), STAR = P("M12 2l3.1 6.3 6.9 1-5 4.9 1.2 6.8L12 17.8 5.8 21 7 14.2 2 9.3l6.9-1z");
+const POWER = P("M18.4 6.6a9 9 0 1 1-12.8 0M12 2v10"), TRASH = P("M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6");
+const MENU_ICONS = [
+  [/^Query/, P("M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z")],
+  [/^Whois/, C(12, 12, 10) + P("M12 16v-4M12 8h.01")],
+  [/^Mention/, C(12, 12, 4) + P("M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8")],
+  [/^CTCP Version/, P("M4 17l6-6-6-6M12 19h8")],
+  [/^CTCP Ping/, P("M22 12h-4l-3 9L9 3l-3 9H2")],
+  [/^CTCP Time/, C(12, 12, 10) + P("M12 6v6l4 2")],
+  [/^Ignore/, P("M17.9 17.9A10 10 0 0 1 12 20c-7 0-10-8-10-8a18 18 0 0 1 5.1-5.9M9.9 4.2A9 9 0 0 1 12 4c7 0 10 8 10 8a18 18 0 0 1-2.2 3.2M2 2l20 20")],
+  [/^Unignore/, P("M2 12s3-8 10-8 10 8 10 8-3 8-10 8S2 12 2 12z") + C(12, 12, 3)],
+  [/^(Op|Deop)$/, P("M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z")],
+  [/^(Voice|Devoice)$/, P("M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7")],
+  [/^Kickban|^Ban/, C(12, 12, 10) + P("M4.9 4.9l14.2 14.2")],
+  [/^Kick/, P("M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9")],
+  [/^Kill/, P("M7.9 2h8.2L22 7.9v8.2L16.1 22H7.9L2 16.1V7.9zM15 9l-6 6M9 9l6 6")],
+  [/^G-line/, C(12, 12, 10) + P("M2 12h20M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20")],
+  [/^Turn on E2E/, '<rect x="3" y="11" width="18" height="11" rx="2"/>' + P("M7 11V7a5 5 0 0 1 10 0v4")],
+  [/^Turn off E2E/, '<rect x="3" y="11" width="18" height="11" rx="2"/>' + P("M7 11V7a5 5 0 0 1 9.9-1")],
+  [/^Clear/, P("M4 7h16M4 12h11M4 17h6")],
+  [/^Close/, P("M18 6L6 18M6 6l12 12")],
+  [/^Quiet mode on/, BELL + P("M2 2l20 20")],
+  [/^Quiet mode off/, BELL],
+  [/autojoin$/, STAR],
+  [/^Reconnect/, P("M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15")],
+  [/^(Connect|Disconnect)$/, POWER],
+  [/its channels$/, P("M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01")],
+  [/at startup$/, P("M13 2L3 14h9l-1 8 10-12h-9z")],
+  [/^Delete/, TRASH],
+];
 function showMenu(m) {
   closeMenu();
   if (!m.items.length) return;
@@ -1925,7 +1973,10 @@ function showMenu(m) {
   const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = m.nick; box.append(hd);
   for (const [label, cmd] of m.items) {
     if (!label) { box.append(document.createElement("hr")); continue; }
-    const it = document.createElement("div"); it.className = "it"; it.textContent = label;
+    const it = document.createElement("div"); it.className = "it";
+    const ic = MENU_ICONS.find(([re]) => re.test(label));
+    it.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (ic ? ic[1] : "") + "</svg>";  // our own constant markup; the label goes in as text
+    it.append(label);
     it.onclick = () => {
       closeMenu();
       if (cmd[0] === "?") {  // "?question\n/command": ask first
