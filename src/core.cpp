@@ -40,6 +40,7 @@ void Core::load_config() {
         it = it->first.rfind("server.", 0) == 0 ? defaults.erase(it) : std::next(it);
     defaults["general"]["nick"] = defaults["general"]["altnick"] = defaults["web"]["user"] = "";  // placeholders
     std::string err;
+    theme_dir = ini_get(cfg, "general", "theme_dir", "themes");
     if (!load_theme(ini_get(cfg, "general", "theme", "default"), theme, err)) {
         if (!load_theme("default", theme, err)) theme = Theme{};
     }
@@ -343,7 +344,7 @@ std::vector<Core::Setting> Core::settings() const {
 struct SetGroup { const char* name; std::vector<std::string> keys; };
 static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Identity", {"nick", "altnick", "realname"}},
-    {"Look", {"theme", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
+    {"Look", {"theme", "theme_dir", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
               "banner_mono", "banner_anim", "show_guide"}},
     {"Updates", {"check_updates"}},
     {"Messages", {"hilight_window", "hilight_words", "bell_notifications", "ignore", "paste_confirm", "quit_message", "part_message",
@@ -1037,6 +1038,11 @@ void Core::exec(Buffer* b, const std::string& input) {
             if (key == "nick" && (sec == "general" || sec == "server." + sv->cfg.name) && !sv->last_nick.empty())
                 remember_nick(sv.get(), "");  // /set nick wins over the last /nick
             load_flood(sv.get());
+        }
+        if (sec == "general" && key == "theme_dir") {  // the current theme from there, if it has it
+            theme_dir = val;
+            Theme t;
+            if (load_theme(ini_get(cfg, "general", "theme", "default"), t, err)) theme = t, notify(Ev::THEME, nullptr);
         }
         if (sec == "keys") cfg_changed = true;
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));

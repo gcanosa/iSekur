@@ -51,6 +51,7 @@ struct Theme {
     Style get(const std::string& k) const;
     std::string lay(const std::string& k, const std::string& def) const;
 };
+extern std::string theme_dir;  // [general] theme_dir: searched first for <name>.theme
 bool load_theme(const std::string& name, Theme& out, std::string& err);
 std::vector<std::string> theme_names();  // installed themes, sorted
 

@@ -297,9 +297,16 @@ static Style parse_style(const std::string& v) {
     return st;
 }
 
-// where themes are looked for, first match wins
+std::string theme_dir = "themes";  // [general] theme_dir, set by Core
+
+// where themes are looked for, first match wins: theme_dir, then the usual places (shipped ones stay found)
 static std::vector<std::string> theme_dirs() {
-    std::vector<std::string> dirs = {"themes"};
+    std::string d = theme_dir;
+    if (d.rfind("~/", 0) == 0)
+        if (const char* h = getenv("HOME")) d = h + d.substr(1);
+    std::vector<std::string> dirs;
+    if (!d.empty() && d != "themes") dirs.push_back(d);
+    dirs.push_back("themes");
     if (const char* x = getenv("XDG_CONFIG_HOME")) dirs.push_back(std::string(x) + "/isekur/themes");
     if (const char* h = getenv("HOME")) dirs.push_back(std::string(h) + "/.config/isekur/themes");
 #ifdef ISEKUR_DATADIR

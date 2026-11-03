@@ -6,6 +6,7 @@ nick      = mynick
 altnick   = mynick_
 realname  = iSekur user
 theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes/)
+theme_dir = themes           ; where themes are looked for first, e.g. ~/mythemes
 web_font      = theme      ; webchat font: theme (its font, else mono) | mono | sans | serif
 web_font_size = 14         ; webchat text size in px
 timestamp =                  ; e.g. %H:%M:%S (empty: the theme's, [%H:%M] in mirc)

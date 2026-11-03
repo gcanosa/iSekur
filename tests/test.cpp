@@ -786,6 +786,20 @@ int main() {
         for (const char* k : {"default", "status", "tab_active", "input", "timestamp", "join", "error"}) assert(th.el.count(k));
         assert(th.nicks.size() >= (n.rfind("mirc", 0) == 0 ? 1u : 6u));  // mirc, mirc-dark: one nick color, like mIRC
     }
+    {  // theme_dir: themes from there too, the shipped ones still found after it
+        char d[] = "/tmp/isekur-themes-XXXXXX";
+        assert(mkdtemp(d));
+        std::string p = std::string(d) + "/mine.theme", terr, was = theme_dir;
+        FILE* f = fopen(p.c_str(), "w");
+        fputs("[colors]\ndefault = white black\n", f), fclose(f);
+        theme_dir = d;
+        Theme th;
+        assert(load_theme("mine", th, terr) && load_theme("dracula", th, terr));
+        auto names = theme_names();
+        assert(std::find(names.begin(), names.end(), "mine") != names.end());
+        theme_dir = was;
+        unlink(p.c_str()), rmdir(d);
+    }
 
     // mirc_prefix: n visible characters, the codes around them kept
     assert(mirc_prefix("\x02iSe\x02kur", 4) == "\x02iSe\x02k" && mirc_prefix("\x03" "04,12red", 2) == "\x03" "04,12re");

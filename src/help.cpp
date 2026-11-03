@@ -220,8 +220,9 @@ static const std::vector<CmdInfo> CMDS = {
      {"/grep http", "/grep -all alice"}},
     {"theme", "Windows", "[name]", "Show or switch the color theme",
      "Alone: a picker in the terminal and the webchat; type to filter, Up/Down previews live (both), Enter keeps (as /set theme, so /save writes it), Esc goes back. "
-     "Themes are files in themes/*.theme. The switch is live; /set theme name + /save keeps it.",
-     {"/theme", "/theme dracula", "/theme catppuccin-latte"}},
+     "Themes are files in themes/*.theme (also ~/.config/isekur/themes/); /set theme_dir ~/mythemes looks in your own folder first, "
+     "the shipped ones still found after it. The switch is live; /set theme name + /save keeps it.",
+     {"/theme", "/theme dracula", "/theme catppuccin-latte", "/set theme_dir ~/mythemes"}},
 
     // ---- Settings
     {"set", "Settings", "[[section.]key [value]]", "The settings window, or show or change one setting",
