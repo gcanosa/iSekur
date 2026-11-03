@@ -1,9 +1,15 @@
 # iSekur 0.5
 
+[![Latest release](https://img.shields.io/github/v/release/gcanosa/iSekur?color=c792ea)](https://github.com/gcanosa/iSekur/releases/latest)
+[![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-ff5fd7)](LICENSE)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20FreeBSD-7dcfff)](#download)
+[![Website](https://img.shields.io/badge/website-isekur--site-9ece6a)](https://gcanosa.github.io/isekur-site/)
+[![IRC](https://img.shields.io/badge/IRC-%23iSekur%20on%20irc.sekurnet.org-ffcb6b)](#support)
+
 A small, very colorful terminal IRC client in C++17 with a built-in webchat
 that mirrors your live session in a browser, bouncer style.
 
-**Website: [gcanosa.github.io/isekur-site](https://gcanosa.github.io/isekur-site/)**, with screenshots of the themes and the webchat.
+**Website: [gcanosa.github.io/isekur-site](https://gcanosa.github.io/isekur-site/)**, with a live theme switcher and more screenshots.
 
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
@@ -42,6 +48,22 @@ that mirrors your live session in a browser, bouncer style.
 - `/list` opens a sortable channel table in its own tab (click Channel or Users); double click a #channel anywhere to join it
 - The status bar can show CPU, memory, load and a battery next to the uptime (`/statusbar`), colored by thresholds you can change (`cpu_levels`, `mem_levels`) and by the theme
 - Optional chat logs (`log = on`, rotated daily) and CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
+
+Six of the 35 themes, same chat (mIRC, Rosé Pine, Ayu, Neon, Catppuccin Latte, Dracula):
+
+| | |
+|---|---|
+| ![mIRC theme](https://gcanosa.github.io/isekur-site/img/chat-mirc.png) | ![Rosé Pine theme](https://gcanosa.github.io/isekur-site/img/chat-rose-pine.png) |
+| ![Ayu theme](https://gcanosa.github.io/isekur-site/img/chat-ayu.png) | ![Neon theme](https://gcanosa.github.io/isekur-site/img/chat-neon.png) |
+| ![Catppuccin Latte theme](https://gcanosa.github.io/isekur-site/img/chat-catppuccin-latte.png) | ![Dracula theme](https://gcanosa.github.io/isekur-site/img/chat-dracula.png) |
+
+The webchat, the same live session in a browser or on a phone (here in Rosé Pine, and mIRC with its Windows 95 dialogs):
+
+![The iSekur webchat in the Rosé Pine theme](https://gcanosa.github.io/isekur-site/img/web-rose.png)
+
+| | |
+|---|---|
+| ![The webchat in the mIRC theme](https://gcanosa.github.io/isekur-site/img/web-mirc.png) | ![The webchat settings dialog in the mIRC theme](https://gcanosa.github.io/isekur-site/img/web-set.png) |
 
 ## Download
 
