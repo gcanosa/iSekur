@@ -631,7 +631,8 @@ void Tui::draw() {
         if (t->type == BT::STATUS && t->collapsed)
             for (auto& o : c.bufs)
                 if (o->srv == t->srv && o.get() != t && o.get() != b) hid++, act = std::max(act, o->activity);
-        Style s = t == b ? (t->quiet ? sty(T, "tab_quiet_act", "tab_active") : T.get("tab_active"))
+        Style s = t->id == tab_drop ? T.get("tab_active")  // where a dragged tab would land: reversed below
+                : t == b ? (t->quiet ? sty(T, "tab_quiet_act", "tab_active") : T.get("tab_active"))
                 : act == 3 ? T.get("tab_hilight")
                 : act == 2 ? T.get("tab_msg")
                 : act == 1 ? T.get("tab_data")
@@ -639,6 +640,7 @@ void Tui::draw() {
                 : t->type == BT::SHELL ? sty(T, "tab_shell", "tab_home")
                 : !t->srv ? sty(T, "tab_home", "tab_server")
                 : t->type == BT::STATUS ? sty(T, "tab_server", "tabbar") : tbs;
+        if (t->id == tab_drop) s.attr ^= A_REV;
         Row r;
         cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + (e2e_on(t) ? " \xf0\x9f\x94\x92" : "") + (hid ? " +" + std::to_string(hid) : "") + " ", s, false);
         if (t == b) av = (int)labels.size();
@@ -1935,6 +1937,14 @@ void Tui::mouse(int mod, int k, int x, int y) {
         }
         return;
     }
+    if (tab_drag >= 0 && (mod & TB_MOD_MOTION)) {  // dragging a tab: the one it would land on, reversed
+        auto [moved, at] = drop_at(x, y);
+        int over = -1;
+        for (auto& h : hits)
+            if (moved && h.y == y && x >= h.x0 && x < h.x1 && h.tab >= 0 && h.tab < (int)c.bufs.size()) over = c.bufs[(size_t)h.tab]->id;
+        if (over != tab_drop) tab_drop = over, c.dirty = true;
+        return;
+    }
     if (mod & TB_MOD_MOTION) return;
     if (k == TB_KEY_MOUSE_LEFT && menu.items.empty() && ((div_x >= 0 && x == div_x && y >= top && y < top + ch) || (div_y >= 0 && y == div_y))) {
         div_drag = true, div_moved = false;
@@ -1983,24 +1993,10 @@ void Tui::mouse(int mod, int k, int x, int y) {
         c.dirty = true;
         return;
     }
-    if (k == TB_KEY_MOUSE_RELEASE && tab_drag >= 0) {  // a tab dropped on another of its server's (a server tab: on another server's): it takes that place
-        int from = tab_drag;
-        tab_drag = -1;
-        for (auto& h : hits) {
-            if (h.y != y || x < h.x0 || x >= h.x1 || h.tab < 0 || h.tab >= (int)c.bufs.size() || !h.nick.empty()) continue;
-            Buffer *to = c.bufs[(size_t)h.tab].get(), *b = nullptr;
-            for (auto& p : c.bufs) if (p->id == from) b = p.get();
-            if (!b || b == to || !b->srv || !to->srv) continue;
-            bool srv = b->type == BT::STATUS;  // a server tab: among the servers, onto any tab of another one
-            if (srv == (to->srv == b->srv)) continue;
-            int n = 0, at = 1;  // a channel on its server tab: first
-            for (auto& p : c.bufs)
-                if (srv ? p->srv && p->type == BT::STATUS : p->srv == to->srv && p->type != BT::STATUS) {
-                    n++;
-                    if (srv ? p->srv == to->srv : p.get() == to) at = n;
-                }
-            c.exec(b, "/move " + std::to_string(at));
-        }
+    if (k == TB_KEY_MOUSE_RELEASE && tab_drag >= 0) {  // a dragged tab let go: it takes the place of the one under it
+        auto [moved, at] = drop_at(x, y);
+        tab_drag = tab_drop = -1, c.dirty = true;
+        if (moved) c.exec(moved, "/move " + std::to_string(at));
         return;
     }
     if (k != TB_KEY_MOUSE_LEFT) return;
@@ -2065,6 +2061,28 @@ void Tui::mouse(int mod, int k, int x, int y) {
         }
         selecting = true, sel_x0 = sel_x1 = x, sel_y0 = sel_y1 = y;
     }
+}
+
+// a tab dropped on another of its server's (a server tab: on any tab of another server) takes that place;
+// a channel on its server tab goes first
+std::pair<Buffer*, int> Tui::drop_at(int x, int y) {
+    Buffer* b = nullptr;
+    for (auto& p : c.bufs) if (p->id == tab_drag) b = p.get();
+    for (auto& h : hits) {
+        if (h.y != y || x < h.x0 || x >= h.x1 || h.tab < 0 || h.tab >= (int)c.bufs.size() || !h.nick.empty()) continue;
+        Buffer* to = c.bufs[(size_t)h.tab].get();
+        if (!b || b == to || !b->srv || !to->srv) return {nullptr, 0};
+        bool srv = b->type == BT::STATUS;  // a server tab: among the servers
+        if (srv == (to->srv == b->srv)) return {nullptr, 0};
+        int n = 0, at = 1;
+        for (auto& p : c.bufs)
+            if (srv ? p->srv && p->type == BT::STATUS : p->srv == to->srv && p->type != BT::STATUS) {
+                n++;
+                if (srv ? p->srv == to->srv : p.get() == to) at = n;
+            }
+        return {b, at};
+    }
+    return {nullptr, 0};
 }
 
 void Tui::open_menu(const std::string& nick, int x, int y) {

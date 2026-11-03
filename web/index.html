@@ -61,7 +61,7 @@ button, input { font: inherit; color: inherit; }
 #side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
 #side .tab.a3 { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
 #side .tab.off { opacity: .55; }
-#side :is(.tab, .srv).drop { box-shadow: inset 0 2px var(--accent); }  /* a dragged tab lands here */
+#side .ghost { opacity: .5; background: color-mix(in srgb, var(--accent) 14%, transparent); outline: 1px dashed var(--accent); outline-offset: -1px; }  /* where a dragged tab lands */  /* a dragged tab lands here */
 #side .tab.split { border-left-color: var(--muted); border-left-style: dashed; }  /* in the webchat's other /split pane */
 /* bottom left: add a server, settings, about */
 #foot { grid-area: foot; display: flex; gap: 6px; padding: 8px 10px; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
@@ -657,29 +657,63 @@ function label(b) { return b.type === "status" ? b.srv : b.name; }
 
 // a folded network (click its name here, or right click its tab in the terminal) lists only its
 // server tab with "+N" in the color of their activity; Alt+arrows and Alt+A still go through them
-let dragId = null;  // the sidebar tab being dragged
-// drag a channel or query onto another tab of its server, a network (its name or server tab) onto another network's
-// name or tab: it takes that place (/move); a channel on its server tab: first
-function dragTab(t, b, id) {
-  const srvTab = b.type === "status" && !b.home;
-  const fits = f => f && f !== b && (srvTab || b.type === "channel" || b.type === "query") && (f.type === "status" ? f.net !== b.net : f.net === b.net);
-  if (srvTab || b.type === "channel" || b.type === "query")
-    t.draggable = true, t.ondragstart = e => { dragId = id; e.dataTransfer.setData("text/x-tab", id); e.dataTransfer.effectAllowed = "move"; },
-    t.ondragend = () => { dragId = null; };
-  t.ondragover = e => { const f = bufs.get(dragId); if (fits(f)) e.preventDefault(), t.classList.add("drop"); };
-  t.ondragleave = () => t.classList.remove("drop");
-  t.ondrop = e => {
-    e.preventDefault(); t.classList.remove("drop");
-    const f = bufs.get(dragId); if (!fits(f)) return;
-    let n = 0, at = 1;
-    for (const x of order) {
-      const o = bufs.get(x); if (!o) continue;
-      if (f.type === "status" ? o.type === "status" && !o.home : o.net === b.net && o.type !== "status") { n++; if (f.type === "status" ? o.net === b.net : o === b) at = n; }
-    }
-    send({t: "input", buf: f.id, text: "/move " + at});
+// drag to reorder (/move): a channel or query among its network's tabs, a network (its name or server tab, with all
+// its tabs) among the networks. The list sorts live under the pointer; letting go keeps it, Esc puts it back.
+let dragId = null, dragEls = [];
+function dragTab(el, b, id) {
+  if (tabq.value.trim() || !((b.type === "status" && !b.home) || b.type === "channel" || b.type === "query")) return;  // filtered: not the whole list
+  el.draggable = true;
+  el.ondragstart = e => {
+    dragId = id; e.dataTransfer.setData("text/x-tab", id); e.dataTransfer.effectAllowed = "move";
+    dragEls = b.type === "status" ? [...$("#side").querySelectorAll(`[data-net="${CSS.escape(b.net)}"]`)] : [el];
+    requestAnimationFrame(() => dragEls.forEach(x => x.classList.add("ghost")));  // after the browser took its drag image
   };
+  el.ondragend = () => { dragEls.forEach(x => x.classList.remove("ghost")); dragId = null, dragEls = []; renderSide(); };  // cancelled: as it was
+}
+function dragOver(e) {
+  const f = bufs.get(dragId), side = $("#side"); if (!f) return;
+  e.preventDefault();
+  const over = e.target.closest && e.target.closest("#side .tab[data-net], #side .srv[data-net]");
+  if (!over || dragEls.includes(over) || !over.dataset.net) return;
+  const net = over.dataset.net, put = ref => { if (!dragEls.includes(ref)) dragEls.forEach(x => side.insertBefore(x, ref)); };
+  if (f.type === "status") {  // before or after that whole network, by which half the pointer is on
+    if (net === f.net) return;
+    const grp = [...side.querySelectorAll(`[data-net="${CSS.escape(net)}"]`)];
+    const top = grp[0].getBoundingClientRect().top, bottom = grp.at(-1).getBoundingClientRect().bottom;
+    put(e.clientY < (top + bottom) / 2 ? grp[0] : grp.at(-1).nextSibling);
+  } else if (net === f.net) {  // on its network's name or server tab: first; on a tab: before or after it
+    const st = side.querySelector(`.tab.server[data-net="${CSS.escape(net)}"]`), r = over.getBoundingClientRect();
+    put(over.classList.contains("srv") || over === st ? st.nextSibling : e.clientY < r.top + r.height / 2 ? over : over.nextSibling);
+  }
+}
+function dragDrop(e) {
+  const f = bufs.get(dragId); if (!f) return;
+  e.preventDefault();
+  const net = o => (bufs.get(o) || {}).net, isSrv = o => { const x = bufs.get(o); return x && x.type === "status" && !x.home; };
+  let next = null;  // what now comes after it: the next tab of its network, or the next network's server tab
+  for (let x = dragEls.at(-1).nextElementSibling; x; x = x.nextElementSibling) {
+    const o = x.dataset.id ? +x.dataset.id : null, head = x.classList.contains("srv");
+    if (f.type === "status") { if (head && o !== null) { next = o; break; } continue; }
+    if (head || net(o) !== f.net) break;  // its network ends
+    if (o !== null && !isSrv(o)) { next = o; break; }
+  }
+  // the same move here at once (iSekur's "order" confirms it), and /move N: before the N'th of the others
+  let others, ids;
+  if (f.type === "status") ids = order.filter(o => net(o) === f.net), others = order.filter(o => isSrv(o) && net(o) !== f.net);
+  else ids = [f.id], others = order.filter(o => net(o) === f.net && !isSrv(o) && o !== f.id);
+  const at = next !== null && others.includes(next) ? others.indexOf(next) + 1 : 9999;
+  const rest = order.filter(o => !ids.includes(o));
+  let pos = next !== null ? rest.indexOf(next) : -1;
+  if (pos < 0) {  // the end: after the last of its network's tabs, or of any network's
+    pos = 0;
+    rest.forEach((o, i) => { if (f.type === "status" ? net(o) : net(o) === f.net) pos = i + 1; });
+  }
+  rest.splice(pos, 0, ...ids);
+  order = rest;
+  send({t: "input", buf: f.id, text: "/move " + at});
 }
 function renderSide() {
+  if (dragId !== null) return;  // mid-drag: redrawn when it ends
   const side = $("#side");
   for (const c of [...side.children]) if (c !== sidetop) c.remove();  // the filter keeps its focus
   if (!sidetop.parentNode) side.append(sidetop);
@@ -693,7 +727,7 @@ function renderSide() {
       if (!q.every(w => hay.includes(w))) return;
     }
     if (b.srv !== lastSrv) {
-      const h = document.createElement("div"); h.className = "srv"; lastSrv = b.srv;
+      const h = document.createElement("div"); h.className = "srv"; lastSrv = b.srv; h.dataset.net = b.net;
       st = b.type === "status" && !b.home ? b : null;
       h.textContent = b.srv + (st ? (st.fold ? " ▸" : " ▾") : "");
       if (st) { h.dataset.id = id; h.title = (st.fold ? "Show its channels" : "Hide its channels") + " · drag to reorder the networks"; h.onclick = () => send({t: "fold", buf: id}); dragTab(h, st, id); }
@@ -707,6 +741,7 @@ function renderSide() {
     t.className = "tab" + (id === active ? " active" : id === split ? " split" : "") + (act ? " a" + act : "") +
       (b.home ? " home" : b.type === "status" ? " server" : b.type === "shell" ? " shell" : "") +
       ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
+    t.dataset.id = id, t.dataset.net = b.net;
     const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
     const nm = document.createElement("span"); nm.textContent = b.home ? "❯ console" : b.type === "status" ? "⌂ server" : b.name + (b.e2e ? " 🔒" : "");
     if (b.type === "status") t.title = b.home ? "Commands and iSekur's own messages" : b.srv + ": connection, MOTD, notices and replies";
@@ -1164,6 +1199,7 @@ $("#logout").onclick = async () => { await fetch("/logout", {method: "POST", cre
 $("#menu").onclick = () => $("#side").classList.toggle("open");
 const sidebtn = document.createElement("button"); sidebtn.id = "sidebtn";
 const sidetop = document.createElement("div"); sidetop.id = "sidetop";
+$("#side").addEventListener("dragover", dragOver), $("#side").addEventListener("drop", dragDrop);
 const tabq = document.createElement("input"); tabq.id = "tabq";
 tabq.placeholder = "find a tab · Ctrl+G"; tabq.autocomplete = "off"; tabq.spellcheck = false; tabq.setAttribute("aria-label", "Find a tab");
 sidetop.append(tabq, sidebtn);
