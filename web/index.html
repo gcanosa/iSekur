@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>iSekur Webchat</title>
 <link rel="manifest" href="/manifest.json">
 <link rel="apple-touch-icon" href="/icon.png">
@@ -38,7 +38,7 @@ button, input { font: inherit; color: inherit; }
 #ver { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: var(--muted); opacity: .6; }
 #loginerr { color: var(--err); min-height: 1.4em; font-size: 13px; }
 
-#app { display: none; height: 100%; grid-template-columns: 220px 1fr auto;
+#app { display: none; height: var(--vvh, 100dvh); grid-template-columns: 220px 1fr auto;
   grid-template-rows: auto 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "foot input input"; }
 #side { grid-area: side; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); overflow-y: auto; padding: 8px 0; }
 #side .srv { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
@@ -371,7 +371,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .flist .r .b button:hover, .flist .r .b a:hover { border-color: var(--accent); }
 .flist .r progress { width: 100%; grid-column: 1 / -1; }
 .flist .none { color: var(--muted); padding: 6px; }
-#input { grid-area: input; display: flex; gap: 8px; padding: 8px 10px; background: var(--input-bg, var(--bg)); position: relative; }
+#input { grid-area: input; display: flex; gap: 8px; padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); background: var(--input-bg, var(--bg)); position: relative; }
 /* live suggestions over the input line ("/jo", "/set key", "/help k"), like the terminal's */
 #sugg { position: absolute; left: 0; right: 0; bottom: 100%; max-height: 40vh; overflow-y: auto; background: var(--input-bg, var(--bg)); border-top: 1px solid var(--line); z-index: 4; }
 #sugg:empty, #input:not(:focus-within) #sugg { display: none; }
@@ -382,20 +382,25 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #sugg .v { color: var(--set_value-fg, var(--input-fg, var(--fg))); }
 #prompt { color: var(--input_prompt-fg, var(--accent)); align-self: center; white-space: nowrap; }
 #line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
+@media (pointer: coarse) { input, select, textarea { font-size: max(16px, 1em) !important; } }
 #line:focus { outline: none; border-color: var(--accent); }
 /* a NickServ password being typed: the line's text goes invisible and this copy, with *s, sits over it */
 #line.secret { color: transparent; caret-color: var(--input-fg, var(--fg)); }
 #mask { position: absolute; pointer-events: none; overflow: hidden; white-space: pre; border: 1px solid transparent; padding: 8px 10px; color: var(--input-fg, var(--fg)); display: none; }
 @media (max-width: 760px) {
   #app { grid-template-columns: 1fr; grid-template-areas: "topic" "msgs" "status" "input"; }
-  #side { display: none; position: fixed; inset: 0 30% 0 0; z-index: 5; box-shadow: 0 0 40px #000; }
+  /* the overlays sit under the topic bar, so ☰ and 👥 stay there to close them; a tap outside closes them too */
+  #topic { position: relative; z-index: 7; padding-top: max(8px, env(safe-area-inset-top)); }
+  #side { display: none; position: fixed; inset: var(--toph, 44px) 30% 0 0; z-index: 5; box-shadow: 0 0 40px #000; }
   #side.open { display: block; padding-bottom: 56px; }
   #foot { display: none; }
   #sidebtn { display: none; }
   #side.open ~ #foot { display: flex; position: fixed; left: 0; right: 30%; bottom: 0; z-index: 6; }
-  #nicks { display: none; position: fixed; inset: 0 0 0 40%; z-index: 5; width: auto; }
+  #nicks { display: none; position: fixed; inset: var(--toph, 44px) 0 0 40%; z-index: 5; width: auto; box-shadow: 0 0 40px #000; }
   #nicks.open { display: block; }
   #menu { display: inline-block; }
+  #topic button { padding: 4px 10px; }  /* a finger, not a mouse */
+  #prompt { max-width: 30%; overflow: hidden; text-overflow: ellipsis; }
   .l { display: block; padding: 2px 10px; }
   .l .ts { display: none; }
   .l .nk { display: inline; border: 0; padding: 0 6px 0 0; font-weight: 700; }
@@ -1141,6 +1146,16 @@ sidebtn.onclick = () => { const off = !$("#app").classList.contains("noside"); s
 try { sideFold(localStorage.getItem("side") === "0"); } catch (e) { sideFold(false); }
 // desktop: hide/show the list (remembered); phone: open/close the overlay
 const narrow = matchMedia("(max-width: 760px)");
+// phone: #app follows the visible viewport (iOS keeps the page height when the keyboard opens and hides the input
+// line under it), and the overlays start under the topic bar
+const vv = window.visualViewport, root = document.documentElement.style;
+function fitView() { if (vv && Math.abs(vv.scale - 1) < .01) root.setProperty("--vvh", vv.height + "px"), window.scrollTo(0, 0); }
+if (vv) vv.addEventListener("resize", fitView), fitView();
+new ResizeObserver(() => root.setProperty("--toph", $("#topic").getBoundingClientRect().bottom + "px")).observe($("#topic"));
+document.addEventListener("pointerdown", e => {
+  if (!narrow.matches || e.target.closest("#topic, #side, #nicks, #foot, dialog, #ctx")) return;
+  $("#side").classList.remove("open"), $("#nicks").classList.remove("open");
+});
 try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"), $("#nicks2").classList.add("off"); } catch (e) {}
 // click the topic to see all of it
 $("#topic .t").onclick = e => { if (!e.target.closest("a")) e.currentTarget.classList.toggle("full"); };
