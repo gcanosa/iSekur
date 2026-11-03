@@ -247,12 +247,13 @@ static const std::vector<CmdInfo> CMDS = {
      "Without arguments, lists them. Matching ignores case and takes whole words; * matches anything "
      "(isekur*). They're hilight_words in the config, per server too. /save keeps the list.",
      {"/hilight", "/hilight add isekur", "/hilight add ger*", "/hilight del isekur"}},
-    {"ignore", "Settings", "[mask]", "Ignore a nick or mask, or list ignores",
-     "A bare nick becomes nick!*@*. Ignored users' messages, notices, invites and CTCPs are dropped. "
-     "/save keeps the list.",
+    {"ignore", "Settings", "[mask]", "Ignore a nick or mask on this network, or list its ignores",
+     "Each network has its own list (ignore in its [server.name] section): the same nick elsewhere is "
+     "often someone else. A bare nick becomes nick!*@*. Ignored users' messages, notices, invites and "
+     "CTCPs are dropped. /save keeps the list.",
      {"/ignore", "/ignore spammer", "/ignore *!*@*.evil.host"}},
     {"unignore", "Settings", "mask", "Stop ignoring a mask",
-     "Use the mask exactly as /ignore lists it.",
+     "On this network. Use the mask exactly as /ignore lists it.",
      {"/unignore spammer!*@*"}},
 
     // ---- Session

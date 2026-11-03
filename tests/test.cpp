@@ -166,9 +166,6 @@ int main() {
     }
 
     Core core;
-    core.cfg["general"]["ignore"] = "spam*!*@* *!*@*.Evil.Host";
-    assert(core.ignored("SpamBot!u@h") && core.ignored("x!y@a.evil.host"));
-    assert(!core.ignored("friend!u@good.host") && !core.ignored("irc.server.net"));
 
     Buffer* home = core.open(nullptr, BT::STATUS, "isekur");  // /grep: case-insensitive, nick or text
     core.add(home, Line{0, LK::MSG, "Bob", "Hello \x02World\x02"});
@@ -211,6 +208,15 @@ int main() {
     Server* ts = core.add_server(tc);
     ts->state = SS::CONNECTED, ts->flood_ms = 0;
     ts->prefix_modes = "qaohv", ts->prefix_chars = "~&@%+";
+    {  // ignores are per network: [server.t] ignore, nothing global
+        core.cfg["server.t"]["ignore"] = "spam*!*@* *!*@*.Evil.Host";
+        assert(core.ignored(ts, "SpamBot!u@h") && core.ignored(ts, "x!y@a.evil.host"));
+        assert(!core.ignored(ts, "friend!u@good.host") && !core.ignored(ts, "irc.server.net"));
+        core.cfg["server.t"].erase("ignore");
+        core.cfg["server.other"]["ignore"] = core.cfg["general"]["ignore"] = "spam*!*@*";
+        assert(!core.ignored(ts, "SpamBot!u@h"));  // another network's list, or a global one, isn't used
+        core.cfg.erase("server.other"), core.cfg["general"].erase("ignore");
+    }
     Buffer* chb = core.open(ts, BT::CHANNEL, "#c");
     chb->joined = true;
     auto feed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(ts, mm); };
@@ -744,7 +750,7 @@ int main() {
             for (auto& r : core.setting_rows()) ord.push_back(r.sec + "." + r.key);
             auto at = [&](const std::string& k) { return std::find(ord.begin(), ord.end(), k) - ord.begin(); };
             std::string sv = "server." + ts->cfg.name + ".";
-            assert(at("general.nick") < at("general.ignore") && at("general.typing_effect") < at(sv + "host"));
+            assert(at("general.nick") < at("general.paste_confirm") && at("general.typing_effect") < at(sv + "host"));
             assert(at(sv + "host") < at(sv + "nick") && at(sv + "nick") + 1 == at(sv + "altnick"));
             assert(at(sv + "password") < at(sv + "auto_identify") && at(sv + "auto_identify") < at(sv + "nickserv_pass"));
             assert(at(sv + "autojoin") < at(sv + "last_nick"));

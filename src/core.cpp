@@ -347,7 +347,7 @@ static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Look", {"theme", "theme_dir", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
               "banner_mono", "banner_anim", "show_guide"}},
     {"Updates", {"check_updates"}},
-    {"Messages", {"hilight_window", "hilight_words", "bell_notifications", "ignore", "paste_confirm", "quit_message", "part_message",
+    {"Messages", {"hilight_window", "hilight_words", "bell_notifications", "paste_confirm", "quit_message", "part_message",
                   "ctcp_version", "ctcp_time", "ctcp_ping"}},
     {"Channels", {"rejoin_on_kick", "history_fetch"}},
     {"Away", {"auto_away", "auto_away_idle", "away_message"}},
@@ -361,6 +361,7 @@ static const std::vector<SetGroup> SERVER_GROUPS = {
     {"Identity", {"nick", "altnick", "user", "realname"}},
     {"Login", {"password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key"}},
     {"Channels", {"autojoin", "rejoin_on_kick", "e2e_keys"}},
+    {"Messages", {"ignore"}},
 };
 struct SetPlace { int sec, key; std::string grp; };  // sort keys; the group's name
 static SetPlace set_place(const std::string& sec, const std::string& key) {
@@ -417,7 +418,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
                  {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
                  {"autoconnect", "true"}, {"auto_identify", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
                  {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
-                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}})
+                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"ignore", ""}})
             if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
     }
     std::vector<SetRow> out;
@@ -1057,10 +1058,12 @@ void Core::exec(Buffer* b, const std::string& input) {
                                "  - /save writes it to the config");
         return;
     }
-    if (cmd == "ignore" || cmd == "unignore") {  // masks: nick or nick!user@host globs
-        auto masks = split(ini_get(cfg, "general", "ignore"), ' ');
+    if (cmd == "ignore" || cmd == "unignore") {  // masks: nick or nick!user@host globs, per network
+        if (!s) { print(b, LK::ERROR, "Ignores are per network: use it in one of its tabs"); return; }
+        std::string sec = "server." + s->cfg.name;
+        auto masks = split(ini_get(cfg, sec, "ignore"), ' ');
         if (argv.empty()) {
-            print(b, LK::INFO, masks.empty() ? "Ignore list is empty" : "Ignoring: " + ini_get(cfg, "general", "ignore"));
+            print(b, LK::INFO, masks.empty() ? "Ignore list on " + s->cfg.name + " is empty" : "Ignoring on " + s->cfg.name + ": " + ini_get(cfg, sec, "ignore"));
             return;
         }
         std::string mask = argv[0];
@@ -1073,8 +1076,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         std::string joined;
         for (auto& m : masks) joined += (joined.empty() ? "" : " ") + m;
-        cfg["general"]["ignore"] = unsaved["general"]["ignore"] = joined;
-        print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " (/save to keep)");
+        cfg[sec]["ignore"] = unsaved[sec]["ignore"] = joined;
+        print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " on " + s->cfg.name + " (/save to keep)");
         return;
     }
     if (cmd == "hilight") {  // /hilight [add|del] word: words highlighted besides your nick, * matches anything

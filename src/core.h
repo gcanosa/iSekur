@@ -359,7 +359,7 @@ struct Core {
     void tick(time_t now);  // pings, timeouts, reconnects, auto-away
     void auto_away(Server* s, time_t now);
     int drain();            // flush send queues; ms until the next one is due
-    bool ignored(const std::string& prefix) const;
+    bool ignored(const Server* s, const std::string& prefix) const;  // per network: [server.X] ignore
 
     Buffer* find(Server* s, const std::string& name);
     Buffer* open(Server* s, BT t, const std::string& name);

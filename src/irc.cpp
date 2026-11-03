@@ -115,10 +115,10 @@ int Core::drain() {
     return wait;
 }
 
-bool Core::ignored(const std::string& prefix) const {
+bool Core::ignored(const Server* s, const std::string& prefix) const {
     if (prefix.find('!') == std::string::npos) return false;  // servers are never ignored
     std::string who = irc_lower(prefix);
-    for (auto& mask : split(ini_get(cfg, "general", "ignore"), ' '))
+    for (auto& mask : split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' '))
         if (fnmatch(irc_lower(mask).c_str(), who.c_str(), 0) == 0) return true;
     return false;
 }
@@ -757,7 +757,7 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "ACCOUNT" || cmd == "SETNAME" ||
         cmd == "TAGMSG")
         return;
-    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE") && !is_me(m.nick) && ignored(m.prefix))
+    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE") && !is_me(m.nick) && ignored(s, m.prefix))
         return;  // includes CTCP: ignored users get no replies either
     if (cmd == "INVITE") {
         print(reply_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));

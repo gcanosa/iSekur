@@ -226,7 +226,7 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
     add("CTCP Version", "/ctcp " + nick + " VERSION");
     add("CTCP Ping", "/ctcp " + nick + " PING");
     add("CTCP Time", "/ctcp " + nick + " TIME");
-    auto masks = split(ini_get(cfg, "general", "ignore"), ' ');
+    auto masks = split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' ');
     bool ign = std::find(masks.begin(), masks.end(), nick + "!*@*") != masks.end();
     add("", "");
     add(ign ? "Unignore" : "Ignore", (ign ? "/unignore " : "/ignore ") + nick);
