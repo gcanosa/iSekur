@@ -604,6 +604,16 @@ int main() {
     for (size_t k = wb; k < chb->lines.size(); k++) wl.push_back(mirc_strip(chb->lines[k].text));
     assert(wl.size() == 6 && wl[0].rfind("┌─ whois Bob", 0) == 0 && wl[1] == "│ Bob (~u@h.example): Bob Real" &&
            wl[2] == "│ channels @#c #d" && wl[3].rfind("│ idle 1h2m5s, signed on ", 0) == 0 && wl[4] == "└─────────");
+    wb = chb->lines.size();  // a long channel list wraps into framed lines, none past 60 cols
+    feed(":srv 311 me Bob ~u h.example * :Bob Real");
+    feed(":srv 319 me Bob :#i2p #oftc #asahi #Qubes_OS #moocows #debian-next #freedesktop #kvm #linux #asahi-dev #bash");
+    feed(":srv 318 me Bob :End of /WHOIS list.");
+    assert(chb->lines.size() - wb == 5);
+    for (size_t k = wb + 1; k < wb + 4; k++) {
+        std::string t = mirc_strip(chb->lines[k].text);
+        assert(t.rfind("│ ", 0) == 0 && t.size() <= 64);
+    }
+    assert(mirc_strip(chb->lines[wb + 3].text).find("#bash") != std::string::npos);
     wb = chb->lines.size();  // a 311 without the "*" (SekurIRCd) is framed too
     feed(":srv 311 me Erick erick c.example :Erick R");
     feed(":srv 318 me Erick :End of /WHOIS list.");

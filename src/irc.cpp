@@ -931,7 +931,14 @@ void Core::handle(Server* s, const Msg& m) {
                 txt += std::to_string(idle % 60) + "s";
                 if (m.params.size() > 4) txt += ", signed on " + fmt_time(atol(m.p(3).c_str()), "%Y-%m-%d %H:%M");
             } else if (cmd == "312") txt = "server " + m.p(2) + (m.params.size() > 3 ? " (" + m.p(3) + ")" : "");
-            else if (cmd == "319") txt = "channels " + m.p(2);
+            else if (cmd == "319") {  // ponytail: wrap at ~60 cols so the │ frame survives a long list
+                std::string ln = "channels";
+                for (auto& c : split(m.p(2), ' ')) {
+                    if (ln.size() > 9 && ln.size() + 1 + c.size() > 60) print(reply_buf(), LK::INFO, "│ " + ln), ln = "        ";
+                    ln += " " + c;
+                }
+                txt = ln;
+            }
             else if (cmd == "301") txt = "away: " + m.p(2);
             else if (cmd == "330" && m.params.size() > 3) txt = "logged in as " + m.p(2);
             else for (size_t i = 2; i < m.params.size(); i++) txt += (i > 2 ? " " : "") + m.params[i];
