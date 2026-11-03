@@ -169,6 +169,7 @@ std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std
                           std::string(k) + "multi-server · IRCv3 · TLS + SASL · E2E channels and queries · /shell · detach and attach",
                           std::string(""),
                           std::string(k) + "Author     \x0f" "Gerardo Canosa",
+                          std::string(k) + "Website    \x0f" "https://gcanosa.github.io/isekur-site/",
                           std::string(k) + "Source     \x0f" "https://github.com/gcanosa/iSekur",
                           std::string(k) + "Download   \x0f" "https://github.com/gcanosa/iSekur/releases/latest",
                           update.empty() ? std::string("\x01") : std::string(k) + "Update     \x0f\x02iSekur " + update + " is out\x02  brew upgrade isekur, or the Download link",
@@ -505,7 +506,7 @@ std::string ctcp_version() {
     utsname u{};
     std::string os = uname(&u) == 0 ? std::string(u.sysname) + " " + u.release + "/" + u.machine : "unknown OS";
     return version_string() + " :: " + os +
-           " :: modern, secure, lightweight & powerful IRCv3 client :: https://github.com/gcanosa/iSekur";
+           " :: modern, secure, lightweight & powerful IRCv3 client :: https://gcanosa.github.io/isekur-site/";
 }
 
 // ---- buffers ---------------------------------------------------------------
