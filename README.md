@@ -3,6 +3,8 @@
 A small, very colorful terminal IRC client in C++17 with a built-in webchat
 that mirrors your live session in a browser, bouncer style.
 
+**Website: [gcanosa.github.io/isekur-site](https://gcanosa.github.io/isekur-site/)**, with screenshots of the themes and the webchat.
+
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
 - Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
