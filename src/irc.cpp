@@ -861,7 +861,7 @@ void Core::handle(Server* s, const Msg& m) {
             bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && irc_lower(peer) == "nickserv";
             if (!b) b = ident ? s->status : notice ? reply_buf() : open(s, BT::QUERY, peer);
         }
-        bool hl = !self && !snote && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick, opt(s, "hilight_words", "")));
+        bool hl = !self && !snote && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick, ini_get(cfg, "server." + s->cfg.name, "hilight_words")));
         std::string who = m.nick.empty() ? s->cfg.host : m.nick;
         if (replay) {
             // the AFTER timestamp has 1s precision: skip what the log already showed

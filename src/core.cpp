@@ -347,7 +347,7 @@ static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Look", {"theme", "theme_dir", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
               "banner_mono", "banner_anim", "show_guide"}},
     {"Updates", {"check_updates"}},
-    {"Messages", {"hilight_window", "hilight_words", "bell_notifications", "paste_confirm", "quit_message", "part_message",
+    {"Messages", {"hilight_window", "bell_notifications", "paste_confirm", "quit_message", "part_message",
                   "ctcp_version", "ctcp_time", "ctcp_ping"}},
     {"Channels", {"rejoin_on_kick", "history_fetch"}},
     {"Away", {"auto_away", "auto_away_idle", "away_message"}},
@@ -361,7 +361,7 @@ static const std::vector<SetGroup> SERVER_GROUPS = {
     {"Identity", {"nick", "altnick", "user", "realname"}},
     {"Login", {"password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key"}},
     {"Channels", {"autojoin", "rejoin_on_kick", "e2e_keys"}},
-    {"Messages", {"ignore"}},
+    {"Messages", {"hilight_words", "ignore"}},
 };
 struct SetPlace { int sec, key; std::string grp; };  // sort keys; the group's name
 static SetPlace set_place(const std::string& sec, const std::string& key) {
@@ -418,7 +418,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
                  {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
                  {"autoconnect", "true"}, {"auto_identify", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
                  {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
-                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"ignore", ""}})
+                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""}})
             if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
     }
     std::vector<SetRow> out;
@@ -1080,11 +1080,13 @@ void Core::exec(Buffer* b, const std::string& input) {
         print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " on " + s->cfg.name + " (/save to keep)");
         return;
     }
-    if (cmd == "hilight") {  // /hilight [add|del] word: words highlighted besides your nick, * matches anything
-        auto words = split(ini_get(cfg, "general", "hilight_words"), ' ');
+    if (cmd == "hilight") {  // /hilight [add|del] word: words highlighted besides your nick, * matches anything, per network
+        if (!s) { print(b, LK::ERROR, "Highlights are per network: use it in one of its tabs"); return; }
+        std::string sec = "server." + s->cfg.name;
+        auto words = split(ini_get(cfg, sec, "hilight_words"), ' ');
         if (argv.size() < 2 || (argv[0] != "add" && argv[0] != "del")) {
             if (!argv.empty()) { print(b, LK::ERROR, "Usage: /hilight [add|del] word"); return; }
-            print(b, LK::INFO, words.empty() ? "Highlighting only your nick (/hilight add word)" : "Highlighting your nick and: " + ini_get(cfg, "general", "hilight_words"));
+            print(b, LK::INFO, words.empty() ? "Highlighting only your nick on " + s->cfg.name + " (/hilight add word)" : "Highlighting on " + s->cfg.name + " your nick and: " + ini_get(cfg, sec, "hilight_words"));
             return;
         }
         std::string w = irc_lower(argv[1]);
@@ -1096,8 +1098,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         std::string joined;
         for (auto& x : words) joined += (joined.empty() ? "" : " ") + x;
-        cfg["general"]["hilight_words"] = unsaved["general"]["hilight_words"] = joined;
-        print(b, LK::INFO, (argv[0] == "add" ? "Highlighting " : "No longer highlighting ") + w + " (/save to keep)");
+        cfg[sec]["hilight_words"] = unsaved[sec]["hilight_words"] = joined;
+        print(b, LK::INFO, (argv[0] == "add" ? "Highlighting " : "No longer highlighting ") + w + " on " + s->cfg.name + " (/save to keep)");
         return;
     }
     if (cmd == "save") {

@@ -29,9 +29,6 @@ log_rotate  = on             ; start a new file each day; old ones become <name>
 
 # Copy highlights and private messages to window 1 ("what did I miss").
 hilight_window = on
-# Highlight these words too, besides your nick: whole words, any case, * matches
-# anything, e.g. isekur ger* (or /hilight add word and /save).
-hilight_words  =
 
 # What you leave with (/quit and /part without text). Empty: "iSekur <version> ::
 # colorful terminal IRC client :: <github link>". Can be set per server too.
@@ -122,6 +119,7 @@ port      = 6697
 tls       = true
 tls_verify = true            ; false only for self-signed test servers
 autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
+hilight_words =              ; this network only, besides your nick: whole words, any case, * globs: isekur ger*
 ignore    =                  ; this network only: spammer!*@* *!*@*.bad.host, or /ignore and /save
 ; sasl_pass, password and nickserv_pass are saved as enc:... (key in secret.key next to this file);
 ; type one in plain and iSekur encrypts it on the next start or /reload

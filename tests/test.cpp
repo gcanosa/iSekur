@@ -598,7 +598,10 @@ int main() {
     core.exec(chb, "/hilight add ger*");
     assert(hl("isekur rocks") && !hl("isekurs rock") && hl("hi Gerardo") && !hl("hi roger"));
     core.exec(chb, "/hilight del isekur");
-    assert(!hl("isekur rocks") && core.unsaved["general"]["hilight_words"] == "ger*");
+    assert(!hl("isekur rocks") && core.unsaved["server.t"]["hilight_words"] == "ger*" && !core.cfg["general"].count("hilight_words"));
+    core.cfg["server.t"].erase("hilight_words"), core.cfg["server.other"]["hilight_words"] = core.cfg["general"]["hilight_words"] = "ger*";
+    assert(!hl("hi Gerardo"));  // another network's words, or global ones, aren't used
+    core.cfg.erase("server.other"), core.cfg["general"].erase("hilight_words"), core.cfg["server.t"]["hilight_words"] = "ger*";
     core.exec(chb, "/part");  // closes the tab: open it again for what follows
     assert(sent() == "PART #c :iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur\r\n");
     chb = core.open(ts, BT::CHANNEL, "#c"), chb->joined = true;
