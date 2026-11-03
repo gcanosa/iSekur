@@ -321,6 +321,7 @@ dialog .btns .left { margin-right: auto; }
 .k-action .tx, .k-action .nk { color: var(--action-fg, var(--action)); font-style: italic; }
 .l .self { color: var(--msg_self-fg, var(--accent2)); }
 .tx a { color: var(--accent2); }
+a.chan { cursor: context-menu; text-decoration: underline; }
 #nicks, #nicks2 { grid-area: nicks; width: 190px; background: var(--nicklist-bg, var(--panel)); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 0; }
 :is(#nicks, #nicks2) .hd { color: var(--muted); padding: 2px 12px 6px; font-size: 12px; }
 :is(#nicks, #nicks2) div.u { padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
@@ -564,6 +565,8 @@ function nickColor(n) {
 
 // mIRC formatting -> DOM (text only ever goes through textContent)
 const URL_RE = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
+// a URL or a #channel at the start of a word (not the # in "C#" or a URL's #anchor, which the URL eats first)
+const LINK_RE = new RegExp(URL_RE.source + `|(?<![^\\s(\\[{'"])[#&][^\\s,<>"']*[^\\s,<>"'.;:!?)\\]}]`, "g");
 function addText(parent, text, st) {
   if (!text) return;
   const span = document.createElement("span");
@@ -575,11 +578,12 @@ function addText(parent, text, st) {
   if (st.i) span.style.fontStyle = "italic";
   if (st.u) span.style.textDecoration = "underline";
   let last = 0;
-  for (const m of text.matchAll(URL_RE)) {
+  for (const m of text.matchAll(LINK_RE)) {
     span.append(text.slice(last, m.index));
     const a = document.createElement("a");
-    a.href = m[0]; a.textContent = m[0]; a.target = "_blank"; a.rel = "noopener noreferrer";
-    span.append(a); last = m.index + m[0].length;
+    if (/^[#&]/.test(m[0])) a.className = "chan", a.title = "Right click or double click: join " + m[0];
+    else a.href = m[0], a.target = "_blank", a.rel = "noopener noreferrer";
+    a.textContent = m[0]; span.append(a); last = m.index + m[0].length;
   }
   span.append(text.slice(last));
   parent.append(span);
@@ -1158,7 +1162,7 @@ document.addEventListener("pointerdown", e => {
 });
 try { if (localStorage.getItem("nicks") === "0") $("#nicks").classList.add("off"), $("#nicks2").classList.add("off"); } catch (e) {}
 // click the topic to see all of it
-$("#topic .t").onclick = e => { if (!e.target.closest("a")) e.currentTarget.classList.toggle("full"); };
+$("#topic .t").onclick = e => { if (!e.target.closest("a[href]")) e.currentTarget.classList.toggle("full"); };
 // double click: the topic into the input line, if we may set it (+t needs ops)
 $("#topic .t").ondblclick = e => {
   e.currentTarget.classList.remove("full");
@@ -1881,14 +1885,28 @@ $("#msgs").addEventListener("click", e => {
   else if (w === "Next" || w === "▶") go("next");
   else if (w === "Done" || w === "✔") go("close");
 });
-// double click a #channel in the chat joins it; in *channels anywhere on its row
+// a right click (long press on phones) on a #channel in the chat or the topic: its tab if we're on it, else a box
+// asks to join it. Not a left click: that one selects text to copy
+async function askJoin(name) {
+  const b = bufs.get(active);
+  if (!b || !b.srv) return;
+  const ln = ircLower(name), on = order.find(id => { const o = bufs.get(id); return o && o.srv === b.srv && ircLower(o.name) === ln; });
+  if (on !== undefined) return select(on);
+  if (await askBox({title: "Join channel", text: "Join " + name + " on " + b.srv + "?", ok: "Join"}) !== null)
+    send({t: "input", buf: b.id, text: "/join " + name});
+}
+document.addEventListener("contextmenu", e => {
+  const a = e.target.closest("a.chan");
+  if (a && bufs.get(active)?.srv) e.preventDefault(), askJoin(a.textContent);
+});
+// double click a #channel in the chat (in *channels anywhere on its row): the same join box
 $("#msgs").addEventListener("dblclick", e => {
   const b = bufs.get(active);
   if (!b || !b.srv) return;
   let w = wordAt(e);
   const row = e.target.closest(".l");
   if (!isChan(w) && b.name === "*channels" && row) w = (row.querySelector(".tx").textContent.match(/[#&][^\s,]+/) || [""])[0];
-  if (isChan(w)) { window.getSelection().removeAllRanges(); send({t: "input", buf: active, text: "/join " + w}); }
+  if (isChan(w)) { window.getSelection().removeAllRanges(); askJoin(w); }
 });
 window.addEventListener("focus", seen);
 window.addEventListener("focus", () => { const b = bufs.get(active); if (b && b.act) { b.act = 0; send({t: "read", buf: active}); renderSide(); } });
