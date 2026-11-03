@@ -2087,6 +2087,11 @@ int Tui::suggest(std::vector<Sugg>& out) const {
                 if (irc_lower(st.key).find(irc_lower(arg)) != std::string::npos) out.push_back({st.key, " = ", st.val});
             return (int)sp + 1;
         }
+        if (cmd == "theme") {  // installed themes containing what's typed
+            for (auto& n : theme_names())
+                if (irc_lower(n).find(irc_lower(arg)) != std::string::npos) out.push_back({n, "  ", n == c.theme.name ? "(current)" : ""});
+            return (int)sp + 1;
+        }
         if (cmd == "help") { cmds(arg, false); return (int)sp + 1; }
         if (const CmdInfo* k = find_command(cmd)) {  // "/kickban al": the arguments, until the 2nd word
             out.push_back({"/" + std::string(k->name), (*k->usage ? " " + std::string(k->usage) : "") + "  ", k->summary});

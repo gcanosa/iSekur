@@ -1595,6 +1595,10 @@ function suggest(s) {
     }
     return [sp + 1, out];
   }
+  if (cmd === "theme") {  // installed themes containing what's typed
+    for (const n of theme.themes || []) if (n.toLowerCase().includes(arg.toLowerCase())) out.push([n, "  ", n === theme.name ? "(current)" : ""]);
+    return [sp + 1, out];
+  }
   if (cmd === "help") { cm(arg, false); return [sp + 1, out]; }
   const k = cmds.find(c => c[0] === cmd || (c[3] || "").split(" ").includes(cmd));
   if (k) { out.push(["/" + k[0], (k[1] ? " " + k[1] : "") + "  ", k[2]]); return [-2, out]; }
