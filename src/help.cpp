@@ -110,6 +110,11 @@ static const std::vector<CmdInfo> CMDS = {
      "Toggles for the current tab only. Hidden lines are still logged and come back with /quiet off. "
      "Your own joins and parts stay visible.",
      {"/quiet", "/quiet off"}},
+    {"mute", "Chat", "[on|off]", "Mute hilights and alerts from this tab",
+     "Toggles for the current tab and saves it in the network's mute setting right away. Your nick and hilight_words stop highlighting, "
+     "ringing and being copied to window 1; messages still show and light up the tab. Muted tabs show 🔇. "
+     "Also in the channel tab's right-click menu.",
+     {"/mute", "/mute off"}},
     {"statusbar", "Chat", "[up|cpu|mem|load|bat] [on|off]", "Show uptime, CPU, memory, load or battery in the status bar",
      "Right of the status bar (under the nick list): up = how long iSekur has run, cpu = this "
      "machine's CPU use, mem = memory free/total, load = load average (1, 5, 15 min), bat = battery as 3 bars (green, yellow, orange, red "

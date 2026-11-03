@@ -361,7 +361,7 @@ static const std::vector<SetGroup> SERVER_GROUPS = {
     {"Identity", {"nick", "altnick", "user", "realname"}},
     {"Login", {"password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key"}},
     {"Channels", {"autojoin", "rejoin_on_kick", "e2e_keys"}},
-    {"Messages", {"hilight_words", "ignore"}},
+    {"Messages", {"hilight_words", "ignore", "mute"}},
     {"Away", {"auto_away", "away_announce"}},
 };
 struct SetPlace { int sec, key; std::string grp; };  // sort keys; the group's name
@@ -419,7 +419,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
                  {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
                  {"autoconnect", "true"}, {"auto_identify", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
                  {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
-                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""},
+                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""}, {"mute", ""},
                  {"auto_away", opt(nullptr, "auto_away", "on")}, {"away_announce", opt(nullptr, "away_announce", "off")}})
             if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
     }
@@ -680,6 +680,13 @@ void Core::fold(Buffer* st) {
 // what you leave with: the config's quit_message / part_message, else what iSekur is
 std::string Core::bye(const Server* s, const std::string& key) const {
     return opt(s, key, "iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur");
+}
+
+bool Core::muted(const Buffer* b) const {
+    if (!b->srv || b->type == BT::STATUS) return false;
+    for (auto& ch : split(ini_get(cfg, "server." + b->srv->cfg.name, "mute"), ' '))
+        if (irc_lower(ch) == irc_lower(b->name)) return true;
+    return false;
 }
 
 std::string Core::opt(const Server* s, const std::string& key, const std::string& def) const {
@@ -1263,6 +1270,20 @@ void Core::exec(Buffer* b, const std::string& input) {
         notify(Ev::BUFFER, b);
         print(b, LK::INFO, std::string("Quiet mode ") + (b->quiet ? "on: joins, parts, quits and nick changes are hidden here"
                                                                   : "off: showing joins, parts, quits and nick changes"));
+        return;
+    }
+    if (cmd == "mute") {  // [server.X] mute: channels (or queries) that never hilight; saved now
+        if (!s || b->type == BT::STATUS) { print(b, LK::ERROR, "Mute is for channels and queries: use it in that tab"); return; }
+        bool on = args == "on" || (args != "off" && !muted(b));
+        std::string sec = "server." + s->cfg.name, v;
+        for (auto& ch : split(ini_get(cfg, sec, "mute"), ' '))
+            if (!ch.empty() && irc_lower(ch) != irc_lower(b->name)) v += (v.empty() ? "" : " ") + ch;
+        if (on) v += (v.empty() ? "" : " ") + b->name;
+        cfg[sec]["mute"] = unsaved[sec]["mute"] = v;
+        notify(Ev::BUFFER, b);
+        // written now, like /autojoin: the tab menu's choice must hold at the next start without a /save
+        if (save_section(*this, sec, b))
+            print(b, LK::INFO, b->name + (on ? " muted: no hilights or alerts from it (saved)" : " unmuted: hilights and alerts are back (saved)"));
         return;
     }
     if (cmd == "statusbar") {  // /statusbar [item [on|off]]: what status_info shows right of the status bar

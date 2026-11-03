@@ -642,7 +642,7 @@ void Tui::draw() {
                 : t->type == BT::STATUS ? sty(T, "tab_server", "tabbar") : tbs;
         if (t->id == tab_drop) s.attr ^= A_REV;
         Row r;
-        cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + (e2e_on(t) ? " \xf0\x9f\x94\x92" : "") + (hid ? " +" + std::to_string(hid) : "") + " ", s, false);
+        cells(r, " " + std::to_string(i + 1) + ":" + buf_label(t) + (c.muted(t) ? " \xf0\x9f\x94\x87" : "") + (e2e_on(t) ? " \xf0\x9f\x94\x92" : "") + (hid ? " +" + std::to_string(hid) : "") + " ", s, false);
         if (t == b) av = (int)labels.size();
         labels.push_back(r);
         vis.push_back((int)i);

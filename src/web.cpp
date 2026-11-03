@@ -711,7 +711,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) + ",\"net\":" + json_str(s ? s->cfg.name : "") +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
-           ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
+           ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : "0") + ",\"mute\":" + (c.muted(b) ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
            (b->term && !b->term->host.empty() ? ",\"host\":" + json_str(b->term->host) : "") +
            ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(atoi(c.opt(s, "paste_confirm", "5").c_str())) +

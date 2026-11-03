@@ -346,6 +346,7 @@ struct Core {
     void reload(Buffer* b);  // /reload
     // [server.<name>] key, falling back to [general], then `def`
     std::string opt(const Server* s, const std::string& key, const std::string& def) const;
+    bool muted(const Buffer* b) const;  // in [server.X] mute: no hilights, alerts or copies to window 1 from it
     bool opt_on(const Server* s, const std::string& key, bool def) const;
     void log_line(Buffer* b, const Line& l);
     std::string log_path(Buffer* b) const;

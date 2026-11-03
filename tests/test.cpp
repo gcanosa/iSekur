@@ -444,7 +444,7 @@ int main() {
     core.exec(chb, "/topicrotate off");
     {  // /e2e #c: what we send opens on the way back in, a wrong password doesn't; the menu flips
         core.exec(chb, "/e2e #c hunter2");
-        assert(e2e_on(chb) && core.tab_menu(chb)[2].second == "/e2e off");
+        assert(e2e_on(chb) && core.tab_menu(chb)[3].second == "/e2e off");
         core.say(chb, "secret", false);
         std::string line = sent();
         assert(line.rfind("PRIVMSG #c :+iSE ", 0) == 0 && line.find("secret") == std::string::npos);
@@ -454,7 +454,7 @@ int main() {
         feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
         assert(chb->lines.back().text.find("wrong password?") != std::string::npos);
         core.exec(chb, "/e2e off");
-        assert(!e2e_on(chb) && core.tab_menu(chb)[2].second == "/e2e #c");
+        assert(!e2e_on(chb) && core.tab_menu(chb)[3].second == "/e2e #c");
         // an autojoin channel's key goes to the config (the key, not the password) and comes back
         core.cfg_path = "build/test-e2e.conf";
         unlink(core.cfg_path.c_str());
@@ -602,6 +602,10 @@ int main() {
     core.cfg["server.t"].erase("hilight_words"), core.cfg["server.other"]["hilight_words"] = core.cfg["general"]["hilight_words"] = "ger*";
     assert(!hl("hi Gerardo"));  // another network's words, or global ones, aren't used
     core.cfg.erase("server.other"), core.cfg["general"].erase("hilight_words"), core.cfg["server.t"]["hilight_words"] = "ger*";
+    core.exec(chb, "/mute");  // a muted tab: no hilights; the menu offers the way back
+    assert(core.muted(chb) && core.cfg["server.t"]["mute"] == "#c" && !hl("hey ME!") && core.tab_menu(chb)[1].second == "/mute off");
+    core.exec(chb, "/mute off");
+    assert(!core.muted(chb) && core.cfg["server.t"]["mute"].empty() && hl("hey ME!"));
     core.exec(chb, "/part");  // closes the tab: open it again for what follows
     assert(sent() == "PART #c :iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur\r\n");
     chb = core.open(ts, BT::CHANNEL, "#c"), chb->joined = true;

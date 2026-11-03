@@ -125,6 +125,7 @@ tls_verify = true            ; false only for self-signed test servers
 autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
 hilight_words =              ; this network only, besides your nick: whole words, any case, * globs: isekur ger*
 ignore    =                  ; this network only: spammer!*@* *!*@*.bad.host, or /ignore and /save
+mute      =                  ; channels here that never hilight or alert: #busy #bots (/mute or the tab's menu)
 ; auto_away = off            ; this network's own auto-away policy (default: the one in [general])
 ; away_announce = on         ; announce auto-away in this network's channels (default: [general])
 ; sasl_pass, password and nickserv_pass are saved as enc:... (key in secret.key next to this file);
