@@ -767,8 +767,11 @@ function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /sp
   }
 }
 
+let shownId = null;  // the tab #msgs shows: leaving it keeps where it was scrolled (null = at the bottom)
 function renderMsgs() {
-  const m = $("#msgs"), b = bufs.get(active); m.textContent = "";
+  const m = $("#msgs"), b = bufs.get(active), was = bufs.get(shownId);
+  if (was) was.top = atBottom() ? null : m.scrollTop;
+  shownId = active; m.textContent = "";
   if (!b) return;
   m.classList.toggle("quiet", !!b.q);
   const frag = document.createDocumentFragment();
@@ -777,7 +780,7 @@ function renderMsgs() {
     if (i === mark) { const d = document.createElement("div"); d.className = "newmark"; d.textContent = "new"; frag.append(d); }
     frag.append(lineEl(b, l));
   });
-  m.append(frag); m.scrollTop = m.scrollHeight;
+  m.append(frag); m.scrollTop = b.top != null ? b.top : m.scrollHeight;
   renderPane2();
 }
 
