@@ -1983,6 +1983,26 @@ void Tui::mouse(int mod, int k, int x, int y) {
         c.dirty = true;
         return;
     }
+    if (k == TB_KEY_MOUSE_RELEASE && tab_drag >= 0) {  // a tab dropped on another of its server's (a server tab: on another server's): it takes that place
+        int from = tab_drag;
+        tab_drag = -1;
+        for (auto& h : hits) {
+            if (h.y != y || x < h.x0 || x >= h.x1 || h.tab < 0 || h.tab >= (int)c.bufs.size() || !h.nick.empty()) continue;
+            Buffer *to = c.bufs[(size_t)h.tab].get(), *b = nullptr;
+            for (auto& p : c.bufs) if (p->id == from) b = p.get();
+            if (!b || b == to || !b->srv || !to->srv) continue;
+            bool srv = b->type == BT::STATUS;  // a server tab: among the servers, onto any tab of another one
+            if (srv == (to->srv == b->srv)) continue;
+            int n = 0, at = 1;  // a channel on its server tab: first
+            for (auto& p : c.bufs)
+                if (srv ? p->srv && p->type == BT::STATUS : p->srv == to->srv && p->type != BT::STATUS) {
+                    n++;
+                    if (srv ? p->srv == to->srv : p.get() == to) at = n;
+                }
+            c.exec(b, "/move " + std::to_string(at));
+        }
+        return;
+    }
     if (k != TB_KEY_MOUSE_LEFT) return;
     if (sel_x0 >= 0) sel_x0 = -1, c.dirty = true;
     if (over_topic) {
@@ -2010,7 +2030,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     for (auto& h : hits) {
         if (h.y != y || x < h.x0 || x >= h.x1) continue;
         if (h.tab == -2) c.about(c.active);
-        else if (h.tab >= 0 && h.tab < (int)c.bufs.size()) c.select(c.bufs[(size_t)h.tab].get());
+        else if (h.tab >= 0 && h.tab < (int)c.bufs.size()) c.select(c.bufs[(size_t)h.tab].get()), tab_drag = c.bufs[(size_t)h.tab]->id;
         else if (!h.nick.empty()) {
             long long now = now_ms();
             bool dbl = h.nick == nick_click && now - nick_click_ms < 400;

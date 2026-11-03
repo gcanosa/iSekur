@@ -48,6 +48,7 @@ private:
     void copy_sel();
     // clickable regions from the last draw(): tabs, activity numbers, nicks
     struct Hit { int y, x0, x1; int tab; std::string nick; };
+    int tab_drag = -1;  // the id of the tab pressed on: released on another of its server's tabs, it moves there
     std::vector<Hit> hits;
     int nl_x = -1, nl_scroll = 0;
     // right click on a nick or a channel tab: a menu of commands ("" label = separator); Up/Down/Enter or a click

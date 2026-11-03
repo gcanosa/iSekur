@@ -185,6 +185,11 @@ static const std::vector<CmdInfo> CMDS = {
     {"win", "Windows", "N", "Go to tab N",
      "Same as Alt+1..9 / Alt+0, but works for tabs past 10.",
      {"/win 3", "/win 12"}, "window"},
+    {"move", "Windows", "N", "Move this tab to place N among its server's tabs (a server tab: among the servers)",
+     "1 is right after the server tab. In a server tab it moves the server, with all its tabs. Dragging a tab onto "
+     "another of its server (a server tab onto another server's), here or in the webchat, does the same. The order is "
+     "kept: channels in the server's autojoin list, servers in [general] server_order.",
+     {"/move 1", "/move 3"}, "window"},
     {"close", "Windows", "", "Close the current tab",
      "Parts the channel first, like /part (with part_message). On a server tab it disconnects and closes all of the server's tabs.",
      {"/close"}, "wc"},

@@ -61,6 +61,7 @@ button, input { font: inherit; color: inherit; }
 #side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
 #side .tab.a3 { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
 #side .tab.off { opacity: .55; }
+#side :is(.tab, .srv).drop { box-shadow: inset 0 2px var(--accent); }  /* a dragged tab lands here */
 #side .tab.split { border-left-color: var(--muted); border-left-style: dashed; }  /* in the webchat's other /split pane */
 /* bottom left: add a server, settings, about */
 #foot { grid-area: foot; display: flex; gap: 6px; padding: 8px 10px; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
@@ -656,6 +657,28 @@ function label(b) { return b.type === "status" ? b.srv : b.name; }
 
 // a folded network (click its name here, or right click its tab in the terminal) lists only its
 // server tab with "+N" in the color of their activity; Alt+arrows and Alt+A still go through them
+let dragId = null;  // the sidebar tab being dragged
+// drag a channel or query onto another tab of its server, a network (its name or server tab) onto another network's
+// name or tab: it takes that place (/move); a channel on its server tab: first
+function dragTab(t, b, id) {
+  const srvTab = b.type === "status" && !b.home;
+  const fits = f => f && f !== b && (srvTab || b.type === "channel" || b.type === "query") && (f.type === "status" ? f.net !== b.net : f.net === b.net);
+  if (srvTab || b.type === "channel" || b.type === "query")
+    t.draggable = true, t.ondragstart = e => { dragId = id; e.dataTransfer.setData("text/x-tab", id); e.dataTransfer.effectAllowed = "move"; },
+    t.ondragend = () => { dragId = null; };
+  t.ondragover = e => { const f = bufs.get(dragId); if (fits(f)) e.preventDefault(), t.classList.add("drop"); };
+  t.ondragleave = () => t.classList.remove("drop");
+  t.ondrop = e => {
+    e.preventDefault(); t.classList.remove("drop");
+    const f = bufs.get(dragId); if (!fits(f)) return;
+    let n = 0, at = 1;
+    for (const x of order) {
+      const o = bufs.get(x); if (!o) continue;
+      if (f.type === "status" ? o.type === "status" && !o.home : o.net === b.net && o.type !== "status") { n++; if (f.type === "status" ? o.net === b.net : o === b) at = n; }
+    }
+    send({t: "input", buf: f.id, text: "/move " + at});
+  };
+}
 function renderSide() {
   const side = $("#side");
   for (const c of [...side.children]) if (c !== sidetop) c.remove();  // the filter keeps its focus
@@ -673,7 +696,7 @@ function renderSide() {
       const h = document.createElement("div"); h.className = "srv"; lastSrv = b.srv;
       st = b.type === "status" && !b.home ? b : null;
       h.textContent = b.srv + (st ? (st.fold ? " ▸" : " ▾") : "");
-      if (st) { h.dataset.id = id; h.title = st.fold ? "Show its channels" : "Hide its channels"; h.onclick = () => send({t: "fold", buf: id}); }
+      if (st) { h.dataset.id = id; h.title = (st.fold ? "Show its channels" : "Hide its channels") + " · drag to reorder the networks"; h.onclick = () => send({t: "fold", buf: id}); dragTab(h, st, id); }
       side.append(h);
     }
     if (!q.length && st && st.fold && b !== st && id !== active) return;
@@ -700,6 +723,7 @@ function renderSide() {
       t.append(x);
     }
     t.onclick = () => { select(id); side.classList.remove("open"); if (tabq.value) tabq.value = "", renderSide(); };
+    dragTab(t, b, id);
     if (q.length) { if (picks.length === pick) t.classList.add("pick"); picks.push(id); }
     if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) t.oncontextmenu = e => askMenu(e, "", id);  // a server tab: connect, fold, close
     side.append(t);

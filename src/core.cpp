@@ -57,9 +57,14 @@ void Core::load_config() {
     print(home, LK::INFO, "");  // room before what comes next (webchat, connecting...)
     if (!found || opt_on(nullptr, "show_guide", false)) guide(home, "");  // a new config has show_guide = on
 
-    for (auto& [sec, kv] : cfg) {
-        if (sec.rfind("server.", 0) != 0) continue;
-        Server* s = add_server(server_cfg(sec.substr(7)));
+    // [general] server_order (a server tab dragged, /move) first, then the rest A-Z
+    std::vector<std::string> names, order = split(ini_get(cfg, "general", "server_order"), ',');
+    for (auto& [sec, kv] : cfg)
+        if (sec.rfind("server.", 0) == 0) names.push_back(sec.substr(7));
+    auto rank = [&](const std::string& n) { return std::find(order.begin(), order.end(), n) - order.begin(); };
+    std::stable_sort(names.begin(), names.end(), [&](auto& x, auto& y) { return rank(x) < rank(y); });
+    for (auto& n : names) {
+        Server* s = add_server(server_cfg(n));
         if (s->cfg.autoconnect) connect(s);
     }
 }
@@ -1178,6 +1183,62 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "win" || cmd == "window") {
         int n = atoi(args.c_str());
         if (n >= 1 && n <= (int)bufs.size()) select(bufs[(size_t)n - 1].get());
+        return;
+    }
+    if (cmd == "move") {  // /move N: this tab to place N among its server's tabs, a server tab (with its tabs) among the servers
+        int n = atoi(args.c_str());
+        Server* sv = b->srv;
+        if (n < 1 || !sv) { print(b, LK::ERROR, "Usage: /move N, in a server, channel or query tab"); return; }
+        std::string err;
+        if (b->type == BT::STATUS) {  // before the n'th other server, or after the last; saved as [general] server_order
+            std::vector<std::unique_ptr<Buffer>> mine, rest;
+            for (auto& p : bufs) (p->srv == sv ? mine : rest).push_back(std::move(p));
+            size_t pos = 0;
+            int seen = 0;
+            for (size_t i = 0; i < rest.size(); i++) {
+                if (rest[i]->srv && rest[i]->type == BT::STATUS && ++seen == n) { pos = i; break; }
+                if (rest[i]->srv || !pos) pos = i + 1;  // after the last server's tabs (the console stays first)
+            }
+            rest.insert(rest.begin() + (long)pos, std::make_move_iterator(mine.begin()), std::make_move_iterator(mine.end()));
+            bufs = std::move(rest);
+            std::string v;
+            std::vector<Server*> ord;
+            for (auto& p : bufs)
+                if (p->srv && p->type == BT::STATUS) v += (v.empty() ? "" : ",") + p->srv->cfg.name, ord.push_back(p->srv);
+            auto rank = [&](auto& x) { return std::find(ord.begin(), ord.end(), x.get()) - ord.begin(); };
+            std::stable_sort(servers.begin(), servers.end(), [&](auto& x, auto& y) { return rank(x) < rank(y); });
+            if (ini_get(cfg, "general", "server_order") != v) {  // like last_nick: state, written at once
+                cfg["general"]["server_order"] = v;
+                if (!ini_save(cfg_path, Ini{{"general", {{"server_order", v}}}}, err)) unsaved["general"]["server_order"] = v;
+            }
+        } else {
+            auto it = std::find_if(bufs.begin(), bufs.end(), [&](auto& p) { return p.get() == b; });
+            auto mine = std::move(*it);
+            bufs.erase(it);
+            size_t pos = 0;  // after the n-1'th of its server's other tabs, or its last
+            int seen = 0;
+            for (size_t i = 0; i < bufs.size(); i++)
+                if (bufs[i]->srv == sv && (bufs[i]->type == BT::STATUS || seen++ < n - 1)) pos = i + 1;
+            bufs.insert(bufs.begin() + (long)pos, std::move(mine));
+            // the autojoin list follows the tabs: channels join (and their tabs open) in its order at the next start
+            auto& aj = sv->cfg.autojoin;
+            auto at = [&](const std::string& e) {
+                std::string ch = irc_lower(split(e, ' ')[0]);
+                for (size_t i = 0; i < bufs.size(); i++)
+                    if (bufs[i]->srv == sv && bufs[i]->type == BT::CHANNEL && irc_lower(bufs[i]->name) == ch) return i;
+                return bufs.size();
+            };
+            auto was = aj;
+            std::stable_sort(aj.begin(), aj.end(), [&](auto& x, auto& y) { return at(x) < at(y); });
+            if (aj != was) {
+                std::string v, sec = "server." + sv->cfg.name;
+                for (auto& e : aj) v += (v.empty() ? "" : ",") + e;
+                cfg[sec]["autojoin"] = unsaved[sec]["autojoin"] = v;
+                save_section(*this, sec, b);
+            }
+        }
+        dirty = true;
+        notify(Ev::BUFFER, b);
         return;
     }
     if (cmd == "close" || cmd == "wc") { close(b); return; }

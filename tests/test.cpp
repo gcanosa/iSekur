@@ -214,6 +214,44 @@ int main() {
     Buffer* chb = core.open(ts, BT::CHANNEL, "#c");
     chb->joined = true;
     auto feed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(ts, mm); };
+    {  // /move N: among the server's tabs, after its server tab; a drag runs it
+        Buffer *m1 = core.open(ts, BT::CHANNEL, "#m1"), *m2 = core.open(ts, BT::QUERY, "m2");
+        auto names = [&]() { std::string o; for (auto& p : core.bufs) if (p->srv == ts) o += p->name + ","; return o; };
+        std::string st = ts->status->name + ",";
+        assert(names() == st + "#c,#m1,m2,");
+        core.exec(m2, "/move 1");
+        assert(names() == st + "m2,#c,#m1,");
+        core.exec(m2, "/move 2");
+        assert(names() == st + "#c,m2,#m1,");
+        core.exec(m2, "/move 9");
+        assert(names() == st + "#c,#m1,m2,");
+        // the autojoin list follows the channel tabs, written to the config at once
+        core.cfg_path = "build/test-move.conf";
+        unlink(core.cfg_path.c_str());
+        ts->cfg.autojoin = {"#x", "#m1 key", "#c"};
+        core.exec(m1, "/move 1");
+        assert(names() == st + "#m1,#c,m2,");
+        assert((ts->cfg.autojoin == std::vector<std::string>{"#m1 key", "#c", "#x"}));
+        Ini disk;
+        assert(ini_load(core.cfg_path, disk) && ini_get(disk, "server.t", "autojoin") == "#m1 key,#c,#x");
+        // a server tab moves with its tabs, among the servers: [general] server_order
+        ServerCfg uc;
+        uc.name = "u", uc.nick = "me";
+        Server* us = core.add_server(uc);
+        Buffer* uch = core.open(us, BT::CHANNEL, "#u");
+        auto order = [&]() { std::string o; for (auto& p : core.bufs) if (p->srv) o += p->name + ","; return o; };
+        std::string before = order();
+        core.exec(us->status, "/move 1");
+        assert(order().rfind("u,#u,", 0) == 0 && core.bufs[0]->srv == nullptr);  // the console stays first
+        assert(ini_load(core.cfg_path, disk) && ini_get(disk, "general", "server_order") == "u,t");
+        assert(core.servers[0].get() == us);
+        core.exec(us->status, "/move 9");  // past the last: at the end again
+        assert(order() == before && ini_load(core.cfg_path, disk) && ini_get(disk, "general", "server_order") == "t,u");
+        core.close(uch), core.close(us->status);
+        unlink(core.cfg_path.c_str()), core.cfg_path.clear();
+        ts->cfg.autojoin.clear(), core.cfg.erase("server.t"), core.cfg["general"].erase("server_order");
+        core.close(m1), core.close(m2);
+    }
     auto sent = [&]() { std::string o = ts->conn.out; ts->conn.out.clear(); return o; };
     feed(":me!u@h NICK XXX");  // a reconnect keeps the nick we had, not cfg.nick
     assert(ts->nick == "XXX" && ts->last_nick == "XXX");
