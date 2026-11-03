@@ -44,8 +44,8 @@ button, input { font: inherit; color: inherit; }
 #side .srv { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
 #side .tab { display: flex; gap: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
 #side .tab .n { color: var(--muted); min-width: 1.6em; text-align: right; }
-#side .tab:hover { background: #ffffff08; }
-.light #side .tab:hover, .light #setnav button:hover, .light .l:hover { background: #0000000a; }
+#side .tab:not(.active):hover { background: #ffffff08; }
+.light #side .tab:not(.active):hover, .light #setnav button:hover, .light .l:hover { background: #0000000a; }
 .light dialog::backdrop { background: #0005; }
 #side .srv[data-id] { cursor: pointer; user-select: none; }
 #side .srv[data-id]:hover { color: var(--fg); }
