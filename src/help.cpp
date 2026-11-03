@@ -342,7 +342,8 @@ static const std::vector<CmdInfo> CMDS = {
      "Unknown commands are sent to the server as typed, so everything your server supports works.",
      {"/whois alice"}},
     {"away", "Server", "[message]", "Set or clear away",
-     "With a message marks you away, without one clears it. A manual /away turns off auto-away until you come back.",
+     "With a message marks you away, without one clears it. A manual /away turns off auto-away until you come back. "
+     "auto_away and away_announce (say it in your channels, off by default) can be set per network in its [server.name] section.",
      {"/away lunch", "/away"}},
     {"mode", "Server", "[target] modes [args]", "Change channel or user modes",
      "In a channel's tab the channel is the target when you start with + or -, and /mode "

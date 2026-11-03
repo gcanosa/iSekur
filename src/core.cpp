@@ -350,7 +350,7 @@ static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Messages", {"hilight_window", "bell_notifications", "paste_confirm", "quit_message", "part_message",
                   "ctcp_version", "ctcp_time", "ctcp_ping"}},
     {"Channels", {"rejoin_on_kick", "history_fetch"}},
-    {"Away", {"auto_away", "auto_away_idle", "away_message"}},
+    {"Away", {"auto_away", "auto_away_idle", "away_message", "away_announce"}},
     {"Logs", {"log", "log_dir", "log_history", "log_rotate"}},
     {"Security", {"lock", "lock_idle", "lock_password_hash", "pam_service", "exec_timeout", "exec_web"}},
     {"Network", {"flood_burst", "flood_interval_ms"}},
@@ -362,6 +362,7 @@ static const std::vector<SetGroup> SERVER_GROUPS = {
     {"Login", {"password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key"}},
     {"Channels", {"autojoin", "rejoin_on_kick", "e2e_keys"}},
     {"Messages", {"hilight_words", "ignore"}},
+    {"Away", {"auto_away", "away_announce"}},
 };
 struct SetPlace { int sec, key; std::string grp; };  // sort keys; the group's name
 static SetPlace set_place(const std::string& sec, const std::string& key) {
@@ -418,7 +419,8 @@ std::vector<Core::SetRow> Core::setting_rows() const {
                  {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
                  {"autoconnect", "true"}, {"auto_identify", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
                  {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
-                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""}})
+                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""},
+                 {"auto_away", opt(nullptr, "auto_away", "on")}, {"away_announce", opt(nullptr, "away_announce", "off")}})
             if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
     }
     std::vector<SetRow> out;

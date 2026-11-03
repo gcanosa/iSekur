@@ -328,17 +328,28 @@ void Core::set_attached(bool a) {
 
 // auto_away (on): away when nobody has been attached for 30s (daemon mode,
 // no browser) or, with auto_away_idle = N, after N minutes without input.
-// A manual /away is left alone.
+// A manual /away is left alone. [server.X] auto_away = off turns it off on that
+// network only (and brings you back there if it had set you away).
+// away_announce (off): also /me it in that network's joined channels.
 void Core::auto_away(Server* s, time_t now) {
-    if (!opt_on(s, "auto_away", true)) return;
     int idle = atoi(opt(s, "auto_away_idle", "0").c_str());
-    bool want = (!attached && now - detached_at >= 30) || (idle > 0 && now - last_input >= idle * 60);
+    bool want = opt_on(s, "auto_away", true) && ((!attached && now - detached_at >= 30) || (idle > 0 && now - last_input >= idle * 60));
+    auto announce = [&](const std::string& t) {
+        if (!opt_on(s, "away_announce", false)) return;
+        std::vector<Buffer*> chans;  // say() may add lines: collect first
+        for (auto& b : bufs)
+            if (b->srv == s && b->type == BT::CHANNEL && b->joined) chans.push_back(b.get());
+        for (Buffer* b : chans) say(b, t, true);
+    };
+    std::string msg = opt(s, "away_message", "Not here right now");
     if (want && !s->away && !s->auto_away) {
         s->auto_away = true;
-        s->send("AWAY :" + opt(s, "away_message", "Not here right now"));
+        s->send("AWAY :" + msg);
+        announce("is away: " + msg);
     } else if (!want && s->auto_away && s->away) {
         s->auto_away = false;
         s->send("AWAY");
+        announce("is back");
     }
 }
 

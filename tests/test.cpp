@@ -831,6 +831,31 @@ int main() {
     assert(mirc_strip(lb->lines[2].text).rfind(" 1.  #big", 0) == 0);
     core.select(chb);
 
+    {  // auto-away per network; away_announce /me's it in the joined channels, off by default
+        int fl = ts->flood_ms;
+        ts->flood_ms = 0, ts->sendq.clear(), sent();
+        core.attached = false, core.detached_at = 0;
+        core.cfg["server.t"]["auto_away"] = "off";
+        core.auto_away(ts, 1000);
+        assert(!ts->auto_away && sent().empty());
+        core.cfg["server.t"]["auto_away"] = "on";
+        core.auto_away(ts, 1000);
+        assert(ts->auto_away && sent() == "AWAY :Not here right now\r\n");  // no announce
+        ts->away = true;
+        core.cfg["server.t"]["auto_away"] = "off";  // turned off while away: back
+        core.auto_away(ts, 1000);
+        assert(!ts->auto_away && sent() == "AWAY\r\n");
+        ts->away = false;  // the server's 305
+        core.cfg["server.t"]["auto_away"] = "on", core.cfg["general"]["away_announce"] = "on";
+        core.auto_away(ts, 1000);
+        assert(sent() == "AWAY :Not here right now\r\nPRIVMSG #c :\x01" "ACTION is away: Not here right now\x01\r\n");
+        ts->away = true, core.attached = true;
+        core.auto_away(ts, 1000);
+        assert(sent() == "AWAY\r\nPRIVMSG #c :\x01" "ACTION is back\x01\r\n");
+        ts->away = false;
+        core.cfg["server.t"].erase("auto_away"), core.cfg["general"].erase("away_announce");
+        ts->flood_ms = fl;
+    }
     core.exec(home, "/detach");  // nothing attached (the webchat typed it)
     assert(!core.detach_req && home->lines.back().kind == LK::ERROR);
     core.tty = true;

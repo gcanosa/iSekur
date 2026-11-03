@@ -38,7 +38,7 @@ that mirrors your live session in a browser, bouncer style.
 - `/grep [-all] text` searches the scrollback
 - Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`
 - `/help` with colors, details and examples; commands complete with Tab as you type
-- Auto-away when nothing is attached, and catch-up from IRCv3 chathistory on join
+- Auto-away when nothing is attached (on or off per network, optionally announced in your channels), and catch-up from IRCv3 chathistory on join
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), a × on the hovered tab to close it (it asks before leaving a channel or disconnecting), folding networks, Alt+A for the next active tab and the theme's tab colors
