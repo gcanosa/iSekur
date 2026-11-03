@@ -73,6 +73,7 @@ private:
     std::string stat_json();  // the status line: per network umodes and lag, status_info
     std::string last_keys, last_stat;
     time_t last_stat_at = 0;
+    time_t ws_seen = 0;  // last time a browser was attached
     void files(Client& cl, const std::string& path, const std::map<std::string, std::string>& h);  // dcc_web
     void feed(Client& cl);
 };

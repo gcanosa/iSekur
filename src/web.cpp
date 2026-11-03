@@ -341,6 +341,7 @@ void Web::process(const std::vector<pollfd>& v) {
         }
     }
     for (auto& cl : clients) {
+        if (cl->ws && !cl->conn.closing) ws_seen = now;
         if (!cl->ws) {  // idle HTTP connections; a download only once it stops moving
             if (now - cl->since > 30) dead.push_back(cl.get());
             continue;
@@ -461,6 +462,7 @@ void Web::http(Client& cl) {
             token = random_hex(32);
             sessions[sha256_hex(token)] = now + SESSION_TTL;
             save_sessions();
+            ws_seen = 0;  // a login is an attach: its page asks for the lock password
             c.print(c.bufs.front().get(), LK::INFO, "Webchat login from " + cl.conn.host);
             respond(cl.conn, 200, "OK", "application/json", "{}",
                     "Set-Cookie: isekur_sid=" + token + "; Path=/; HttpOnly; SameSite=Strict" +
@@ -486,6 +488,8 @@ void Web::http(Client& cl) {
         SHA1((const unsigned char*)k2.data(), k2.size(), sha);
         cl.conn.out += "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                        "Sec-WebSocket-Accept: " + b64(std::string((char*)sha, 20)) + "\r\n\r\n";
+        // a browser coming back (not a reload or a dropped connection) is an attach: lock, like the terminal
+        if (!attached() && now - ws_seen > 30 && c.lock_on() && !c.locked) c.set_lock(true);
         cl.ws = true;
         snapshot(cl);
         ws_frames(cl);
