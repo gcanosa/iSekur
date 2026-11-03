@@ -47,10 +47,10 @@ void Core::load_config() {
     for (auto& l : banner_lines(theme, opt_on(nullptr, "banner_mono", false))) print(home, LK::INFO, l);
     if (created)
         print(home, LK::INFO, "Wrote " + cfg_path + " with every setting: edit it, or /set key value and /save. "
-                              "Add a server with /server irc.example.org 6697 -tls");
+                              "Add a server with /server irc.sekurnet.org 6697 -tls -name sekurnet");
     else if (!found)
         print(home, LK::INFO, "No config at " + cfg_path +
-                                  " - see iSekur.conf.example. Try /server irc.example.org 6697 -tls");
+                                  " - see iSekur.conf.example. Try /server irc.sekurnet.org 6697 -tls -name sekurnet");
     print(home, LK::INFO, "Welcome to " + version_string() + ". /help lists commands.");
     print(home, LK::INFO, "\x03" "01,09" "\x02" " NEW HERE? " "\x0f" " Type " "\x03" "11" "\x02" "/guide" "\x0f"
                           " for a quick tour of the first steps and features");

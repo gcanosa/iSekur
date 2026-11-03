@@ -1243,7 +1243,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     if (ch == 'n') {
         sw.open = false;
         c.ask_pass(c.active, "server", [this](const std::string& v) { if (!v.empty()) c.exec(c.active, "/server " + v); }, false, "New server",
-                   {"host [port] [-tls] [-noverify] [-name name] [-nick nick]", "e.g. irc.libera.chat 6697 -tls -name libera"});
+                   {"host [port] [-tls] [-noverify] [-name name] [-nick nick]", "e.g. irc.sekurnet.org 6697 -tls -name sekurnet"});
         return;
     }
     if (ch == 'e') k = TB_KEY_ENTER, ch = 0;

@@ -21,7 +21,7 @@ static const std::vector<CmdInfo> CMDS = {
      "yourlogin, then /set server.twitch.password oauth:yourtoken and /connect twitch; /join #streamer "
      "(lowercase is done for you). Names, colors, badges, subs, raids, timeouts and room modes show up; "
      "WHOIS, DCC and Twitch's /ban /timeout don't exist over its IRC.",
-     {"/server irc.libera.chat 6697 -tls -name libera", "/server irc.example.org", "/server 10.0.0.5 6697 -tls -noverify",
+     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "
@@ -34,7 +34,7 @@ static const std::vector<CmdInfo> CMDS = {
      {"/twitch", "/twitch token", "/join somestreamer"}},
     {"connect", "Connection", "[name]", "Reconnect a configured server",
      "Connects the server of the current tab, or the [server.<name>] you give.",
-     {"/connect", "/connect libera"}},
+     {"/connect", "/connect sekurnet"}},
     {"servers", "Connection", "", "Manage your servers",
      "The terminal: the settings window at the first server, where c connects the selected one, x deletes it (it asks "
      "first) and n adds one; its keys edit it. The webchat: the Servers window (the server-rack button). Elsewhere it "
@@ -227,7 +227,7 @@ static const std::vector<CmdInfo> CMDS = {
      "switches and a theme list. With a key it shows it; with a value it changes it right away. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
      "/set key \"\" empties it, which means its default again.",
-     {"/set", "/set theme neon", "/set server.libera.autojoin #a,#b", "/set log on"}},
+     {"/set", "/set theme neon", "/set server.sekurnet.autojoin #a,#b", "/set log on"}},
     {"reload", "Settings", "", "Re-read the config file",
      "Applies an edited config without restarting: theme, keys, mouse, colors, bell, logging and "
      "the rest right away; server settings on the next /connect; [web] after /web restart. "
