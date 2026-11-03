@@ -354,7 +354,7 @@ static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Logs", {"log", "log_dir", "log_history", "log_rotate"}},
     {"Security", {"lock", "lock_idle", "lock_password_hash", "pam_service", "exec_timeout", "exec_web"}},
     {"Network", {"flood_burst", "flood_interval_ms"}},
-    {"Files", {"dcc_dir", "dcc_ip", "dcc_ports", "dcc_web"}},
+    {"Files", {"dcc", "dcc_dir", "dcc_ip", "dcc_ports", "dcc_web"}},
 };
 static const std::vector<SetGroup> SERVER_GROUPS = {
     {"Connection", {"host", "port", "tls", "tls_verify", "autoconnect"}},

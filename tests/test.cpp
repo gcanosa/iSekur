@@ -862,6 +862,14 @@ int main() {
         std::string port = std::to_string(ntohs(la.sin_port));
         system("rm -rf build/dcctest");
         core.cfg["general"]["dcc_dir"] = "build/dcctest";
+        core.cfg["server.t"]["dcc"] = "on";  // a server's own dcc isn't read: [general] decides
+        core.cfg["general"]["dcc"] = "off";  // off: the offer is dropped, /dcc get and send refused
+        feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND x.txt 2130706433 " + port + " 11\x01");
+        Buffer* nb = core.active && core.active->srv == ts ? core.active : ts->status;  // where DCC news goes
+        assert(core.dccs.empty() && nb->lines.back().text.find("dcc is off") != std::string::npos);
+        core.exec(chb, "/dcc send bob x.txt");
+        assert(core.dccs.empty() && chb->lines.back().text == "DCC is off (/set dcc on)");
+        core.cfg["server.t"].erase("dcc"), core.cfg["general"].erase("dcc");
         feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND \"../.x/.hi there.txt\" 2130706433 " + port + " 11\x01");
         assert(core.dccs.size() == 1 && core.dccs[0]->file == "hi there.txt" && core.dccs[0]->host == "127.0.0.1");
         feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND x ::1 0 5 tok\x01");  // passive: not taken

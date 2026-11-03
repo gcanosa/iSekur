@@ -126,6 +126,10 @@ static void receive(Core& c, Dcc* d) {
 void Core::dcc_ctcp(Server* s, const std::string& nick, const std::string& arg) {
     std::string type = arg.substr(0, arg.find(' '));
     for (auto& ch : type) ch = (char)toupper((unsigned char)ch);
+    if (!opt_on(nullptr, "dcc", true)) {  // dcc = off ([general] only): nothing comes in, they get no answer
+        print(where(*this, s), LK::INFO, "DCC " + type + " from " + nick + " dropped (dcc is off: /set dcc on)");
+        return;
+    }
     std::string file;
     std::vector<std::string> w;
     bool ok = arg.size() > type.size() && split_file(arg.substr(type.size() + 1), file, w);
@@ -334,6 +338,10 @@ void Core::dcc_cmd(Buffer* b, const std::string& args) {
             print(b, LK::INFO, "#" + id + (d->send ? " ⇡ " : " ⇣ ") + d->file + " (" + of_size(d.get()) + ") " +
                                    (d->send ? "to " : "from ") + d->nick + ": " + st);
         }
+        return;
+    }
+    if ((sub == "get" || sub == "send") && !opt_on(nullptr, "dcc", true)) {
+        print(b, LK::ERROR, "DCC is off (/set dcc on)");
         return;
     }
     if (sub == "get") {

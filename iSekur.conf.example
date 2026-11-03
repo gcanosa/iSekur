@@ -100,6 +100,9 @@ ctcp_version = on
 ctcp_time    = on
 ctcp_ping    = on
 
+# DCC file transfers: off drops offers people send you and turns off
+# /dcc get and /dcc send, on every network.
+dcc     = on
 # Files sent to you (DCC SEND) wait for /dcc get, then download here; the
 # status bar shows the progress. On a VPS that's the VPS's disk.
 dcc_dir = ~/Downloads

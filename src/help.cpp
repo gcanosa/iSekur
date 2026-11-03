@@ -274,7 +274,8 @@ static const std::vector<CmdInfo> CMDS = {
      "dcc_ports (e.g. 5000-5010) to this machine. Transfers run in the background with their "
      "progress in the status bar and the webchat. /dcc close refuses an offer, cancels a transfer "
      "or takes a finished one off the list. With dcc_web on, the webchat's Files window downloads "
-     "what's in dcc_dir, like a seedbox. Passive DCC is not supported yet.",
+     "what's in dcc_dir, like a seedbox. dcc = off (/set dcc off, every network) drops offers "
+     "and turns off /dcc get and send. Passive DCC is not supported yet.",
      {"/dcc", "/dcc get", "/dcc get 3", "/dcc send bob ~/notes.txt", "/dcc close bob"}},
     {"shell", "Session", "", "Open a real terminal in a tab",
      "Asks for this machine's login and password first (the user iSekur runs as, checked by "
