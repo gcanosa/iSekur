@@ -64,6 +64,7 @@ void Core::load_config() {
         if (sec.rfind("server.", 0) == 0) names.push_back(sec.substr(7));
     auto rank = [&](const std::string& n) { return std::find(order.begin(), order.end(), n) - order.begin(); };
     std::stable_sort(names.begin(), names.end(), [&](auto& x, auto& y) { return rank(x) < rank(y); });
+    sts_load();
     for (auto& n : names) {
         Server* s = add_server(server_cfg(n));
         if (s->cfg.autoconnect) connect(s);
@@ -347,7 +348,7 @@ static const std::vector<SetGroup> GENERAL_GROUPS = {
     {"Look", {"theme", "theme_dir", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
               "banner_mono", "banner_anim", "show_guide"}},
     {"Updates", {"check_updates"}},
-    {"Messages", {"hilight_window", "bell_notifications", "paste_confirm", "quit_message", "part_message",
+    {"Messages", {"hilight_window", "bell_notifications", "paste_confirm", "send_typing", "quit_message", "part_message",
                   "ctcp_version", "ctcp_time", "ctcp_ping"}},
     {"Channels", {"rejoin_on_kick", "history_fetch"}},
     {"Away", {"auto_away", "auto_away_idle", "away_message", "away_announce"}},
@@ -361,7 +362,7 @@ static const std::vector<SetGroup> SERVER_GROUPS = {
     {"Identity", {"nick", "altnick", "user", "realname"}},
     {"Login", {"password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key"}},
     {"Channels", {"autojoin", "rejoin_on_kick", "e2e_keys"}},
-    {"Messages", {"hilight_words", "ignore", "mute"}},
+    {"Messages", {"hilight_words", "ignore", "mute", "notify", "send_typing"}},
     {"Away", {"auto_away", "away_announce"}},
 };
 struct SetPlace { int sec, key; std::string grp; };  // sort keys; the group's name
@@ -419,7 +420,8 @@ std::vector<Core::SetRow> Core::setting_rows() const {
                  {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
                  {"autoconnect", "true"}, {"auto_identify", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
                  {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
-                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""}, {"mute", ""},
+                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""}, {"mute", ""}, {"notify", ""},
+                 {"send_typing", opt(nullptr, "send_typing", "on")},
                  {"auto_away", opt(nullptr, "auto_away", "on")}, {"away_announce", opt(nullptr, "away_announce", "off")}})
             if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
     }
@@ -520,9 +522,9 @@ std::string ctcp_version() {
 
 // ---- buffers ---------------------------------------------------------------
 Buffer* Core::find(Server* s, const std::string& name) {
-    std::string n = irc_lower(name);
+    std::string n = s ? s->lower(name) : irc_lower(name);
     for (auto& b : bufs)
-        if (b->srv == s && b->type != BT::STATUS && irc_lower(b->name) == n) return b.get();
+        if (b->srv == s && b->type != BT::STATUS && (s ? s->lower(b->name) : irc_lower(b->name)) == n) return b.get();
     return nullptr;
 }
 
@@ -685,7 +687,7 @@ std::string Core::bye(const Server* s, const std::string& key) const {
 bool Core::muted(const Buffer* b) const {
     if (!b->srv || b->type == BT::STATUS) return false;
     for (auto& ch : split(ini_get(cfg, "server." + b->srv->cfg.name, "mute"), ' '))
-        if (irc_lower(ch) == irc_lower(b->name)) return true;
+        if (b->srv->lower(ch) == b->srv->lower(b->name)) return true;
     return false;
 }
 
@@ -862,7 +864,7 @@ void Core::load_history(Buffer* b) {
     if (hist.size() > (size_t)n) hist.erase(hist.begin(), hist.end() - n);
     if (hist.empty()) return;
     for (auto& l : hist) {
-        l.self = irc_lower(l.nick) == irc_lower(b->srv->nick);
+        l.self = b->srv->lower(l.nick) == b->srv->lower(b->srv->nick);
         b->lines.push_back(l);  // not add(): history must not be logged again
     }
     b->lines.push_back(Line{time(nullptr), LK::INFO, "", "--- end of log history ---"});
@@ -911,6 +913,112 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
         if (!s->caps.count("echo-message"))
             add(b, Line{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? "\xf0\x9f\x94\x92 " + part : mask_services(b->name, part), true});
     }
+    s->typing_sent[s->lower(b->name)] = {now_ms(), false};  // a message ends typing, no "done" needed
+}
+
+// draft/multiline: the lines go as one message in a BATCH; a line over 400 bytes goes on in
+// draft/multiline-concat parts (cut on UTF-8 boundaries, nothing dropped)
+void Core::say_multi(Buffer* b, const std::vector<std::string>& lines) {
+    Server* s = b->srv;
+    std::string ref = "m" + std::to_string(now_ms());
+    s->send("BATCH +" + ref + " draft/multiline " + b->name);
+    for (auto& l : lines) {
+        for (size_t i = 0; i < l.size();) {
+            size_t e = std::min(l.size(), i + 400);
+            while (e < l.size() && e > i + 1 && ((unsigned char)l[e] & 0xc0) == 0x80) e--;
+            s->send("@batch=" + ref + (i ? ";draft/multiline-concat" : "") + " PRIVMSG " + b->name + " :" + l.substr(i, e - i));
+            i = e;
+        }
+        if (!s->caps.count("echo-message")) add(b, Line{time(nullptr), LK::MSG, s->nick, mask_services(b->name, l), true});
+    }
+    s->send("BATCH -" + ref);
+    s->typing_sent[s->lower(b->name)] = {now_ms(), false};
+}
+
+// +typing: "active" at most every 3s while there's text to send, "done" when it's gone (sent or erased);
+// best effort: never queued behind real lines, so it costs no flood budget
+void Core::typed(Buffer* b, const std::string& input) {
+    Server* s = b ? b->srv : nullptr;
+    if (!s || s->state != SS::CONNECTED || (b->type != BT::CHANNEL && b->type != BT::QUERY) || b->name[0] == '*' ||
+        b == pass_buf || !opt_on(s, "send_typing", true) || !s->tag_ok("typing"))
+        return;
+    bool text = !input.empty() && (input[0] != '/' || input.rfind("//", 0) == 0);
+    auto& st = s->typing_sent[s->lower(b->name)];
+    long long now = now_ms();
+    if (text == st.second && (!text || now - st.first < 3000)) return;
+    if (!s->sendq.empty()) return;
+    st = {now, text};
+    s->send_now(std::string("@+typing=") + (text ? "active" : "done") + " TAGMSG " + b->name);
+}
+
+// /notify: [server.X] notify = nicks, watched with MONITOR (or ISON once a minute where there's none)
+void Core::notify_start(Server* s) {
+    s->online.clear();
+    std::vector<std::string> watch = split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' ');
+    if (watch.empty()) return;
+    if (!s->isupport.count("MONITOR")) { s->ison_at = time(nullptr); return; }
+    int lim = atoi(s->isupport["MONITOR"].c_str());
+    if (lim > 0 && (int)watch.size() > lim) {
+        print(s->status, LK::ERROR, "/notify: " + s->cfg.name + " watches " + std::to_string(lim) + " nicks at most, the rest are left out");
+        watch.resize((size_t)lim);
+    }
+    std::string l;
+    for (auto& n : watch) {
+        if (!l.empty() && l.size() + n.size() > 400) s->send("MONITOR + " + l), l.clear();
+        l += (l.empty() ? "" : ",") + n;
+    }
+    s->send("MONITOR + " + l);
+}
+
+void Core::notify_seen(Server* s, const std::string& nick, bool on, const std::string& host) {
+    std::string k = s->lower(nick);
+    auto it = s->online.find(k);
+    bool known = it != s->online.end();
+    if (known && it->second == on) return;
+    s->online[k] = on;
+    if (!known && !on) return;  // offline when we started watching: nothing happened
+    std::string t = on ? "\x02" + nick + "\x02 is online" + (host.empty() ? "" : " (" + host + ")") : nick + " went offline";
+    add(s->status, Line{time(nullptr), LK::INFO, "", t, false, on});  // online: a hilight, copied to window 1
+    if (Buffer* q = find(s, nick); q && q->type == BT::QUERY) print(q, LK::INFO, t);
+    if (on) ring(s);
+}
+
+void Core::notify_cmd(Buffer* b, const std::string& args) {
+    Server* s = b->srv;
+    if (!s) { print(b, LK::ERROR, "/notify works in a server's tabs"); return; }
+    auto argv = split(args, ' ');
+    std::string sec = "server." + s->cfg.name;
+    std::vector<std::string> list = split(ini_get(cfg, sec, "notify"), ' ');
+    if (argv.empty()) {
+        if (list.empty()) { print(b, LK::INFO, "Nobody on /notify for " + s->cfg.name + ": /notify add nick"); return; }
+        std::string on, off;
+        for (auto& n : list) {
+            auto it = s->online.find(s->lower(n));
+            (it != s->online.end() && it->second ? on : off) += " " + n;
+        }
+        print(b, LK::INFO, "/notify on " + s->cfg.name + (s->state != SS::CONNECTED ? " (not connected):" + on + off
+                                                           : ": online" + (on.empty() ? " none" : on) + " \xc2\xb7 offline" + (off.empty() ? " none" : off)));
+        return;
+    }
+    if ((argv[0] != "add" && argv[0] != "del") || argv.size() < 2) { print(b, LK::ERROR, "Usage: /notify [add|del] nick [nick...]"); return; }
+    bool add = argv[0] == "add";
+    std::vector<std::string> changed;
+    for (size_t i = 1; i < argv.size(); i++) {
+        auto it = std::find_if(list.begin(), list.end(), [&](const std::string& n) { return s->lower(n) == s->lower(argv[i]); });
+        if (add && it == list.end()) list.push_back(argv[i]), changed.push_back(argv[i]);
+        if (!add && it != list.end()) list.erase(it), changed.push_back(argv[i]), s->online.erase(s->lower(argv[i]));
+    }
+    if (changed.empty()) { print(b, LK::INFO, add ? "Already on /notify" : "Not on /notify"); return; }
+    std::string v, c;
+    for (auto& n : list) v += (v.empty() ? "" : " ") + n;
+    for (auto& n : changed) c += (c.empty() ? "" : ",") + n;
+    cfg[sec]["notify"] = unsaved[sec]["notify"] = v;
+    if (s->state == SS::CONNECTED && s->motd_done) {
+        if (s->isupport.count("MONITOR")) s->send(std::string("MONITOR ") + (add ? "+ " : "- ") + c);
+        else if (add) s->ison_at = time(nullptr);
+    }
+    if (save_section(*this, sec, b))
+        print(b, LK::INFO, (add ? "Watching " : "No longer watching ") + c + " on " + s->cfg.name + " (saved)");
 }
 
 // the text after the first n words
@@ -928,6 +1036,32 @@ std::string after_words(const std::string& args, size_t n) {
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
     if (input.find('\n') != std::string::npos) {
+        std::vector<std::string> ls;
+        bool chat = true;
+        size_t bytes = 0;
+        for (auto l : split(input, '\n')) {
+            if (!l.empty() && l.back() == '\r') l.pop_back();
+            if (l.empty()) continue;
+            if (l[0] == '/' && l.rfind("//", 0) != 0) chat = false;
+            ls.push_back(l[0] == '/' ? l.substr(1) : l), bytes += l.size() + 1;
+        }
+        // a paste of plain lines: one draft/multiline message when the server takes it (and its limits allow)
+        Server* s = b->srv;
+        if (chat && ls.size() > 1 && s && s->state == SS::CONNECTED && s->caps.count("draft/multiline") && b != pass_buf &&
+            (b->type == BT::CHANNEL || b->type == BT::QUERY) && b->name[0] != '*' && !e2e_on(b)) {
+            size_t max_bytes = 0, max_lines = 0;
+            for (auto& kv : split(s->cap_vals["draft/multiline"], ',')) {
+                if (kv.rfind("max-bytes=", 0) == 0) max_bytes = (size_t)atol(kv.c_str() + 10);
+                if (kv.rfind("max-lines=", 0) == 0) max_lines = (size_t)atol(kv.c_str() + 10);
+            }
+            if ((!max_bytes || bytes <= max_bytes) && (!max_lines || ls.size() <= max_lines)) {
+                last_input = time(nullptr);
+                s->label_buf = b->id;
+                say_multi(b, ls);
+                s->label_buf = 0;
+                return;
+            }
+        }
         for (auto& l : split(input, '\n')) exec(b, l);
         return;
     }
@@ -960,6 +1094,12 @@ void Core::exec(Buffer* b, const std::string& input) {
     auto rest = [&](size_t n) { return after_words(args, n); };
     Server* s = b->srv;
     if (s) s->typed_in = b->id, s->typed_at = time(nullptr);
+    // labeled-response: every line this command sends is labeled with this tab
+    struct LabelScope {  // /server del may have deleted s by the end
+        Core& c; Server* s; int was;
+        ~LabelScope() { for (auto& sv : c.servers) if (sv.get() == s) s->label_buf = was; }
+    } label_scope{*this, s, s ? s->label_buf : 0};
+    if (s) s->label_buf = b->id;
     auto need = [&]() {
         if (s && s->state == SS::CONNECTED) return true;
         print(b, LK::ERROR, "Not connected to a server");
@@ -1243,9 +1383,9 @@ void Core::exec(Buffer* b, const std::string& input) {
             // the autojoin list follows the tabs: channels join (and their tabs open) in its order at the next start
             auto& aj = sv->cfg.autojoin;
             auto at = [&](const std::string& e) {
-                std::string ch = irc_lower(split(e, ' ')[0]);
+                std::string ch = sv->lower(split(e, ' ')[0]);
                 for (size_t i = 0; i < bufs.size(); i++)
-                    if (bufs[i]->srv == sv && bufs[i]->type == BT::CHANNEL && irc_lower(bufs[i]->name) == ch) return i;
+                    if (bufs[i]->srv == sv && bufs[i]->type == BT::CHANNEL && sv->lower(bufs[i]->name) == ch) return i;
                 return bufs.size();
             };
             auto was = aj;
@@ -1277,7 +1417,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         bool on = args == "on" || (args != "off" && !muted(b));
         std::string sec = "server." + s->cfg.name, v;
         for (auto& ch : split(ini_get(cfg, sec, "mute"), ' '))
-            if (!ch.empty() && irc_lower(ch) != irc_lower(b->name)) v += (v.empty() ? "" : " ") + ch;
+            if (!ch.empty() && s->lower(ch) != s->lower(b->name)) v += (v.empty() ? "" : " ") + ch;
         if (on) v += (v.empty() ? "" : " ") + b->name;
         cfg[sec]["mute"] = unsaved[sec]["mute"] = v;
         notify(Ev::BUFFER, b);
@@ -1371,6 +1511,11 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "nick") {
         if (argv.empty()) return;
+        if (s && s->isupport.count("NICKLEN") && atoi(s->isupport["NICKLEN"].c_str()) > 0 &&
+            argv[0].size() > (size_t)atoi(s->isupport["NICKLEN"].c_str())) {
+            print(b, LK::ERROR, "Nicks on " + s->cfg.name + " have " + s->isupport["NICKLEN"] + " characters at most");
+            return;
+        }
         if (s && s->state != SS::DISCONNECTED) s->send("NICK " + argv[0]);
         else if (s) s->cfg.nick = argv[0];
         return;
@@ -1388,7 +1533,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             std::string v;
             for (auto& bp : bufs) {
                 if (bp->srv != sv.get() || bp->type != BT::CHANNEL) continue;
-                auto k = sv->chan_keys.find(irc_lower(bp->name));
+                auto k = sv->chan_keys.find(sv->lower(bp->name));
                 aj.push_back(bp->name + (k == sv->chan_keys.end() ? "" : " " + k->second));
                 v += (v.empty() ? "" : ",") + aj.back();
             }
@@ -1419,13 +1564,86 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (save_section(*this, sec, b)) print(b, LK::INFO, s->cfg.name + (s->cfg.autoconnect ? " connects" : " no longer connects") + " when iSekur starts (saved)");
         return;
     }
+    if (cmd == "notify") { notify_cmd(b, args); return; }
     if (!need()) return;
+    // /reply nick text, /react emoji [nick]: their newest message here (msgid); /redact: your newest
+    auto last_from = [&](const std::string& nick, bool mine) -> Line* {
+        for (auto it = b->lines.rbegin(); it != b->lines.rend(); ++it)
+            if ((it->kind == LK::MSG || it->kind == LK::ACTION || it->kind == LK::NOTICE) && it->self == mine &&
+                (nick.empty() || s->lower(it->nick) == s->lower(nick)) && (mine || !nick.empty() || !it->msgid.empty()))
+                return &*it;
+        return nullptr;
+    };
+    bool chat = (b->type == BT::CHANNEL || b->type == BT::QUERY) && b->name[0] != '*';
+    if (cmd == "reply") {
+        if (argv.size() < 2 || !chat) { print(b, LK::ERROR, "Usage: /reply nick text (in a channel or query tab)"); return; }
+        Line* t = last_from(argv[0], false);
+        if (!t) { print(b, LK::ERROR, "No message from " + argv[0] + " in this tab"); return; }
+        std::string text = rest(1);
+        if (t->msgid.empty() || !s->tag_ok("reply") || e2e_on(b)) { say(b, t->nick + ": " + text); return; }  // no tags: the old way
+        std::string q = "\x1d\x03" "14\xe2\x86\xaa " + t->nick + ": " + reply_snippet(t->text) + "\x0f ";
+        auto parts = chunk(text, 400);
+        s->send("@+draft/reply=" + escape_tag(t->msgid) + " PRIVMSG " + b->name + " :" + parts[0]);
+        for (size_t i = 1; i < parts.size(); i++) s->send("PRIVMSG " + b->name + " :" + parts[i]);
+        if (!s->caps.count("echo-message"))
+            for (size_t i = 0; i < parts.size(); i++) add(b, Line{time(nullptr), LK::MSG, s->nick, (i ? "" : q) + parts[i], true});
+        s->typing_sent[s->lower(b->name)] = {now_ms(), false};
+        return;
+    }
+    if (cmd == "react") {
+        if (argv.empty() || !chat) { print(b, LK::ERROR, "Usage: /react emoji [nick] (in a channel or query tab)"); return; }
+        if (!s->tag_ok("react")) { print(b, LK::ERROR, s->cfg.name + " doesn't pass reactions (no message-tags, or CLIENTTAGDENY)"); return; }
+        Line* t = last_from(argv.size() > 1 ? argv[1] : "", false);
+        if (!t || t->msgid.empty()) { print(b, LK::ERROR, "No message to react to here" + std::string(argv.size() > 1 ? " from " + argv[1] : "")); return; }
+        s->send("@+draft/react=" + escape_tag(argv[0]) + ";+draft/reply=" + escape_tag(t->msgid) + " TAGMSG " + b->name);
+        if (!s->caps.count("echo-message"))
+            add(b, Line{time(nullptr), LK::INFO, s->nick, "You reacted " + argv[0] + " to " + t->nick + "'s message " + reply_snippet(t->text), true});
+        return;
+    }
+    if (cmd == "redact") {
+        if (!chat) { print(b, LK::ERROR, "/redact works in a channel or query tab"); return; }
+        if (!s->caps.count("draft/message-redaction")) { print(b, LK::ERROR, s->cfg.name + " can't delete messages (no draft/message-redaction)"); return; }
+        Line* t = last_from("", true);
+        while (t && t->msgid.empty()) t = nullptr;
+        if (!t) { print(b, LK::ERROR, "No message of yours to delete here (it needs a msgid: echo-message)"); return; }
+        s->send("REDACT " + b->name + " " + t->msgid + (args.empty() ? "" : " :" + args));
+        return;
+    }
+    if (cmd == "setname") {
+        if (args.empty()) { print(b, LK::ERROR, "Usage: /setname new real name"); return; }
+        if (!s->caps.count("setname")) { print(b, LK::ERROR, s->cfg.name + " can't change your real name while connected (no setname): /set realname and reconnect"); return; }
+        s->send("SETNAME :" + args);
+        return;
+    }
+    if (cmd == "register" || cmd == "verify") {  // draft/account-registration
+        if (!s->caps.count("draft/account-registration")) {
+            print(b, LK::ERROR, s->cfg.name + " has no account registration command: try /msg NickServ REGISTER password email");
+            return;
+        }
+        if (cmd == "verify") {
+            if (argv.size() != 2) { print(b, LK::ERROR, "Usage: /verify account code"); return; }
+            s->send("VERIFY " + argv[0] + " " + argv[1]);
+            return;
+        }
+        bool need_mail = s->cap_vals["draft/account-registration"].find("email-required") != std::string::npos;
+        std::string mail = argv.empty() ? "*" : argv[0];
+        if (mail == "*" && need_mail) { print(b, LK::ERROR, s->cfg.name + " needs an email: /register you@example.org"); return; }
+        int bid = b->id;
+        ask_pass(b, "password for the account " + s->nick, [this, s, bid, mail](const std::string& p) {
+            if (std::none_of(servers.begin(), servers.end(), [&](auto& sv) { return sv.get() == s; })) return;  // /server del meanwhile
+            s->reg_pass = p;
+            s->label_buf = bid;
+            s->send("REGISTER * " + mail + " :" + p);
+            s->label_buf = 0;
+        }, true, "Register " + s->nick, {"An account for your nick on " + s->cfg.name});
+        return;
+    }
     if (cmd == "join" || cmd == "j") {
         if (argv.empty()) return;
         std::string ch = s->is_chan(argv[0]) ? argv[0] : "#" + argv[0];
         if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
         s->send("JOIN " + ch + (argv.size() > 1 ? " " + argv[1] : ""));
-        if (argv.size() > 1) s->chan_keys[irc_lower(ch)] = argv[1];
+        if (argv.size() > 1) s->chan_keys[s->lower(ch)] = argv[1];
         return;
     }
     if (cmd == "autojoin") {  // /autojoin [add|del] [#chan [key]]: the server's autojoin list
@@ -1440,12 +1658,12 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (argv[0] != "add" && argv[0] != "del") { print(b, LK::ERROR, "Usage: /autojoin [add|del] [#channel [key]] or /autojoin snap [here]"); return; }
         std::string ch = argv.size() > 1 ? (s->is_chan(argv[1]) ? argv[1] : "#" + argv[1]) : b->name;
         if (!s->is_chan(ch)) { print(b, LK::ERROR, "Not a channel: name one, or run it in the channel's tab"); return; }
-        auto it = std::find_if(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(ch); });
+        auto it = std::find_if(aj.begin(), aj.end(), [&](const std::string& e) { return s->lower(split(e, ' ')[0]) == s->lower(ch); });
         if (argv[0] == "del") {
             if (it == aj.end()) { print(b, LK::ERROR, ch + " is not in autojoin"); return; }
             aj.erase(it);
         } else {
-            std::string key = argv.size() > 2 ? argv[2] : s->chan_keys.count(irc_lower(ch)) ? s->chan_keys[irc_lower(ch)] : "";
+            std::string key = argv.size() > 2 ? argv[2] : s->chan_keys.count(s->lower(ch)) ? s->chan_keys[s->lower(ch)] : "";
             std::string e = ch + (key.empty() ? "" : " " + key);
             if (it != aj.end()) *it = e;
             else aj.push_back(e);
@@ -1491,7 +1709,11 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "topic") {
         if (b->type != BT::CHANNEL) { print(b, LK::ERROR, "Not a channel"); return; }
         if (args.empty()) print(b, LK::TOPIC, "Topic: " + b->topic);
-        else s->send("TOPIC " + b->name + " :" + args);
+        else {
+            int max = s->isupport.count("TOPICLEN") ? atoi(s->isupport["TOPICLEN"].c_str()) : 0;
+            if (max > 0 && args.size() > (size_t)max) print(b, LK::ERROR, "That topic is " + std::to_string(args.size()) + " bytes: " + s->cfg.name + " keeps " + std::to_string(max));
+            s->send("TOPIC " + b->name + " :" + args);
+        }
         return;
     }
     if (chanop(b, cmd, args)) return;

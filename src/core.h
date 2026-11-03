@@ -71,7 +71,9 @@ struct Msg {
     const std::string& p(size_t i) const;  // "" if missing
 };
 bool irc_parse(const std::string& line, Msg& m);
-std::string irc_lower(const std::string& s);  // rfc1459 casemapping
+std::string irc_lower(const std::string& s, int casemap = 0);  // 0 rfc1459, 1 ascii, 2 strict-rfc1459 (005 CASEMAPPING)
+std::string escape_tag(const std::string& v);  // an IRCv3 tag value as it goes on the wire
+std::string reply_snippet(const std::string& text);  // “the first 40 characters…” of a line, for replies and reactions
 time_t parse_server_time(const std::string& iso);
 
 // ---- buffers ---------------------------------------------------------------
@@ -84,6 +86,7 @@ struct Line {
     bool nolog = false;  // /grep results: shown, never written to the log
     long long typed_at = 0;  // /typing: when it started typing itself out (ms), 0 = shown at once
     RGB color = -1;          // the nick's own color (Twitch "color" tag), -1 = theme's
+    std::string msgid = {};  // IRCv3 msgid tag: what /reply, /react and REDACT point at
 };
 // /typing: how many of a line's len visible characters show at now; ~30 a second, never over 2s a line
 inline size_t typed_chars(const Line& l, size_t len, long long now) {
@@ -111,7 +114,9 @@ struct Term {
     struct Buffer* b = nullptr;
     ~Term();  // hangs up the shell
 };
-struct NickEntry { std::string nick, prefix; bool away = false; std::string host; };  // host: user@host, "" = unknown
+// host: user@host, "" = unknown; account: logged in as (account-notify, account-tag, WHOX), "" = no or unknown;
+// realname: WHOX, SETNAME; bot: the 005 BOT mode (WHOX flags, the bot tag)
+struct NickEntry { std::string nick, prefix; bool away = false; std::string host, account, realname; bool bot = false; };
 struct Buffer {
     int id;
     BT type;
@@ -136,6 +141,9 @@ struct Buffer {
     int rot_min = 0;
     size_t rot_i = 0;
     time_t rot_at = 0;
+    std::map<std::string, long long> typing;  // +typing: irc_lower(nick) -> until when (ms) they're typing
+    time_t read_ts = 0;                       // draft/read-marker: read up to here (MARKREAD), on any client
+    time_t read_sent = 0;                     // the newest MARKREAD we sent
     ~Buffer() { if (log) fclose(log); }
 };
 
@@ -203,7 +211,24 @@ struct Server {
     std::string last_nick;  // set by a /nick of ours, used on reconnect and restart ([server.x] last_nick) over cfg.nick
     std::string prefix_modes = "ov", prefix_chars = "@+", chantypes = "#&";
     std::set<std::string> caps, caps_ls;  // enabled / advertised
+    std::map<std::string, std::string> cap_vals;  // CAP LS values: "sts" -> "port=6697,duration=..."
+    std::map<std::string, std::string> isupport;  // 005 tokens: "MONITOR" -> "100", "WHOX" -> ""
+    int casemap = 0;                       // 005 CASEMAPPING: irc_lower's mode
+    std::string lower(const std::string& x) const { return irc_lower(x, casemap); }
+    int sts_port = 0;                      // STS: TLS on this port, whatever cfg says (a policy or an upgrade)
     std::set<std::string> hist_batches;    // open chathistory BATCH ids
+    // labeled-response: label -> the tab the command was typed in; batch -> the label's tab
+    std::map<std::string, int> labels, batch_labels;
+    int label_buf = 0, label_next = 1;     // label_buf: Core::exec is running for that tab: its lines get labels
+    struct Multi { Msg open; std::string cmd; std::vector<std::string> lines; };
+    std::map<std::string, Multi> multi;    // draft/multiline batches being received
+    std::set<std::string> who_auto;        // channels whose WHO we asked for on join: the replies aren't shown
+    std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
+    time_t ison_at = 0;
+    bool motd_done = false;                // the first 376/422 of this connection: /notify starts
+    int ison_wait = 0;                     // our ISONs not yet answered: their 303s aren't shown
+    std::map<std::string, std::pair<long long, bool>> typing_sent;  // our +typing per target: when, active
+    std::string reg_pass;                  // /register: the password, for sasl_pass once it worked
     std::string inbuf;
     std::string chanmodes = "beI,k,l,imnpst";
     int max_modes = 3;                      // 005 MODES: mode changes per MODE line
@@ -225,6 +250,7 @@ struct Server {
     std::string to_self;  // echo-message: a message to our own nick comes twice (echo + delivery); the first one's msgid or text
     time_t to_self_at = 0;
     time_t ident_at = 0;   // our automatic NickServ IDENTIFY: its echo and NickServ's answers go to the server tab for a while
+    bool tag_ok(const std::string& tag) const;  // a client tag (no +) isn't in 005 CLIENTTAGDENY, and message-tags is on
     int typed_in = 0;      // the buffer id a /command for this server was last typed in: its replies go there
     time_t typed_at = 0;
     long long ping_sent_ms = 0;
@@ -359,6 +385,17 @@ struct Core {
     void on_readable(Server* s, short revents);
     void tick(time_t now);  // pings, timeouts, reconnects, auto-away
     void auto_away(Server* s, time_t now);
+    bool away_wanted(Server* s, time_t now) const;
+    void sts_load();                    // the STS policies file next to the config
+    std::map<std::string, std::pair<int, time_t>> sts;  // host -> TLS port, until
+    void sts_save();
+    void notify_cmd(Buffer* b, const std::string& args);  // /notify [add|del] nick: MONITOR (or ISON) watch list
+    void notify_start(Server* s);       // after 001: MONITOR + the list
+    void notify_seen(Server* s, const std::string& nick, bool on, const std::string& host = "");
+    void typed(Buffer* b, const std::string& input);  // the input line changed: +typing=active / done (send_typing)
+    void mark_read(Server* s, time_t now);  // draft/read-marker: MARKREAD for the tabs on screen
+    Line* by_msgid(Buffer* b, const std::string& id);
+    void say_multi(Buffer* b, const std::vector<std::string>& lines);  // draft/multiline: a paste as one message
     int drain();            // flush send queues; ms until the next one is due
     bool ignored(const Server* s, const std::string& prefix) const;  // per network: [server.X] ignore
 

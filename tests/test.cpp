@@ -1119,6 +1119,192 @@ int main() {
         assert(z->status->lines.back().text == "Password required");
     }
 
+    {  // IRCv3: STS, ISUPPORT, WHOX, accounts, typing, replies, reactions, labels, standard replies, redaction,
+       // read markers, rename, MONITOR / ISON, multiline
+        assert(irc_lower("Nick[A]\\~", 1) == "nick[a]\\~" && irc_lower("Nick[A]\\~", 2) == "nick{a}|~");
+        assert(escape_tag("a b;c\\d") == "a\\sb\\:c\\\\d");
+        ServerCfg vc;
+        vc.name = "v3", vc.nick = "me", vc.host = "irc.v3.test";
+        Server* v = core.add_server(vc);
+        v->flood_ms = 0;
+        auto vf = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(v, mm); };
+        auto vs = [&]() { std::string o = v->conn.out; v->conn.out.clear(); return o; };
+        std::string path = "build/test-v3.conf";
+        remove(path.c_str()), remove("build/sts");
+        std::swap(core.cfg_path, path);
+        // STS over plain text: TLS on its port, at once, nothing requested
+        v->state = SS::REGISTERING;
+        vf(":srv CAP * LS :sts=port=6697,duration=300 message-tags");
+        assert(v->sts_port == 6697 && v->state == SS::DISCONNECTED && v->reconnect_at && vs().empty());
+        // over verified TLS: the policy is kept, in the sts file next to the config
+        v->conn.tls = 1, v->state = SS::REGISTERING, v->caps_ls.clear();
+        vf(":srv CAP * LS :sts=duration=300 message-tags labeled-response batch draft/multiline=max-bytes=4096,max-lines=3 "
+           "draft/read-marker draft/message-redaction setname account-tag account-notify extended-join echo-message");
+        assert(core.sts.count("irc.v3.test") && core.sts["irc.v3.test"].first == 6697);
+        core.sts.clear(), core.sts_load();
+        assert(core.sts.count("irc.v3.test"));
+        std::string o = vs();
+        assert(o.rfind("CAP REQ :", 0) == 0 && o.find("sts") == std::string::npos && o.find("labeled-response") != std::string::npos);
+        vf(":srv CAP me ACK :message-tags labeled-response batch draft/multiline draft/read-marker draft/message-redaction setname account-tag account-notify extended-join echo-message");
+        assert(vs() == "CAP END\r\n");
+        vf(":srv 001 me :Welcome");
+        vs();
+        vf(":srv 005 me CASEMAPPING=ascii MONITOR=2 WHOX BOT=B CLIENTTAGDENY=*,-typing,-draft/react,-draft/reply NICKLEN=9 :are supported");
+        assert(v->casemap == 1 && v->isupport["MONITOR"] == "2" && v->tag_ok("typing") && v->tag_ok("react") && !v->tag_ok("foo"));
+        vf(":srv 005 me -NICKLEN :are supported");
+        assert(!v->isupport.count("NICKLEN"));
+        // our join: NAMES, then WHOX fills accounts, real names, away and bots, and none of it is shown
+        vf(":me!u@h JOIN #v3 * :Me");
+        Buffer* vb = core.find(v, "#v3");
+        assert(vb && v->who_auto.count("#v3"));
+        vs();
+        vf(":srv 353 me = #v3 :@me Bob[x] bot1");
+        vf(":srv 366 me #v3 :End of /NAMES list.");
+        assert(vs() == "WHO #v3 %tcuhnfar,777\r\n");
+        size_t n0 = vb->lines.size();
+        vf(":srv 354 me 777 #v3 ~b b.host Bob[x] G acct1 :Bob Real");
+        vf(":srv 354 me 777 #v3 ~t t.host bot1 HB 0 :I am a bot");
+        vf(":srv 315 me #v3 :End of WHO list");
+        assert(vb->lines.size() == n0 && v->who_auto.empty());
+        NickEntry& bob = vb->nicks["bob[x]"];  // ascii casemapping: [ stays [
+        assert(bob.away && bob.account == "acct1" && bob.realname == "Bob Real" && bob.host == "~b@b.host");
+        assert(vb->nicks["bot1"].bot && vb->nicks["bot1"].account.empty());
+        vf(":Bob[x]!b@h ACCOUNT *");
+        assert(bob.account.empty());
+        vf("@account=acct2 :Bob[x]!b@h PRIVMSG #v3 :hi");
+        assert(bob.account == "acct2");
+        vf(":Bob[x]!b@h SETNAME :New Name");
+        assert(bob.realname == "New Name");
+        vf(":carol!c@h JOIN #v3 cacct :Carol C");
+        assert(vb->nicks["carol"].account == "cacct" && vb->nicks["carol"].realname == "Carol C");
+        vf(":bob{x}!z@h JOIN #v3");  // ascii: someone else than Bob[x]
+        assert(vb->nicks.count("bob{x}") && vb->nicks.count("bob[x]"));
+        // +typing in, ended by their message
+        vf("@+typing=active :carol!c@h TAGMSG #v3");
+        assert(vb->typing.count("carol"));
+        vf(":carol!c@h PRIVMSG #v3 :done typing");
+        assert(!vb->typing.count("carol"));
+        // msgid, replies (one to us hilights), reactions
+        vf("@msgid=m1 :me!u@h PRIVMSG #v3 :my words here");
+        assert(vb->lines.back().msgid == "m1" && vb->lines.back().self);
+        vf("@msgid=m2;+draft/reply=m1 :carol!c@h PRIVMSG #v3 :agreed");
+        assert(vb->lines.back().hilight && mirc_strip(vb->lines.back().text) == "↪ me: “my words here” agreed");
+        vf("@+draft/react=\U0001F44D;+draft/reply=m2 :Bob[x]!b@h TAGMSG #v3");
+        assert(vb->lines.back().text == "Bob[x] reacted \U0001F44D to carol's message “" "agreed”");
+        core.exec(vb, "/reply carol sure");
+        assert(vs() == "@+draft/reply=m2 PRIVMSG #v3 :sure\r\n");
+        core.exec(vb, "/react \U0001F389 carol");
+        assert(vs() == "@+draft/react=\U0001F389;+draft/reply=m2 TAGMSG #v3\r\n");
+        // labeled-response: the answer goes to the tab the command was typed in, whatever is on screen
+        core.select(v->status);
+        auto label = [&](const std::string& out) { assert(out.rfind("@label=", 0) == 0); return out.substr(7, out.find(' ') - 7); };
+        core.exec(vb, "/whois carol");
+        std::string lab = label(vs());
+        v->typed_at = 0;  // no 30s guess: only the label says where
+        vf("@label=" + lab + " :srv 401 me carol :No such nick");
+        assert(vb->lines.back().text.find("No such nick") != std::string::npos && v->labels.empty());
+        core.exec(vb, "/quote CHATHISTORY LATEST #v3 * 10");
+        lab = label(vs()), v->typed_at = 0;
+        vf("@label=" + lab + " :srv FAIL CHATHISTORY INVALID_TARGET #v3 :No history here");
+        assert(vb->lines.back().kind == LK::ERROR && vb->lines.back().text == "CHATHISTORY: No history here (INVALID_TARGET #v3)");
+        core.exec(vb, "/quote WHO x");
+        lab = label(vs()), v->typed_at = 0;
+        vf("@label=" + lab + " :srv BATCH +lb labeled-response");
+        vf("@batch=lb :srv 352 me * u h srv x H :0 X");
+        vf(":srv BATCH -lb");
+        assert(vb->lines.back().text.find("u h srv x") != std::string::npos && v->batch_labels.empty());
+        core.select(vb);
+        // redaction: theirs shows as deleted, /redact deletes our newest
+        vf(":carol!c@h REDACT #v3 m2 :oops");
+        Line* l2 = core.by_msgid(vb, "m2");
+        assert(l2 && mirc_strip(l2->text) == "[message deleted: oops]" && !l2->hilight);
+        core.exec(vb, "/redact");
+        assert(vs().find(" REDACT #v3 m1\r\n") != std::string::npos);
+        // read markers: another client read it all; we tell the server what's on screen, once
+        vb->activity = 2, vb->unread = 3;
+        vf(":srv MARKREAD #v3 timestamp=2099-01-01T00:00:00.000Z");
+        assert(vb->activity == 0 && vb->unread == 0);
+        Buffer* dq = core.open(v, BT::QUERY, "dave");
+        core.add(dq, Line{1700000000, LK::MSG, "dave", "yo"});
+        core.select(dq), core.attached = true;
+        core.mark_read(v, time(nullptr));
+        assert(vs() == "MARKREAD dave timestamp=2023-11-14T22:13:20.999Z\r\n");
+        core.mark_read(v, time(nullptr));
+        assert(vs().empty());
+        core.select(vb);
+        vf(":srv RENAME #v3 #v4 :moved");
+        assert(vb->name == "#v4" && core.find(v, "#v4") == vb && core.find(v, "#v3") == nullptr);
+        // /notify: MONITOR from the end of the MOTD, within its limit
+        core.exec(vb, "/notify add alice zed");
+        assert(core.cfg["server.v3"]["notify"] == "alice zed" && vs().find("MONITOR") == std::string::npos);
+        vf(":srv 376 me :End of /MOTD command.");
+        assert(vs().find("MONITOR + alice,zed\r\n") != std::string::npos);
+        vf(":srv 730 me :alice!a@a.host");
+        assert(v->online["alice"] && v->status->lines.back().text.find("is online (a@a.host)") != std::string::npos && v->status->lines.back().hilight);
+        vf(":srv 731 me :zed");  // offline from the start: nothing to say
+        vf(":srv 731 me :alice");
+        assert(v->status->lines.back().text == "alice went offline");
+        core.exec(vb, "/notify del zed");
+        assert(vs().find("MONITOR - zed") != std::string::npos);
+        // ...and ISON where there's no MONITOR
+        v->isupport.erase("MONITOR"), v->motd_done = false;
+        vf(":srv 422 me :MOTD File is missing");
+        assert(v->ison_at);
+        vs();
+        v->ison_at = 1, v->ping_at = time(nullptr) + 100, v->last_rx = time(nullptr);
+        core.upd_at = time(nullptr) + 86400;  // no update check thread (its HTTPS would outlive the test)
+        core.tick(time(nullptr));
+        assert(vs().find("ISON alice\r\n") != std::string::npos);
+        size_t sn = v->status->lines.size();
+        vf(":srv 303 me :alice");
+        assert(v->online["alice"] && v->ison_wait == 0 && v->status->lines.size() == sn + 1);
+        // draft/multiline in: one message, its lines shown in turn, concat joined
+        vf("@msgid=ml1 :carol!c@h BATCH +mm draft/multiline #v4");
+        vf("@batch=mm :carol!c@h PRIVMSG #v4 :line one");
+        vf("@batch=mm;draft/multiline-concat :carol!c@h PRIVMSG #v4 : continued");
+        vf("@batch=mm :carol!c@h PRIVMSG #v4 :line two");
+        vf(":carol!c@h BATCH -mm");
+        size_t L = vb->lines.size();
+        assert(vb->lines[L - 2].text == "line one continued" && vb->lines[L - 1].text == "line two" && vb->lines[L - 1].msgid == "ml1");
+        // ...and out: a paste in one BATCH, unless it's over max-lines
+        core.exec(vb, "a\nb");
+        o = vs();
+        std::string ref = o.substr(7, o.find(' ', 7) - 7);
+        assert(o == "BATCH +" + ref + " draft/multiline #v4\r\n@batch=" + ref + " PRIVMSG #v4 :a\r\n@batch=" + ref + " PRIVMSG #v4 :b\r\nBATCH -" + ref + "\r\n");
+        core.exec(vb, "1\n2\n3\n4");
+        o = vs();
+        assert(o.find("BATCH") == std::string::npos && o.find("PRIVMSG #v4 :4\r\n") != std::string::npos);
+        // +typing out: active (not again within 3s), done when the line empties; not for a command
+        core.typed(vb, "hel");
+        assert(vs() == "@+typing=active TAGMSG #v4\r\n");
+        core.typed(vb, "hell");
+        assert(vs().empty());
+        core.typed(vb, "");
+        assert(vs() == "@+typing=done TAGMSG #v4\r\n");
+        core.typed(vb, "/whois x");
+        assert(vs().empty());
+        // draft/pre-away: nobody attached for a while: away before registration ends, not a tick later
+        {
+            ServerCfg pc;
+            pc.name = "pre", pc.nick = "pa";
+            Server* p = core.add_server(pc);
+            p->flood_ms = 0, p->state = SS::REGISTERING;
+            core.attached = false, core.detached_at = time(nullptr) - 100;
+            Msg mm;
+            assert(irc_parse(":srv CAP * ACK :draft/pre-away", mm));
+            core.handle(p, mm);
+            assert(p->conn.out == "AWAY :Not here right now\r\nCAP END\r\n" && p->auto_away);
+            core.attached = true;
+            core.close(p->status);
+        }
+        // NICKLEN: refused here, not by the server
+        vf(":srv 005 me NICKLEN=5 :are supported");
+        core.exec(vb, "/nick waytoolong");
+        assert(vs().empty() && vb->lines.back().kind == LK::ERROR);
+        std::swap(core.cfg_path, path);
+        remove(path.c_str()), remove("build/sts");
+    }
+
     Server sv;  // token bucket: 2 at once, then one per second
     sv.flood_burst = 2, sv.flood_ms = 1000, sv.tokens = 2, sv.tokens_at = 0;
     for (int i = 0; i < 4; i++) sv.sendq.push_back("L" + std::to_string(i) + "\r\n");

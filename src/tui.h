@@ -19,6 +19,7 @@ struct Tui {
 
 private:
     std::u32string input;
+    int typed_id = 0;  // the tab the input line was last typed in (+typing goes there)
     size_t cur = 0;
     std::string paste;  // a multi-line paste waiting for y/n
     std::string confirm;  // "question\n/command" from a menu, waiting for y/n

@@ -395,7 +395,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     switch (l.kind) {
     case LK::MSG: {
         std::string pfx;
-        auto it = b->nicks.find(irc_lower(l.nick));
+        auto it = b->nicks.find(b->srv->lower(l.nick));
         if (it != b->nicks.end() && !it->second.prefix.empty()) pfx = it->second.prefix.substr(0, 1);
         marker = pfx + l.nick;
         if (auto br = T.lay("nick_brackets", ""); br.size() == 2) marker = br[0] + marker + br[1];  // mirc: <nick>
@@ -497,6 +497,7 @@ void Tui::draw_nicks(Buffer* b, int sx, int top, int xend, int ch, bool focus) {
                  : e->prefix[0] == '+' ? sty(T, "nicklist_voice", "nicklist")
                                        : sty(T, "nicklist_op", "nicklist");
         if (e->away) ns.attr |= A_DIM;
+        if (e->bot) ns.attr |= A_ITALIC;  // the 005 BOT mode
         fill(top + 1 + (int)i, sx + 1, xend, T.get("nicklist"));
         text(sx + 2, top + 1 + (int)i, xend, (e->prefix.empty() ? " " : e->prefix.substr(0, 1)) + e->nick, ns, false);
     }
@@ -793,6 +794,14 @@ void Tui::draw() {
         seg(lag, sh);
     } else if (s && s->state != SS::CONNECTED) {
         seg(s->state == SS::DISCONNECTED ? "disconnected" : "connecting", T.get("error"));
+    }
+    if (!b->typing.empty()) {  // +typing
+        std::string who;
+        for (auto& kv : b->typing) {
+            auto it = b->nicks.find(kv.first);
+            who += (who.empty() ? "" : ", ") + (it != b->nicks.end() ? it->second.nick : b->type == BT::QUERY ? b->name : kv.first);
+        }
+        seg(who + (b->typing.size() == 1 ? " is typing\u2026" : " are typing\u2026"), ss);
     }
     if (!c.update_ver.empty()) {  // check_updates found a newer release; a click opens /about
         Style us = sh;
@@ -1673,6 +1682,13 @@ void Tui::on_readable() {
         c.dirty = true;
     }
     if (enter) submit(), c.dirty = true;
+    // +typing: the input line has text for the tab on screen; a tab left behind is told "done"
+    int id = c.active ? c.active->id : 0;
+    if (id != typed_id)
+        for (auto& b : c.bufs)
+            if (b->id == typed_id) c.typed(b.get(), "");
+    typed_id = id;
+    if (c.active) c.typed(c.active, c.locked || sw.open || tw.open || fw.open ? "" : to_utf8(input));
 }
 
 bool Tui::action(const std::string& a) {
@@ -2010,7 +2026,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
         // double click: the topic into the input line, if we may set it (+t needs ops)
         topic_open = false;
         if (b->type != BT::CHANNEL || !b->srv) return;
-        auto me = b->nicks.find(irc_lower(b->srv->nick));
+        auto me = b->nicks.find(b->srv->lower(b->srv->nick));
         std::string my = me == b->nicks.end() ? "" : me->second.prefix;
         if (b->modes.find('t') != std::string::npos && !rank_ok(b->srv, my, '%')) {
             c.print(b, LK::ERROR, b->name + " is +t: only channel operators can change the topic");

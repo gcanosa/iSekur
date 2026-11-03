@@ -56,7 +56,7 @@ bool twitch_user(Buffer* b, const Msg& m, Line& l) {  // true: nick list changed
     if (b->type != BT::CHANNEL) return false;
     std::string pfx = badges.find(",broadcaster/") != std::string::npos || badges.find(",moderator/") != std::string::npos ? "@"
                       : badges.find(",vip/") != std::string::npos ? "+" : "";
-    NickEntry& e = b->nicks[irc_lower(m.nick)];
+    NickEntry& e = b->nicks[b->srv->lower(m.nick)];
     if (e.nick == l.nick && e.prefix == pfx) return false;
     e.nick = l.nick, e.prefix = pfx;
     return true;

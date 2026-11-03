@@ -2,6 +2,7 @@
 #include <algorithm>
 #include <cstring>
 #include <fnmatch.h>
+#include <sys/stat.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/rand.h>
@@ -12,6 +13,9 @@ static const char* WANT_CAPS[] = {
     "multi-prefix", "away-notify", "account-notify", "extended-join", "chghost",
     "echo-message", "batch", "server-time", "message-tags", "userhost-in-names",
     "invite-notify", "setname", "cap-notify", "account-tag", "sasl", "draft/chathistory",
+    "labeled-response", "draft/multiline", "extended-monitor", "draft/read-marker", "draft/message-redaction",
+    "draft/channel-rename", "draft/pre-away", "draft/account-registration", "standard-replies",
+    // not asked for: sts (never requested, only read), no-implicit-names (the nick list needs NAMES)
     // ZNC: other clients' messages (self-message), backlog on request (playback, see 001),
     // and the pre-IRCv3 names of server-time and batch that ZNC 1.6 still offers
     "znc.in/self-message", "znc.in/playback", "znc.in/server-time-iso", "znc.in/batch"};
@@ -66,13 +70,40 @@ bool irc_parse(const std::string& line, Msg& m) {
     return !m.cmd.empty();
 }
 
-std::string irc_lower(const std::string& s) {
+std::string irc_lower(const std::string& s, int cm) {
     std::string o = s;
+    char top = cm == 1 ? 'Z' : ']';  // ascii: A-Z only; rfc1459s: also []\ -> {}|
     for (auto& c : o) {
-        if (c >= 'A' && c <= ']') c = (char)(c + 32);  // A-Z and []\ -> a-z {}|
-        else if (c == '~') c = '^';
+        if (c >= 'A' && c <= top) c = (char)(c + 32);
+        else if (c == '~' && cm == 0) c = '^';  // strict-rfc1459 leaves ~ alone
     }
     return o;
+}
+
+std::string escape_tag(const std::string& v) {
+    std::string o;
+    for (char c : v) o += c == ';' ? "\\:" : c == ' ' ? "\\s" : c == '\\' ? "\\\\" : c == '\r' ? "\\r" : c == '\n' ? "\\n" : std::string(1, c);
+    return o;
+}
+
+// a short quote of a line for replies and reactions: no colors, no reply arrow of its own, 40 characters
+std::string reply_snippet(const std::string& text) {
+    std::string t = text;
+    if (t.rfind("\x1d\x03" "14\xe2\x86\xaa", 0) == 0) {  // our "↪ nick: ..." prefix
+        size_t e = t.find("\x0f ");
+        if (e != std::string::npos) t = t.substr(e + 2);
+    }
+    t = mirc_strip(t);
+    size_t i = 0, n = 0;
+    while (i < t.size() && n < 40) utf8_next(t, i), n++;
+    return "\u201c" + t.substr(0, i) + (i < t.size() ? "\u2026" : "") + "\u201d";
+}
+
+static std::string iso_utc(time_t t, const char* frac) {  // 2024-01-02T03:04:05 + frac
+    char out[40] = "";
+    tm g{};
+    if (gmtime_r(&t, &g)) strftime(out, sizeof out, "%Y-%m-%dT%H:%M:%S", &g);
+    return out + std::string(frac);
 }
 
 time_t parse_server_time(const std::string& iso) {
@@ -92,8 +123,16 @@ static std::string wire(const std::string& line) {
 void Server::send_now(const std::string& line) { conn.out += wire(line); }
 
 void Server::send(const std::string& line) {
-    if (state != SS::CONNECTED || flood_ms <= 0) { send_now(line); return; }
-    sendq.push_back(wire(line));
+    std::string l = line;
+    // labeled-response: what a typed command makes the server say comes back with its label (its tab)
+    if (label_buf && caps.count("labeled-response") && !l.empty() && l[0] != '@' && l.rfind("BATCH ", 0) && l.rfind("QUIT", 0)) {
+        std::string id = "i" + std::to_string(label_next++);
+        labels[id] = label_buf;
+        if (labels.size() > 200) labels.erase(labels.begin());  // ponytail: an unanswered one goes eventually, not the oldest first
+        l = "@label=" + id + " " + l;
+    }
+    if (state != SS::CONNECTED || flood_ms <= 0) { send_now(l); return; }
+    sendq.push_back(wire(l));
     drain(now_ms());
 }
 
@@ -121,6 +160,22 @@ bool Core::ignored(const Server* s, const std::string& prefix) const {
     for (auto& mask : split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' '))
         if (fnmatch(irc_lower(mask).c_str(), who.c_str(), 0) == 0) return true;
     return false;
+}
+
+bool Server::tag_ok(const std::string& tag) const {
+    if (!caps.count("message-tags")) return false;
+    auto it = isupport.find("CLIENTTAGDENY");  // "*,-typing": all but typing; "draft/react": just that
+    auto base = [](std::string t) {            // "+draft/react", "react": the same tag
+        if (!t.empty() && t[0] == '+') t.erase(0, 1);
+        return t.rfind("draft/", 0) == 0 ? t.substr(6) : t;
+    };
+    bool ok = true;
+    if (it != isupport.end())
+        for (auto& t : split(it->second, ',')) {
+            if (t == "*") ok = false;
+            else if (base(t[0] == '-' ? t.substr(1) : t) == base(tag)) ok = t[0] == '-';
+        }
+    return ok;
 }
 
 bool Server::is_chan(const std::string& t) const {
@@ -226,17 +281,26 @@ void Core::connect(Server* s) {
     s->caps.clear(), s->caps_ls.clear();
     s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear(), s->list.clear(), s->listing = false;
     s->away = s->auto_away = false;
-    s->hist_batches.clear();
+    s->hist_batches.clear(), s->cap_vals.clear(), s->isupport.clear(), s->casemap = 0;
+    s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear();
+    s->online.clear(), s->ison_at = 0, s->ison_wait = 0, s->typing_sent.clear(), s->motd_done = false;
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
     s->nick = s->last_nick.empty() ? s->cfg.nick : s->last_nick;
     s->last_rx = time(nullptr);
     s->reconnect_at = 0;
+    int tls = s->cfg.tls ? (s->cfg.tls_verify ? 1 : 2) : 0, port = s->cfg.port;
+    std::string why;
+    // STS: a server that asked for TLS gets TLS, verified, on its port: now (the upgrade) or until the policy runs out
+    auto pol = sts.find(irc_lower(s->cfg.host));
+    if (pol != sts.end() && pol->second.second <= time(nullptr)) sts.erase(pol), sts_save(), pol = sts.end();
+    if (!s->cfg.tls && !s->twitch()) {
+        if (s->sts_port) tls = 1, port = s->sts_port, why = ", STS";
+        else if (pol != sts.end()) tls = 1, port = pol->second.first, why = ", STS policy";
+    }
     print(s->status, LK::INFO,
-          "Connecting to " + s->cfg.host + ":" + std::to_string(s->cfg.port) +
-              (s->cfg.tls ? " (TLS)" : ""));
-    int tls = s->cfg.tls ? (s->cfg.tls_verify ? 1 : 2) : 0;
-    if (!s->conn.connect(s->cfg.host, s->cfg.port, tls, s->cfg.cert, s->cfg.key)) {
+          "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (tls ? " (TLS" + why + ")" : ""));
+    if (!s->conn.connect(s->cfg.host, port, tls, s->cfg.cert, s->cfg.key)) {
         s->state = SS::CONNECTING;  // so disconnect() schedules a retry
         disconnect(s, s->conn.err);
         return;
@@ -315,6 +379,24 @@ void Core::tick(time_t now) {
             }
             auto_away(s, now);
             chan_timers(s, now);
+            mark_read(s, now);
+            // /notify without MONITOR: ISON once a minute, from the end of the MOTD on
+            std::string watch = ini_get(cfg, "server." + s->cfg.name, "notify");
+            if (s->ison_at && now >= s->ison_at && !watch.empty() && !s->isupport.count("MONITOR")) {
+                std::string l;
+                for (auto& n : split(watch, ' '))
+                    if (!n.empty() && l.size() + n.size() < 400) l += " " + n;
+                s->send("ISON" + l);
+                s->ison_wait++, s->ison_at = now + 60;
+            }
+        }
+        long long ms = now_ms();  // +typing runs out: 6s after the last "active"
+        for (auto& b : bufs) {
+            if (b->srv != s) continue;
+            for (auto it = b->typing.begin(); it != b->typing.end();) {
+                if (it->second <= ms) it = b->typing.erase(it), dirty = true, notify(Ev::BUFFER, b.get());
+                else ++it;
+            }
         }
     }
 }
@@ -331,9 +413,13 @@ void Core::set_attached(bool a) {
 // A manual /away is left alone. [server.X] auto_away = off turns it off on that
 // network only (and brings you back there if it had set you away).
 // away_announce (off): also /me it in that network's joined channels.
-void Core::auto_away(Server* s, time_t now) {
+bool Core::away_wanted(Server* s, time_t now) const {
     int idle = atoi(opt(s, "auto_away_idle", "0").c_str());
-    bool want = opt_on(s, "auto_away", true) && ((!attached && now - detached_at >= 30) || (idle > 0 && now - last_input >= idle * 60));
+    return opt_on(s, "auto_away", true) && ((!attached && now - detached_at >= 30) || (idle > 0 && now - last_input >= idle * 60));
+}
+
+void Core::auto_away(Server* s, time_t now) {
+    bool want = away_wanted(s, now);
     auto announce = [&](const std::string& t) {
         if (!opt_on(s, "away_announce", false)) return;
         std::vector<Buffer*> chans;  // say() may add lines: collect first
@@ -351,6 +437,56 @@ void Core::auto_away(Server* s, time_t now) {
         s->send("AWAY");
         announce("is back");
     }
+}
+
+// ---- STS policies: "host port until" lines in sts next to the config ----------
+static std::string sts_path(const std::string& cfg_path) {
+    return cfg_path.empty() ? "" : cfg_path.substr(0, cfg_path.rfind('/') + 1) + "sts";
+}
+
+void Core::sts_load() {
+    sts.clear();
+    std::string p = sts_path(cfg_path);
+    FILE* f = p.empty() ? nullptr : fopen(p.c_str(), "r");
+    if (!f) return;
+    char host[256];
+    int port;
+    long long until;
+    while (fscanf(f, "%255s %d %lld", host, &port, &until) == 3)
+        if (port > 0 && port < 65536 && until > time(nullptr)) sts[host] = {port, (time_t)until};
+    fclose(f);
+}
+
+void Core::sts_save() {
+    std::string p = sts_path(cfg_path);
+    if (p.empty()) return;
+    mode_t old = umask(077);
+    FILE* f = fopen(p.c_str(), "w");
+    umask(old);
+    if (!f) return;
+    for (auto& [h, v] : sts) fprintf(f, "%s %d %lld\n", h.c_str(), v.first, (long long)v.second);
+    fclose(f);
+}
+
+// draft/read-marker: the tabs on screen are read up to their newest message, on every client of the account
+void Core::mark_read(Server* s, time_t now) {
+    if (!s->caps.count("draft/read-marker") || !attached) return;
+    for (Buffer* b : {active, split_buf}) {
+        if (!b || b->srv != s || b->type == BT::STATUS || b->name[0] == '*') continue;
+        time_t newest = 0;
+        for (auto it = b->lines.rbegin(); it != b->lines.rend(); ++it)
+            if (it->kind == LK::MSG || it->kind == LK::ACTION || it->kind == LK::NOTICE) { newest = it->ts; break; }
+        if (newest <= b->read_sent || newest > now + 60) continue;
+        b->read_sent = b->read_ts = newest;
+        s->send("MARKREAD " + b->name + " timestamp=" + iso_utc(newest, ".999Z"));
+    }
+}
+
+Line* Core::by_msgid(Buffer* b, const std::string& id) {
+    if (b && !id.empty())
+        for (auto it = b->lines.rbegin(); it != b->lines.rend(); ++it)
+            if (it->msgid == id) return &*it;
+    return nullptr;
 }
 
 // ---- handlers --------------------------------------------------------------
@@ -381,15 +517,18 @@ static bool hilights(const std::string& text, const std::string& nick, const std
     return false;
 }
 
+// a NAMES again (/names) keeps what WHOX and the tags taught us
 static void add_nick(Buffer* b, const std::string& nick, const std::string& prefix, const std::string& host) {
-    b->nicks[irc_lower(nick)] = NickEntry{nick, prefix, false, host};
+    NickEntry& e = b->nicks[b->srv->lower(nick)];
+    e.nick = nick, e.prefix = prefix;
+    if (!host.empty()) e.host = host;
 }
 
 // user@host for every channel entry of nick (WHO replies, CHGHOST)
 static void set_host(Core& c, Server* s, const std::string& nick, const std::string& host) {
     for (auto& b : c.bufs) {
         if (b->srv != s) continue;
-        auto it = b->nicks.find(irc_lower(nick));
+        auto it = b->nicks.find(s->lower(nick));
         if (it != b->nicks.end()) it->second.host = host;
     }
 }
@@ -408,20 +547,46 @@ void Core::handle(Server* s, const Msg& m) {
                     bool self = false, bool hl = false) {
         add(b, Line{ts, k, nick, text, self, hl});
     };
-    auto is_me = [&](const std::string& n) { return irc_lower(n) == irc_lower(s->nick); };
+    auto is_me = [&](const std::string& n) { return s->lower(n) == s->lower(s->nick); };
+    const std::string& cmd = m.cmd;
+    // labeled-response: the reply (or the batch it opens) names the command it answers, and so its tab
+    int label_id = 0;
+    if (auto lt = m.tags.find("label"); lt != m.tags.end()) {
+        auto f = s->labels.find(lt->second);
+        if (f != s->labels.end()) label_id = f->second, s->labels.erase(f);
+        if (cmd == "BATCH" && label_id && m.p(0).size() > 1 && m.p(0)[0] == '+') s->batch_labels[m.p(0).substr(1)] = label_id;
+    } else if (auto bt = m.tags.find("batch"); bt != m.tags.end()) {
+        auto f = s->batch_labels.find(bt->second);
+        if (f != s->batch_labels.end()) label_id = f->second;
+    }
+    if (cmd == "ACK") return;  // a labeled command with nothing to say
+    // what we know of a nick from every message: its account (account-tag), a bot (the bot tag)
+    auto each_entry = [&](const std::string& nick, const std::function<bool(NickEntry&)>& fn) {
+        for (auto& b : bufs) {
+            if (b->srv != s) continue;
+            auto it = b->nicks.find(s->lower(nick));
+            if (it != b->nicks.end() && fn(it->second)) notify(Ev::BUFFER, b.get()), dirty = true;
+        }
+    };
+    if (!m.nick.empty() && m.prefix.find('!') != std::string::npos) {
+        auto at = m.tags.find("account");
+        if (at != m.tags.end() && s->caps.count("account-tag"))
+            each_entry(m.nick, [&](NickEntry& e) { bool ch = e.account != at->second; e.account = at->second; return ch; });
+        if (m.tags.count("bot") && (cmd == "PRIVMSG" || cmd == "NOTICE"))
+            each_entry(m.nick, [&](NickEntry& e) { bool ch = !e.bot; e.bot = true; return ch; });
+    }
     // where server replies go: the active buffer if it's ours, else status
-    // the tab the user typed a command in, for its replies (whois, errors...): within 30s, if still open
-    auto typed_buf = [&]() -> Buffer* {  // ponytail: last command wins; per-command tracking (labeled-response) if two overlap
-        if (time(nullptr) - s->typed_at > 30) return nullptr;
+    // the tab the user typed a command in, for its replies (whois, errors...): its label's, else within 30s, if still open
+    auto typed_buf = [&]() -> Buffer* {
+        int id = label_id ? label_id : time(nullptr) - s->typed_at > 30 ? 0 : s->typed_in;
         for (auto& b : bufs)
-            if (b->id == s->typed_in && b->srv == s) return b.get();
+            if (id && b->id == id && b->srv == s) return b.get();
         return nullptr;
     };
     auto reply_buf = [&]() {
         if (Buffer* b = typed_buf()) return b;
         return active && active->srv == s && s->state == SS::CONNECTED ? active : s->status;
     };
-    const std::string& cmd = m.cmd;
 
     if (cmd == "PING") { s->send_now("PONG :" + m.p(0)); return; }
     if (cmd == "PONG") {
@@ -436,9 +601,35 @@ void Core::handle(Server* s, const Msg& m) {
         const std::string& sub = m.p(1);
         if (sub == "LS" || sub == "NEW") {
             bool more = m.p(2) == "*";
-            for (auto& c : split(more ? m.p(3) : m.p(2), ' '))
-                s->caps_ls.insert(c.substr(0, c.find('=')));
+            for (auto& c : split(more ? m.p(3) : m.p(2), ' ')) {
+                size_t eq = c.find('=');
+                s->caps_ls.insert(c.substr(0, eq));
+                s->cap_vals[c.substr(0, eq)] = eq == std::string::npos ? "" : c.substr(eq + 1);
+            }
             if (more) return;
+            // STS: over plain text, reconnect with TLS on its port now; over verified TLS, remember it for duration
+            auto sv = s->cap_vals.find("sts");
+            if (sv != s->cap_vals.end() && !s->twitch()) {
+                std::map<std::string, std::string> kv;
+                for (auto& p : split(sv->second, ',')) kv[p.substr(0, p.find('='))] = p.find('=') == std::string::npos ? "" : p.substr(p.find('=') + 1);
+                int port = atoi(kv["port"].c_str());
+                if (!s->conn.tls && port > 0 && port < 65536) {
+                    print(s->status, LK::INFO, "STS: " + s->cfg.host + " wants TLS, reconnecting on port " + std::to_string(port));
+                    s->sts_port = port;
+                    s->conn.close();
+                    s->state = SS::DISCONNECTED, s->reconnect_at = time(nullptr);  // tick() connects, with TLS
+                    notify(Ev::BUFFER, s->status);
+                    return;
+                }
+                if (s->conn.tls == 1 && kv.count("duration")) {
+                    long dur = atol(kv["duration"].c_str());
+                    std::string h = irc_lower(s->cfg.host);
+                    int tport = s->cfg.tls ? s->cfg.port : s->sts_port ? s->sts_port : sts.count(h) ? sts[h].first : s->cfg.port;
+                    if (dur > 0) sts[h] = {tport, time(nullptr) + dur};
+                    else sts.erase(h);
+                    if (!s->cfg.tls) sts_save();  // a tls = true server needs no policy on disk
+                }
+            }
             std::string req;
             for (const char* w : WANT_CAPS)
                 if (s->caps_ls.count(w) && !s->caps.count(w) &&
@@ -449,9 +640,13 @@ void Core::handle(Server* s, const Msg& m) {
         } else if (sub == "ACK") {
             bool sasl = false;
             for (auto& c : split(m.p(2), ' ')) {
+                if (c.empty()) continue;
                 if (c[0] == '-') { s->caps.erase(c.substr(1)); continue; }
                 s->caps.insert(c);
                 if (c == "sasl") sasl = true;
+                // draft/pre-away: nobody's here (daemon, no browser): away from the start, not 30s in
+                if (c == "draft/pre-away" && s->state != SS::CONNECTED && away_wanted(s, time(nullptr)) && !s->away)
+                    s->auto_away = true, s->send("AWAY :" + opt(s, "away_message", "Not here right now"));
             }
             if (sasl && s->state != SS::CONNECTED) {
                 s->send("AUTHENTICATE " + sasl_mech(s));
@@ -489,12 +684,12 @@ void Core::handle(Server* s, const Msg& m) {
         std::vector<std::string> chans;  // autojoin, then the channel tabs still open (reconnects)
         for (auto& e : s->cfg.autojoin) {
             auto w = split(e, ' ');
-            if (w.size() > 1) s->chan_keys[irc_lower(w[0])] = w[1];
+            if (w.size() > 1) s->chan_keys[s->lower(w[0])] = w[1];
             chans.push_back(w[0]);
         }
         for (auto& b : bufs)
             if (b->srv == s && b->type == BT::CHANNEL &&
-                std::find_if(chans.begin(), chans.end(), [&](const std::string& c) { return irc_lower(c) == irc_lower(b->name); }) == chans.end())
+                std::find_if(chans.begin(), chans.end(), [&](const std::string& c) { return s->lower(c) == s->lower(b->name); }) == chans.end())
                 chans.push_back(b->name);
         // ZNC playback module: with the cap ZNC holds the backlog back until asked; ask for
         // what came after the newest line we have (the same second again: the replay check drops it)
@@ -508,7 +703,7 @@ void Core::handle(Server* s, const Msg& m) {
         }
         for (auto& ch : chans) {
             if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
-            auto k = s->chan_keys.find(irc_lower(ch));
+            auto k = s->chan_keys.find(s->lower(ch));
             s->send("JOIN " + ch + (k != s->chan_keys.end() ? " " + k->second : ""));
         }
         notify(Ev::BUFFER, s->status);
@@ -517,7 +712,14 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "005") {
         for (size_t i = 1; i + 1 < m.params.size(); i++) {
             const std::string& t = m.params[i];
-            if (t.rfind("PREFIX=(", 0) == 0) {
+            if (t.empty()) continue;
+            if (t[0] == '-') { s->isupport.erase(t.substr(1)); continue; }
+            size_t eq = t.find('=');
+            s->isupport[t.substr(0, eq)] = eq == std::string::npos ? "" : t.substr(eq + 1);
+            if (t.rfind("CASEMAPPING=", 0) == 0) {
+                std::string v = t.substr(12);
+                s->casemap = v == "ascii" || v == "rfc7613" || v == "precis" ? 1 : v == "strict-rfc1459" ? 2 : 0;
+            } else if (t.rfind("PREFIX=(", 0) == 0) {
                 size_t close = t.find(')');
                 if (close != std::string::npos) {
                     s->prefix_modes = t.substr(8, close - 8);
@@ -557,7 +759,33 @@ void Core::handle(Server* s, const Msg& m) {
         }
         return;
     }
-    if (cmd == "366") { if (Buffer* b = find(s, m.p(1))) notify(Ev::BUFFER, b), dirty = true; return; }
+    if (cmd == "366") {
+        Buffer* b = find(s, m.p(1));
+        if (b) notify(Ev::BUFFER, b), dirty = true;
+        // WHOX after our own join: accounts, real names, away and bots for the nick list (not for huge channels)
+        if (b && s->who_auto.count(s->lower(b->name))) {
+            if (s->isupport.count("WHOX") && b->nicks.size() <= 500) s->send("WHO " + b->name + " %tcuhnfar,777");
+            else s->who_auto.erase(s->lower(b->name));
+        }
+        return;
+    }
+    if (cmd == "354" && m.p(1) == "777" && m.params.size() >= 9) {  // me 777 #chan user host nick flags account :realname
+        Buffer* b = find(s, m.p(2));
+        if (!b) return;
+        auto it = b->nicks.find(s->lower(m.p(5)));
+        if (it == b->nicks.end()) return;
+        NickEntry& e = it->second;
+        const std::string& fl = m.p(6);
+        std::string bot = s->isupport.count("BOT") ? s->isupport["BOT"] : "";
+        e.host = m.p(3) + "@" + m.p(4), e.away = !fl.empty() && fl[0] == 'G';
+        e.account = m.p(7) == "0" ? "" : m.p(7), e.realname = m.params.back();
+        e.bot = !bot.empty() && fl.find(bot[0]) != std::string::npos;
+        return;
+    }
+    if (cmd == "315" && s->who_auto.erase(s->lower(m.p(1)))) {  // the end of our join's WHO: draw the list once
+        if (Buffer* b = find(s, m.p(1))) notify(Ev::BUFFER, b), dirty = true;
+        return;
+    }
     if (cmd == "332" || cmd == "TOPIC") {
         bool num = cmd == "332";
         Buffer* b = find(s, m.p(num ? 1 : 0));
@@ -591,14 +819,12 @@ void Core::handle(Server* s, const Msg& m) {
                 time_t last = 0;
                 for (auto& l : b->lines)
                     if (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) last = l.ts;
-                char when[40] = "*";
-                tm t{};
-                if (last && gmtime_r(&last, &t)) strftime(when, sizeof when, "timestamp=%Y-%m-%dT%H:%M:%S.000Z", &t);
+                std::string when = last ? "timestamp=" + iso_utc(last, ".000Z") : "*";
                 s->send("CHATHISTORY " + std::string(last ? "AFTER " : "LATEST ") + ch + " " + when + " " +
                         std::to_string(std::min(fetch, 500)));
             }
             line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
-            if (!s->twitch()) s->send("MODE " + ch);  // Twitch: 421 unknown command
+            if (!s->twitch()) s->send("MODE " + ch), s->who_auto.insert(s->lower(ch));  // Twitch: 421 unknown command
             if (fresh) select(b), notify(Ev::FOCUS, b);  // the webchat follows too
             return;
         }
@@ -607,6 +833,11 @@ void Core::handle(Server* s, const Msg& m) {
         add_nick(b, m.nick, "", host_of(m));
         std::string acct = s->caps.count("extended-join") && m.p(1) != "*" && !m.p(1).empty()
                                ? " [" + m.p(1) + "]" : "";
+        if (s->caps.count("extended-join")) {  // JOIN #chan account :real name
+            NickEntry& e = b->nicks[s->lower(m.nick)];
+            e.account = m.p(1) == "*" ? "" : m.p(1);
+            if (m.params.size() > 2) e.realname = m.p(2);
+        }
         line(b, LK::JOIN, m.nick, m.nick + " (" + host_of(m) + ")" + acct + " has joined " + ch);
         notify(Ev::BUFFER, b);
         return;
@@ -616,7 +847,7 @@ void Core::handle(Server* s, const Msg& m) {
         Buffer* b = find(s, m.p(0));
         if (!b) return;
         std::string who = kick ? m.p(1) : m.nick, why = m.p(kick ? 2 : 1);
-        b->nicks.erase(irc_lower(who));
+        b->nicks.erase(s->lower(who));
         std::string txt = kick ? who + " was kicked by " + m.nick
                                : who + " (" + host_of(m) + ") has left " + b->name;
         if (!why.empty()) txt += " (" + why + ")";
@@ -626,7 +857,7 @@ void Core::handle(Server* s, const Msg& m) {
         if (kick && is_me(who) && opt_on(s, "rejoin_on_kick", false)) {  // a ban makes it fail once (474), no loop
             std::string key;
             for (auto& e : s->cfg.autojoin)
-                if (auto w = split(e, ' '); w.size() > 1 && irc_lower(w[0]) == irc_lower(b->name)) key = " " + w[1];
+                if (auto w = split(e, ' '); w.size() > 1 && s->lower(w[0]) == s->lower(b->name)) key = " " + w[1];
             print(b, LK::INFO, "Rejoining " + b->name + " (rejoin_on_kick)");
             s->send("JOIN " + b->name + key);
         }
@@ -636,8 +867,8 @@ void Core::handle(Server* s, const Msg& m) {
         for (auto& bp : bufs) {
             Buffer* b = bp.get();
             if (b->srv != s) continue;
-            bool in = b->nicks.erase(irc_lower(m.nick)) ||
-                      (b->type == BT::QUERY && irc_lower(b->name) == irc_lower(m.nick));
+            bool in = b->nicks.erase(s->lower(m.nick)) ||
+                      (b->type == BT::QUERY && s->lower(b->name) == s->lower(m.nick));
             if (!in) continue;
             line(b, LK::QUIT, m.nick, m.nick + " (" + host_of(m) + ") has quit (" + m.p(0) + ")");
             notify(Ev::BUFFER, b);
@@ -658,14 +889,14 @@ void Core::handle(Server* s, const Msg& m) {
         for (auto& bp : bufs) {
             Buffer* b = bp.get();
             if (b->srv != s) continue;
-            auto it = b->nicks.find(irc_lower(m.nick));
-            bool query = b->type == BT::QUERY && irc_lower(b->name) == irc_lower(m.nick);
+            auto it = b->nicks.find(s->lower(m.nick));
+            bool query = b->type == BT::QUERY && s->lower(b->name) == s->lower(m.nick);
             if (it == b->nicks.end() && !query && !(me && b->type == BT::STATUS)) continue;
             if (it != b->nicks.end()) {
                 NickEntry e = it->second;
                 e.nick = nn;
                 b->nicks.erase(it);
-                b->nicks[irc_lower(nn)] = e;
+                b->nicks[s->lower(nn)] = e;
             }
             if (query) b->name = nn;
             line(b, LK::NICK, m.nick,
@@ -700,7 +931,7 @@ void Core::handle(Server* s, const Msg& m) {
             if (ch == '+' || ch == '-') { add = ch == '+'; continue; }
             size_t pm = s->prefix_modes.find(ch);
             if (pm != std::string::npos && pm < s->prefix_chars.size()) {  // a malformed PREFIX= has fewer chars
-                auto it = b->nicks.find(irc_lower(m.p(arg++)));
+                auto it = b->nicks.find(s->lower(m.p(arg++)));
                 if (it == b->nicks.end()) continue;
                 std::string& pf = it->second.prefix;
                 char pc = s->prefix_chars[pm];
@@ -728,7 +959,7 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "AWAY") {
         for (auto& b : bufs) {
             if (b->srv != s) continue;
-            auto it = b->nicks.find(irc_lower(m.nick));
+            auto it = b->nicks.find(s->lower(m.nick));
             if (it != b->nicks.end()) it->second.away = !m.params.empty(), notify(Ev::BUFFER, b.get());
         }
         dirty = true;
@@ -736,13 +967,115 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "BATCH") {  // remember chathistory and ZNC buffer batches: their lines are replays
         const std::string& ref = m.p(0);
-        if (ref.size() > 1 && ref[0] == '+' && (m.p(1).find("chathistory") != std::string::npos || m.p(1) == "znc.in/playback"))
-            s->hist_batches.insert(ref.substr(1));
-        else if (ref.size() > 1 && ref[0] == '-')
-            s->hist_batches.erase(ref.substr(1));
+        if (ref.size() < 2) return;
+        std::string id = ref.substr(1);
+        if (ref[0] == '+' && (m.p(1).find("chathistory") != std::string::npos || m.p(1) == "znc.in/playback"))
+            s->hist_batches.insert(id);
+        else if (ref[0] == '+' && m.p(1) == "draft/multiline" && m.params.size() > 2)
+            s->multi[id] = Server::Multi{m, "PRIVMSG", {}};
+        else if (ref[0] == '-') {
+            s->hist_batches.erase(id), s->batch_labels.erase(id);
+            auto mu = s->multi.find(id);
+            if (mu == s->multi.end()) return;
+            // draft/multiline: one message of many lines, each shown as a line of its own (with the batch's
+            // time, msgid and, inside a chathistory batch, that batch: a replay stays a replay)
+            Server::Multi done = std::move(mu->second);
+            s->multi.erase(mu);
+            for (auto& text : done.lines) {
+                Msg x;
+                x.tags = done.open.tags, x.prefix = done.open.prefix, x.nick = done.open.nick;
+                x.cmd = done.cmd, x.params = {done.open.p(2), text};
+                handle(s, x);
+                if (s->state == SS::DISCONNECTED) return;
+            }
+        }
         return;
     }
     if (cmd == "CHGHOST") { set_host(*this, s, m.nick, m.p(0) + "@" + m.p(1)); return; }
+    if (cmd == "ACCOUNT") {  // account-notify: logged in as p(0), "*" = logged out
+        std::string a = m.p(0) == "*" ? "" : m.p(0);
+        each_entry(m.nick, [&](NickEntry& e) { bool ch = e.account != a; e.account = a; return ch; });
+        return;
+    }
+    if (cmd == "SETNAME") {
+        each_entry(m.nick, [&](NickEntry& e) { bool ch = e.realname != m.p(0); e.realname = m.p(0); return ch; });
+        if (is_me(m.nick)) print(reply_buf(), LK::INFO, "Your real name is now: " + m.p(0));
+        return;
+    }
+    if (cmd == "RENAME") {  // draft/channel-rename: RENAME #old #new :reason, the tab, its key and autojoin follow
+        Buffer* b = find(s, m.p(0));
+        if (!b || m.p(1).empty()) return;
+        std::string old = b->name, nn = m.p(1);
+        auto k = s->chan_keys.find(s->lower(old));
+        if (k != s->chan_keys.end()) s->chan_keys[s->lower(nn)] = k->second, s->chan_keys.erase(s->lower(old));
+        for (auto& e : s->cfg.autojoin) {
+            auto w = split(e, ' ');
+            if (!w.empty() && s->lower(w[0]) == s->lower(old)) e = nn + (w.size() > 1 ? " " + w[1] : "");
+        }
+        if (auto w = s->who_auto.find(s->lower(old)); w != s->who_auto.end()) s->who_auto.erase(w), s->who_auto.insert(s->lower(nn));
+        b->name = nn;
+        line(b, LK::INFO, m.nick, "Channel " + old + " is now " + nn + (m.p(2).empty() ? "" : " (" + m.p(2) + ")") +
+                                       (s->cfg.autojoin.empty() ? "" : ": /autojoin snap keeps the new name"));
+        notify(Ev::BUFFER, b), dirty = true;
+        return;
+    }
+    if (cmd == "MARKREAD") {  // draft/read-marker: read up to this time on some client of ours
+        Buffer* b = find(s, m.p(0));
+        time_t t = b && m.p(1).rfind("timestamp=", 0) == 0 ? parse_server_time(m.p(1).substr(10)) : 0;
+        if (!t || t <= b->read_ts) return;
+        b->read_ts = t, b->read_sent = std::max(b->read_sent, t);
+        time_t newest = 0;
+        for (auto it = b->lines.rbegin(); it != b->lines.rend(); ++it)
+            if (it->kind == LK::MSG || it->kind == LK::ACTION || it->kind == LK::NOTICE) { newest = it->ts; break; }
+        if (t >= newest && (b->activity || b->unread)) b->activity = 0, b->unread = 0, notify(Ev::BUFFER, b), dirty = true;
+        return;
+    }
+    if (cmd == "REDACT") {  // draft/message-redaction: REDACT target msgid [:reason]
+        bool self = is_me(m.nick);
+        Buffer* b = s->is_chan(m.p(0)) ? find(s, m.p(0)) : find(s, self ? m.p(0) : m.nick);
+        Line* l = by_msgid(b, m.p(1));
+        if (!l) return;
+        bool own = s->lower(l->nick) == s->lower(m.nick);
+        l->text = "\x1d\x03" "14[message deleted" + (own ? std::string() : " by " + m.nick) + (m.p(2).empty() ? "" : ": " + m.p(2)) + "]\x0f";
+        l->hilight = false;
+        dirty = true, notify(Ev::CLEAR, b);  // the webchat draws the tab again
+        return;
+    }
+    if (cmd == "REGISTER" || cmd == "VERIFY") {  // draft/account-registration: SUCCESS|VERIFICATION_REQUIRED account :message
+        print(reply_buf(), LK::INFO, m.params.back());
+        if (m.p(0) == "SUCCESS" && !s->reg_pass.empty() && s->cfg.sasl_user.empty()) {  // SASL logs in next time
+            std::string sec = "server." + s->cfg.name;
+            s->cfg.sasl_user = cfg[sec]["sasl_user"] = unsaved[sec]["sasl_user"] = m.p(1);
+            s->cfg.sasl_pass = cfg[sec]["sasl_pass"] = unsaved[sec]["sasl_pass"] = s->reg_pass;
+            print(reply_buf(), LK::INFO, "sasl_user and sasl_pass are set for " + s->cfg.name + ": /save to log in with SASL next time");
+        }
+        if (m.p(0) == "SUCCESS") s->reg_pass.clear();
+        return;
+    }
+    if (cmd == "FAIL" || cmd == "WARN" || cmd == "NOTE") {  // standard replies: CMD CODE [context...] :description
+        std::string ctx;
+        for (size_t i = 2; i + 1 < m.params.size(); i++) ctx += " " + m.params[i];
+        print(reply_buf(), cmd == "NOTE" ? LK::INFO : LK::ERROR,
+              (cmd == "WARN" ? "Warning: " : "") + (m.p(0) == "*" || m.p(0).empty() ? "" : m.p(0) + ": ") +
+                  (m.params.size() > 2 ? m.params.back() : m.p(1)) + " (" + m.p(1) + ctx + ")");
+        if (cmd == "FAIL" && m.p(0) == "REGISTER") s->reg_pass.clear();
+        return;
+    }
+    if (cmd == "730" || cmd == "731") {  // MONITOR: :nick!u@h,... online / :nick,... offline
+        for (auto& who : split(m.params.back(), ','))
+            if (!who.empty()) notify_seen(s, who.substr(0, who.find('!')), cmd == "730", who.find('!') == std::string::npos ? "" : who.substr(who.find('!') + 1));
+        return;
+    }
+    if (cmd == "734") { print(s->status, LK::ERROR, "/notify: " + m.params.back() + " (" + m.p(1) + " at most)"); return; }
+    if (cmd == "303" && s->ison_wait > 0) {  // our ISON: the watched nicks that are on
+        s->ison_wait--;
+        std::set<std::string> on;
+        for (auto& n : split(m.p(1), ' ')) on.insert(s->lower(n));
+        for (auto& n : split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' '))
+            if (!n.empty()) notify_seen(s, n, on.count(s->lower(n)) > 0);
+        return;
+    }
+    if ((cmd == "376" || cmd == "422") && !s->motd_done) s->motd_done = true, notify_start(s);  // 005 is in by now; then printed as usual
     if (cmd == "352") set_host(*this, s, m.p(5), m.p(2) + "@" + m.p(3));  // WHO; then printed as usual
     if (cmd == "302" && !s->kb_wait.empty()) {  // USERHOST for a /kickban: "nick*=+user@host"
         KickBan kb = s->kb_wait.front();
@@ -753,7 +1086,7 @@ void Core::handle(Server* s, const Msg& m) {
             if (eq == std::string::npos || e.size() < eq + 3) continue;
             std::string n = e.substr(0, eq);
             if (!n.empty() && n.back() == '*') n.pop_back();
-            if (irc_lower(n) == irc_lower(kb.nick)) uh = e.substr(eq + 2);
+            if (s->lower(n) == s->lower(kb.nick)) uh = e.substr(eq + 2);
             else others = true;
         }
         if (!uh.empty() || !others) {  // else someone else's USERHOST (/quote): printed as usual
@@ -765,11 +1098,43 @@ void Core::handle(Server* s, const Msg& m) {
         }
     }
     if (s->twitch() && twitch_handle(s, m, ts)) return;  // twitch.cpp
-    if (cmd == "ACCOUNT" || cmd == "SETNAME" ||
-        cmd == "TAGMSG")
-        return;
-    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE") && !is_me(m.nick) && ignored(s, m.prefix))
+    if ((cmd == "PRIVMSG" || cmd == "NOTICE") && m.tags.count("batch")) {  // a draft/multiline line: kept for its batch's end
+        auto mu = s->multi.find(m.tags.at("batch"));
+        if (mu != s->multi.end()) {
+            auto& ls = mu->second.lines;
+            if (m.tags.count("draft/multiline-concat") && !ls.empty()) ls.back() += m.p(1);
+            else ls.push_back(m.p(1));
+            mu->second.cmd = cmd;
+            return;
+        }
+    }
+    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE" || cmd == "TAGMSG") && !is_me(m.nick) && ignored(s, m.prefix))
         return;  // includes CTCP: ignored users get no replies either
+    auto tagv = [&](const char* name) {  // a client tag, final or draft: "reply" -> +reply or +draft/reply
+        auto t = m.tags.find(std::string("+") + name);
+        if (t == m.tags.end()) t = m.tags.find(std::string("+draft/") + name);
+        return t == m.tags.end() ? std::string() : t->second;
+    };
+    if (cmd == "TAGMSG") {  // +typing, +draft/react
+        std::string tgt = m.p(0);
+        while (tgt.size() > 1 && s->prefix_chars.find(tgt[0]) != std::string::npos && s->is_chan(tgt.substr(1))) tgt.erase(0, 1);
+        bool self = is_me(m.nick);
+        Buffer* b = s->is_chan(tgt) ? find(s, tgt) : find(s, self ? tgt : m.nick);
+        if (!b) return;
+        auto ty = m.tags.find("+typing");
+        if (ty != m.tags.end() && !self) {
+            if (ty->second == "active") b->typing[s->lower(m.nick)] = now_ms() + 6000;
+            else b->typing.erase(s->lower(m.nick));
+            notify(Ev::BUFFER, b), dirty = true;
+        }
+        std::string react = tagv("react");
+        if (!react.empty()) {
+            Line* t = by_msgid(b, tagv("reply"));
+            std::string to = !t ? "" : " to " + (t->self ? std::string("your") : t->nick + "'s") + " message " + reply_snippet(t->text);
+            line(b, LK::INFO, m.nick, (self ? std::string("You") : m.nick) + " reacted " + react + to, self);
+        }
+        return;
+    }
     if (cmd == "INVITE") {
         print(reply_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));
         if (is_me(m.p(0))) ring(s);
@@ -869,7 +1234,7 @@ void Core::handle(Server* s, const Msg& m) {
             if (self) text = mask_services(tgt, text);
             b = find(s, peer);
             // our automatic IDENTIFY and what NickServ says to it: the server tab, not a new NickServ tab
-            bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && irc_lower(peer) == "nickserv";
+            bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && s->lower(peer) == "nickserv";
             if (!b) b = ident ? s->status : notice ? reply_buf() : open(s, BT::QUERY, peer);
         }
         bool hl = !self && !snote && !muted(b) && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick, ini_get(cfg, "server." + s->cfg.name, "hilight_words")));
@@ -881,7 +1246,15 @@ void Core::handle(Server* s, const Msg& m) {
                 if (it->ts == ts && it->nick == who && mirc_strip(it->text) == plain) return;
             hl = false;  // old news: no alerts, no copies to window 1
         }
+        b->typing.erase(s->lower(who));  // a message ends their typing
+        std::string rid = tagv("reply");
+        if (!rid.empty()) {  // +draft/reply: "↪ alice: “what they said”" before the text
+            Line* t = by_msgid(b, rid);
+            if (t && t->self && !self && !muted(b) && !replay && !snote) hl = true;  // a reply to you is a mention
+            text = "\x1d\x03" "14\xe2\x86\xaa " + (t ? t->nick + ": " + reply_snippet(t->text) : std::string("an earlier message")) + "\x0f " + text;
+        }
         Line l{ts, kind, who, locked ? "\xf0\x9f\x94\x92 " + text : text, self, hl};
+        if (auto id = m.tags.find("msgid"); id != m.tags.end()) l.msgid = id->second;
         if (s->twitch() && !self && !server_msg && twitch_user(b, m, l)) notify(Ev::BUFFER, b);
         add(b, l);
         if (hl) ring(s);
@@ -920,12 +1293,12 @@ void Core::handle(Server* s, const Msg& m) {
                                                       "330", "335", "338", "378", "379", "671", "276"};
     // "me nick user host * :real name"; some servers (SekurIRCd) leave out the "*"
     if (cmd == "311" && m.params.size() > 4) {
-        s->whois = irc_lower(m.p(1));
+        s->whois = s->lower(m.p(1));
         print(reply_buf(), LK::INFO, "┌─ whois \x02" + m.p(1) + "\x02 ─────────");
         print(reply_buf(), LK::INFO, "│ " + m.p(1) + " (" + m.p(2) + "@" + m.p(3) + "): " + m.params.back());
         return;
     }
-    if (!s->whois.empty() && m.params.size() > 2 && irc_lower(m.p(1)) == s->whois) {
+    if (!s->whois.empty() && m.params.size() > 2 && s->lower(m.p(1)) == s->whois) {
         if (cmd == "318") {
             s->whois.clear();
             print(reply_buf(), LK::INFO, "└─────────");

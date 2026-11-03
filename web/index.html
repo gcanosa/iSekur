@@ -334,6 +334,7 @@ a.chan { cursor: context-menu; text-decoration: underline; }
 :is(#nicks, #nicks2) .op { color: var(--nicklist_op-fg, #ff9e64); }
 :is(#nicks, #nicks2) .voice { color: var(--nicklist_voice-fg, #9ece6a); }
 :is(#nicks, #nicks2) .away { opacity: .45; }
+:is(#nicks, #nicks2) .bot { font-style: italic; }
 @media (min-width: 761px) { #nicks.off, #nicks2.off { display: none !important; } }
 #nicks2 { grid-area: nicks2; display: none; }
 #status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
@@ -793,6 +794,7 @@ function renderStatus() {
   seg((order.indexOf(active) + 1) + ":" + (b.me && b.type !== "status" ? b.srv + "/" : "") + label(b) + (b.modes ? "(+" + b.modes + ")" : ""));
   if (b.state !== "connected") seg(b.state === "disconnected" ? "disconnected" : "connecting", "err");
   else if (sv && sv[1] >= 1) seg("Lag " + sv[1].toFixed(1) + "s");
+  if (b.typing && b.typing.length) st.append(b.typing.join(", ") + (b.typing.length === 1 ? " is typing\u2026 " : " are typing\u2026 "));
   const acts = order.map((id, i) => [i + 1, id, bufs.get(id)]).filter(([, , x]) => x && x.act);
   if (acts.length) {
     st.append("[Act: ");
@@ -816,10 +818,12 @@ function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /sp
   const rank = p => p ? (pf.indexOf(p[0]) < 0 ? pf.length : pf.indexOf(p[0])) : pf.length;
   const list = [...b.nicks].sort((x, y) => rank(x[0]) - rank(y[0]));  // already in name order, like the terminal's
   const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = list.length + " users"; el.append(hd);
-  for (const [p, n, away] of list) {
+  for (const [p, n, away, bot, acct, real] of list) {
     const d = document.createElement("div");
-    d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "");
+    d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "") + (bot ? " bot" : "");
     d.textContent = (p ? p[0] : " ") + n;
+    const tip = [real, acct ? "account: " + acct : "", bot ? "bot" : "", away ? "away" : ""].filter(Boolean).join(" \u00b7 ");
+    if (tip) d.title = tip;
     d.ondblclick = () => send({t: "input", buf: id, text: "/query " + n});  // double: one stray click does nothing
     d.oncontextmenu = e => askMenu(e, n, id);  // a /split pane: its own channel, not the focused one
     el.append(d);
@@ -1749,7 +1753,15 @@ function take() {
   suggSel = -1, comp = null; renderSugg();
   return true;
 }
-line.addEventListener("input", () => { suggSel = -1; renderSugg(); });
+line.addEventListener("input", () => { suggSel = -1; renderSugg(); sendTyping(); });
+// +typing: iSekur says "active" at most every 3s and "done" when the line empties; tell it when that may have changed
+let typedAt = 0, typedText = false;
+function sendTyping() {
+  const v = line.value, text = v !== "" && (v[0] !== "/" || v.startsWith("//")), now = Date.now();
+  if (text === typedText && (!text || now - typedAt < 2500)) return;
+  typedText = text, typedAt = now;
+  send({t: "typing", buf: active, text: v});
+}
 line.addEventListener("keyup", e => { if (/^(Arrow(Left|Right)|Home|End)$/.test(e.key)) renderSugg(); });
 line.addEventListener("click", renderSugg);
 // a paste with newlines (or formatting) stays in the line as ↵ until Enter; paste_confirm asks then
@@ -1827,7 +1839,7 @@ $("#input").onsubmit = async e => {
   if (inputSecret(b.name, raw)[0] < 0 && hist[hist.length - 1] !== raw) hist.push(raw);  // a password: not kept for Up
   if (hist.length > 500) hist.shift();
   hpos = hist.length;
-  line.value = ""; suggSel = -1; renderSugg();
+  line.value = ""; suggSel = -1; renderSugg(); typedText = false;  // iSekur ends +typing when it sends
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
   if (/^\/about\s*$/i.test(v)) { openAbout(); return; }  // a dialog here, not a tab
   if (/^\/theme\s*$/i.test(v)) { openThemes(); return; }  // like the terminal: the theme picker

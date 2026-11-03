@@ -638,6 +638,7 @@ void Web::ws_frames(Client& cl) {
         Buffer* b = by_id(c, atoi(m["buf"].c_str()));
         if (!b) continue;
         if (m["t"] == "input") c.from_web = true, c.exec(b, m["text"]), c.from_web = false;
+        else if (m["t"] == "typing") c.typed(b, m["text"]);  // +typing from the browser's input line
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "seen" && b->unread && b != c.active) { b->unread = 0; c.notify(Ev::BUFFER, b); }
         else if (m["t"] == "fold") c.fold(b);
@@ -697,10 +698,16 @@ std::string Web::buf_json(Buffer* b, bool full) {
     std::string nicks = "[";
     for (auto& kv : b->nicks) {
         if (nicks.size() > 1) nicks += ",";
-        nicks += "[" + json_str(kv.second.prefix) + "," + json_str(kv.second.nick) + "," +
-                 (kv.second.away ? "1" : "0") + "]";
+        const NickEntry& e = kv.second;  // [prefix, nick, away, bot, account, real name]: the last two only when known
+        nicks += "[" + json_str(e.prefix) + "," + json_str(e.nick) + "," + (e.away ? "1" : "0") + "," + (e.bot ? "1" : "0") +
+                 (e.account.empty() && e.realname.empty() ? "" : "," + json_str(e.account) + "," + json_str(e.realname)) + "]";
     }
     nicks += "]";
+    std::string typing;  // +typing: who's typing here
+    for (auto& kv : b->typing) {
+        auto it = b->nicks.find(kv.first);
+        typing += (typing.empty() ? "" : ",") + json_str(it != b->nicks.end() ? it->second.nick : b->type == BT::QUERY ? b->name : kv.first);
+    }
     // most updates are activity, unread counts, lag: the browsers keep the list they have
     // (a 2000 user channel is ~60K of JSON, and a re-sort and redraw there)
     if (!full) {
@@ -718,6 +725,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
            (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +
                                                 ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
+           ",\"typing\":[" + typing + "]" +
            ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + (nicks.empty() ? "" : ",\"nicks\":" + nicks) + "}";
 }
 

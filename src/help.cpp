@@ -20,7 +20,9 @@ static const std::vector<CmdInfo> CMDS = {
      "reconnects it. Twitch chat works too: /server irc.chat.twitch.tv 6697 -tls -name twitch -nick "
      "yourlogin, then /set server.twitch.password oauth:yourtoken and /connect twitch; /join #streamer "
      "(lowercase is done for you). Names, colors, badges, subs, raids, timeouts and room modes show up; "
-     "WHOIS, DCC and Twitch's /ban /timeout don't exist over its IRC.",
+     "WHOIS, DCC and Twitch's /ban /timeout don't exist over its IRC. A server that asks for TLS "
+     "(IRCv3 STS) gets it: iSekur reconnects with TLS on the port it names, and remembers that for as long "
+     "as the server says (the sts file next to the config; delete it to forget).",
      {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
@@ -61,6 +63,19 @@ static const std::vector<CmdInfo> CMDS = {
      "iSekur remembers it per network ([server.x] last_nick, written to the config at once), so "
      "reconnects and restarts use it; /set nick (or server.x.nick) goes back to the configured one.",
      {"/nick ethernet", "/nick ethernet_away"}},
+    {"setname", "Connection", "real name", "Change your real name without reconnecting",
+     "Sends SETNAME on servers with IRCv3 setname; others see it in WHOIS and the webchat nick list's tooltip. "
+     "It lasts until you disconnect: /set realname keeps one for the next connect.",
+     {"/setname Gerardo from SekurNet"}},
+    {"register", "Connection", "[email]", "Register your nick as an account on this server",
+     "On servers with IRCv3 account registration (draft/account-registration), asks for a password (hidden) "
+     "and registers your current nick. Some servers need an email, and some send a code to it: /verify finishes "
+     "then. Once it works, sasl_user and sasl_pass are set for this server: /save logs you in with SASL from then "
+     "on. Elsewhere, use /msg NickServ REGISTER.",
+     {"/register", "/register me@example.org"}},
+    {"verify", "Connection", "account code", "Finish a /register with the emailed code",
+     "Sends the code the server emailed after /register (IRCv3 VERIFY).",
+     {"/verify ethernet 4f2a9c"}},
 
     // ---- Chat
     {"join", "Chat", "#channel [key]", "Join a channel",
@@ -115,6 +130,25 @@ static const std::vector<CmdInfo> CMDS = {
      "ringing and being copied to window 1; messages still show and light up the tab. Muted tabs show 🔇. "
      "Also in the channel tab's right-click menu.",
      {"/mute", "/mute off"}},
+    {"reply", "Chat", "nick text", "Reply to someone's last message here",
+     "Sends text as an IRCv3 reply to nick's newest message in this tab: clients that know replies "
+     "show it under that message, and iSekur shows it as \"↪ nick: “what they said”\" before your text. "
+     "A reply to one of your messages hilights. On servers without message tags (or in an /e2e tab) it "
+     "goes as \"nick: text\".",
+     {"/reply alice yes, tonight", "/reply bob thanks!"}},
+    {"react", "Chat", "emoji [nick]", "React to the last message here",
+     "Sends an IRCv3 reaction to the newest message in this tab (or nick's newest). Reactions show as a "
+     "line: \"bob reacted 👍 to your message “…”\". Needs message tags on the server.",
+     {"/react 👍", "/react 😂 alice"}},
+    {"redact", "Chat", "[reason]", "Delete your last message here",
+     "On servers with IRCv3 message redaction, deletes your newest message in this tab for everyone: it "
+     "shows as [message deleted]. Ops deleting others' messages show the same way.",
+     {"/redact", "/redact wrong channel"}},
+    {"notify", "Chat", "[add|del] nick [nick...]", "Be told when a nick comes online or goes",
+     "Watches nicks on this tab's network: \"bob is online\" in the server tab (a hilight, so it rings and "
+     "goes to window 1) and \"bob went offline\". It uses MONITOR, or ISON once a minute on servers "
+     "without it. Alone it lists them, online first. add / del write the network's notify setting at once.",
+     {"/notify", "/notify add alice bob", "/notify del bob"}},
     {"statusbar", "Chat", "[up|cpu|mem|load|bat] [on|off]", "Show uptime, CPU, memory, load or battery in the status bar",
      "Right of the status bar (under the nick list): up = how long iSekur has run, cpu = this "
      "machine's CPU use, mem = memory free/total, load = load average (1, 5, 15 min), bat = battery as 3 bars (green, yellow, orange, red "

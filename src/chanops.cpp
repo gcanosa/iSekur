@@ -35,8 +35,8 @@ bool Core::chanop(Buffer* b, const std::string& cmd, const std::string& args) {
         return true;
     }
     auto argv = split(args, ' ');
-    auto is_me = [&](const NickEntry& e) { return irc_lower(e.nick) == irc_lower(s->nick); };
-    auto mine = b->nicks.find(irc_lower(s->nick));
+    auto is_me = [&](const NickEntry& e) { return s->lower(e.nick) == s->lower(s->nick); };
+    auto mine = b->nicks.find(s->lower(s->nick));
     std::string my = mine == b->nicks.end() ? "" : mine->second.prefix;
     auto usage = [&]() {
         const CmdInfo* k = find_command(cmd);
@@ -68,7 +68,7 @@ bool Core::chanop(Buffer* b, const std::string& cmd, const std::string& args) {
         if (!b->rot.empty())
             out("Topic rotation:", std::to_string(b->rot.size()) + " topics every " + std::to_string(b->rot_min) + " min");
         for (auto& t : s->tempbans)
-            if (irc_lower(t.chan) == irc_lower(b->name))
+            if (s->lower(t.chan) == s->lower(b->name))
                 out("Temp ban:", t.mask + ", lifted in " + std::to_string((t.until - time(nullptr) + 59) / 60) + " min");
         return true;
     }
@@ -125,7 +125,7 @@ bool Core::chanop(Buffer* b, const std::string& cmd, const std::string& args) {
             print(b, LK::ERROR, "Minutes go from 1 to 10080 (a week)");
             return true;
         }
-        auto it = b->nicks.find(irc_lower(argv[0]));
+        auto it = b->nicks.find(s->lower(argv[0]));
         if (it == b->nicks.end()) { print(b, LK::ERROR, argv[0] + " is not in " + b->name); return true; }
         if (is_me(it->second)) { print(b, LK::ERROR, "That's you"); return true; }
         kb.nick = it->second.nick;
@@ -182,7 +182,7 @@ void Core::kickban(Server* s, Buffer* b, const KickBan& kb, const std::string& u
     if (!kb.minutes) return;
     auto& tb = s->tempbans;
     tb.erase(std::remove_if(tb.begin(), tb.end(),
-                            [&](const TempBan& t) { return t.mask == mask && irc_lower(t.chan) == irc_lower(kb.chan); }),
+                            [&](const TempBan& t) { return t.mask == mask && s->lower(t.chan) == s->lower(kb.chan); }),
              tb.end());
     tb.push_back({kb.chan, mask, time(nullptr) + kb.minutes * 60});
     print(b, LK::INFO, "Banned " + mask + " for " + std::to_string(kb.minutes) +
@@ -231,7 +231,7 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
     add("", "");
     add(ign ? "Unignore" : "Ignore", (ign ? "/unignore " : "/ignore ") + nick);
     if (b->type == BT::CHANNEL && b->joined) {
-        auto me = b->nicks.find(irc_lower(s->nick)), them = b->nicks.find(irc_lower(nick));
+        auto me = b->nicks.find(s->lower(s->nick)), them = b->nicks.find(s->lower(nick));
         std::string my = me == b->nicks.end() ? "" : me->second.prefix;
         std::string their = them == b->nicks.end() ? "" : them->second.prefix;
         bool op = rank_ok(s, my, '@'), half = rank_ok(s, my, '%');
@@ -252,7 +252,7 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
     if (s->umodes.find('o') != std::string::npos) {  // IRC operator
         add("", "");
         add("Kill...", "/kill " + nick + " :");
-        auto them = b->nicks.find(irc_lower(nick));
+        auto them = b->nicks.find(s->lower(nick));
         std::string host = them == b->nicks.end() ? "" : them->second.host;
         if (host.find('@') != std::string::npos)
             add("G-line 1 day...", "/gline *@" + host.substr(host.find('@') + 1) + " 1d :");
@@ -287,7 +287,7 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
     }
     if (b->type != BT::CHANNEL || !s) return m;
     auto& aj = s->cfg.autojoin;
-    bool in_aj = std::any_of(aj.begin(), aj.end(), [&](const std::string& e) { return irc_lower(split(e, ' ')[0]) == irc_lower(b->name); });
+    bool in_aj = std::any_of(aj.begin(), aj.end(), [&](const std::string& e) { return s->lower(split(e, ' ')[0]) == s->lower(b->name); });
     m.push_back({b->quiet ? "Quiet mode off" : "Quiet mode on", b->quiet ? "/quiet off" : "/quiet on"});
     m.push_back({muted(b) ? "Unmute channel" : "Mute channel", muted(b) ? "/mute off" : "/mute on"});
     m.push_back({"Clear", "/clear"});
@@ -321,7 +321,7 @@ void Core::list_table(Server* s) {
     auto& L = s->list;
     bool by_name = s->list_sort == 'n', rev = s->list_rev;
     std::sort(L.begin(), L.end(), [&](auto& a, auto& z) {
-        std::string an = irc_lower(a.chan), zn = irc_lower(z.chan);
+        std::string an = s->lower(a.chan), zn = s->lower(z.chan);
         if (by_name) return rev ? an > zn : an < zn;
         return a.users != z.users ? (rev ? a.users < z.users : a.users > z.users) : an < zn;
     });
