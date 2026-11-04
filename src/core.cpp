@@ -1675,6 +1675,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "reload") { reload(b); return; }
     if (cmd == "theme") {
         std::string err;
+        while (!args.empty() && isspace((unsigned char)args.back())) args.pop_back();  // a picked suggestion leaves "ayu "
         if (args.empty() && tty && !from_web) { theme_win = dirty = true; return; }  // the terminal's theme picker
         if (args.empty()) {
             std::string l;
