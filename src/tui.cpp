@@ -557,6 +557,7 @@ void Tui::draw() {
     tb_clear();
     isekur_links_begin(), frame_urls.clear();
     int W = tb_width(), H = tb_height();
+    sync_input();  // a tab switch from outside a key (a command, the webchat, a closed tab)
     Buffer* b = c.active;
     c.dirty = false;
     hits.clear(), nl_x = -1;
@@ -1836,12 +1837,28 @@ void Tui::shutdown() { tb_shutdown(); }
 
 void Tui::fds(int& tty, int& resize) { tb_get_fds(&tty, &resize); }
 
+void Tui::sync_input() {
+    int id = c.active ? c.active->id : 0;
+    if (id == input_id) return;
+    if (!input.empty()) drafts[input_id] = {input, cur};
+    else drafts.erase(input_id);
+    auto it = drafts.find(id);
+    if (it != drafts.end()) input = it->second.first, cur = it->second.second, drafts.erase(it);
+    else input.clear(), cur = 0;
+    if (!hist.empty()) hists[input_id] = std::move(hist);
+    auto h = hists.find(id);
+    if (h != hists.end()) hist = std::move(h->second), hists.erase(h);
+    else hist.clear();
+    hpos = hist.size(), input_id = id;
+}
+
 void Tui::on_readable() {
     tb_event ev;
     // An Enter followed by more input in the same read is a paste: it becomes
     // a newline in the input line instead of sending each line as it comes.
     bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
+        sync_input();  // a key may have switched tabs: the next one types into that tab's line
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
         if ((c.locked || sw.open || tw.open || fw.open || kw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
@@ -1851,6 +1868,7 @@ void Tui::on_readable() {
         c.dirty = true;
     }
     if (enter) submit(), c.dirty = true;
+    sync_input();
     // +typing: the input line has text for the tab on screen; a tab left behind is told "done"
     int id = c.active ? c.active->id : 0;
     if (id != typed_id)

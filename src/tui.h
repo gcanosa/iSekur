@@ -21,10 +21,14 @@ private:
     std::u32string input;
     int typed_id = 0;  // the tab the input line was last typed in (+typing goes there)
     size_t cur = 0;
+    std::map<int, std::pair<std::u32string, size_t>> drafts;  // tab id -> its unsent input line and cursor
+    int input_id = 0;  // the tab input belongs to
+    void sync_input();  // the active tab changed: park input under the old one, bring back the new one's
     std::string paste;  // a multi-line paste waiting for y/n
     std::string confirm;  // "question\n/command" from a menu, waiting for y/n
     std::string confirm_title;  // the menu item that asked
-    std::vector<std::string> hist;
+    std::vector<std::string> hist;  // the active tab's sent lines (Up/Down)
+    std::map<int, std::vector<std::string>> hists;  // every other tab's, by id
     size_t hpos = 0;
     std::map<std::string, std::string> keymap;
     void apply_cfg();  // mouse, colors, keys
