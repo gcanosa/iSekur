@@ -33,6 +33,9 @@ else
   ifneq ($(shell uname -s),Darwin)
     PAM_LIBS := -lutil  # forkpty
     LDFLAGS  += -rdynamic  # function names in isekur.crash backtraces
+    ifneq ($(filter %BSD DragonFly,$(shell uname -s)),)
+      PAM_LIBS += -lexecinfo  # backtrace() isn't in the BSDs' libc
+    endif
   else
     PAM_LIBS := -framework IOKit -framework CoreFoundation  # /statusbar bat
   endif
