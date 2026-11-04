@@ -2204,7 +2204,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
             }
             if (y < top_row() - tab_h || y >= top_row() || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
             Buffer* tb = c.bufs[(size_t)h.tab].get();
-            if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY)  // its commands run there
+            if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY || tb->type == BT::SHELL)  // its commands run there
                 c.select(tb), menu = Menu{x, y, 0, tb->type == BT::STATUS ? tb->srv->cfg.name : tb->name, c.tab_menu(tb)}, c.dirty = true;
         }
         return;

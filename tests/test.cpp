@@ -202,6 +202,12 @@ int main() {
         core.exec(home, bad);
         assert(home->lines.back().text == "/attach -p takes a port, 1-65535" && core.bufs.size() == tabs);
     }
+    {  // a shell or remote tab gets a right-click menu: its keys all go to the tab
+        Buffer* sh = core.open(nullptr, BT::SHELL, "vps");
+        auto tm = core.tab_menu(sh);
+        assert(tm.size() == 1 && tm[0].second == "/close");
+        core.close(sh);
+    }
     core.from_web = true;
     core.exec(home, "/attach vps");
     core.from_web = false;

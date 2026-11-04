@@ -297,6 +297,11 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
         m.push_back({"Delete server...", "?Delete " + s->cfg.name + ": disconnect, close its tabs and remove it from the config?\n/server del " + s->cfg.name});
         return m;
     }
+    if (b->type == BT::SHELL) {  // /shell or /attach: keys go to the tab, so its menu is the way out
+        bool remote = b->term && !b->term->host.empty();
+        m.push_back({remote ? "Disconnect (iSekur keeps running there)" : "Close", "/close"});
+        return m;
+    }
     if (b->type == BT::QUERY && s) {  // a private chat: the nick's menu (bar Query, Mention), then the tab's own
         for (auto& it : nick_menu(b, b->name))
             if (it.first != "Query" && it.first != "Mention" && !(m.empty() && it.first.empty())) m.push_back(it);
