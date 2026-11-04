@@ -1679,11 +1679,12 @@ function mircPrefix(s, n) {
 function typeOut(tx) {
   const src = tx.src_; if (!src || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
   let len = 0; while (mircPrefix(src, len + 1) !== mircPrefix(src, len)) len++;
-  const per = Math.min(33, 2000 / Math.max(len, 1)), t0 = performance.now();
+  const per = Math.min(33, 2000 / Math.max(len, 1)), t0 = performance.now(), box = tx.closest("main");
   const step = () => {
     if (!tx.isConnected) return;
     const n = Math.floor((performance.now() - t0) / per);
     tx.textContent = ""; mirc(tx, mircPrefix(src, n));
+    if (box?.pin_) box.scrollTop = box.scrollHeight;  // the line wraps onto more rows as it types: follow it down
     if (n < len) { tx.insertAdjacentText("beforeend", "\u258C"); requestAnimationFrame(step); } else tx.mark_?.();
   };
   step();
