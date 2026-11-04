@@ -125,7 +125,7 @@ only attached to it.
     isekur --attach     # back again, from this or any other terminal or SSH login (none running: a new one starts)
     isekur --daemon     # start in the background without attaching
     isekur --list       # the ones running, and the command that attaches each
-    /attach host        # inside iSekur: another machine's iSekur, live in a tab (over ssh)
+    /attach host        # inside iSekur: another machine's iSekur, live in a tab (over ssh; -p 2222 for another port)
 
 Several sessions side by side: one config each, in the same folder or not
 (`isekur -c ~/.config/isekur/work.conf`, Alt+D, then `isekur -c ~/.config/isekur/fun.conf`...).

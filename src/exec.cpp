@@ -276,6 +276,15 @@ void Core::shell_login(Buffer* sb, const std::string& err) {
 void Core::attach_cmd(Buffer* b, const std::string& args) {
     if (from_web) { print(b, LK::ERROR, "/attach works in the terminal only"); return; }
     auto w = split(args, ' ');
+    std::string port;  // -p N (anywhere): ssh's own -p, the one option let through, digits only
+    for (size_t i = 0; i < w.size(); i++)
+        if (w[i] == "-p" && port.empty()) {
+            port = i + 1 < w.size() ? w[i + 1] : "";
+            bool num = !port.empty() && port.size() <= 5 && port.find_first_not_of("0123456789") == std::string::npos;
+            if (!num || atoi(port.c_str()) < 1 || atoi(port.c_str()) > 65535) { print(b, LK::ERROR, "/attach -p takes a port, 1-65535"); return; }
+            w.erase(w.begin() + (long)i, w.begin() + (long)i + 2);
+            break;
+        }
     // words that go into ssh's arguments and the remote shell's command line: never an
     // option ("-oProxyCommand=..." would run a command here), never a quote or a $
     auto safe = [](const std::string& x, const char* extra) {
@@ -285,7 +294,7 @@ void Core::attach_cmd(Buffer* b, const std::string& args) {
     };
     std::string host = w.empty() ? "" : w[0], rcfg = w.size() > 1 ? w[1] : "";
     if (w.size() > 2 || !safe(host, "@._-:[]") || (!rcfg.empty() && !safe(rcfg, "/._-~+"))) {
-        print(b, LK::ERROR, "Usage: /attach host [config]  (host: user@host or a Host from ~/.ssh/config; "
+        print(b, LK::ERROR, "Usage: /attach [-p port] host [config]  (host: user@host or a Host from ~/.ssh/config; "
                             "config: that machine's isekur -c file, for one of several iSekurs there)");
         return;
     }
@@ -304,16 +313,16 @@ void Core::attach_cmd(Buffer* b, const std::string& args) {
     Buffer* ab = open(nullptr, BT::SHELL, name);
     select(ab);
     if (ab->term) return;  // already attached there
-    print(ab, LK::INFO, "ssh " + host + ": iSekur --attach there" + (rcfg.empty() ? "" : " with " + rcfg) +
+    print(ab, LK::INFO, "ssh " + (port.empty() ? "" : "-p " + port + " ") + host + ": iSekur --attach there" + (rcfg.empty() ? "" : " with " + rcfg) +
                             " (Alt+D or /detach inside leaves it running)");
-    shell_start(ab, host, rcfg);
+    shell_start(ab, host, rcfg, port);
 }
 
-void Core::shell_start(Buffer* sb, const std::string& host, const std::string& rcfg) {
+void Core::shell_start(Buffer* sb, const std::string& host, const std::string& rcfg, const std::string& port) {
     const char* sh = getenv("SHELL");
     std::string path = sh && *sh ? sh : "/bin/sh";
     auto t = std::make_unique<Term>();
-    t->c = this, t->b = sb, t->host = host, t->rcfg = rcfg;
+    t->c = this, t->b = sb, t->host = host, t->rcfg = rcfg, t->port = port;
     winsize ws{(unsigned short)t->rows, (unsigned short)t->cols, 0, 0};
     int fd = -1;
     pid_t pid = forkpty(&fd, nullptr, nullptr, &ws);
@@ -325,7 +334,8 @@ void Core::shell_start(Buffer* sb, const std::string& host, const std::string& r
         if (const char* home = getenv("HOME")) if (chdir(home)) {}
         if (!host.empty()) {  // a login shell there, so isekur is on its PATH (Homebrew's too)
             std::string cmd = "sh -c 'exec \"${SHELL:-sh}\" -lc \"isekur " + (rcfg.empty() ? "" : "-c " + rcfg + " ") + "--attach\"'";
-            execlp("ssh", "ssh", "-t", "--", host.c_str(), cmd.c_str(), (char*)nullptr);
+            if (port.empty()) execlp("ssh", "ssh", "-t", "--", host.c_str(), cmd.c_str(), (char*)nullptr);
+            else execlp("ssh", "ssh", "-t", "-p", port.c_str(), "--", host.c_str(), cmd.c_str(), (char*)nullptr);
             _exit(127);
         }
         std::string arg0 = "-" + path.substr(path.rfind('/') + 1);  // "-zsh": a login shell
@@ -398,7 +408,7 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
         pid_t pid = t->pid;
         t->pid = -1;  // reaped here, not hung up
         std::string end = waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) ? ": exit " + std::to_string(WEXITSTATUS(st)) : "";
-        std::string host = t->host + (t->rcfg.empty() ? "" : " " + t->rcfg);
+        std::string host = (t->port.empty() || t->host.empty() ? "" : "-p " + t->port + " ") + t->host + (t->rcfg.empty() ? "" : " " + t->rcfg);
         b->term.reset();
         if (host.empty()) print(b, LK::INFO, "\x02[shell ended" + end + "]\x02 /shell starts another, Ctrl+W closes the tab");
         else print(b, LK::INFO, "\x02[ssh " + host + " ended" + end + "]\x02 /attach " + host + " again, Ctrl+W closes the tab");

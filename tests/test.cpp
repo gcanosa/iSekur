@@ -194,9 +194,13 @@ int main() {
     // /attach: never an ssh option or more than a host, never from the webchat; no tab opened
     size_t tabs = core.bufs.size();
     for (const char* bad : {"/attach", "/attach -oProxyCommand=touch /tmp/x", "/attach a b c", "/attach a;b", "/attach a -x",
-                            "/attach a $(id)", "/attach a 'x'", "/attach a x\"y"}) {
+                            "/attach a $(id)", "/attach a 'x'", "/attach a x\"y", "/attach -p 22 -x a", "/attach -p 22 a b c"}) {
         core.exec(home, bad);
-        assert(home->lines.back().text.find("Usage: /attach host") == 0 && core.bufs.size() == tabs);
+        assert(home->lines.back().text.find("Usage: /attach [-p port] host") == 0 && core.bufs.size() == tabs);
+    }
+    for (const char* bad : {"/attach -p a", "/attach -p 0 a", "/attach -p 70000 a", "/attach -p -oX=y a", "/attach a -p"}) {  // -p: a port, nothing else
+        core.exec(home, bad);
+        assert(home->lines.back().text == "/attach -p takes a port, 1-65535" && core.bufs.size() == tabs);
     }
     core.from_web = true;
     core.exec(home, "/attach vps");
