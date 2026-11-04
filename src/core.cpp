@@ -797,7 +797,7 @@ void Core::add(Buffer* b, Line l) {
     b->lines.push_back(std::move(l));
     b->added++;
     while (b->lines.size() > max_lines) b->lines.pop_front();
-    if (b->scroll) b->scroll++;  // keep the scrolled view still
+    if (b->scroll) b->scroll_new++;  // keep the scrolled view still: the tui knows how many rows it wraps to
     const Line& ln = b->lines.back();
     int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : b->quiet && noise(ln) ? 0 : 1;
     // the "new" marker goes above the first message you missed, then counts everything after it

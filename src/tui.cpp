@@ -380,7 +380,8 @@ std::string status_info_json(const Core& c) {
 }
 
 // ---- line layout -----------------------------------------------------------
-static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_) {
+// full: a /typing line at its whole length, so its height holds still (scrolled back)
+static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false) {
     const Theme& T = c.theme;
     int nw = atoi(T.lay("nick_width", "12").c_str());
     std::string tsfmt = ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
@@ -433,7 +434,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     if (!marker.empty() || !sep.empty()) cells(pre, sep.empty() ? " " : " " + sep + " ", T.get("separator"), false);
 
     int tsw = tsr.empty() ? 0 : width(tsr) + 1, indent = width(pre), avail = std::max(10, width_ - indent - tsw);
-    if (l.typed_at) {  // /typing: the part typed so far, and the cursor
+    if (l.typed_at && !full) {  // /typing: the part typed so far, and the cursor
         size_t len = 0, n;
         for (unsigned char ch : mirc_strip(txt)) len += (ch & 0xc0) != 0x80;  // characters, not bytes
         n = typed_chars(l, len, now_ms());
@@ -517,6 +518,10 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
         draw_term(term, y, h, w, x);
         return;
     }
+    if (b->scroll)  // scrolled back: the lines that came in since push the view up by all their rows, not one
+        for (auto it = b->lines.rbegin(); it != b->lines.rend() && b->scroll_new > 0; ++it, b->scroll_new--)
+            if (!(b->quiet && noise(*it))) b->scroll += (int)wrap(c, *it, b, w, true).size();
+    b->scroll_new = 0;
     std::vector<Row> rows;  // bottom-up
     int need = h + b->scroll;
     size_t n = 0;
@@ -529,7 +534,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             rows.push_back(mk);
         }
         if (b->quiet && noise(*it)) continue;
-        auto r = wrap(c, *it, b, w);
+        auto r = wrap(c, *it, b, w, b->scroll > 0);
         rows.insert(rows.end(), r.rbegin(), r.rend());
     }
     if ((int)rows.size() < need) b->scroll = std::max(0, (int)rows.size() - h);

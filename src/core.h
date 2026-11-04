@@ -133,6 +133,7 @@ struct Buffer {
     int activity = 0;                        // 0 none, 1 data, 2 msg, 3 hilight
     int unread = 0;                          // lines below the "new" marker
     int scroll = 0;                          // rows scrolled back (tui)
+    int scroll_new = 0;                      // lines added while scrolled back: the tui adds their rows to scroll
     bool joined = false;
     bool quiet = false;                      // /quiet: hide joins, parts, quits, nick changes
     bool quiet_typing = false;               // quiet only because /typing turned it on: /typing off undoes it
