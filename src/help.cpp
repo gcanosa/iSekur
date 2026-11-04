@@ -15,7 +15,8 @@ static const std::vector<CmdInfo> CMDS = {
     {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
-     "(default: the host), -nick its own nick (default: [general] nick). The server is remembered "
+     "(default: the host), -nick its own nick (default: [general] nick). An IPv6 address works bare or "
+     "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). The server is remembered "
      "like /set does, so /save keeps it for the next start. Naming a server you already have "
      "reconnects it. Twitch chat works too: /server irc.chat.twitch.tv 6697 -tls -name twitch -nick "
      "yourlogin, then /set server.twitch.password oauth:yourtoken and /connect twitch; /join #streamer "

@@ -713,6 +713,21 @@ int main() {
         std::swap(core.cfg_path, path);
     }
 
+    // /server with an IPv6 address: bare, or [addr]:port; the name is the address with - for its :
+    {
+        std::string path = "build/test-server6.conf";
+        std::swap(core.cfg_path, path);
+        core.exec(home, "/server [::1]:1 -nick v6");
+        assert(core.cfg["server.--1"]["host"] == "::1" && core.cfg["server.--1"]["port"] == "1" && core.cfg["server.--1"]["nick"] == "v6");
+        core.exec(home, "/server 2001:db8::1 1");
+        assert(core.cfg["server.2001-db8--1"]["host"] == "2001:db8::1" && core.cfg["server.2001-db8--1"]["port"] == "1");
+        core.exec(home, "/server ::1 1 -name six");
+        assert(core.cfg["server.six"]["host"] == "::1");
+        for (auto n : {"--1", "2001-db8--1", "six"}) core.exec(home, std::string("/server del ") + n);
+        remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
+    }
+
     // every key the settings know is in the template (where it can be set), and every key there is known
     {
         std::set<std::string> gen, srv;

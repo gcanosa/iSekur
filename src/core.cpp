@@ -1546,7 +1546,16 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "server") {
         if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] | del name"); return; }
-        std::string name = argv[0], nick, port;
+        // an IPv6 address: bare (2001:db8::1) or in brackets with a port ([2001:db8::1]:6697); the lookup takes it bare
+        std::string host = argv[0], nick, port;
+        if (host[0] == '[') {
+            size_t e = host.find(']');
+            if (e != std::string::npos && e + 1 < host.size() && host[e + 1] == ':') port = host.substr(e + 2);
+            host = host.substr(1, e == std::string::npos ? std::string::npos : e - 1);
+        }
+        // no -name: the host is the name, and what a [server.x] can't have (an address's :) turns to -
+        std::string name = host;
+        for (char& ch : name) if (!server_name_ok(std::string(1, ch))) ch = '-';
         bool tls = false, verify = true;
         for (size_t i = 1; i < argv.size(); i++) {
             if (argv[i] == "-tls") tls = true;
@@ -1565,7 +1574,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (port.empty() || (tls && port == "6667")) port = tls ? "6697" : "6667";
         // remembered like /set, so /save keeps it for the next start
         for (auto& [k, v] : std::map<std::string, std::string>{
-                 {"host", argv[0]}, {"port", port},
+                 {"host", host}, {"port", port},
                  {"tls", tls ? "true" : "false"}, {"tls_verify", verify ? "true" : "false"}})
             cfg[sec][k] = unsaved[sec][k] = v;
         if (!nick.empty()) cfg[sec]["nick"] = unsaved[sec]["nick"] = nick;
