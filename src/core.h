@@ -31,6 +31,8 @@ std::string ini_update(const std::string& text, const Ini& changes);
 bool ini_save(const std::string& path, const Ini& changes, std::string& err);
 std::string ini_drop(const std::string& text, const std::string& sec);  // text without [sec]
 bool ini_drop_section(const std::string& path, const std::string& sec, std::string& err);
+std::string ini_rename(const std::string& text, const std::string& from, const std::string& to);  // [from] is [to] now
+bool ini_rename_section(const std::string& path, const std::string& from, const std::string& to, std::string& err);
 std::string ini_get(const Ini& ini, const std::string& sec, const std::string& key,
                     const std::string& def = "");
 
@@ -300,9 +302,11 @@ struct Core {
     std::vector<Setting> settings() const;
     // every key, for the settings windows (terminal and webchat): val is "" when not set
     // choices: what Space / the webchat's switch or list steps through: on/off (true/false, yes/no), the themes
-    // cat: the settings window's category ([general]: a topic group like "Look", else the section);
+    // cat: the settings window's category: "general/Look", "server.libera/Login", "web";
     // head: the header over its rows ("Look", "⇢ libera · Login", "[web]")
-    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; std::string grp, cat, head; };
+    // shared: a [general] key under a network: not set there (val ""), def is [general]'s; over: under [general],
+    // the networks that override it ("libera: off")
+    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; std::string grp, cat, head; bool shared; std::string over; };
     std::vector<SetRow> setting_rows() const;
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     bool settings_servers = false;  // /servers: that window, at the first server
@@ -376,7 +380,16 @@ struct Core {
     bool opt_on(const Server* s, const std::string& key, bool def) const;
     void log_line(Buffer* b, const Line& l);
     std::string log_path(Buffer* b) const;
+    std::string log_folder(const Server* s) const;  // <log_dir>/<network>
+    bool rename_server(Buffer* b, const std::string& from, const std::string& to);  // /server rename
     void load_history(Buffer* b);
+    // keep_history (log off): each tab's last log_history lines in <config>.history, saved on quit and
+    // every 5 minutes, put back when the tab opens again. Keyed "server\tname"; tabs not reopened stay
+    std::map<std::string, std::vector<Line>> hist_cache;
+    bool hist_loaded = false;
+    long long hist_saved = 0;
+    void save_history();
+    void hist_read();  // <config>.history into hist_cache, once
     ServerCfg server_cfg(const std::string& name) const;
     Server* add_server(const ServerCfg& sc);
     void load_flood(Server* s);  // flood_burst / flood_interval_ms
@@ -489,5 +502,12 @@ std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool we
 std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
 void mkdir_p(const std::string& path);  // 0700
+// the settings' keys (core.cpp): scope 'g' [general] only, 'n' a network only, 'b' both (a network overrides [general])
+struct KeyInfo { const char* key; const char* grp; char scope; };
+const std::vector<KeyInfo>& setting_keys();
+const KeyInfo* key_info(const std::string& key);                 // nullptr: not one iSekur knows
+std::vector<std::pair<std::string, std::string>> conf_keys();   // iSekur.conf.example's [section] keys, commented or not
+bool server_name_ok(const std::string& n);  // letters, digits, . _ -
 std::string safe_name(const std::string& n);  // network name -> safe log file name
 bool parse_log_line(const std::string& s, Line& l);
+std::string log_fmt(const Line& l);  // a Line as one log row

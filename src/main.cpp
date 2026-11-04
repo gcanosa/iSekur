@@ -312,6 +312,7 @@ int main(int argc, char** argv) {
         for (size_t i = 0; i < polled.size(); i++)
             if (fds[i].revents) polled[i]->conn.pump(fds[i].revents, polled[i]->inbuf);
     }
+    c.save_history();
     if (c.tty) tui.shutdown();
     ses.release('Q');
     ses.close();

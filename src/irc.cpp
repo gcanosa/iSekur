@@ -147,6 +147,8 @@ int Server::drain(long long now) {
 int Core::drain() {
     int wait = 1000;
     long long now = now_ms();
+    if (!hist_saved) hist_saved = now;
+    else if (now - hist_saved > 5 * 60 * 1000) save_history();  // a crash loses 5 minutes, not the session
     for (auto& s : servers) {
         int w = s->drain(now);
         if (w >= 0) wait = std::min(wait, w);

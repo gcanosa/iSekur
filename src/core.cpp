@@ -9,6 +9,7 @@
 #include <sys/utsname.h>
 #include "core.h"
 #include "net.h"
+#include "session.h"
 #include <thread>
 #include "version.h"
 #include "conf_template.h"
@@ -340,57 +341,60 @@ std::vector<Core::Setting> Core::settings() const {
     return out;
 }
 
-// The settings window's groups, in order, each with its keys in order: [general] by topic (each its own
-// category), a server's keys by what you fill in first. Keys in none of them: "Other", A-Z.
-struct SetGroup { const char* name; std::vector<std::string> keys; };
-static const std::vector<SetGroup> GENERAL_GROUPS = {
-    {"Identity", {"nick", "altnick", "realname"}},
-    {"Look", {"theme", "theme_dir", "web_font", "web_font_size", "colors", "timestamp", "timestamp_align", "scrollback", "mouse", "status_info", "cpu_levels", "mem_levels", "typing_effect",
-              "banner_mono", "banner_anim", "show_guide"}},
-    {"Updates", {"check_updates"}},
-    {"Messages", {"hilight_window", "bell_notifications", "paste_confirm", "send_typing", "quit_message", "part_message",
-                  "ctcp_version", "ctcp_time", "ctcp_ping"}},
-    {"Channels", {"rejoin_on_kick", "history_fetch"}},
-    {"Away", {"auto_away", "auto_away_idle", "away_message", "away_announce"}},
-    {"Logs", {"log", "log_dir", "log_history", "log_rotate"}},
-    {"Security", {"lock", "lock_idle", "lock_password_hash", "pam_service", "exec_timeout", "exec_web"}},
-    {"Network", {"flood_burst", "flood_interval_ms"}},
-    {"Files", {"dcc", "dcc_dir", "dcc_ip", "dcc_ports", "dcc_web"}},
+// Every key iSekur reads from [general] and [server.<name>], in the settings window's order, with its topic
+// and where it can be set: 'g' [general] only, 'n' a network only, 'b' [general] and a network can override
+// it (opt() reads it that way). A key added here belongs in iSekur.conf.example too (the tests check both ways)
+static const std::vector<KeyInfo> KEYS = {
+    {"name", "Connection", 'n'}, {"host", "Connection", 'n'}, {"port", "Connection", 'n'}, {"tls", "Connection", 'n'},
+    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'},
+    {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
+    {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
+    {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
+    {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"colors", "Look", 'g'},
+    {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'},
+    {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
+    {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
+    {"hilight_words", "Messages", 'n'}, {"hilight_window", "Messages", 'b'}, {"bell_notifications", "Messages", 'b'},
+    {"paste_confirm", "Messages", 'b'}, {"send_typing", "Messages", 'b'}, {"quit_message", "Messages", 'b'}, {"part_message", "Messages", 'b'},
+    {"ignore", "Messages", 'n'}, {"mute", "Messages", 'n'}, {"notify", "Messages", 'n'},
+    {"ctcp_version", "Messages", 'b'}, {"ctcp_time", "Messages", 'b'}, {"ctcp_ping", "Messages", 'b'},
+    {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
+    {"auto_away", "Away", 'b'}, {"auto_away_idle", "Away", 'b'}, {"away_message", "Away", 'b'}, {"away_announce", "Away", 'b'},
+    {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
+    {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
+    {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
+    {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
+    {"exec_timeout", "Security", 'g'}, {"exec_web", "Security", 'g'},
+    {"check_updates", "Updates", 'g'},
 };
-static const std::vector<SetGroup> SERVER_GROUPS = {
-    {"Connection", {"host", "port", "tls", "tls_verify", "autoconnect"}},
-    {"Identity", {"nick", "altnick", "user", "realname"}},
-    {"Login", {"password", "auto_identify", "sasl_mech", "sasl_user", "sasl_pass", "nickserv_pass", "cert", "key"}},
-    {"Channels", {"autojoin", "rejoin_on_kick", "e2e_keys"}},
-    {"Messages", {"hilight_words", "ignore", "mute", "notify", "send_typing"}},
-    {"Away", {"auto_away", "away_announce"}},
-};
-struct SetPlace { int sec, key; std::string grp; };  // sort keys; the group's name
-static SetPlace set_place(const std::string& sec, const std::string& key) {
-    static std::map<std::string, int> secs, keys;  // other sections: "sec" / "sec\nkey" -> position in the template
-    if (secs.empty()) {
-        std::istringstream in(conf_template);
-        std::string line, cur;
-        int n = 0;
-        while (std::getline(in, line)) {
-            if (!line.empty() && line[0] == '[') { cur = line.substr(1, line.find(']') - 1); if (cur.rfind("server.", 0)) secs.emplace(cur, n++); continue; }
-            size_t a = line.find_first_not_of("#; "), e = line.find('=');
-            if (a == std::string::npos || e == std::string::npos || e < a) continue;
-            std::string k = line.substr(a, e - a);
-            while (!k.empty() && k.back() == ' ') k.pop_back();
-            if (!k.empty() && k.find(' ') == std::string::npos) keys.emplace(cur + "\n" + k, n++);
-        }
+const std::vector<KeyInfo>& setting_keys() { return KEYS; }
+const KeyInfo* key_info(const std::string& key) {
+    static const std::map<std::string, const KeyInfo*> by = [] {
+        std::map<std::string, const KeyInfo*> m;
+        for (auto& k : KEYS) m[k.key] = &k;
+        return m;
+    }();
+    auto it = by.find(key);
+    return it == by.end() ? nullptr : it->second;
+}
+// state iSekur keeps in the config itself: never listed
+static bool state_key(const std::string& sec, const std::string& k) { return (sec == "general" && k == "server_order") || k == "last_nick"; }
+
+// the template's keys, commented or not ("; key =", "#key ="; "# prose = ..." isn't one), by section
+std::vector<std::pair<std::string, std::string>> conf_keys() {
+    static std::vector<std::pair<std::string, std::string>> out;
+    if (!out.empty()) return out;
+    std::istringstream in(conf_template);
+    std::string line, cur;
+    while (std::getline(in, line)) {
+        if (!line.empty() && line[0] == '[') { cur = line.substr(1, line.find(']') - 1); continue; }
+        size_t a = line[0] == '#' ? 1 : line.find_first_not_of("; "), e = line.find('=');
+        if (a == std::string::npos || e == std::string::npos || e < a || (line[0] == '#' && line.size() > 1 && line[1] == ' ')) continue;
+        std::string k = line.substr(a, e - a);
+        while (!k.empty() && k.back() == ' ') k.pop_back();
+        if (!k.empty() && k.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_") == std::string::npos) out.push_back({cur, k});
     }
-    bool gen = sec == "general", srv = sec.rfind("server.", 0) == 0;
-    if (gen || srv) {
-        auto& gs = gen ? GENERAL_GROUPS : SERVER_GROUPS;
-        for (size_t g = 0; g < gs.size(); g++)
-            for (size_t k = 0; k < gs[g].keys.size(); k++)
-                if (gs[g].keys[k] == key) return {gen ? 0 : 1, (int)(g * 1000 + k), gs[g].name};
-        return {gen ? 0 : 1, 1 << 20, "Other"};
-    }
-    auto k = keys.find(sec + "\n" + key);
-    return {2 + (secs.count(sec) ? secs[sec] : 1 << 20), k == keys.end() ? 1 << 20 : k->second, ""};
+    return out;
 }
 
 // a [section]'s unsaved keys, written to the config now: the whole section's, since a /server one isn't in the file yet
@@ -406,52 +410,134 @@ static bool save_section(Core& c, const std::string& sec, Buffer* b) {
 }
 
 std::vector<Core::SetRow> Core::setting_rows() const {
-    Ini all = defaults;
-    all["general"]["timestamp"] = theme.lay("timestamp", "%H:%M");  // empty: the theme's
-    for (auto& [sec, kv] : cfg)
-        for (auto& [k, v] : kv) all[sec][k];
-    // every server shows the keys it can have, with what it uses when they aren't set
-    for (auto& [sec, kv] : cfg) {
-        if (sec.rfind("server.", 0) != 0) continue;
-        ServerCfg d = server_cfg(sec.substr(7));
-        const char* login = getenv("USER");
-        std::string gnick = ini_get(cfg, "general", "nick", login ? login : "isekur");  // what nick falls back to
-        for (auto& [k, v] : std::map<std::string, std::string>{
-                 {"host", sec.substr(7)}, {"port", d.tls ? "6697" : "6667"}, {"tls", "false"}, {"tls_verify", "true"},
-                 {"autoconnect", "true"}, {"auto_identify", "true"}, {"nick", gnick}, {"altnick", ini_get(cfg, "general", "altnick", d.nick + "_")},
-                 {"user", ini_get(cfg, "general", "user", d.nick)}, {"realname", ini_get(cfg, "general", "realname", "iSekur user")},
-                 {"password", ""}, {"sasl_user", ""}, {"sasl_pass", ""}, {"sasl_mech", ""}, {"nickserv_pass", ""}, {"autojoin", ""}, {"hilight_words", ""}, {"ignore", ""}, {"mute", ""}, {"notify", ""},
-                 {"send_typing", opt(nullptr, "send_typing", "on")},
-                 {"auto_away", opt(nullptr, "auto_away", "on")}, {"away_announce", opt(nullptr, "away_announce", "off")}})
-            if (!all[sec].count(k) || all[sec][k].empty()) all[sec][k] = v;
-    }
     std::vector<SetRow> out;
     auto themes = theme_names();
-    for (auto& [sec, kv] : all)
-        for (auto& [k, d] : kv) {
-            SetRow r{sec, k, ini_get(cfg, sec, k), d, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}, {}, {}, {}};
-            std::string v = r.val.empty() ? d : r.val;
-            for (auto& ch : v) ch = (char)tolower((unsigned char)ch);
-            if (sec == "general" && k == "theme") r.choices = themes;
-            else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
-            else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
-            else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
-            else if (v == "on" || v == "off") r.choices = {"on", "off"};
-            else if (v == "true" || v == "false") r.choices = {"true", "false"};
-            else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
-            out.push_back(r);
-        }
-    for (auto& r : out) {  // [general]: a category per group; a server, or [web]: one, with a header per group
-        r.grp = set_place(r.sec, r.key).grp;
-        bool srv = r.sec.rfind("server.", 0) == 0;
-        r.cat = r.sec == "general" ? r.grp : r.sec;
-        r.head = r.sec == "general" ? r.grp : srv ? "\u21E2 " + r.sec.substr(7) + " \u00B7 " + r.grp : "[" + r.sec + "]";
+    auto add = [&](const std::string& sec, const std::string& k, const std::string& def, const std::string& grp) -> SetRow& {
+        SetRow r{sec, k, ini_get(cfg, sec, k), def, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}, grp, {}, {}, false, {}};
+        bool srv = sec.rfind("server.", 0) == 0;
+        r.cat = sec == "general" ? "general/" + grp : srv ? sec + "/" + grp : sec;
+        r.head = sec == "general" ? grp : srv ? "⇢ " + sec.substr(7) + " · " + grp : "[" + sec + "]";
+        std::string v = r.val.empty() ? def : r.val;
+        for (auto& ch : v) ch = (char)tolower((unsigned char)ch);
+        if (sec == "general" && k == "theme") r.choices = themes;
+        else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
+        else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
+        else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
+        else if (v == "on" || v == "off") r.choices = {"on", "off"};
+        else if (v == "true" || v == "false") r.choices = {"true", "false"};
+        else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
+        out.push_back(r);
+        return out.back();
+    };
+    // what [general] uses when a key isn't set: the template's value (the theme's timestamp)
+    auto gdef = [&](const std::string& k) { return k == "timestamp" ? theme.lay("timestamp", "%H:%M") : ini_get(defaults, "general", k); };
+    std::vector<std::string> nets;
+    for (auto& [sec, kv] : cfg)
+        if (sec.rfind("server.", 0) == 0) nets.push_back(sec);
+    // [general], by topic; a key a network overrides says where
+    for (auto& k : KEYS) {
+        if (k.scope == 'n') continue;
+        SetRow& r = add("general", k.key, gdef(k.key), k.grp);
+        if (k.scope == 'b')
+            for (auto& sec : nets)
+                if (std::string v = ini_get(cfg, sec, k.key); !v.empty())
+                    r.over += (r.over.empty() ? "" : ", ") + sec.substr(7) + ": " + (secret_key(k.key) ? "********" : v);
     }
-    std::stable_sort(out.begin(), out.end(), [](const SetRow& a, const SetRow& b) {  // ties (unknown keys): A-Z, as the map had them
-        auto pa = set_place(a.sec, a.key), pb = set_place(b.sec, b.key);
-        return pa.sec != pb.sec ? pa.sec < pb.sec : a.sec != b.sec ? a.sec < b.sec : pa.key < pb.key;
-    });
+    auto unknown = [&](const std::string& sec) {  // keys in the config iSekur doesn't know (typos, old ones): Other
+        if (cfg.count(sec))
+            for (auto& [k, v] : cfg.at(sec))
+                if (!key_info(k) && !state_key(sec, k)) add(sec, k, "", "Other");
+    };
+    unknown("general");
+    // each network: its own keys, with what it uses when they aren't set (server_cfg's fallbacks), and
+    // every [general] key it can override: not set here, it inherits [general]'s
+    for (auto& sec : nets) {
+        ServerCfg d = server_cfg(sec.substr(7));
+        std::map<std::string, std::string> uses = {
+            {"name", d.name}, {"host", d.host}, {"port", std::to_string(d.port)}, {"tls", d.tls ? "true" : "false"},
+            {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"},
+            {"auto_identify", d.auto_identify ? "true" : "false"}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}};
+        for (auto& k : KEYS) {
+            if (k.scope == 'g') continue;
+            auto u = uses.find(k.key);
+            SetRow& r = add(sec, k.key, u != uses.end() ? u->second : k.scope == 'b' ? ini_get(cfg, "general", k.key, gdef(k.key)) : "", k.grp);
+            if (k.key == std::string("name")) r.val = d.name;  // not a key: the section's name, renamed by /server rename
+            r.shared = k.scope == 'b';
+        }
+        unknown(sec);
+    }
+    // the other sections ([web], [keys]...): the template's keys in its order, then the config's
+    std::vector<std::string> secs;
+    for (auto& [sec, k] : conf_keys())
+        if (sec != "general" && sec.rfind("server.", 0) != 0 && std::find(secs.begin(), secs.end(), sec) == secs.end()) secs.push_back(sec);
+    for (auto& [sec, kv] : cfg)
+        if (sec != "general" && sec.rfind("server.", 0) != 0 && std::find(secs.begin(), secs.end(), sec) == secs.end()) secs.push_back(sec);
+    for (auto& sec : secs) {
+        std::vector<std::string> ks;
+        for (auto& [s2, k] : conf_keys())
+            if (s2 == sec && defaults.count(sec) && defaults.at(sec).count(k) && std::find(ks.begin(), ks.end(), k) == ks.end()) ks.push_back(k);
+        if (cfg.count(sec))
+            for (auto& [k, v] : cfg.at(sec))
+                if (std::find(ks.begin(), ks.end(), k) == ks.end()) ks.push_back(k);
+        for (auto& k : ks) add(sec, k, ini_get(defaults, sec, k), "");
+    }
     return out;
+}
+
+// what a [server.<name>] can be called
+bool server_name_ok(const std::string& n) {
+    return !n.empty() && n.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == std::string::npos;
+}
+
+// a network's new name: its [server.x] (in the file at once, comments kept), unsaved changes, place in server_order,
+// tab, logs folder (when the new one isn't there yet: logs are never merged) and its tabs' kept history.
+// Only a local label: no reconnect
+bool Core::rename_server(Buffer* b, const std::string& from, const std::string& to) {
+    std::string os = "server." + from, ns = "server." + to, err;
+    Server* t = nullptr;
+    for (auto& sv : servers)
+        if (sv->cfg.name == from) t = sv.get();
+    if (!t && !cfg.count(os)) { print(b, LK::ERROR, "No server named " + from); return false; }
+    if (from == to) return true;
+    if (!server_name_ok(to)) { print(b, LK::ERROR, "A server name can have letters, digits, . _ and - only"); return false; }
+    bool taken = cfg.count(ns);
+    for (auto& sv : servers) taken = taken || sv->cfg.name == to;
+    if (taken) { print(b, LK::ERROR, "There's a server named " + to + " already"); return false; }
+    if (!cfg_path.empty() && !ini_rename_section(cfg_path, os, ns, err)) { print(b, LK::ERROR, err); return false; }
+    std::string old_logs = t ? log_folder(t) : "";
+    for (Ini* m : {&cfg, &unsaved, &set_was})
+        if (m->count(os)) (*m)[ns] = std::move((*m)[os]), m->erase(os);
+    auto ord = split(ini_get(cfg, "general", "server_order"), ',');
+    if (std::find(ord.begin(), ord.end(), from) != ord.end()) {
+        std::string v;
+        for (auto& n : ord) v += (v.empty() ? "" : ",") + (n == from ? to : n);
+        cfg["general"]["server_order"] = v;
+        if (!ini_save(cfg_path, Ini{{"general", {{"server_order", v}}}}, err)) unsaved["general"]["server_order"] = v;
+    }
+    hist_read();
+    for (auto it = hist_cache.begin(); it != hist_cache.end();)
+        if (it->first.rfind(from + "\t", 0) == 0) hist_cache[to + it->first.substr(from.size())] = std::move(it->second), it = hist_cache.erase(it);
+        else ++it;
+    std::string note;
+    if (t) {
+        t->cfg.name = to;
+        for (auto& p : bufs)
+            if (p->srv == t) {
+                if (p->log) fclose(p->log), p->log = nullptr;  // reopened in the new folder
+                if (p->type == BT::STATUS) p->name = to;
+                notify(Ev::BUFFER, p.get());
+            }
+        std::string new_logs = log_folder(t);
+        struct stat st;
+        if (old_logs != new_logs && stat(old_logs.c_str(), &st) == 0) {
+            if (stat(new_logs.c_str(), &st) == 0) note = " (its logs stay in " + old_logs + ": " + new_logs + " exists)";
+            else if (rename(old_logs.c_str(), new_logs.c_str()) != 0) note = " (its logs stay in " + old_logs + ": " + strerror(errno) + ")";
+        }
+    }
+    save_history();
+    dirty = true;
+    print(b, LK::INFO, "Renamed " + from + " to " + to + note);
+    return true;
 }
 
 // [server.<name>] with [general] fallbacks; also re-read by /set
@@ -532,6 +618,55 @@ int Core::index_of(Buffer* b) const {
     for (size_t i = 0; i < bufs.size(); i++)
         if (bufs[i].get() == b) return (int)i;
     return -1;
+}
+
+void Core::hist_read() {
+    if (hist_loaded) return;
+    hist_loaded = true;
+    FILE* f = fopen(cfg_side(cfg_path, "history").c_str(), "r");
+    if (!f) return;
+    std::vector<Line>* cur = nullptr;
+    char row[4096];
+    while (fgets(row, sizeof row, f)) {
+        std::string r = row;
+        if (!r.empty() && r.back() == '\n') r.pop_back();
+        Line l;
+        if (r.rfind("=== ", 0) == 0) cur = &hist_cache[r.substr(4)];
+        else if (cur && parse_log_line(r, l)) cur->push_back(l);
+    }
+    fclose(f);
+}
+
+// <config>.history: "=== server\tname" then that tab's rows in the log format. Private, written whole
+// ponytail: tabs never reopened stay in it forever; prune by age if it ever grows
+void Core::save_history() {
+    if (cfg_path.empty()) return;
+    hist_saved = now_ms();
+    hist_read();  // first: the tabs not open now keep their lines
+    auto rows = hist_cache;
+    for (auto& b : bufs) {
+        Server* s = b->srv;
+        if (!s || (b->type != BT::CHANNEL && b->type != BT::QUERY) || b->name[0] == '*') continue;
+        int n = atoi(opt(s, "log_history", "200").c_str());
+        if (n <= 0 || opt_on(s, "log", false) || !opt_on(s, "keep_history", true)) continue;
+        auto& v = rows[s->cfg.name + "\t" + irc_lower(b->name)];
+        v.clear();
+        for (auto& l : b->lines)
+            if (!l.nolog) v.push_back(l);
+        if (v.size() > (size_t)n) v.erase(v.begin(), v.end() - n);
+    }
+    std::string path = cfg_side(cfg_path, "history"), tmp = path + ".tmp";
+    mode_t old = umask(077);  // chat lines are private, like the logs
+    FILE* f = fopen(tmp.c_str(), "w");
+    umask(old);
+    if (!f) return;
+    for (auto& [key, v] : rows) {
+        if (v.empty()) continue;
+        fprintf(f, "=== %s\n", key.c_str());
+        for (auto& l : v) fprintf(f, "%s\n", log_fmt(l).c_str());
+    }
+    if (fclose(f) == 0) rename(tmp.c_str(), path.c_str());
+    else unlink(tmp.c_str());
 }
 
 Buffer* Core::open(Server* s, BT t, const std::string& name) {
@@ -693,7 +828,8 @@ bool Core::muted(const Buffer* b) const {
 
 std::string Core::opt(const Server* s, const std::string& key, const std::string& def) const {
     std::string g = ini_get(cfg, "general", key, def);
-    return s ? ini_get(cfg, "server." + s->cfg.name, key, g) : g;
+    const KeyInfo* k = s ? key_info(key) : nullptr;
+    return k && k->scope == 'g' ? g : s ? ini_get(cfg, "server." + s->cfg.name, key, g) : g;  // a [general]-only key: the network's is ignored
 }
 
 // /reload: the config file again, without restarting. Unsaved /set changes stay
@@ -765,12 +901,15 @@ std::string safe_name(const std::string& n) {
     return o;
 }
 
-std::string Core::log_path(Buffer* b) const {
-    std::string dir = opt(b->srv, "log_dir", cfg_path.substr(0, cfg_path.rfind('/') + 1) + "logs");
+// <log_dir>/<network>: a network's logs
+std::string Core::log_folder(const Server* s) const {
+    std::string dir = opt(s, "log_dir", cfg_path.substr(0, cfg_path.rfind('/') + 1) + "logs");
     if (dir.rfind("~/", 0) == 0)
         if (const char* h = getenv("HOME")) dir = h + dir.substr(1);
-    return dir + "/" + safe_name(b->srv->cfg.name) + "/" + safe_name(b->name) + ".log";
+    return dir + "/" + safe_name(s->cfg.name);
 }
+
+std::string Core::log_path(Buffer* b) const { return log_folder(b->srv) + "/" + safe_name(b->name) + ".log"; }
 
 // [general] log = on writes channels and queries to <log_dir>/<server>/<name>.log
 void Core::log_line(Buffer* b, const Line& l) {
@@ -798,15 +937,20 @@ void Core::log_line(Buffer* b, const Line& l) {
         if (!b->log) return;
         fprintf(b->log, "--- Log opened %s\n", fmt_time(time(nullptr), "%Y-%m-%d %H:%M:%S").c_str());
     }
-    std::string txt = mirc_strip(l.text), who;
+    fprintf(b->log, "%s\n", log_fmt(l).c_str());
+    fflush(b->log);
+}
+
+// A Line as one log row (what parse_log_line reads back): "2026-10-27 19:09:42 <nick> text"
+std::string log_fmt(const Line& l) {
+    std::string who;
     switch (l.kind) {
     case LK::MSG: who = "<" + l.nick + "> "; break;
     case LK::ACTION: who = "* " + l.nick + " "; break;
     case LK::NOTICE: who = "-" + l.nick + "- "; break;
     default: who = "-!- "; break;
     }
-    fprintf(b->log, "%s %s%s\n", fmt_time(l.ts, "%Y-%m-%d %H:%M:%S").c_str(), who.c_str(), txt.c_str());
-    fflush(b->log);
+    return fmt_time(l.ts, "%Y-%m-%d %H:%M:%S") + " " + who + mirc_strip(l.text);
 }
 
 // One line written by log_line() back into a Line; false for headers/garbage.
@@ -831,7 +975,23 @@ bool parse_log_line(const std::string& s, Line& l) {
 // Fill a newly opened tab with the tail of its log (log_history lines, default 200).
 void Core::load_history(Buffer* b) {
     int n = atoi(opt(b->srv, "log_history", "200").c_str());
-    if (n <= 0 || !opt_on(b->srv, "log", false)) return;
+    if (n <= 0) return;
+    if (!opt_on(b->srv, "log", false)) {  // no log: the last session's lines from <config>.history
+        if (!opt_on(b->srv, "keep_history", true) || cfg_path.empty()) return;
+        hist_read();
+        auto it = hist_cache.find(b->srv->cfg.name + "\t" + irc_lower(b->name));
+        if (it == hist_cache.end()) return;
+        auto& h = it->second;
+        for (size_t i = h.size() > (size_t)n ? h.size() - n : 0; i < h.size(); i++) {
+            h[i].self = b->srv->lower(h[i].nick) == b->srv->lower(b->srv->nick);
+            b->lines.push_back(h[i]);
+        }
+        hist_cache.erase(it);  // the tab has them now; save_history writes them back from it
+        Line sep{time(nullptr), LK::INFO, "", "--- end of last session ---"};
+        sep.nolog = true;  // not saved again: one separator, not one per restart
+        b->lines.push_back(sep);
+        return;
+    }
     // the current log, preceded by the newest rotated one when it is short
     std::string path = log_path(b);
     auto tail = [&](const std::string& p) {
@@ -1150,6 +1310,12 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string val = rest(1);
         if (val == "\"\"") val.clear();  // /set key "": empty, i.e. the default again
         if (key.empty() || sec.empty()) { print(b, LK::ERROR, "Usage: /set [section.]key value"); return; }
+        if (key == "name" && sec.rfind("server.", 0) == 0) {  // not a key: the settings window's name row
+            if (argv.size() == 1) print(b, LK::INFO, argv[0] + " = " + sec.substr(7));
+            else if (val.empty()) print(b, LK::ERROR, "A server needs a name: /server del " + sec.substr(7) + " removes it");
+            else rename_server(b, sec.substr(7), val);
+            return;
+        }
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
@@ -1267,6 +1433,17 @@ void Core::exec(Buffer* b, const std::string& input) {
         quit = true;
         return;
     }
+    if (cmd == "server" && !argv.empty() && argv[0] == "rename") {  // /server rename [old] [new]: asks for what's missing
+        std::string from = argv.size() > 1 ? argv[1] : s ? s->cfg.name : "";
+        if (from.empty()) { print(b, LK::ERROR, "Usage: /server rename old new"); return; }
+        if (argv.size() < 3) {
+            ask_pass(b, "new name", [this, from](const std::string& v) { if (!v.empty()) rename_server(active, from, v); }, false,
+                     "Rename " + from, {"Its config section, tab and logs follow", "Letters, digits, . _ and -"});
+            return;
+        }
+        rename_server(b, from, argv[2]);
+        return;
+    }
     if (cmd == "server" && !argv.empty() && argv[0] == "del") {  // /server del name: out of iSekur and the config
         if (argv.size() < 2) { print(b, LK::ERROR, "Usage: /server del name"); return; }
         std::string name = argv[1], sec = "server." + name, err;
@@ -1292,7 +1469,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             else port = argv[i];
         }
         // the name is a config section: [server.<name>]
-        if (name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos) {
+        if (!server_name_ok(name)) {
             print(b, LK::ERROR, "A server name can have letters, digits, . _ and - only");
             return;
         }

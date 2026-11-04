@@ -224,6 +224,9 @@ dialog .btns .left { margin-right: auto; }
 #setnav button .c { color: var(--muted); font-size: 11px; }
 #setnav button.uns .c::before { content: "● "; color: var(--accent); }
 #setnav button[disabled] { opacity: .35; cursor: default; }
+#setnav button.top { font-weight: 600; }
+#setnav button.sub span:first-child { margin-left: 12px; }  /* a topic under Global or a network */
+#setlist .k small { display: block; color: var(--muted); font-size: 11px; }
 #setlist { overflow-y: auto; display: grid; grid-template-columns: minmax(130px, auto) 1fr; gap: 4px 10px; align-content: start; align-items: center; padding-right: 4px; }
 #setlist .sec { grid-column: 1 / -1; color: var(--accent2); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 0 2px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 #setlist .sec:first-child { padding-top: 0; }
@@ -507,7 +510,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="srvside"><div id="srvlist" role="listbox" aria-label="Servers"></div><button type="button" id="srvnew">+ New server</button></div>
   <div id="srvform">
   <div class="row2"><label>Host or IP<input name="host" required placeholder="irc.sekurnet.org"></label><label>Port<input name="port" type="number" min="1" max="65535" value="6697"></label></div>
-  <label>Network name (its [server.name] in the config)<input name="name" pattern="[A-Za-z0-9._\-]+" placeholder="sekurnet" title="letters, digits, . _ and - only"></label>
+  <label>Network name (its [server.name] in the config; changing it renames it)<input name="name" pattern="[A-Za-z0-9._\-]+" placeholder="sekurnet" title="letters, digits, . _ and - only"></label>
   <label>Nickname<input name="nick" placeholder="(your default nick)"></label>
   <label>Autojoin channels<input name="autojoin" placeholder="#channel, #other key" autocomplete="off"></label>
   <label class="ck"><input type="checkbox" name="tls" checked> SSL/TLS</label>
@@ -1349,17 +1352,21 @@ function srvPick(name) {
     fs.autojoin.value = (o.autojoin || "").split(",").map(x => x.trim()).filter(Boolean).join(", ");
     fs.tls.checked = isOn(o.tls); fs.verify.checked = isOn(o.tls_verify ?? "true"); fs.auto.checked = isOn(o.autoconnect ?? "true");
   }
-  fs.name.readOnly = !!o;  // the name is its [server.name]: renaming is a new server
   fs.verify.disabled = !fs.tls.checked;
   renderSrv();
 }
 // the /set lines for what changed on the picked server; true when there were any
 function srvApply() {
   const o = srvs.find(x => x.name === srvSel); if (!o) return false;
+  const nm = fs.name.value.trim();
+  let n = 0;
+  if (nm && nm !== o.name) {  // first: the /set lines below are for its new [server.name]
+    send({t: "input", buf: active, text: "/server rename " + o.name + " " + nm}), n++;
+    o.name = srvSel = nm;
+  }
   const want = {host: fs.host.value.trim(), port: fs.port.value.trim(), nick: fs.nick.value.trim(),
     autojoin: fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(","),
     tls: fs.tls.checked ? "true" : "false", tls_verify: fs.verify.checked ? "true" : "false", autoconnect: fs.auto.checked ? "true" : "false"};
-  let n = 0;
   for (const [k, v] of Object.entries(want)) {
     const was = ["tls", "tls_verify", "autoconnect"].includes(k) ? (isOn(o[k] ?? (k === "tls" ? "false" : "true")) ? "true" : "false") : (o[k] || "").split(",").map(x => x.trim()).filter(Boolean).join(",");
     if (v === was) continue;
@@ -1371,7 +1378,7 @@ function srvApply() {
 const srvRefresh = () => send({t: "settings", buf: active});
 $("#addsrv").onclick = () => { $("#side").classList.remove("open"); srvSel = null; srvPick(null); srvRefresh(); dsrv.showModal(); };
 $("#srvnew").onclick = () => { srvPick(null); fs.host.focus(); };
-$("#srvsave").onclick = () => { if (!fs.host.reportValidity()) return; srvNote = srvApply() ? "Saved." : "Nothing changed."; renderSrv(); setTimeout(srvRefresh, 300); };
+$("#srvsave").onclick = () => { if (!fs.host.reportValidity() || !fs.name.reportValidity()) return; srvNote = srvApply() ? "Saved." : "Nothing changed."; renderSrv(); setTimeout(srvRefresh, 300); };
 $("#srvdel").onclick = async () => {
   if (!srvSel || await askBox({title: "Delete server", text: "Delete " + srvSel + "? It disconnects, its tabs close and its [server." + srvSel + "] leaves the config.", ok: "Delete"}) === null) return;
   send({t: "input", buf: active, text: "/server del " + srvSel});
@@ -1381,8 +1388,8 @@ fs.tls.onchange = () => { if (fs.port.value === "6667" || fs.port.value === "669
 dsrv.onclose = () => {
   if (dsrv.returnValue !== "ok") return;
   if (srvSel) {  // a configured one: its changes, then connect (or reconnect: host and port count from the next connect)
+    const t = srvTab(srvSel);  // before a rename: the tab still has the old name here
     srvApply();
-    const t = srvTab(srvSel);
     if (t && t.state !== "disconnected") send({t: "input", buf: t.id, text: "/reconnect"});
     else send({t: "input", buf: active, text: "/connect " + srvSel});
     return;
@@ -1555,22 +1562,25 @@ $("#setbtn").onclick = () => { $("#side").classList.remove("open"); $("#setlist"
 let setCat = "";  // "" = All
 function renderSettings(list) {
   const box = $("#setlist"); box.textContent = ""; setRows = [];
-  for (const [sec, k, v, def, uns, secret, choices, cat, head] of list) {
+  for (const [sec, k, v, def, uns, secret, choices, cat, head, shared, over] of list) {
     const full = (sec === "general" ? "" : sec + ".") + k;
     const kl = document.createElement("div"); kl.className = "k" + (+uns ? " uns" : ""); kl.textContent = k; kl.title = full;
+    // where the value comes from: under a network, Global's (inherited) or its own; under Global, who overrides it
+    const inh = +shared && !v, note = +shared && v ? "overrides Global" : over ? over : "";
+    if (note) kl.append(el("small", "", note));
     const row = {full, sec, cat, head, k, kl, uns: +uns};
     const now = v || def;  // what's in effect
     // a switch, a list or a text field; switches and lists apply at once (Apply & save keeps them)
     const live = val => {
       if (!setLive.has(full)) setLive.set(full, v);
       send({t: "input", buf: active, text: "/set " + full + " " + val}); row.orig = val; row.uns = 1; kl.classList.add("uns");
-      for (const nb of $("#setnav").children) if (nb.dataset.cat === "" || nb.dataset.cat === cat) nb.classList.add("uns");  // its category's dot, now
+      for (const nb of $("#setnav").children) if (inCat(cat, nb.dataset.cat)) nb.classList.add("uns");  // its category's dot, now
       $("#setmsg").textContent = full + " = " + val + " (Apply keeps it, Close undoes it)";
     };
     if (choices.length === 2 && /^(on|true|yes)$/.test(choices[0])) {  // left/right and the like: a list
       const lab = document.createElement("label"); lab.className = "sw";
       const cb = document.createElement("input"); cb.type = "checkbox"; cb.checked = now === choices[0];
-      const t = document.createElement("span"); t.textContent = now + (v ? "" : "  (default)");
+      const t = document.createElement("span"); t.textContent = now + (v ? "" : inh ? "  (Global)" : "  (default)");
       cb.onchange = () => { const val = cb.checked ? choices[0] : choices[1]; t.textContent = val; live(val); };
       lab.append(cb, document.createElement("i"), t);
       Object.assign(row, {el: lab, get: () => cb.checked ? choices[0] : choices[1], orig: now});
@@ -1582,7 +1592,7 @@ function renderSettings(list) {
     } else {
       const inp = document.createElement("input");
       if (+secret) { inp.type = "password"; inp.placeholder = v ? "******** (set; type to change)" : "(not set)"; inp.autocomplete = "new-password"; }
-      else { inp.value = v; inp.placeholder = def ? "default: " + def : "(not set)"; }
+      else { inp.value = v; inp.placeholder = def ? (inh ? "inherits: " : "default: ") + def : "(not set)"; }
       inp.oninput = () => inp.classList.toggle("chg", inp.value !== row.orig);
       Object.assign(row, {el: inp, get: () => inp.value, orig: +secret ? "" : v});
     }
@@ -1590,20 +1600,32 @@ function renderSettings(list) {
   }
   filterSettings();
 }
+// like the terminal's: Global ("general") over its topics ("general/Look"), each network ("server.x") over
+// its own, shown while it or one of them is chosen; then [web]...
+const catTop = c => c.split("/")[0];
+const inCat = (cat, s) => !s || cat === s || cat.startsWith(s + "/");
+function catLabel(s) {
+  if (!s) return "All";
+  if (s.includes("/")) return s.slice(s.indexOf("/") + 1);
+  return s === "general" ? "Global" : s.startsWith("server.") ? "⇢ " + s.slice(7) : s === "web" ? "Web" : s === "keys" ? "Keys" : s;
+}
 // the categories with how many keys match, and the keys of the chosen one (or all, under section headers)
 function filterSettings() {
   const q = $("#setq").value.toLowerCase(), box = $("#setlist"), nav = $("#setnav");
   const match = r => !q || r.full.toLowerCase().includes(q) || r.get().toLowerCase().includes(q);
-  const secs = [...new Set(setRows.map(r => r.cat))];  // [general]'s topic groups, then servers, [web]...
-  const count = s => setRows.filter(r => (!s || r.cat === s) && match(r));
+  const secs = [];
+  for (const r of setRows) for (const c of r.cat.includes("/") ? [catTop(r.cat), r.cat] : [r.cat]) if (!secs.includes(c)) secs.push(c);
+  const count = s => setRows.filter(r => inCat(r.cat, s) && match(r));
   if (setCat && (!secs.includes(setCat) || !count(setCat).length)) setCat = "";  // a search with no hits here shows them all
+  const open = catTop(setCat);
   nav.textContent = "";
   for (const s of ["", ...secs]) {
+    if (s.includes("/") && catTop(s).startsWith("server.") && catTop(s) !== open) continue;  // another network's topics: folded
     const rows = count(s), b = document.createElement("button");
-    b.type = "button"; b.className = (s === setCat ? "on" : "") + (rows.some(r => r.uns) ? " uns" : ""); b.dataset.cat = s;
+    b.type = "button"; b.className = (s === setCat ? "on" : "") + (rows.some(r => r.uns) ? " uns" : "") + (s.includes("/") ? " sub" : s === "general" || s.startsWith("server.") ? " top" : ""); b.dataset.cat = s;
     b.innerHTML = "<span></span><span class=c></span>";
-    b.firstChild.textContent = s ? s.replace(/^server\./, "⇢ ") : "All";
-    b.lastChild.textContent = rows.length; b.title = !s ? "Every setting" : /^(server\.|web$|keys$)/.test(s) ? "[" + s + "]" : "[general] " + s;
+    b.firstChild.textContent = catLabel(s);
+    b.lastChild.textContent = rows.length; b.title = !s ? "Every setting" : s === "general" ? "[general]" : s.startsWith("general/") ? "[general] " + catLabel(s) : "[" + catTop(s) + "]" + (s.includes("/") ? " " + catLabel(s) : "");
     b.disabled = s !== "" && !rows.length;
     b.onclick = () => { setCat = s; filterSettings(); box.scrollTop = 0; };
     nav.append(b);
@@ -1612,7 +1634,7 @@ function filterSettings() {
   box.textContent = "";
   let last = null, any = false;
   for (const r of setRows) {
-    if ((setCat && r.cat !== setCat) || !match(r)) continue;
+    if (!inCat(r.cat, setCat) || !match(r)) continue;
     if (r.head !== last) { const h = document.createElement("div"); h.className = "sec"; h.textContent = r.head; box.append(h); last = r.head; }
     box.append(r.kl, r.el); any = true;
   }
@@ -2034,11 +2056,14 @@ const MENU_ICONS = [
   [/^Close/, P("M18 6L6 18M6 6l12 12")],
   [/^Quiet mode on/, BELL + P("M2 2l20 20")],
   [/^Quiet mode off/, BELL],
+  [/^Mute/, P("M11 5L6 9H2v6h4l5 4zM23 9l-6 6M17 9l6 6")],
+  [/^Unmute/, P("M11 5L6 9H2v6h4l5 4zM15.5 8.5a5 5 0 0 1 0 7M19 5a10 10 0 0 1 0 14")],
   [/autojoin$/, STAR],
   [/^Reconnect/, P("M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15")],
   [/^(Connect|Disconnect)$/, POWER],
   [/its channels$/, P("M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01")],
   [/at startup$/, P("M13 2L3 14h9l-1 8 10-12h-9z")],
+  [/^Rename/, P("M12 20h9M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z")],
   [/^Delete/, TRASH],
 ];
 function showMenu(m) {

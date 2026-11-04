@@ -5,6 +5,7 @@
 nick      = mynick
 altnick   = mynick_
 realname  = iSekur user
+; user      = mynick         ; the ident (user@) part; default: the nick
 theme     = default          ; themes/<name>.theme (also ~/.config/isekur/themes/)
 theme_dir = themes           ; where themes are looked for first, e.g. ~/mythemes
 web_font      = theme      ; webchat font: theme (its font, else mono) | mono | sans | serif
@@ -26,6 +27,8 @@ log       = off
 log_dir   =                  ; default: "logs" next to this file, e.g. ~/irclogs
 log_history = 200            ; lines restored into a tab from its log (0 = off)
 log_rotate  = on             ; start a new file each day; old ones become <name>.YYYY-MM-DD.log
+keep_history = on            ; log off: tabs still show their last log_history lines after a restart
+                             ; (kept in <config>.history, e.g. isekur.history; private, overwritten)
 
 # Copy highlights and private messages to window 1 ("what did I miss").
 hilight_window = on
@@ -142,6 +145,7 @@ notify    =                  ; nicks to watch: "bob is online" / "went offline" 
 ; sasl_pass = secret
 ; sasl_mech = PLAIN          ; PLAIN | SCRAM-SHA-256 | EXTERNAL (default: PLAIN, or EXTERNAL with cert)
 ; cert      = /path/client.pem  ; client certificate for SASL EXTERNAL / CertFP
+; key       = /path/client.key  ; its private key, when it isn't in the cert file
 ; password  = server-password  ; bouncers: ZNC me/network:pass, psyBNC/sBNC the user password
 ; nickserv_pass = secret     ; /msg NickServ IDENTIFY on connect, for networks without SASL
 ; e2e_keys  =                ; written by /e2e #chan for autojoin channels (the key, not the password)

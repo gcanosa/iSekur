@@ -173,6 +173,26 @@ static bool write_file(const std::string& path, const std::string& text, std::st
     return true;
 }
 
+// text with [from]'s header renamed [to]: its keys and comments stay where they are
+std::string ini_rename(const std::string& text, const std::string& from, const std::string& to) {
+    std::istringstream in(text);
+    std::string out, line;
+    while (std::getline(in, line)) {
+        std::string t = trim(line);
+        if (!t.empty() && t[0] == '[' && t.back() == ']' && trim(t.substr(1, t.size() - 2)) == from) line = "[" + to + "]";
+        out += line + "\n";
+    }
+    return out;
+}
+
+bool ini_rename_section(const std::string& path, const std::string& from, const std::string& to, std::string& err) {
+    std::ifstream f(path);
+    if (!f) return true;  // no file: nothing to rename
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return write_file(path, ini_rename(ss.str(), from, to), err);
+}
+
 bool ini_drop_section(const std::string& path, const std::string& sec, std::string& err) {
     std::ifstream f(path);
     if (!f) return true;  // no file: nothing to drop

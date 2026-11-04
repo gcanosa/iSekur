@@ -1,6 +1,7 @@
 // Self-checks for the parsing code: run with `make test`.
 #include <algorithm>
 #include <cassert>
+#include <sys/stat.h>
 #include <cstdio>
 #include <fstream>
 #include <csignal>
@@ -220,6 +221,35 @@ int main() {
     Buffer* chb = core.open(ts, BT::CHANNEL, "#c");
     chb->joined = true;
     auto feed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(ts, mm); };
+    {  // keep_history: a tab's last log_history lines come back after a restart, log off
+        core.cfg_path = "build/test-hist.conf";
+        unlink("build/test-hist.history");
+        core.cfg["general"]["log_history"] = "2";
+        Buffer* h = core.open(ts, BT::CHANNEL, "#Hist");
+        core.add(h, Line{1000, LK::MSG, "bob", "one"});
+        core.add(h, Line{2000, LK::MSG, "me", "two"});
+        core.add(h, Line{3000, LK::ACTION, "bob", "waves"});
+        Line g{3000, LK::INFO, "", "grep hit"};
+        g.nolog = true;
+        core.add(h, g);
+        core.hist_cache["gone\t#old"] = {Line{1000, LK::MSG, "x", "kept"}};  // a tab not open now
+        core.hist_loaded = true;
+        core.save_history();
+        core.close(h);
+        core.hist_cache.clear(), core.hist_loaded = false;  // a fresh start
+        h = core.open(ts, BT::CHANNEL, "#hist");
+        assert(h->lines.size() == 3 && h->lines[0].text == "two" && h->lines[0].self && h->lines[1].kind == LK::ACTION);
+        assert(h->lines[2].text == "--- end of last session ---" && h->lines[2].nolog);
+        assert(core.hist_cache.count("gone\t#old") && !core.hist_cache.count("t\t#hist"));
+        core.close(h);
+        core.cfg["general"]["keep_history"] = "off";
+        core.hist_cache.clear(), core.hist_loaded = false;
+        h = core.open(ts, BT::CHANNEL, "#hist");
+        assert(h->lines.empty());
+        core.close(h);
+        core.cfg["general"].erase("keep_history"), core.cfg["general"].erase("log_history");
+        unlink("build/test-hist.history"), core.cfg_path.clear();
+    }
     {  // /move N: among the server's tabs, after its server tab; a drag runs it
         Buffer *m1 = core.open(ts, BT::CHANNEL, "#m1"), *m2 = core.open(ts, BT::QUERY, "m2");
         auto names = [&]() { std::string o; for (auto& p : core.bufs) if (p->srv == ts) o += p->name + ","; return o; };
@@ -524,9 +554,9 @@ int main() {
     // a server tab's menu: reconnect / disconnect while up, fold, close (asks first)
     {
         auto sm = core.tab_menu(ts->status);
-        assert(sm.size() == 7 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
-               sm[5].second.rfind("?Disconnect from ", 0) == 0 && sm[6].second.rfind("?Delete t:", 0) == 0 &&
-               sm[6].second.find("\n/server del t") != std::string::npos);
+        assert(sm.size() == 8 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
+               sm[5].second.rfind("?Disconnect from ", 0) == 0 && sm[6].second == "/server rename t" && sm[7].second.rfind("?Delete t:", 0) == 0 &&
+               sm[7].second.find("\n/server del t") != std::string::npos);
         // connect at startup or not: flips with the setting and goes to the config at once
         std::string path = "build/test-autoconnect.conf";
         remove(path.c_str());
@@ -578,6 +608,55 @@ int main() {
         core.exec(home, "/server del gone2");
         assert(home->lines.back().text == "No server named gone2");
         remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
+    }
+
+    // every key the settings know is in the template (where it can be set), and every key there is known
+    {
+        std::set<std::string> gen, srv;
+        for (auto& [sec, k] : conf_keys())
+            if (sec == "general") gen.insert(k);
+            else if (sec.rfind("server.", 0) == 0) srv.insert(k);
+        int bad = 0;
+        auto no = [&](const char* what, const std::string& k) { fprintf(stderr, "%s: %s\n", what, k.c_str()), bad++; };
+        for (auto& k : setting_keys()) {
+            if (k.scope != 'n' && !gen.count(k.key)) no("not in the template's [general]", k.key);
+            if (k.scope == 'n' && std::string(k.key) != "name" && !srv.count(k.key)) no("not in the template's [server.*]", k.key);
+        }
+        for (auto& k : gen) if (!key_info(k) || key_info(k)->scope == 'n') no("template [general] key not in KEYS as g or b", k);
+        for (auto& k : srv) if (!key_info(k) || key_info(k)->scope == 'g') no("template [server.*] key not in KEYS as n or b", k);
+        assert(!bad);
+    }
+
+    // /server rename: the section in the file (comments kept), the tab, unsaved keys, server_order and the logs folder
+    {
+        assert(ini_rename("[a]\n# note\nk = 1\n[b]\n", "a", "z") == "[z]\n# note\nk = 1\n[b]\n");
+        std::string path = "build/test-rename.conf", logs = "build/test-rename-logs";
+        system(("rm -rf " + logs).c_str());
+        { std::ofstream f(path); f << "[general]\nnick = me\n\n[server.old1]\n# mine\nhost = irc.invalid\nautoconnect = false\n"; }
+        std::swap(core.cfg_path, path);
+        core.cfg["server.old1"]["host"] = "irc.invalid", core.cfg["server.old1"]["autoconnect"] = "false";
+        core.cfg["server.old1"]["log_dir"] = logs, core.unsaved["server.old1"]["nick"] = "un";
+        core.cfg["general"]["server_order"] = "x,old1";
+        Server* g = core.add_server(core.server_cfg("old1"));
+        mkdir_p(logs + "/old1");
+        core.exec(g->status, "/server rename old1 bad/name");
+        assert(g->cfg.name == "old1" && g->status->lines.back().text.find("letters, digits") != std::string::npos);
+        core.exec(g->status, "/set server.old1.name new1");  // the settings window's name row
+        Ini f;
+        struct stat st;
+        assert(g->cfg.name == "new1" && g->status->name == "new1" && !core.cfg.count("server.old1") && core.cfg["server.new1"]["host"] == "irc.invalid" &&
+               core.unsaved["server.new1"]["nick"] == "un" && core.cfg["general"]["server_order"] == "x,new1" &&
+               ini_load(core.cfg_path, f) && f.count("server.new1") && !f.count("server.old1") && stat((logs + "/new1").c_str(), &st) == 0);
+        std::ifstream in(core.cfg_path);
+        std::string txt((std::istreambuf_iterator<char>(in)), {});
+        assert(txt.find("[server.new1]\n# mine\nhost") != std::string::npos);
+        core.exec(home, "/server rename new1 " + core.servers.front()->cfg.name);
+        assert(home->lines.back().text.find("already") != std::string::npos);
+        core.exec(home, "/server del new1");
+        core.cfg["general"].erase("server_order");
+        remove(core.cfg_path.c_str());
+        system(("rm -rf " + logs).c_str());
         std::swap(core.cfg_path, path);
     }
 
@@ -760,7 +839,26 @@ int main() {
             assert(at("general.nick") < at("general.paste_confirm") && at("general.typing_effect") < at(sv + "host"));
             assert(at(sv + "host") < at(sv + "nick") && at(sv + "nick") + 1 == at(sv + "altnick"));
             assert(at(sv + "password") < at(sv + "auto_identify") && at(sv + "auto_identify") < at(sv + "nickserv_pass"));
-            assert(at(sv + "autojoin") < at(sv + "last_nick"));
+            assert(at(sv + "last_nick") == (long)ord.size());  // state, not a setting
+        }
+        // a network lists every [general] key it can override: unset, it inherits [general]'s value;
+        // set, [general]'s row names the network. A [general]-only key set on a network does nothing
+        {
+            std::string sv = "server." + ts->cfg.name;
+            core.cfg["general"]["log_history"] = "77";
+            const Core::SetRow* inh = nullptr;
+            auto rows = core.setting_rows();
+            for (auto& r : rows) if (r.sec == sv && r.key == "log_history") inh = &r;
+            assert(inh && inh->shared && inh->val.empty() && inh->def == "77" && inh->cat == sv + "/Logs");
+            core.cfg[sv]["log_history"] = "5", core.cfg[sv]["theme"] = "mirc";
+            rows = core.setting_rows();
+            bool over = false, gen_theme = false;
+            for (auto& r : rows) {
+                over |= r.sec == "general" && r.key == "log_history" && r.over == ts->cfg.name + ": 5" && r.cat == "general/Logs";
+                gen_theme |= r.sec == sv && r.key == "theme" && r.grp == "Other";
+            }
+            assert(over && !gen_theme && core.opt(ts, "log_history", "1") == "5" && core.opt(ts, "theme", "x") == ini_get(core.cfg, "general", "theme", "x"));
+            core.cfg[sv].erase("log_history"), core.cfg[sv].erase("theme"), core.cfg["general"].erase("log_history");
         }
         unlink(core.cfg_path.c_str());
         std::swap(core.cfg_path, path);

@@ -12,7 +12,7 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] | del name", "Connect to a new server, or delete one",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick). The server is remembered "
@@ -22,8 +22,11 @@ static const std::vector<CmdInfo> CMDS = {
      "(lowercase is done for you). Names, colors, badges, subs, raids, timeouts and room modes show up; "
      "WHOIS, DCC and Twitch's /ban /timeout don't exist over its IRC. A server that asks for TLS "
      "(IRCv3 STS) gets it: iSekur reconnects with TLS on the port it names, and remembers that for as long "
-     "as the server says (the sts file next to the config; delete it to forget).",
-     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify",
+     "as the server says (the sts file next to the config; delete it to forget). /server rename gives a network a new name: "
+     "its [server.<name>] in the config (saved at once, comments kept), its tab, its logs folder and kept history follow, "
+     "no reconnect needed (the name is only yours). Without the names it asks, for the tab you're in; the settings window's "
+     "name row and r do the same.",
+     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "
@@ -38,8 +41,8 @@ static const std::vector<CmdInfo> CMDS = {
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect sekurnet"}},
     {"servers", "Connection", "", "Manage your servers",
-     "The terminal: the settings window at the first server, where c connects the selected one, x deletes it (it asks "
-     "first) and n adds one; its keys edit it. The webchat: the Servers window (the server-rack button). Elsewhere it "
+     "The terminal: the settings window at the first server, where c connects the selected one, r renames it, x deletes "
+     "it (it asks first) and n adds one; its keys edit it. The webchat: the Servers window (the server-rack button). Elsewhere it "
      "lists them.",
      {"/servers"}},
     {"autoconnect", "Connection", "[on|off]", "Connect this server when iSekur starts",
@@ -265,7 +268,10 @@ static const std::vector<CmdInfo> CMDS = {
 
     // ---- Settings
     {"set", "Settings", "[[section.]key [value]]", "The settings window, or show or change one setting",
-     "Alone it opens the settings window: every key by category (All, general, web, each server). "
+     "Alone it opens the settings window: All, then Global ([general], by topic), each network with its own topics "
+     "(open the one you pick), then Web. A network lists its own keys and every Global one it can override: "
+     "\"inherits\" shows Global's value, \"overrides Global\" its own (d gives Global's back), and the Global key "
+     "names the networks overriding it. "
      "/ searches, Up/Down moves, Tab or Left/Right goes between categories and keys, e or Enter edits, "
      "Space switches on/off (and steps through the themes, applied at once), d or Del puts the default "
      "back, s or Ctrl+S saves, q or Esc closes; the mouse works too. The webchat's ⚙ is the same, with "
@@ -628,6 +634,7 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("The settings window"),
         "  " G_CMD("/set") " alone opens every setting by category: " G_KEY("/") " searches, " G_KEY("e") " edits,",
         "  " G_KEY("Space") " flips on/off or steps through a list, " G_KEY("d") " puts the default back, " G_KEY("s") " saves, " G_KEY("Esc") " closes.",
+        "  Each network has Global's keys too: set one there and it overrides Global for that network only.",
         "",
         G_HEAD("Colors"),
         "  " G_CMD("/theme") " lists the themes, " G_CMD("/theme dracula") " tries one live. Some to try:",
@@ -648,8 +655,8 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/hilight add ") G_VAL("word") " + " G_CMD("/save") " lights up other words too.",
         "",
         G_HEAD("Logs"),
-        "  " G_CMD("/set log on") " + " G_CMD("/save") " writes every channel and query to disk; reopened tabs show",
-        "  their last lines again. " G_CMD("/grep ") G_VAL("text") " searches this tab.",
+        "  After a restart every channel and query shows its last lines again (" BOLD "keep_history" RESET ").",
+        "  " G_CMD("/set log on") " + " G_CMD("/save") " also writes them all to disk. " G_CMD("/grep ") G_VAL("text") " searches this tab.",
         "",
         G_HEAD("Stay online when you leave"),
         "  " G_KEY("Ctrl+Z") ", " G_KEY("Alt+D") " or " G_CMD("/detach") " gives the terminal back and " BOLD "keeps iSekur connected" RESET ".",

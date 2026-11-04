@@ -1047,37 +1047,61 @@ void Tui::draw_lock(int W, int H, long long ms) {
 }
 
 // ---- the settings window (/set alone) ----------------------------------------
-//   ┌─ Settings ───────────────────────────────────────────────┐
-//   │ / search: tls_                                           │
-//   │ All          50 │ [server.libera]                        │
-//   │ general      36 │  tls              true                 │
-//   │ ⇢ libera      6 │  tls_verify       default: true        │
-//   │ ↑↓ move · e edit · Space on/off · d default · s save · q │
-//   └──────────────────────────────────────────────────────────┘
+//   ┌─ Settings ────────────────────────────────────────────────┐
+//   │ / search: log                                             │
+//   │ All          12 │ ⇢ libera · Logs                         │
+//   │ Global        5 │  log          ● on  ← overrides Global  │
+//   │   Logs        5 │  log_history  inherits: 200             │
+//   │ ⇢ libera      5 │  log_rotate   ● on  (Global)            │
+//   │     Logs      5 │                                         │
+//   │ ↑↓ move · e edit · Space on/off · d default · s save · q  │
+//   └───────────────────────────────────────────────────────────┘
 static std::string lower(std::string s) { for (auto& ch : s) ch = (char)tolower((unsigned char)ch); return s; }
 static std::string full_key(const Core::SetRow& r) { return (r.sec == "general" ? "" : r.sec + ".") + r.key; }
 
-// the categories with how many keys match the search, and the rows of the chosen one
-static void set_view(const std::vector<Core::SetRow>& all, const std::string& q, int& cat,
-                     std::vector<std::string>& cats, std::vector<int>& counts, std::vector<const Core::SetRow*>& rows) {
+// the categories with how many keys match the search, and the rows of the chosen one. Two levels:
+// "general" (Global) over "general/Look"..., "server.x" over "server.x/Login"...; a network's topics show
+// while it (or one of them) is chosen. cat: the chosen one's name ("" All), kept when the list folds
+static std::string cat_parent(const std::string& c) { size_t sl = c.find('/'); return sl == std::string::npos ? "" : c.substr(0, sl); }
+static int set_view(const std::vector<Core::SetRow>& all, const std::string& q, std::string& cat,
+                    std::vector<std::string>& cats, std::vector<int>& counts, std::vector<const Core::SetRow*>& rows) {
     auto match = [&](const Core::SetRow& r) { return q.empty() || lower(full_key(r)).find(q) != std::string::npos || (!r.secret && lower(r.val).find(q) != std::string::npos); };
-    cats = {""};
-    for (auto& r : all)
-        if (std::find(cats.begin(), cats.end(), r.cat) == cats.end()) cats.push_back(r.cat);
-    counts.assign(cats.size(), 0);
-    for (auto& r : all)
-        if (match(r)) counts[0]++, counts[(size_t)(std::find(cats.begin(), cats.end(), r.cat) - cats.begin())]++;
-    if (cat >= (int)cats.size() || (cat > 0 && !counts[(size_t)cat])) cat = 0;  // a search with no hits here: All
+    auto in = [](const Core::SetRow& r, const std::string& c) { return c.empty() || r.cat == c || r.cat.rfind(c + "/", 0) == 0; };
+    std::vector<std::string> full = {""};
+    for (auto& r : all) {
+        std::string p = cat_parent(r.cat);
+        if (!p.empty() && std::find(full.begin(), full.end(), p) == full.end()) full.push_back(p);
+        if (std::find(full.begin(), full.end(), r.cat) == full.end()) full.push_back(r.cat);
+    }
+    std::string open = cat_parent(cat).empty() ? cat : cat_parent(cat);  // the network whose topics show
+    cats.clear(), counts.clear();
+    for (auto& c : full) {
+        std::string p = cat_parent(c);
+        if (p.rfind("server.", 0) == 0 && p != open) continue;
+        int n = 0;
+        for (auto& r : all) n += match(r) && in(r, c);
+        cats.push_back(c), counts.push_back(n);
+    }
+    int at = (int)(std::find(cats.begin(), cats.end(), cat) - cats.begin());
+    if (at >= (int)cats.size() || !counts[(size_t)at]) cat.clear(), at = 0;  // gone, or a search with no hits here: All
     rows.clear();
     for (auto& r : all)
-        if (match(r) && (cat == 0 || r.cat == cats[(size_t)cat])) rows.push_back(&r);
+        if (match(r) && in(r, cat)) rows.push_back(&r);
+    return at;
+}
+static std::string cat_label(const std::string& c) {
+    if (c.empty()) return "All";
+    if (c == "general") return "Global";
+    if (c.rfind("server.", 0) == 0 && cat_parent(c).empty()) return "⇢ " + c.substr(7);
+    if (!cat_parent(c).empty()) return (cat_parent(c) == "general" ? "  " : "    ") + c.substr(c.find('/') + 1);
+    return c == "web" ? "Web" : c == "keys" ? "Keys" : c;
 }
 
 // the server the selected key or category is about ("" for none): its keys, or a "server.x" category
-static std::string set_server(const std::vector<std::string>& cats, int cat, const Core::SetRow* r) {
+static std::string set_server(const std::string& cat, const Core::SetRow* r) {
     if (r && r->sec.rfind("server.", 0) == 0) return r->sec.substr(7);
-    if (cat > 0 && cat < (int)cats.size() && cats[(size_t)cat].rfind("server.", 0) == 0) return cats[(size_t)cat].substr(7);
-    return "";
+    std::string p = cat_parent(cat).empty() ? cat : cat_parent(cat);
+    return p.rfind("server.", 0) == 0 ? p.substr(7) : "";
 }
 
 void Tui::draw_settings(int W, int H) {
@@ -1101,14 +1125,13 @@ void Tui::draw_settings(int W, int H) {
     std::vector<std::string> cats;
     std::vector<int> counts;
     std::vector<const Core::SetRow*> rows;
-    set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
     if (sw.to_servers) {
         sw.to_servers = false;
-        for (int i = 0; i < (int)cats.size(); i++)
-            if (cats[(size_t)i].rfind("server.", 0) == 0) { sw.cat = i, sw.focus = 0, sw.sel = sw.top = 0; break; }
-        if (sw.cat == 0) sw.msg = "No servers yet: n adds one";
-        set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
+        for (auto& r : all)
+            if (r.sec.rfind("server.", 0) == 0) { sw.cat = r.sec, sw.focus = 0, sw.sel = sw.top = 0; break; }
+        if (sw.cat.empty()) sw.msg = "No servers yet: n adds one";
     }
+    int ci = set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
     sw.sel = std::max(0, std::min(sw.sel, (int)rows.size() - 1));
 
     // search line: "/" starts it, letters are commands otherwise
@@ -1121,17 +1144,23 @@ void Tui::draw_settings(int W, int H) {
     // categories
     int nw = 22, ly = y0 + 3, n = bh - 6;  // n rows for the lists
     sw.x0 = x0, sw.y0 = y0, sw.w = bw, sw.h = bh, sw.nav_w = nw, sw.list_y = ly;
-    for (int i = 0; i < (int)cats.size() && i < n; i++) {
-        std::string name = cats[(size_t)i].empty() ? "All" : cats[(size_t)i].rfind("server.", 0) == 0 ? "\u21E2 " + cats[(size_t)i].substr(7) : cats[(size_t)i];
-        bool on = i == sw.cat, uns = false;
-        for (auto& r : all) uns |= r.unsaved && (i == 0 || r.cat == cats[(size_t)i]);
+    if (ci < sw.ctop) sw.ctop = ci;  // the chosen category in sight
+    if (ci >= sw.ctop + n) sw.ctop = ci - n + 1;
+    sw.ctop = std::max(0, std::min(sw.ctop, (int)cats.size() - n));
+    for (int j = 0; j < n && sw.ctop + j < (int)cats.size(); j++) {
+        int i = sw.ctop + j;
+        const std::string& cn = cats[(size_t)i];
+        std::string name = cat_label(cn);
+        bool on = i == ci, uns = false;
+        for (auto& r : all) uns |= r.unsaved && (cn.empty() || r.cat == cn || r.cat.rfind(cn + "/", 0) == 0);
         Style st = on ? sel : counts[(size_t)i] ? bs : dim;
         if (on && sw.focus != 0) st = keyst, st.attr |= A_BOLD;  // chosen, but the keys have the focus
-        fill(ly + i, x0 + 2, x0 + 2 + nw - 1, on && sw.focus == 0 ? sel : bs);
-        text(x0 + 3, ly + i, x0 + nw - 5, name, st, false);
+        if (cn == "general" || (cn.rfind("server.", 0) == 0 && cat_parent(cn).empty())) st.attr |= A_BOLD;  // a level's top
+        fill(ly + j, x0 + 2, x0 + 2 + nw - 1, on && sw.focus == 0 ? sel : bs);
+        text(x0 + 3, ly + j, x0 + nw - 5, name, st, false);
         std::string cnt = (uns ? "\u25CF " : "") + std::to_string(counts[(size_t)i]);
         int cl = (int)cnt.size() - (uns ? 2 : 0);
-        text(x0 + 2 + nw - 2 - cl, ly + i, x0 + 2 + nw, cnt, on && sw.focus == 0 ? sel : dim, false);
+        text(x0 + 2 + nw - 2 - cl, ly + j, x0 + 2 + nw, cnt, on && sw.focus == 0 ? sel : dim, false);
     }
     for (int yy = ly - 1; yy < ly + n; yy++) cell(x0 + 2 + nw, yy, U'│', ls);
 
@@ -1170,15 +1199,22 @@ void Tui::draw_settings(int W, int H) {
             continue;
         }
         std::string eff = L.r->val.empty() ? L.r->def : L.r->val;
-        if (L.r->choices.size() == 2 && (L.r->choices[0] == "on" || L.r->choices[0] == "true" || L.r->choices[0] == "yes")) {  // on/off: ● on, ○ off, (default) when not set
+        // where the value comes from: a network's own (overrides Global), Global's (inherited), the default
+        bool inherits = L.r->shared && L.r->val.empty(), overrides = L.r->shared && !L.r->val.empty();
+        std::string from = inherits ? "  (Global)" : overrides ? "  \u2190 overrides Global" : L.r->val.empty() ? "  (default)" : "";
+        if (!L.r->over.empty()) from += "  (" + L.r->over + ")";
+        if (L.r->choices.size() == 2 && (L.r->choices[0] == "on" || L.r->choices[0] == "true" || L.r->choices[0] == "yes")) {  // on/off: ● on, ○ off, and where it comes from
             bool yes = eff == L.r->choices[0];
-            Style ts = on ? sel : yes ? val : dim;
+            Style ts = on ? sel : yes && !inherits ? val : dim;
             int ex = text(vx, yy, vmax, std::string(yes ? "\u25CF " : "\u25CB ") + eff, ts, false);
-            if (L.r->val.empty()) ex = text(ex, yy, vmax, "  (default)", on ? sel : dim, false);
-            if (on) text(ex, yy, vmax, "   Space: switch", sel, false);
+            ex = text(ex, yy, vmax, from, on ? sel : dim, false);
+            if (on) text(ex, yy, vmax, inherits ? "   Space: override" : overrides ? "   Space: switch · d: Global's" : "   Space: switch", sel, false);
             continue;
         }
-        std::string v = L.r->secret ? (L.r->val.empty() ? "(not set)" : "********") : L.r->val.empty() ? (L.r->def.empty() ? "(not set)" : "default: " + L.r->def) : L.r->val;
+        std::string over = L.r->over.empty() ? "" : "  (" + L.r->over + ")";
+        std::string v = !L.r->val.empty() ? (L.r->secret ? "********" : L.r->val) + (overrides ? "  \u2190 overrides Global" : "") + over
+                        : L.r->secret || L.r->def.empty() ? "(not set)" + over
+                                                          : (inherits ? "inherits: " : "default: ") + L.r->def + over;
         int ex = text(vx, yy, vmax, v, on ? sel : L.r->val.empty() ? dim : val, false);
         if (on && !L.r->choices.empty()) {  // the themes: where this one is among them
             std::string list;
@@ -1188,10 +1224,10 @@ void Tui::draw_settings(int W, int H) {
     }
     // what happened, or what the keys do
     const Core::SetRow* hr = rows.empty() ? nullptr : rows[(size_t)std::max(0, std::min(sw.sel, (int)rows.size() - 1))];
-    bool on_srv = !set_server(cats, sw.cat, sw.focus == 1 ? hr : nullptr).empty();
+    bool on_srv = !set_server(sw.cat, sw.focus == 1 ? hr : nullptr).empty();
     std::string hint = sw.editing     ? "Enter: set it · Esc: cancel · empty = the default"
                        : sw.searching ? "type to search · Enter or \u2193: to the list · Esc: clear it"
-                       : on_srv ? "c: connect · x: delete server · n: new server · e Enter: edit · s: save · q: close"
+                       : on_srv ? "c: connect · r: rename · x: delete server · n: new server · e Enter: edit · s: save · q: close"
                        : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · n: new server · /: search · q Esc: close"
                                        : "\u2191\u2193: move · e Enter: edit · Space: on/off, next choice · d: default · /: search · s: save · q: close";
     text(x0 + 2, y1 - 1, x1 - 1, sw.msg.empty() ? hint : sw.msg, sw.msg.empty() ? dim : mark, false);
@@ -1202,7 +1238,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     std::vector<std::string> cats;
     std::vector<int> counts;
     std::vector<const Core::SetRow*> rows;
-    set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
+    int ci = set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
     const Core::SetRow* r = rows.empty() ? nullptr : rows[(size_t)std::max(0, std::min(sw.sel, (int)rows.size() - 1))];
     bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
     if (sw.editing) {
@@ -1211,7 +1247,8 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
             std::string v = to_utf8(sw.ed);
             c.exec(c.active, "/set " + full_key(*r) + " " + (v.empty() ? "\"\"" : v));
             sw.editing = false;
-            sw.msg = full_key(*r) + (v.empty() ? " is back to its default" : " = " + (r->secret ? std::string("********") : v)) + "  (not saved yet: s)";
+            sw.msg = r->key == "name" && r->sec.rfind("server.", 0) == 0 ? (v.empty() ? "A server needs a name" : "Renamed to " + v + " (saved)")
+                     : full_key(*r) + (v.empty() ? (r->shared ? " uses Global's again" : " is back to its default") : " = " + (r->secret ? std::string("********") : v)) + "  (not saved yet: s)";
             return;
         }
         if (ch || k == TB_KEY_SPACE) sw.ed.insert(sw.ecur++, 1, ch ? (char32_t)ch : U' ');
@@ -1244,8 +1281,9 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
         return;
     }
     // servers, like the webchat's Servers window: c connects the selected one, x deletes it (asks first), n adds one
-    std::string srv = set_server(cats, sw.cat, r);
+    std::string srv = set_server(sw.cat, r);
     if (ch == 'c' && !srv.empty()) { c.exec(c.active, "/connect " + srv); sw.msg = "Connecting " + srv; return; }
+    if (ch == 'r' && !srv.empty()) { sw.open = false; c.exec(c.active, "/server rename " + srv); return; }
     if (ch == 'x' && !srv.empty()) {
         sw.open = false;
         confirm = "Delete " + srv + ": disconnect, close its tabs and remove it from the config?\n/server del " + srv, confirm_title = "Delete server";
@@ -1274,8 +1312,8 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     if (k == TB_KEY_ARROW_RIGHT) { sw.focus = 1; return; }
     if (sw.focus == 0) {  // categories: the empty ones are skipped
         int d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0, nc = (int)cats.size();
-        for (int i = sw.cat + d; d && i >= 0 && i < nc; i += d)
-            if (counts[(size_t)i]) { sw.cat = i, sw.sel = sw.top = 0; break; }
+        for (int i = ci + d; d && i >= 0 && i < nc; i += d)
+            if (counts[(size_t)i]) { sw.cat = cats[(size_t)i], sw.sel = sw.top = 0; break; }
         if (k == TB_KEY_ENTER) sw.focus = 1;
         return;
     }
@@ -1287,9 +1325,10 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     else if (k == TB_KEY_HOME) sw.sel = 0;
     else if (k == TB_KEY_END) sw.sel = std::max(0, n - 1);
     else if (k == TB_KEY_ENTER && r) sw.editing = true, sw.ed = r->secret ? U"" : from_utf8(r->val), sw.ecur = sw.ed.size();
+    else if (k == TB_KEY_DELETE && r && r->key == "name" && r->sec.rfind("server.", 0) == 0) sw.msg = "A server needs a name: r renames it, x deletes it";
     else if (k == TB_KEY_DELETE && r) {
         c.exec(c.active, "/set " + full_key(*r) + " \"\"");
-        sw.msg = full_key(*r) + " is back to its default  (not saved yet: s)";
+        sw.msg = full_key(*r) + (r->shared ? " uses Global's again" : " is back to its default") + "  (not saved yet: s)";
     }
 }
 
@@ -1495,7 +1534,7 @@ void Tui::settings_mouse(int k, int x, int y) {
     std::vector<const Core::SetRow*> rows;
     set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
     if (x < sw.x0 + 2 + sw.nav_w) {  // a category
-        if (i < (int)cats.size() && counts[(size_t)i]) sw.cat = i, sw.sel = sw.top = 0, sw.focus = 0;
+        if (sw.ctop + i < (int)cats.size() && counts[(size_t)(sw.ctop + i)]) sw.cat = cats[(size_t)(sw.ctop + i)], sw.sel = sw.top = 0, sw.focus = 0;
         return;
     }
     // the row under the pointer, counting the section headers the way draw_settings lays them out

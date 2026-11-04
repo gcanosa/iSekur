@@ -92,7 +92,8 @@ private:
     // /set alone: every setting in a window over the chat; categories left, keys right, a search on top
     struct SetWin {
         bool open = false, editing = false, searching = false;  // searching: "/" was typed, keys go to the search
-        int focus = 1, cat = 0, sel = 0, top = 0;  // focus: 0 categories, 1 keys
+        int focus = 1, sel = 0, top = 0, ctop = 0;  // focus: 0 categories, 1 keys; ctop: the first category shown
+        std::string cat;                           // the chosen category ("" All, "general/Look", "server.x"...)
         std::u32string q, ed;                      // the search; the value being edited
         size_t ecur = 0;
         std::string msg;                           // the last thing done, under the list
