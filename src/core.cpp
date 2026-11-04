@@ -785,6 +785,7 @@ void Core::select(Buffer* b) {
     b->activity = 0;
     dirty = true;
     notify(Ev::BUFFER, b);
+    notify(Ev::FOCUS, b);  // the webchat follows the terminal (and a tab picked in the webchat moves the terminal)
 }
 
 void Core::add(Buffer* b, Line l) {
@@ -1892,7 +1893,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string text = rest(1);
         if (cmd == "query") {
             Buffer* q = open(s, BT::QUERY, argv[0]);
-            select(q), notify(Ev::FOCUS, q);  // the webchat follows too
+            select(q);
             if (!text.empty()) say(q, text);
             return;
         }

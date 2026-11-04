@@ -1216,7 +1216,8 @@ int main() {
         assert(old.find("\"tf\":\"", at) != std::string::npos);  // the time stamp, formatted by iSekur
         {  // a tab picked in the browser moves the session's focus: the one left behind gets activity again (a /join had focused it)
             Buffer* was = core.active;
-            core.select(chb);
+            core.select(chb);  // a tab picked in the terminal (Ctrl+A...): the browsers follow
+            assert(more("").find("{\"t\":\"active\",\"buf\":" + std::to_string(chb->id) + "}") != std::string::npos);
             more(client_frame("{\"t\":\"focus\",\"buf\":" + std::to_string(core.bufs.front()->id) + "}"));
             assert(core.active == core.bufs.front().get());
             feed(":bob!u@h PRIVMSG #c :hi");

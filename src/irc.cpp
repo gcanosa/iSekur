@@ -827,7 +827,7 @@ void Core::handle(Server* s, const Msg& m) {
             }
             line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
             if (!s->twitch()) s->send("MODE " + ch), s->who_auto.insert(s->lower(ch));  // Twitch: 421 unknown command
-            if (fresh) select(b), notify(Ev::FOCUS, b);  // the webchat follows too
+            if (fresh) select(b);  // the webchat follows too
             return;
         }
         Buffer* b = find(s, ch);
@@ -1280,7 +1280,7 @@ void Core::handle(Server* s, const Msg& m) {
         lb->lines.clear(), lb->scroll = lb->unread = 0;
         notify(Ev::CLEAR, lb);
         add(lb, Line{ts, LK::INFO, "", "Listing channels...", false, false, true});
-        select(lb), notify(Ev::FOCUS, lb);
+        select(lb);
         if (cmd == "321") return;
     }
     if (cmd == "322" && m.params.size() > 2) {  // me #chan users :topic
