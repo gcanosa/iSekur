@@ -18,6 +18,9 @@ struct Session {
     void release(char why);  // 'D' detached / 'Q' quit / 'F' unusable terminal: tell the attach process, close its terminal
     int tty = -1;            // the attached terminal
     bool lost = false;       // the attach process went away (closed terminal, dropped SSH)
+    // who the attached terminal is, for the home tab: "203.0.113.7 (ssh) on /dev/ttys004" or
+    // "local on /dev/ttys001"; refused: the same for one turned away (busy), "" once printed
+    std::string who, refused;
 
 private:
     int lfd = -1, cfd = -1;    // listener; the attach process while attached
@@ -25,6 +28,8 @@ private:
     size_t first = 0, n = 0;   // our slots in the pollfd vector
 };
 
+// the attach audit line's source: SSH_CONNECTION's client IP ("" = local) and the tty
+std::string attach_who(const std::string& ssh_connection, const std::string& tty);
 std::string cfg_side(const std::string& cfg_path, const std::string& ext);  // <dir>/<name>.conf -> <dir>/<name>.ext
 std::string sock_path_for(const std::string& cfg_path);  // <dir>/<name>.sock
 // --list: the running ones whose sockets are in dirs, each with the command that attaches it

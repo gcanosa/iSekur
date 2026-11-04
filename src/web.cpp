@@ -246,8 +246,27 @@ void Web::stop() {
     if (ctx) SSL_CTX_free(ctx), ctx = nullptr;
     if (lfd >= 0) close(lfd), lfd = -1;
     secure = false;
-    pending.clear(), known.clear(), last_order.clear(), sent_nicks.clear();
+    pending.clear(), known.clear(), last_order.clear(), sent_nicks.clear(), ws_ips.clear();
     url.clear();
+}
+
+std::string client_ip(const std::string& peer, const std::string& xff) {
+    if (xff.empty() || (peer != "127.0.0.1" && peer != "::1" && peer != "::ffff:127.0.0.1")) return peer;
+    std::string ip = xff.substr(xff.rfind(',') == std::string::npos ? 0 : xff.rfind(',') + 1);
+    ip.erase(0, ip.find_first_not_of(' '));
+    while (!ip.empty() && ip.back() == ' ') ip.pop_back();
+    bool ok = !ip.empty() && ip.size() <= 45 && ip.find_first_not_of("0123456789abcdefABCDEF.:") == std::string::npos;
+    return ok ? ip : peer;
+}
+
+// ponytail: a few substrings, not a UA parser; order matters (Edge and Opera say Chrome, Chrome says Safari)
+std::string ua_short(const std::string& ua) {
+    auto has = [&](const char* k) { return ua.find(k) != std::string::npos; };
+    std::string b = has("Edg/") ? "Edge" : has("OPR/") ? "Opera" : has("Firefox/") || has("FxiOS/") ? "Firefox"
+                  : has("Chrome/") || has("CriOS/") ? "Chrome" : has("Safari/") ? "Safari" : "";
+    std::string o = has("iPhone") ? "iPhone" : has("iPad") ? "iPad" : has("Android") ? "Android" : has("Mac OS X") ? "macOS"
+                  : has("Windows") ? "Windows" : has("CrOS") ? "ChromeOS" : has("Linux") ? "Linux" : "";
+    return b.empty() ? o : o.empty() ? b : b + " on " + o;
 }
 
 // [web] autostart (or the older "enabled") decides whether main() calls this at launch.
@@ -341,7 +360,7 @@ void Web::process(const std::vector<pollfd>& v) {
         }
     }
     for (auto& cl : clients) {
-        if (cl->ws && !cl->conn.closing) ws_seen = now;
+        if (cl->ws && !cl->conn.closing) ws_seen = now, ws_ips[cl->ip].second = now;
         if (!cl->ws) {  // idle HTTP connections; a download only once it stops moving
             if (now - cl->since > 30) dead.push_back(cl.get());
             continue;
@@ -356,6 +375,11 @@ void Web::process(const std::vector<pollfd>& v) {
                                      return std::find(dead.begin(), dead.end(), cl.get()) != dead.end();
                                  }),
                   clients.end());
+    for (auto it = ws_ips.begin(); it != ws_ips.end();)
+        if (now - it->second.second >= 30) {
+            c.print(c.bufs.front().get(), LK::INFO, "\u25c0 Webchat gone: " + it->first + ", attached " + fmt_dur((long)(it->second.second - it->second.first)));
+            it = ws_ips.erase(it);
+        } else ++it;
 }
 
 static void respond(Conn& conn, int code, const std::string& status, const std::string& ctype,
@@ -409,6 +433,9 @@ void Web::http(Client& cl) {
     // plain HTTP behind a TLS proxy (Caddy, nginx): the browser's page is https://host, still us
     bool same_origin = origin.empty() || origin == (secure ? "https://" : "http://") + h["host"] ||
                        (!secure && origin == "https://" + h["host"]);
+    // behind a proxy every peer is 127.0.0.1: the lockout and the audit lines go by the real browser
+    std::string ip = client_ip(cl.conn.host, h["x-forwarded-for"]), ua = ua_short(h["user-agent"]);
+    std::string from = ip + (ip != cl.conn.host ? " (via proxy " + cl.conn.host + ")" : "") + (ua.empty() ? "" : ", " + ua);
 
     if (method == "GET" && (path == "/" || path == "/index.html")) {
         static const std::string page = [] {
@@ -446,7 +473,7 @@ void Web::http(Client& cl) {
         else respond(cl.conn, 401, "Unauthorized", "application/json", "{}");
     } else if (method == "POST" && path == "/login") {
         if (!same_origin) { respond(cl.conn, 403, "Forbidden", "text/plain", "bad origin"); return; }
-        auto& f = fails[cl.conn.host];
+        auto& f = fails[ip];
         if (f.second > now) {
             respond(cl.conn, 429, "Too Many Requests", "application/json",
                     "{\"wait\":" + std::to_string(f.second - now) + "}");
@@ -458,18 +485,18 @@ void Web::http(Client& cl) {
         bool user_ok = u.size() == user.size() && CRYPTO_memcmp(u.data(), user.data(), u.size()) == 0;
         bool pass_ok = check_password(form["pass"], pass_hash);
         if (user_ok && pass_ok) {
-            fails.erase(cl.conn.host);
+            fails.erase(ip);
             token = random_hex(32);
             sessions[sha256_hex(token)] = now + SESSION_TTL;
             save_sessions();
             ws_seen = 0;  // a login is an attach: its page asks for the lock password
-            c.print(c.bufs.front().get(), LK::INFO, "Webchat login from " + cl.conn.host);
+            c.print(c.bufs.front().get(), LK::INFO, "Webchat login: " + from);
             respond(cl.conn, 200, "OK", "application/json", "{}",
                     "Set-Cookie: isekur_sid=" + token + "; Path=/; HttpOnly; SameSite=Strict" +
                         (secure ? "; Secure" : "") + "; Max-Age=" + std::to_string(SESSION_TTL) + "\r\n");
         } else {
             if (++f.first >= 5) f.second = now + std::min<time_t>(3600, 60L << std::min(f.first - 5, 6));
-            c.print(c.bufs.front().get(), LK::ERROR, "Failed webchat login from " + cl.conn.host);
+            c.print(c.bufs.front().get(), LK::ERROR, "\u2715 Webchat login failed: " + from + (f.second > now ? ", locked out " + fmt_dur((long)(f.second - now)) : ""));
             respond(cl.conn, 401, "Unauthorized", "application/json", "{}");
         }
         if (fails.size() > 1000)  // forget old unlocked offenders
@@ -490,7 +517,9 @@ void Web::http(Client& cl) {
                        "Sec-WebSocket-Accept: " + b64(std::string((char*)sha, 20)) + "\r\n\r\n";
         // a browser coming back (not a reload or a dropped connection) is an attach: lock, like the terminal
         if (!attached() && now - ws_seen > 30 && c.lock_on() && !c.locked) c.set_lock(true);
-        cl.ws = true;
+        cl.ws = true, cl.ip = ip;
+        if (!ws_ips.count(ip)) c.print(c.bufs.front().get(), LK::INFO, "\u25b6 Webchat attached: " + from);
+        ws_ips[ip] = {ws_ips.count(ip) ? ws_ips[ip].first : now, now};
         snapshot(cl);
         ws_frames(cl);
     } else if (method == "GET" && (path == "/files" || path.rfind("/files/", 0) == 0)) {

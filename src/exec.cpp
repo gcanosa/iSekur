@@ -271,6 +271,23 @@ void Core::shell_login(Buffer* sb, const std::string& err) {
     }, false, title, err.empty() ? std::vector<std::string>{} : std::vector<std::string>{"!" + err});
 }
 
+// `ssh -G` output -> "user@hostname:port", "" when it says nothing (an old ssh)
+std::string ssh_dest(const std::string& g) {
+    std::string user, hostname, port;
+    for (auto& l : split(g, '\n')) {
+        size_t sp = l.find(' ');
+        if (sp == std::string::npos) continue;
+        std::string k = l.substr(0, sp), v = l.substr(sp + 1);
+        while (!v.empty() && (v.back() == '\r' || v.back() == ' ')) v.pop_back();
+        if (k == "user" && user.empty()) user = v;
+        else if (k == "hostname" && hostname.empty()) hostname = v;
+        else if (k == "port" && port.empty()) port = v;
+    }
+    if (hostname.empty()) return "";
+    if (hostname.find(':') != std::string::npos) hostname = "[" + hostname + "]";  // IPv6
+    return (user.empty() ? "" : user + "@") + hostname + (port.empty() ? "" : ":" + port);
+}
+
 // /attach host: ssh runs the other machine's iSekur --attach in a tab like /shell's.
 // No login asked here: ssh asks for (or uses keys for) its own.
 void Core::attach_cmd(Buffer* b, const std::string& args) {
@@ -313,8 +330,18 @@ void Core::attach_cmd(Buffer* b, const std::string& args) {
     Buffer* ab = open(nullptr, BT::SHELL, name);
     select(ab);
     if (ab->term) return;  // already attached there
-    print(ab, LK::INFO, "ssh " + (port.empty() ? "" : "-p " + port + " ") + host + ": iSekur --attach there" + (rcfg.empty() ? "" : " with " + rcfg) +
-                            " (Alt+D or /detach inside leaves it running)");
+    // what ssh will really reach after ~/.ssh/config: ssh -G only reads config, no network
+    // (host is safe(): no quote, so single quotes hold it; '[' would glob otherwise)
+    std::string g;
+    if (FILE* f = popen(("ssh -G " + (port.empty() ? "" : "-p " + port + " ") + "-- '" + host + "' 2>/dev/null").c_str(), "r")) {
+        char buf[4096];
+        size_t k;
+        while ((k = fread(buf, 1, sizeof buf, f)) > 0 && g.size() < 65536) g.append(buf, k);
+        pclose(f);
+    }
+    std::string dest = ssh_dest(g);
+    print(ab, LK::INFO, "\u25b6 ssh " + (dest.empty() ? (port.empty() ? "" : "-p " + port + " ") + host : dest + " (" + host + ")") +
+                            ": iSekur --attach there" + (rcfg.empty() ? "" : " with " + rcfg) + " (Alt+D or /detach inside leaves it running)");
     shell_start(ab, host, rcfg, port);
 }
 
@@ -409,9 +436,11 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
         t->pid = -1;  // reaped here, not hung up
         std::string end = waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) ? ": exit " + std::to_string(WEXITSTATUS(st)) : "";
         std::string host = (t->port.empty() || t->host.empty() ? "" : "-p " + t->port + " ") + t->host + (t->rcfg.empty() ? "" : " " + t->rcfg);
+        time_t t0 = t->t0;
         b->term.reset();
         if (host.empty()) print(b, LK::INFO, "\x02[shell ended" + end + "]\x02 /shell starts another, Ctrl+W closes the tab");
-        else print(b, LK::INFO, "\x02[ssh " + host + " ended" + end + "]\x02 /attach " + host + " again, Ctrl+W closes the tab");
+        else print(b, LK::INFO, "\u25c0 \x02[ssh " + host + " ended after " + fmt_dur((long)(time(nullptr) - t0)) + end + "]\x02 /attach " + host +
+                                    " again, Ctrl+W closes the tab");
     }
     for (size_t i = 0; i < hung_up.size();)
         if (waitpid(hung_up[i], nullptr, WNOHANG) != 0) hung_up.erase(hung_up.begin() + (long)i);

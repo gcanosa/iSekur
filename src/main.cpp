@@ -6,6 +6,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <termios.h>
+#include <pwd.h>
 #include <unistd.h>
 #include <sys/select.h>
 #include <sys/stat.h>
@@ -199,6 +200,7 @@ int main(int argc, char** argv) {
     c.tty = local;
     if (local && c.lock_on()) c.set_lock(true);
     bool hinted = false;
+    time_t tty_on = 0, tty_off = 0;  // the terminal's last attach and detach
 
     // banner_anim: a light sweeps the banner (home's first 6 lines) once, ~1.2s,
     // when a terminal first shows it (usually an attach a moment after start); not in banner_mono
@@ -252,12 +254,17 @@ int main(int argc, char** argv) {
         web.process(fds);
         c.jobs_poll(fds, job0);
         int t = ses.process(fds, c.tty);
+        // the audit lines: who attached from where, for how long, and who was turned away
+        if (!ses.refused.empty())
+            c.print(home, LK::ERROR, "\u2715 Refused attach: " + ses.refused + ", a terminal is already attached"), ses.refused.clear();
         if (c.detach_req && local) c.print(c.active, LK::ERROR, "Detaching is not available: " + err);
         else if (c.tty && (hung || c.detach_req)) {
             tui.shutdown();
             ses.release('D');
             c.tty = false;
-            c.print(home, LK::INFO, std::string(hung ? "Terminal gone" : "Detached") + "; " + how + " brings it back");
+            tty_off = time(nullptr);
+            c.print(home, LK::INFO, std::string(hung ? "\u25c0 Terminal gone: " : "\u25c0 Detached: ") + ses.who + ", attached " +
+                                        fmt_dur((long)(tty_off - tty_on)) + "; " + how + " brings it back");
         }
         c.detach_req = false;
         if (t >= 0) {
@@ -267,6 +274,10 @@ int main(int argc, char** argv) {
             }
             else {
                 c.tty = c.dirty = true;
+                tty_on = time(nullptr);
+                const passwd* pw = getpwuid(geteuid());  // always us: the socket takes no one else
+                c.print(home, LK::INFO, "\u25b6 Attached: " + std::string(pw ? pw->pw_name : "?") + ", " + ses.who +
+                                            (tty_off ? ", after " + fmt_dur((long)(tty_on - tty_off)) + " away" : ""));
                 if (c.lock_on()) c.set_lock(true);  // every attach asks again (the webchat too)
                 if (!hinted) c.print(home, LK::INFO, "Alt+D (Option+D on a Mac) or /detach leaves iSekur running in the background"), hinted = true;
             }

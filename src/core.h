@@ -113,6 +113,7 @@ struct Term {
     int rows = 24, cols = 80;
     bool cursor = true;
     std::string host, rcfg, port;  // /attach [-p port] host [config]: ssh to another iSekur, "" = /shell
+    time_t t0 = time(nullptr);     // started: "connected 47m" when it ends
     Core* c = nullptr;
     struct Buffer* b = nullptr;
     ~Term();  // hangs up the shell
@@ -490,6 +491,8 @@ bool e2e_open(const std::string& key, const std::string& sealed, std::string& pl
 bool e2e_on(const Buffer* b);  // a 🔒 tab: an encrypted query, or a channel with a key
 std::string fmt_time(time_t t, const std::string& fmt);
 std::string human_bytes(unsigned long long n);  // 512M, 3.2G
+std::string ssh_dest(const std::string& ssh_g);  // exec.cpp: `ssh -G` output -> "user@hostname:port"
+std::string fmt_dur(long secs);  // tui.cpp: 3d4h22m, 47m12s, 9s
 std::string status_info_json(const Core& c);  // tui.cpp: the status_info items for the webchat, [[[text, fg, bg], ...], ...]
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS

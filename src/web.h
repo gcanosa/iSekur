@@ -34,6 +34,7 @@ private:
         int frag_op = 0;
         time_t since = 0;    // accepted; a WebSocket: last heard from
         time_t pinged = 0;   // a WebSocket: our last ping
+        std::string ip;      // a WebSocket: the browser's address (client_ip)
         FILE* file = nullptr;  // GET /files/name: streamed into conn.out as it drains
         unsigned long long left = 0;
         ~Client() { if (file) fclose(file); }
@@ -74,6 +75,8 @@ private:
     std::string last_keys, last_stat;
     time_t last_stat_at = 0;
     time_t ws_seen = 0;  // last time a browser was attached
+    // the audit lines: ip -> (attached, last seen); gone once 30s pass without it (a reload or a blip isn't)
+    std::map<std::string, std::pair<time_t, time_t>> ws_ips;
     void files(Client& cl, const std::string& path, const std::map<std::string, std::string>& h);  // dcc_web
     void feed(Client& cl);
 };
@@ -86,4 +89,7 @@ std::string ws_frame(const std::string& payload, int opcode = 1);
 // Without `fin`, a frame that isn't the last of its message is bad.
 long ws_parse(const std::string& buf, int& opcode, std::string& payload, bool* fin = nullptr);
 std::string json_str(const std::string& s);
+// the browser's address: the proxy's X-Forwarded-For (its last hop) when the peer is this machine, else the peer
+std::string client_ip(const std::string& peer, const std::string& xff);
+std::string ua_short(const std::string& ua);  // "Firefox on macOS", "" when unknown
 std::map<std::string, std::string> json_flat(const std::string& s);

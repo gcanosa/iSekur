@@ -242,7 +242,7 @@ bool mem_free(unsigned long long& avail, unsigned long long& total);
 int battery_pct();
 
 // uptime as 3d4h22m, seconds below a day
-static std::string fmt_uptime(long up) {
+std::string fmt_dur(long up) {
     std::string u;
     const std::pair<long, const char*> units[] = {{2592000, "mo"}, {86400, "d"}, {3600, "h"}, {60, "m"}, {1, "s"}};
     bool days = up >= 86400;
@@ -324,7 +324,7 @@ static std::vector<Row> status_info(const Core& c, Style st, bool dcc = true) {
             cells(out.back(), "\u21E3" + std::to_string(offers) + " offered (/dcc)", sty(T, "hilight", "status_hi"), false);
         }
     }
-    if (has("up")) add("u:" + fmt_uptime((long)(time(nullptr) - c.started)));
+    if (has("up")) add("u:" + fmt_dur((long)(time(nullptr) - c.started)));
     // label in st, the value in its level's color
     auto leveled = [&](const std::string& label, const std::string& val, const std::string& key, const char* def, int pct) {
         int lv = pct >= 0 ? level(c, key, def, pct) : 0;

@@ -121,6 +121,20 @@ int main() {
     assert(ws_parse(ping, op, p, &fin) == -1);
 
     assert(json_str("a\"b\\\n\xe9") == "\"a\\\"b\\\\\\u000a\xc3\xa9\"");
+    // attach / webchat audit lines
+    assert(fmt_dur(9) == "9s" && fmt_dur(2832) == "47m12s" && fmt_dur(90061) == "1d1h1m");
+    assert(attach_who("203.0.113.7 52144 10.0.0.2 22", "/dev/ttys004") == "203.0.113.7 (ssh) on /dev/ttys004");
+    assert(attach_who("", "/dev/ttys001") == "local on /dev/ttys001" && attach_who("", "") == "local");
+    assert(ssh_dest("user ethernet\nhostname 203.0.113.7\nport 22\nidentityfile ~/.ssh/id\n") == "ethernet@203.0.113.7:22");
+    assert(ssh_dest("hostname 2001:db8::1\nport 2222\n") == "[2001:db8::1]:2222" && ssh_dest("") == "");
+    assert(client_ip("203.0.113.9", "1.2.3.4") == "203.0.113.9");             // not from a local proxy: ignored
+    assert(client_ip("127.0.0.1", "6.6.6.6, 198.51.100.23") == "198.51.100.23");  // the proxy's own hop
+    assert(client_ip("::1", "2001:db8::5") == "2001:db8::5" && client_ip("127.0.0.1", "") == "127.0.0.1");
+    assert(client_ip("127.0.0.1", "evil host") == "127.0.0.1");
+    assert(ua_short("Mozilla/5.0 (Macintosh; Intel Mac OS X 14.5; rv:131.0) Gecko/20100101 Firefox/131.0") == "Firefox on macOS");
+    assert(ua_short("Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 Version/18.0 Mobile/15E148 Safari/604.1") == "Safari on iPhone");
+    assert(ua_short("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/130.0 Safari/537.36 Edg/130.0") == "Edge on Windows");
+    assert(ua_short("") == "" && ua_short("curl/8.7.1") == "");
     auto j = json_flat("{\"t\":\"input\", \"buf\": 12, \"text\":\"x\\\"y\\u00e9\\ud83d\\ude00\"}");
     assert(j["t"] == "input" && j["buf"] == "12" && j["text"] == "x\"y\xc3\xa9\xf0\x9f\x98\x80");
 

@@ -8,6 +8,7 @@
 #include <cstring>
 #include <dirent.h>
 #include <fcntl.h>
+#include <map>
 #include <set>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -19,6 +20,12 @@
 static const char* HELLO = "isekur-attach 1\n";
 // what the terminal's side decides: terminfo, truecolor, character widths
 static const char* ENV_KEYS[] = {"TERM", "COLORTERM", "LANG", "LC_ALL", "LC_CTYPE"};
+// SSH_CONNECTION and ISEKUR_TTY come along too, only for the audit lines: never
+// setenv'd here (/shell tabs would inherit them)
+std::string attach_who(const std::string& ssh, const std::string& tty) {
+    std::string ip = ssh.substr(0, ssh.find(' '));  // "client_ip client_port server_ip server_port"
+    return (ip.empty() ? "local" : ip + " (ssh)") + (tty.empty() ? "" : " on " + tty);
+}
 
 // <dir>/<name>.<ext> beside <dir>/<name>.conf: each config its own socket and log,
 // so several iSekurs can share ~/.config/isekur (isekur.conf keeps isekur.sock)
@@ -143,20 +150,24 @@ int Session::process(const std::vector<pollfd>& fds, bool busy) {
                 ::close(p.fd);
                 continue;
             }
+            std::map<std::string, std::string> kv;
+            for (auto& l : split(env.substr(strlen(HELLO)), '\n')) {
+                size_t eq = l.find('=');
+                if (eq != std::string::npos) kv[l.substr(0, eq)] = l.substr(eq + 1);
+            }
+            std::string w = attach_who(kv["SSH_CONNECTION"], kv["ISEKUR_TTY"]);
             if (busy || cfd >= 0 || got >= 0) {
+                refused = w;
                 if (write(p.fd, "B", 1) < 0) {}
                 ::close(t), ::close(p.fd);
                 continue;
             }
             cloexec(t);
             for (const char* k : ENV_KEYS) unsetenv(k);
-            for (auto& l : split(env.substr(strlen(HELLO)), '\n')) {
-                size_t eq = l.find('=');
-                for (const char* k : ENV_KEYS)
-                    if (eq != std::string::npos && l.compare(0, eq, k) == 0) setenv(k, l.c_str() + eq + 1, 1);
-            }
+            for (const char* k : ENV_KEYS)
+                if (kv.count(k)) setenv(k, kv[k].c_str(), 1);
             setlocale(LC_CTYPE, "");
-            cfd = p.fd, tty = got = t, lost = false;
+            cfd = p.fd, tty = got = t, lost = false, who = w;
         }
     }
     return got;
@@ -179,8 +190,9 @@ int attach_main(const std::string& path, const std::string& how) {
     // the terminal's own device: on macOS and the BSDs /dev/tty means "my
     // controlling terminal" on every call, which is nothing to the receiver
     int tty = -1;
+    std::string tname;
     for (int fd = 0; fd < 3 && tty < 0; fd++)
-        if (const char* name = isatty(fd) ? ttyname(fd) : nullptr) tty = open(name, O_RDWR | O_NOCTTY);
+        if (const char* name = isatty(fd) ? ttyname(fd) : nullptr) tname = name, tty = open(name, O_RDWR | O_NOCTTY);
     if (tty < 0) tty = open("/dev/tty", O_RDWR | O_NOCTTY);
     if (tty < 0) { fprintf(stderr, "isekur --attach needs a terminal\n"); return 1; }
     sockaddr_un a;
@@ -192,6 +204,8 @@ int attach_main(const std::string& path, const std::string& how) {
     std::string env = HELLO;
     for (const char* k : ENV_KEYS)
         if (const char* v = getenv(k)) env += std::string(k) + "=" + v + "\n";
+    if (const char* v = getenv("SSH_CONNECTION")) env += std::string("SSH_CONNECTION=") + v + "\n";
+    if (!tname.empty()) env += "ISEKUR_TTY=" + tname + "\n";
     iovec io{&env[0], env.size()};
     union { cmsghdr h; char b[CMSG_SPACE(sizeof(int))]; } ctl;
     memset(&ctl, 0, sizeof ctl);
