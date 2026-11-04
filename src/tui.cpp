@@ -395,8 +395,10 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     switch (l.kind) {
     case LK::MSG: {
         std::string pfx;
-        auto it = b->nicks.find(b->srv->lower(l.nick));
-        if (it != b->nicks.end() && !it->second.prefix.empty()) pfx = it->second.prefix.substr(0, 1);
+        if (b->srv) {  // the cmd tab has no server (and no nicks), its lines still can be msgs
+            auto it = b->nicks.find(b->srv->lower(l.nick));
+            if (it != b->nicks.end() && !it->second.prefix.empty()) pfx = it->second.prefix.substr(0, 1);
+        }
         marker = pfx + l.nick;
         if (auto br = T.lay("nick_brackets", ""); br.size() == 2) marker = br[0] + marker + br[1];  // mirc: <nick>
         ms = l.self ? T.get("msg_self") : nick_style(T, l.nick);
