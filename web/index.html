@@ -1172,7 +1172,11 @@ for (const d of document.querySelectorAll("dialog, #login form, #lock .card")) {
 
 function onMsg(ev) {
   const m = JSON.parse(ev.data);
-  if (m.t === "theme") { theme = m; applyTheme(); renderMsgs(); }
+  if (m.t === "theme") {  // new fonts reflow the chat: one that was at the bottom stays there (renderMsgs would see it scrolled up)
+    const end = $("#msgs").pin_;
+    theme = m; applyTheme(); renderMsgs();
+    if (end) $("#msgs").scrollTop = $("#msgs").scrollHeight;
+  }
   else if (m.t === "buf") {
     const old = bufs.get(m.id), fresh = !!m.nicks;  // no "nicks": unchanged since the last one
     m.lines = old ? old.lines : [];
@@ -2086,11 +2090,14 @@ $("#msgs").addEventListener("scroll", () => {
 });
 // a resize (the nick list shown or hidden, the window, /split's divider) rewraps the lines: a pane that was
 // at the bottom stays there, no -- MORE -- for a line pushed off by the rewrap
-for (const m of [$("#msgs"), $("#msgs2")]) {
-  let pin = true;
-  m.addEventListener("scroll", () => { pin = m.scrollHeight - m.scrollTop - m.clientHeight < 40; });
-  new ResizeObserver(() => { if (pin) m.scrollTop = m.scrollHeight; }).observe(m);
+// at the bottom (pin_), so is a font that loads late (mirc's Fixedsys) and makes the lines taller
+const panes = [$("#msgs"), $("#msgs2")], keepEnd = () => { for (const m of panes) if (m.pin_) m.scrollTop = m.scrollHeight; };
+for (const m of panes) {
+  m.pin_ = true;
+  m.addEventListener("scroll", () => { m.pin_ = m.scrollHeight - m.scrollTop - m.clientHeight < 40; });
+  new ResizeObserver(keepEnd).observe(m);
 }
+document.fonts?.addEventListener("loadingdone", keepEnd);
 // bell_notifications: a short beep, like the terminal's bell (browsers allow sound after a first click or key)
 let actx = null;
 const unlockAudio = () => { try { actx = actx || new AudioContext(); actx.resume(); } catch (e) {} };
