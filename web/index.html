@@ -1043,8 +1043,10 @@ document.addEventListener("copy", e => {
   const s = getSelection(); if (!s.rangeCount) return;
   const r = s.getRangeAt(0), a = r.commonAncestorContainer, el = a.nodeType === 1 ? a : a.parentElement;
   if (!el.closest("#msgs, #msgs2") || el.closest(".ts, .nk, .tx")) return;  // within one column: as is
-  const br = [...(theme.lay?.nick_brackets || "")].length === 2, out = [];
-  for (const d of r.cloneContents().querySelectorAll(".l")) {
+  const br = [...(theme.lay?.nick_brackets || "")].length === 2, out = [], f = r.cloneContents(), one = el.closest(".l");
+  // within one line the clone holds bits of its columns but no .l: put them back in one
+  let ls = f.querySelectorAll(".l"); if (one) { const d = one.cloneNode(false); d.append(f); ls = [d]; }
+  for (const d of ls) {
     const [ts, nk, tx] = [".ts", ".nk", ".tx"].map(q => d.querySelector(q)?.textContent || "");
     out.push([ts, nk && d.classList.contains("k-msg") && !br ? "<" + nk + ">" : nk, tx].filter(Boolean).join(" "));
   }
