@@ -39,10 +39,12 @@ else
   else
     PAM_LIBS := -framework IOKit -framework CoreFoundation  # /statusbar bat
   endif
-  ifeq ($(shell echo '\#include <security/pam_appl.h>' | $(CXX) -E -x c++ - >/dev/null 2>&1 && echo yes),yes)
+  # \043 is "#": make 4.x keeps a backslash in '\#', so cpp got "\#include", saw no include and always said yes
+  ifeq ($(shell printf '\043include <security/pam_appl.h>\n' | $(CXX) -E -x c++ - >/dev/null 2>&1 && echo yes),yes)
     PAM_LIBS += -lpam
   else
-    $(warning no PAM headers (libpam0g-dev / pam-devel): building without /shell login)
+    $(warning no PAM headers: building without the /shell login. For it, install them and run make again:)
+    $(warning   Debian/Ubuntu: sudo apt install libpam0g-dev   Fedora/RHEL: sudo dnf install pam-devel   Arch: sudo pacman -S pam)
     OPENSSL_CFLAGS += -DISEKUR_NO_PAM
   endif
 endif
