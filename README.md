@@ -177,7 +177,7 @@ dropped instead of showing up as garbage.
 ## Commands
 
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
-`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/ctcp`,
+`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
 `/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

@@ -224,6 +224,7 @@ struct Server {
     int label_buf = 0, label_next = 1;     // label_buf: Core::exec is running for that tab: its lines get labels
     struct Multi { Msg open; std::string cmd; std::vector<std::string> lines; };
     std::map<std::string, Multi> multi;    // draft/multiline batches being received
+    std::function<void(const char*, const std::string&)> raw_hook;  // /rawlog: every line in or out, set while its *raw tab is open
     std::set<std::string> who_auto;        // channels whose WHO we asked for on join: the replies aren't shown
     std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
     time_t ison_at = 0;
@@ -420,6 +421,7 @@ struct Core {
     int index_of(Buffer* b) const;
     void add(Buffer* b, Line l);
     void print(Buffer* b, LK k, const std::string& text);
+    void rawlog(Buffer* b, const std::string& arg);  // /rawlog [on|off]: the server's *raw tab
     void notify(Ev e, Buffer* b, const Line* l = nullptr);
 
     void exec(Buffer* b, const std::string& input);  // "/cmd" or text
@@ -512,3 +514,4 @@ bool server_name_ok(const std::string& n);  // letters, digits, . _ -
 std::string safe_name(const std::string& n);  // network name -> safe log file name
 bool parse_log_line(const std::string& s, Line& l);
 std::string log_fmt(const Line& l);  // a Line as one log row
+std::string raw_redact(const std::string& line);  // /rawlog: a line with its password or SASL payload blanked

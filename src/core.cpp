@@ -715,6 +715,7 @@ void Core::close(Buffer* b, const std::string& part_msg) {
         print(s->status, LK::INFO, "You left " + b->name);
     }
     if (pass_buf == b) pass_buf = nullptr, pass_done = nullptr;
+    if (s && b->name == "*raw" && b->type == BT::QUERY) s->raw_hook = nullptr;  // /rawlog stops with its tab
     bool drop_server = s && b->type == BT::STATUS;
     int i = index_of(b);
     notify(Ev::CLOSE, b);
@@ -1042,6 +1043,60 @@ void Core::print(Buffer* b, LK k, const std::string& text) {
     add(b ? b : bufs.front().get(), Line{time(nullptr), k, "", text});
 }
 
+// /rawlog: what a line shows with its secret blanked: PASS, OPER's password, SASL payloads,
+// REGISTER, and what follows the first word to NickServ/ChanServ (IDENTIFY pw, also echoed back)
+std::string raw_redact(const std::string& line) {
+    size_t at = 0;
+    auto word = [&]() {
+        while (at < line.size() && line[at] == ' ') at++;
+        size_t st = at;
+        while (at < line.size() && line[at] != ' ') at++;
+        return line.substr(st, at - st);
+    };
+    std::string w = word();
+    if (!w.empty() && w[0] == '@') w = word();  // tags
+    if (!w.empty() && w[0] == ':') w = word();  // prefix
+    for (auto& ch : w) ch = (char)toupper((unsigned char)ch);
+    size_t verb_end = at;
+    std::string a = word();
+    if (w == "PASS" || w == "REGISTER") return line.substr(0, verb_end) + " ***";
+    if (w == "AUTHENTICATE") {
+        static const std::set<std::string> plain{"PLAIN", "EXTERNAL", "SCRAM-SHA-256", "SCRAM-SHA-1", "+", "*"};
+        return plain.count(a) ? line : line.substr(0, verb_end) + " ***";
+    }
+    if (w == "OPER" || w == "NS" || w == "CS" || w == "NICKSERV" || w == "CHANSERV")
+        return a.empty() ? line : line.substr(0, at) + " ***";
+    if (w == "PRIVMSG" || w == "NOTICE") {
+        std::string t = irc_lower(a.substr(0, a.find('@')));
+        if (t != "nickserv" && t != "chanserv") return line;
+        size_t colon = line.find(" :", at);
+        if (colon == std::string::npos) return line;
+        size_t sp = line.find(' ', colon + 2);
+        return sp == std::string::npos ? line : line.substr(0, sp) + " ***";
+    }
+    return line;
+}
+
+void Core::rawlog(Buffer* b, const std::string& arg) {
+    Server* s = b->srv;
+    if (!s) { print(b, LK::ERROR, "/rawlog is per server: use it in that server's tabs"); return; }
+    Buffer* r = find(s, "*raw");
+    if (arg == "off" || (arg != "on" && r)) { if (r) close(r); else print(b, LK::INFO, "Raw log is off"); return; }
+    if (!r) {
+        r = open(s, BT::QUERY, "*raw");
+        s->raw_hook = [this, s](const char* dir, const std::string& l) {
+            if (Buffer* rb = find(s, "*raw")) {
+                Line ln{time(nullptr), LK::INFO, "", std::string(dir) + " " + raw_redact(l)};
+                ln.nolog = true;  // never on disk: neither the log nor the history file
+                add(rb, ln);
+            }
+        };
+        print(r, LK::INFO, "Raw log of " + s->cfg.name + ": every line from the server (\xe2\x86\x90) and to it (\xe2\x86\x92), passwords blanked. "
+                           "/rawlog off or closing this tab stops it");
+    }
+    select(r);
+}
+
 void Core::notify(Ev e, Buffer* b, const Line* l) {
     if (listener) listener(e, b, l);
     if (e == Ev::THEME)  // the guide's colors are the theme's
@@ -1067,7 +1122,7 @@ static std::vector<std::string> chunk(const std::string& t, size_t max) {
 
 void Core::say(Buffer* b, const std::string& text, bool action) {
     Server* s = b->srv;
-    if (!s || b->type == BT::STATUS || b->name == "*channels" || b->name == "*snotices") {  // ours; *status (ZNC) is a real query
+    if (!s || b->type == BT::STATUS || b->name == "*channels" || b->name == "*snotices" || b->name == "*raw") {  // ours; *status (ZNC) is a real query
         print(b, LK::ERROR, "Not a channel or query window"); return; }
     if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
     // /e2e: "+iSE " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes
@@ -1604,6 +1659,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "close" || cmd == "wc") { close(b); return; }
     if (cmd == "split") { split_cmd(b, args); return; }
+    if (cmd == "rawlog") { rawlog(b, args); return; }
     if (cmd == "unsplit" || cmd == "merge") { split_cmd(b, "off"); return; }
     if (cmd == "quiet") {  // per tab, until restart
         b->quiet = args == "on" || (args != "off" && !b->quiet);

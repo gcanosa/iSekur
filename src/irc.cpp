@@ -120,7 +120,10 @@ static std::string wire(const std::string& line) {
     return l + "\r\n";
 }
 
-void Server::send_now(const std::string& line) { conn.out += wire(line); }
+void Server::send_now(const std::string& line) {
+    if (raw_hook) raw_hook("\xe2\x86\x92", line);  // →
+    conn.out += wire(line);
+}
 
 void Server::send(const std::string& line) {
     std::string l = line;
@@ -132,6 +135,7 @@ void Server::send(const std::string& line) {
         l = "@label=" + id + " " + l;
     }
     if (state != SS::CONNECTED || flood_ms <= 0) { send_now(l); return; }
+    if (raw_hook) raw_hook("\xe2\x86\x92", l);  // ponytail: logged when queued, not when the flood limit lets it out
     sendq.push_back(wire(l));
     drain(now_ms());
 }
@@ -353,6 +357,7 @@ void Core::on_readable(Server* s, short rev) {
         if (!line.empty() && line.back() == '\r') line.pop_back();
         Msg m;
         s->last_rx = time(nullptr);
+        if (s->raw_hook) s->raw_hook("\xe2\x86\x90", line);  // ←
         if (irc_parse(line, m)) handle(s, m);
         if (s->state == SS::DISCONNECTED) return;  // handler closed it (connect() cleared inbuf)
     }
@@ -601,6 +606,10 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "CAP") {
         const std::string& sub = m.p(1);
+        {  // shown as well as used: LS, LIST, ACK, NAK, NEW, DEL (a "*" continuation names its list next)
+            bool more = m.p(2) == "*";
+            print(s->status, sub == "NAK" ? LK::ERROR : LK::INFO, "CAP " + sub + ": " + (more ? m.p(3) : m.p(2)));
+        }
         if (sub == "LS" || sub == "NEW") {
             bool more = m.p(2) == "*";
             for (auto& c : split(more ? m.p(3) : m.p(2), ' ')) {
@@ -712,6 +721,9 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "005") {
+        std::string toks;  // the tokens shown, minus the trailing ":are supported by this server"
+        for (size_t i = 1; i + 1 < m.params.size(); i++) toks += (toks.empty() ? "" : " ") + m.params[i];
+        if (!toks.empty()) print(s->status, LK::INFO, "ISUPPORT: " + toks);
         for (size_t i = 1; i + 1 < m.params.size(); i++) {
             const std::string& t = m.params[i];
             if (t.empty()) continue;
@@ -1362,5 +1374,9 @@ void Core::handle(Server* s, const Msg& m) {
         print(b, cmd[0] == '4' || cmd[0] == '5' ? LK::ERROR : LK::INFO, txt);
         return;
     }
-    print(s->status, LK::INFO, cmd + " " + m.p(0) + " " + m.p(1));
+    // anything else: as it came, every parameter (the last one used to be cut off past the second)
+    std::string txt = (m.nick.empty() ? m.prefix : m.nick);
+    txt += (txt.empty() ? "" : " ") + cmd;
+    for (auto& p : m.params) txt += " " + p;
+    print(s->status, LK::INFO, txt);
 }

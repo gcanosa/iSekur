@@ -172,6 +172,11 @@ static const std::vector<CmdInfo> CMDS = {
     {"raw", "Chat", "line", "Send a raw IRC line",
      "Sends the line to the server exactly as typed. Unknown commands do this too.",
      {"/raw PRIVMSG #chan :hello", "/quote WHO #sekurnet"}, "quote"},
+    {"rawlog", "Chat", "[on|off]", "Show every line to and from this server in a *raw tab",
+     "For debugging: what the server sent (\xe2\x86\x90) and what iSekur sent (\xe2\x86\x92), as they are on the wire, "
+     "numerics, CAP and replies iSekur doesn't know included. Per server, never logged; passwords and SASL payloads "
+     "show as ***. /rawlog again, /rawlog off or closing the tab stops it.",
+     {"/rawlog", "/rawlog off"}},
 
     // ---- Channel ops
     {"op", "Channel ops", "nick ...", "Give ops", "In the channel's tab; several nicks at once.", {"/op alice bob"}},

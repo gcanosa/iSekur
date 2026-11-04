@@ -429,6 +429,30 @@ int main() {
         assert(ts->status->lines.back().text.find("(+b)") != std::string::npos && other->lines.empty());
         core.close(other), core.select(chb), sent();
     }
+    {  // /rawlog: every line in and out in a *raw tab, secrets blanked; the fallbacks show what they used to hide
+        assert(raw_redact("PASS hunter2") == "PASS ***" && raw_redact("REGISTER me * pw") == "REGISTER ***");
+        assert(raw_redact("@label=i3 PRIVMSG NickServ :IDENTIFY me pw") == "@label=i3 PRIVMSG NickServ :IDENTIFY ***");
+        assert(raw_redact(":me!u@h PRIVMSG nickserv :identify pw") == ":me!u@h PRIVMSG nickserv :identify ***");
+        assert(raw_redact("AUTHENTICATE PLAIN") == "AUTHENTICATE PLAIN" && raw_redact("AUTHENTICATE bWU=") == "AUTHENTICATE ***");
+        assert(raw_redact("OPER admin pw") == "OPER admin ***" && raw_redact("PRIVMSG #c :hi") == "PRIVMSG #c :hi");
+        assert(raw_redact("NS IDENTIFY pw") == "NS IDENTIFY ***" && raw_redact("") == "");
+        core.exec(chb, "/rawlog");
+        Buffer* rb = core.find(ts, "*raw");
+        assert(rb && core.active == rb && ts->raw_hook);
+        ts->send("PRIVMSG NickServ :IDENTIFY secret"), sent();
+        assert(rb->lines.back().text == "\xe2\x86\x92 PRIVMSG NickServ :IDENTIFY ***" && rb->lines.back().nolog);
+        core.exec(rb, "hello");  // not a chat: nothing sent
+        assert(rb->lines.back().kind == LK::ERROR && sent().empty());
+        core.exec(rb, "/rawlog");  // again: off, the tab goes
+        assert(!core.find(ts, "*raw") && !ts->raw_hook);
+        core.select(chb);
+        feed(":srv CAP me LIST :sasl multi-prefix");
+        assert(ts->status->lines.back().text == "CAP LIST: sasl multi-prefix");
+        feed(":srv 005 me AWAYLEN=200 SILENCE :are supported by this server");
+        assert(ts->status->lines.back().text == "ISUPPORT: AWAYLEN=200 SILENCE");
+        feed(":srv FROB a b :c d");
+        assert(ts->status->lines.back().text == "srv FROB a b c d");
+    }
 
     // Twitch: display-name + color tags, badges in the nick list, its own commands, lowercase joins
     if (!twitch_host("irc.chat.twitch.tv")) {  // make notwitch: /twitch only says so

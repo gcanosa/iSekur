@@ -584,6 +584,7 @@ void Tui::draw() {
         std::string topic;
         if (b->type == BT::CHANNEL) topic = b->topic;
         else if (b->name == "*channels") topic = "Channel list: /list again refreshes it · /join #channel";
+        else if (b->name == "*raw" && b->srv) topic = "Raw log: \xe2\x86\x90 from the server, \xe2\x86\x92 to it · /rawlog off or Ctrl+W stops it";
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
         else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · q, Esc or Ctrl+W closes";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
