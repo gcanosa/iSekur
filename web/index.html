@@ -360,6 +360,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .l .self { color: var(--msg_self-fg, var(--accent2)); }
 .tx a { color: var(--accent2); }
 a.chan { cursor: context-menu; text-decoration: underline; }
+.who { cursor: context-menu; } .who:hover { text-decoration: underline; }
 #nicks, #nicks2 { grid-area: nicks; width: 190px; background: var(--nicklist-bg, var(--panel)); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 0; }
 :is(#nicks, #nicks2) .hd { color: var(--muted); padding: 2px 12px 6px; font-size: 12px; }
 :is(#nicks, #nicks2) div.u { user-select: none; padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
@@ -701,9 +702,31 @@ function lineEl(b, l) {
     if (/^\s+#\s+Channel/.test(tx.textContent)) d.classList.add("hdr"), d.title = "Click Channel or Users to sort";
     else if (/^\s+\d+\.\s+[#&]/.test(tx.textContent)) d.classList.add("chrow"), d.title = "Double click to join";
   }
-  if (l.n && !l.s && b.type !== "status" && (l.k === "msg" || l.k === "action" || l.k === "notice")) nk.oncontextmenu = e => askMenu(e, l.n);
+  if (l.n && !l.s && b.type !== "status" && (l.k === "msg" || l.k === "notice")) nk.classList.add("who"), nk.dataset.nick = l.n;
+  (tx.mark_ = () => markNicks(tx, b, l))();
+  d.oncontextmenu = e => { const w = e.target.closest(".who"); if (w) askMenu(e, w.dataset.nick, b.id); };  // b.id: a /split pane's own tab
   d.append(ts, nk, tx);
   return d;
+}
+
+// nicks in the text (the channel's, the line's own, a query's peer, not yours): underlined on hover, right click = the nick menu
+const NICK_RE = /[A-Za-z0-9\[\]\\`_^{|}-]+/g;
+function markNicks(tx, b, l) {
+  if (b.type === "status") return;
+  const me = ircLower(b.me || ""), own = ircLower(l.n || ""), peer = b.type === "query" ? ircLower(b.name) : "";
+  const is = w => { const k = ircLower(w); return k !== me && (b.nickmap?.has(k) || (k === own && !l.s) || k === peer); };
+  const tw = document.createTreeWalker(tx, NodeFilter.SHOW_TEXT), nodes = [];
+  while (tw.nextNode()) if (!tw.currentNode.parentElement.closest("a")) nodes.push(tw.currentNode);
+  for (const n of nodes) {
+    const t = n.textContent, f = document.createDocumentFragment(); let last = 0;
+    for (const m of t.matchAll(NICK_RE)) {
+      if (!is(m[0])) continue;
+      f.append(t.slice(last, m.index));
+      const s = document.createElement("span"); s.className = "who"; s.dataset.nick = s.textContent = m[0];
+      f.append(s); last = m.index + m[0].length;
+    }
+    if (last) f.append(t.slice(last)), n.replaceWith(f);
+  }
 }
 
 function label(b) { return b.type === "status" ? b.srv : b.name; }
@@ -1653,7 +1676,7 @@ function typeOut(tx) {
     if (!tx.isConnected) return;
     const n = Math.floor((performance.now() - t0) / per);
     tx.textContent = ""; mirc(tx, mircPrefix(src, n));
-    if (n < len) { tx.insertAdjacentText("beforeend", "\u258C"); requestAnimationFrame(step); }
+    if (n < len) { tx.insertAdjacentText("beforeend", "\u258C"); requestAnimationFrame(step); } else tx.mark_?.();
   };
   step();
 }
