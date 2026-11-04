@@ -185,7 +185,7 @@ key           =              ; e.g. /path/privkey.pem
 # Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
 # Actions: next_tab prev_tab next_active next_server close_tab scroll_up
 #          scroll_down toggle_nicklist toggle_topic detach toggle_mouse other_pane find_tab
-#          quit (asks first)
+#          quit (asks first) keys (the key list, F1 M-k)
 #          tab_1 .. tab_10
 [keys]
 ; next_tab = M-Right C-n

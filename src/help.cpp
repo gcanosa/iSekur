@@ -260,6 +260,11 @@ static const std::vector<CmdInfo> CMDS = {
      "Shows the lines of the current tab that contain text (nick or message, case insensitive), "
      "the last 50 at most. -all searches every tab.",
      {"/grep http", "/grep -all alice"}},
+    {"keys", "Windows", "", "Show every keyboard shortcut",
+     "Opens a window with every key binding drawn as keycaps, by group (tabs, view, session, typing), in the terminal "
+     "and the webchat; F1 or Alt+K open it too. Your own [keys] bindings show as well. Up/Down scrolls, Esc closes. "
+     "Change a key with /set keys.<action> \"<key> [key...]\" (e.g. /set keys.next_tab \"M-Right C-n\").",
+     {"/keys", "/set keys.find_tab \"C-g M-j\""}},
     {"theme", "Windows", "[name]", "Show or switch the color theme",
      "Alone: a picker in the terminal and the webchat; type to filter, Up/Down previews live (both), Enter keeps (as /set theme, so /save writes it), Esc goes back. "
      "Themes are files in themes/*.theme (also ~/.config/isekur/themes/); /set theme_dir ~/mythemes looks in your own folder first, "
@@ -629,6 +634,7 @@ static const std::vector<GuidePage> GUIDE = {
         "",
         G_NOTE "On a Mac, Alt is " BOLD "Option" RESET ". If Option keys type symbols, turn on \"Option as Meta\"",
         "  in your terminal's settings. Keys are yours to change in " BOLD "[keys]" RESET " (" G_CMD("/help set") ").",
+        "  " G_CMD("/keys") ", " G_KEY("F1") " or " G_KEY("Alt+K") " shows every key in a window, anytime.",
     }},
     {"Make it yours", {
         G_HEAD("The settings window"),

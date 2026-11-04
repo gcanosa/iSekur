@@ -1273,6 +1273,11 @@ void Core::exec(Buffer* b, const std::string& input) {
 
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "about") { about(b); return; }
+    if (cmd == "keys") {  // the terminal's window (the webchat opens its own dialog)
+        if (tty && !from_web) keys_win = dirty = true;
+        else print(b, LK::INFO, "The key list is a window: F1 or Alt+K in the terminal or the webchat");
+        return;
+    }
     if (cmd == "guide") { guide(b, args); return; }
     if (cmd == "typing") {  // /typing [on|off]: like /statusbar, kept until restart unless /save
         if (!args.empty() && args != "on" && args != "off") { print(b, LK::ERROR, "Usage: /typing [on|off]"); return; }

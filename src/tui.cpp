@@ -549,6 +549,7 @@ void Tui::draw() {
         auto l = theme_list();
         tw.sel = std::max(0, (int)(std::find(l.begin(), l.end(), tw.orig) - l.begin()) % std::max(1, (int)l.size()));
     }
+    if (c.keys_win) c.keys_win = false, kw = KeysWin{}, kw.open = true;
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
@@ -889,6 +890,11 @@ void Tui::draw() {
     }
     if (fw.open) {  // Ctrl+G: the tab finder has the keys
         draw_find(W, H);
+        present();
+        return;
+    }
+    if (kw.open) {  // /keys, F1: the key list
+        draw_keys(W, H);
         present();
         return;
     }
@@ -1416,6 +1422,127 @@ void Tui::theme_key(int k, uint32_t ch) {
     if (n && l[(size_t)tw.sel] != c.theme.name) c.use_theme(l[(size_t)tw.sel], err);  // the live preview
 }
 
+// /keys: the key list. A row is a group header (desc empty) or the keys of one action ("M-Right C-n") and what it does
+struct KeyRow { std::string head, specs, desc; };
+static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& keymap) {
+    static const std::vector<std::pair<const char*, std::vector<std::pair<const char*, const char*>>>> GROUPS = {
+        {"Tabs", {{"next_tab", "next tab"}, {"prev_tab", "previous tab"}, {"next_active", "the busiest tab"},
+                  {"next_server", "next server tab"}, {"find_tab", "find a tab by name"},
+                  {"other_pane", "the other /split pane"}, {"close_tab", "close the tab"}}},
+        {"View", {{"scroll_up", "scroll up half a page"}, {"scroll_down", "scroll down half a page"}, {"toggle_nicklist", "show or hide the nick list"},
+                  {"toggle_topic", "show or hide the topic bar"}, {"toggle_mouse", "mouse on / off"}, {"keys", "this list"}}},
+        {"Session", {{"detach", "detach (stays connected)"}, {"quit", "quit (asks first)"}}},
+    };
+    std::map<std::string, std::string> by;  // action -> its keys; Option-symbol twins (¬ ∆...) left out
+    for (auto& [sp, act] : keymap)
+        if ((unsigned char)sp[0] < 0x80) by[act] += (by[act].empty() ? "" : " ") + sp;
+    std::vector<KeyRow> out;
+    for (auto& [g, acts] : GROUPS) {
+        out.push_back({g, "", ""});
+        if (std::string(g) == "Tabs") {  // Alt+1..0 in one row; a tab_N bound elsewhere gets its own
+            out.push_back({"", "M-1…0", "go to tab 1 to 10"});
+            for (int i = 1; i <= 10; i++) {
+                std::string a = "tab_" + std::to_string(i), own;
+                for (auto& sp : split(by[a], ' ')) if (sp != "M-" + std::to_string(i % 10)) own += (own.empty() ? "" : " ") + sp;
+                if (!own.empty()) out.push_back({"", own, "go to tab " + std::to_string(i)});
+            }
+        }
+        for (auto& [a, d] : acts)
+            if (!by[a].empty()) out.push_back({"", by[a], d});
+    }
+    out.push_back({"Typing", "", ""});
+    for (auto& r : std::vector<KeyRow>{
+             {"", "Enter", "send the line"}, {"", "Tab", "complete nick or command"}, {"", "Up Down", "earlier lines you typed"},
+             {"", "Home End", "start / end of the line"}, {"", "C-u C-k", "delete to start / end"}, {"", "M-BS", "delete the previous word"},
+             {"", "C-b C-c C-o", "bold, color, reset"}, {"", "C-v C-] C-_", "reverse, italic, underline"}})
+        out.push_back(r);
+    return out;
+}
+
+// "M-Right" -> {"Alt", "→"}: the keycaps of one key
+static std::vector<std::string> key_caps(const std::string& sp) {
+    static const std::map<std::string, std::string> NAMES = {{"Right", "→"}, {"Left", "←"}, {"Up", "↑"}, {"Down", "↓"}, {"BS", "⌫"}, {"Esc", "Esc"}};
+    std::vector<std::string> caps;
+    size_t i = 0;
+    for (; i + 1 < sp.size() && sp[i + 1] == '-' && sp.size() > i + 2; i += 2)
+        caps.push_back(sp[i] == 'M' ? "Alt" : sp[i] == 'C' ? "Ctrl" : sp[i] == 'S' ? "Shift" : sp[i] == 'D' ? "Cmd" : std::string(1, sp[i]));
+    std::string k = sp.substr(i);
+    auto n = NAMES.find(k);
+    caps.push_back(n != NAMES.end() ? n->second : k.size() == 1 ? std::string(1, (char)toupper((unsigned char)k[0])) : k);
+    return caps;
+}
+
+void Tui::draw_keys(int W, int H) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          cap = sty(T, "menu_sel", "tab_active"), grp = sty(T, "hilight", "menu");
+    for (Style* st : {&ls, &dim, &grp}) st->bg = bs.bg;
+    grp.fg = readable(grp.fg, bs.bg), dim.fg = readable(dim.fg, bs.bg);
+    hs.attr |= A_BOLD, grp.attr |= A_BOLD, cap.attr |= A_BOLD;
+    auto rows = key_rows(keymap);
+    kw.n = (int)rows.size();
+    kw.rows = std::max(1, std::min(kw.n, H - 5));
+    auto caps_w = [&](const std::string& sp, bool first) {  // " Alt "+" → ", " / " before an alternative
+        int w = first ? -1 : 2;
+        for (auto& k : key_caps(sp)) { Row rr; cells(rr, k, cap, false); w += width(rr) + 3; }
+        return w;
+    };
+    int need = 0, dw = 0;  // the widest keycaps and description, for the box's width
+    for (auto& r : rows) {
+        int w = 0;
+        bool first = true;
+        for (auto& sp : split(r.specs, ' ')) w += caps_w(sp, first), first = false;
+        need = std::max(need, w), dw = std::max(dw, (int)from_utf8(r.desc).size());
+    }
+    kw.w = std::min(W - 2, need + dw + 7), kw.x0 = (W - kw.w) / 2;
+    kw.top = std::max(0, std::min(kw.top, kw.n - kw.rows));
+    int bh = kw.rows + 3, y0 = std::max(0, (H - bh) / 2 - 1), x1 = kw.x0 + kw.w, capx = kw.x0 + 3,
+        descx = capx + std::min(need, std::max(12, kw.w - 5 - dw)) + 2;
+    kw.list_y = y0 + 1;
+    for (int yy = y0; yy < y0 + bh; yy++) fill(yy, kw.x0, x1, bs);
+    for (int xx = kw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
+    for (int yy = y0; yy < y0 + bh; yy++) cell(kw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
+    cell(kw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(kw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
+    if (auto cb = box_title(T, kw.x0, x1 - 1, y0, "Keys", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'k'};
+    for (int i = 0; i < kw.rows && kw.top + i < kw.n; i++) {
+        auto& r = rows[(size_t)(kw.top + i)];
+        int y = kw.list_y + i;
+        if (r.specs.empty()) {  // a group: its name and a rule to the edge
+            int ex = text(kw.x0 + 2, y, x1 - 2, r.head, grp, false);
+            for (int xx = ex + 1; xx < x1 - 2; xx++) cell(xx, y, U'─', ls);
+            continue;
+        }
+        // the keycaps: " Alt "+" → ", alternatives apart; what doesn't fit before the description is left out
+        int x = capx;
+        bool first = true;
+        for (auto& sp : split(r.specs, ' ')) {
+            auto caps = key_caps(sp);
+            if (x + caps_w(sp, first) + (first ? 1 : 0) > descx - 1) break;
+            if (!first) x = text(x, y, descx, " / ", dim, false);
+            for (size_t j = 0; j < caps.size(); j++) {
+                if (j) x = text(x, y, descx, "+", dim, false);
+                x = text(x, y, descx, " " + caps[j] + " ", cap, false);
+            }
+            first = false;
+        }
+        text(descx, y, x1 - 2, r.desc, bs, false);
+    }
+    std::string more = kw.n > kw.rows ? "↑↓ scroll · " : "";
+    text(kw.x0 + 2, y0 + bh - 2, x1 - 2, more + "Esc close · /help keys", dim, false);
+    tb_hide_cursor();
+}
+
+void Tui::keys_key(int k, uint32_t ch) {
+    int last = std::max(0, kw.n - kw.rows);
+    if (k == TB_KEY_ARROW_DOWN) kw.top = std::min(last, kw.top + 1);
+    else if (k == TB_KEY_ARROW_UP) kw.top = std::max(0, kw.top - 1);
+    else if (k == TB_KEY_PGDN || k == TB_KEY_SPACE) kw.top = std::min(last, kw.top + kw.rows);
+    else if (k == TB_KEY_PGUP) kw.top = std::max(0, kw.top - kw.rows);
+    else if (k == TB_KEY_HOME) kw.top = 0;
+    else if (k == TB_KEY_END) kw.top = last;
+    else kw.open = false;  // Esc, q, Enter, F1 or Alt+K again: anything else closes
+}
+
 // every word typed must be in the tab's name, its network, or its kind ("server", "query"...)
 std::vector<Buffer*> Tui::find_list() const {
     auto words = split(irc_lower(to_utf8(fw.q)), ' ');
@@ -1696,6 +1823,7 @@ void Tui::load_keys() {
     keymap["C-g"] = keymap["M-j"] = keymap["∆"] = "find_tab";  // ∆: Option+J on a Mac
     keymap["F6"] = keymap["M-o"] = keymap["ø"] = "other_pane";  // /split; ø: Option+O on a Mac
     keymap["M-q"] = keymap["œ"] = "quit";  // œ: Option+Q on a Mac without "Option as Meta"; it asks first
+    keymap["F1"] = keymap["M-k"] = keymap["˚"] = "keys";  // ˚: Option+K on a Mac
     keymap["M-d"] = keymap["∂"] = keymap["C-z"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"; C-z: detach (still connected) where a shell would suspend
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
@@ -1715,7 +1843,7 @@ void Tui::on_readable() {
     bool enter = false;
     while (tb_peek_event(&ev, 0) == TB_OK) {
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || sw.open || tw.open || fw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || fw.open || kw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -1759,6 +1887,7 @@ bool Tui::action(const std::string& a) {
         confirm = "Quit iSekur? You leave every network and the webchat closes. Alt+D detaches instead: iSekur stays connected.\n/quit";
         confirm_title = "Quit";
     }
+    else if (a == "keys") kw = KeysWin{}, kw.open = true;
     else if (a == "find_tab") fw = FindWin{}, fw.open = true, fw.sel = std::max(0, c.index_of(c.active));
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
@@ -1784,6 +1913,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (sw.open) { settings_key(mod, k, ch); return; }
     if (tw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) theme_key(k, ch); return; }
     if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
+    if (kw.open) { keys_key(k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -1957,6 +2087,7 @@ void Tui::close_box() {
     case 's': sw.open = false; break;
     case 't': tw.q.clear(), theme_key(TB_KEY_ESC, 0); break;  // back to the theme it had
     case 'f': fw.open = false; break;
+    case 'k': kw.open = false; break;
     case 'a': input.clear(), cur = 0, c.exec(c.active, ""); break;  // a question: cancelled
     case 'c': confirm.clear(); break;
     case 'p': input = from_utf8(paste), cur = input.size(), paste.clear(); break;  // back to edit it
@@ -1971,6 +2102,11 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
     if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
+    if (kw.open) {  // the wheel scrolls, a click outside closes
+        if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) keys_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
+        else if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1)) kw.open = false;
+        return;
+    }
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && (nl_x < 0 || x < nl_x);
     if (selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {

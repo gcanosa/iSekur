@@ -224,6 +224,18 @@ dialog .btns .left { margin-right: auto; }
 @media (prefers-reduced-motion: reduce) { #lock, #lock *, #lock.open, #lock.open * { animation-duration: 1ms !important; animation-delay: 0s !important; } }
 #atext > div { animation: rise .5s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+/* /keys, F1, Alt+K: every key binding as keycaps, by group (the terminal's window is the same list) */
+#dkeys { width: min(620px, calc(100vw - 32px)); }
+#klist { max-height: min(62vh, 560px); overflow-y: auto; display: grid; grid-template-columns: auto 1fr; gap: 5px 18px; align-items: center; padding-right: 4px; }
+#klist h3 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dlg-title, var(--accent));
+  display: flex; align-items: center; gap: 8px; }
+#klist h3::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
+#klist h3:first-child { margin-top: 0; }
+#klist .ks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
+#klist .d { font-size: 13px; color: var(--fg); }
+#klist .none { grid-column: 1 / -1; color: var(--muted); }
+kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: border-box; text-align: center; font: 600 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+  color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; }
 #dset { width: min(900px, calc(100vw - 32px)); overflow: hidden; }
 /* /theme alone: the installed themes, a filter on top; moving previews them (the terminal too) */
 #dtheme { width: min(380px, calc(100vw - 32px)); }
@@ -470,6 +482,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #setlist .sw i::after { display: none; }
 .win-95 dialog input[type=checkbox]:checked, .win-95 #setlist .sw input:checked + i { background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9'%3E%3Cpath d='M1 4.5l2.5 2.5L8 1.5' fill='none' stroke='%23000' stroke-width='1.8'/%3E%3C/svg%3E") center / 9px no-repeat; }
 .win-95 #setlist .sw input:focus-visible + i { outline: 1px dotted #000; outline-offset: 2px; }
+.win-95 kbd { border-radius: 0; background: #c0c0c0; color: #000; border: 1px solid; border-color: #fff #404040 #404040 #fff; box-shadow: inset -1px -1px #808080; font: 400 11px/1.5 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+.win-95 #klist h3 { color: #000080; }
 .win-95 :is(#setnav, #thlist, .flist, #srvlist) { background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 2px; gap: 0; }
 .win-95 #setnav { margin-right: 0; }
 .win-95 :is(#setnav button, #thlist button, .flist .r, #srvlist button) { border-radius: 0; padding: 2px 6px; }
@@ -561,6 +575,13 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="thlist" role="listbox" aria-label="Themes"></div>
   <div class="hint">↑↓ or a click previews · Enter keeps · Esc goes back</div>
   <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok">Keep</button></div>
+</form></dialog>
+<dialog id="dkeys"><form method="dialog">
+  <h2>Keys</h2>
+  <input id="kq" placeholder="Filter, e.g. tab, nick, bold..." autocomplete="off" aria-label="Filter keys">
+  <div id="klist"></div>
+  <div class="hint">Change one with /set keys.&lt;action&gt; "&lt;key&gt; ..." · /help keys</div>
+  <div class="btns"><button class="go" value="ok">Close</button></div>
 </form></dialog>
 <div id="toasts" aria-live="polite"></div>
 <dialog id="dfiles"><form method="dialog">
@@ -1557,6 +1578,44 @@ dtheme.onclose = () => {  // Keep: /set theme (so /save writes it); Esc or Cance
   if (dtheme.returnValue === "ok") { if (n && n !== thOrig) send({t: "input", buf: active, text: "/set theme " + n}); }
   else if (theme.name !== thOrig || (n && n !== thOrig)) send({t: "theme", buf: active, name: thOrig});
 };
+// /keys: the bindings as keycaps by group, from the live keymap (the [keys] section included), then the typing keys
+const KEY_GROUPS = [
+  ["Tabs", [["next_tab", "next tab"], ["prev_tab", "previous tab"], ["next_active", "the busiest tab"], ["next_server", "next server tab"],
+            ["find_tab", "find a tab by name"], ["other_pane", "the other /split pane"], ["close_tab", "close the tab"]]],
+  ["View", [["scroll_up", "scroll up half a page"], ["scroll_down", "scroll down half a page"], ["toggle_nicklist", "show or hide the nick list"],
+            ["toggle_topic", "show or hide the topic bar"], ["keys", "this list"]]],
+  ["Session", [["quit", "quit (asks first)"]]],
+  ["Typing", [["Enter", "send the line"], ["Tab", "complete nick or command"], ["Up Down", "earlier lines you typed"],
+              ["C-b C-c C-o", "bold, color, reset"], ["C-r C-i C-u", "reverse, italic, underline"], ["Esc", "cancel a password prompt"]], true]];
+const MAC = /Mac|iP(hone|ad)/.test(navigator.platform), escH = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
+function keyCaps(sp) {  // "M-Right" -> <kbd>Alt</kbd>+<kbd>→</kbd>
+  const N = {Right: "→", Left: "←", Up: "↑", Down: "↓"}, M = {M: MAC ? "⌥ Opt" : "Alt", C: MAC ? "⌃ Ctrl" : "Ctrl", S: "Shift", D: "⌘ Cmd"};
+  const caps = [];
+  while (/^[MCSD]-./.test(sp)) caps.push(M[sp[0]]), sp = sp.slice(2);
+  caps.push(N[sp] || (sp.length === 1 ? sp.toUpperCase() : sp));
+  return caps.map(c => "<kbd>" + escH(c) + "</kbd>").join("+").replace("<kbd>1…0</kbd>", "<kbd>1</kbd>…<kbd>0</kbd>");
+}
+function renderKeys() {
+  const q = $("#kq").value.trim().toLowerCase(), by = {};
+  for (const [sp, a] of Object.entries(keymap)) (by[a] = by[a] || []).push(sp);
+  let h = "";
+  for (const [g, acts, fixed] of KEY_GROUPS) {
+    const rows = [];
+    if (g === "Tabs") {  // Alt+1..0 in one row; a tab_N bound elsewhere gets its own
+      rows.push([[ "M-1…0" ], "go to tab 1 to 10"]);
+      for (let i = 1; i <= 10; i++) { const own = (by["tab_" + i] || []).filter(s => s !== "M-" + i % 10); if (own.length) rows.push([own, "go to tab " + i]); }
+    }
+    for (const [a, d] of acts) { const ks = fixed ? a.split(" ") : by[a]; if (ks && ks.length) rows.push([ks, d]); }
+    const shown = rows.filter(([ks, d]) => !q || (g + " " + d + " " + ks.join(" ")).toLowerCase().includes(q));
+    if (!shown.length) continue;
+    h += "<h3>" + g + "</h3>";
+    for (const [ks, d] of shown) h += '<div class="ks">' + ks.map(keyCaps).join(" / ") + '</div><div class="d">' + escH(d) + "</div>";
+  }
+  $("#klist").innerHTML = h || '<div class="none">no key matches</div>';
+}
+const dkeys = $("#dkeys");
+function openKeys() { $("#side").classList.remove("open"); $("#kq").value = ""; renderKeys(); dkeys.showModal(); $("#kq").focus(); }
+$("#kq").oninput = renderKeys;
 function openAbout() { $("#side").classList.remove("open"); send({t: "about", buf: active}); dabout.showModal(); }
 dabout.onclose = () => clearInterval(typer);
 $("#aboutbtn").onclick = openAbout;
@@ -1919,7 +1978,8 @@ $("#input").onsubmit = async e => {
   hpos = hist.length;
   line.value = ""; suggSel = -1; renderSugg(); typedText = false;  // iSekur ends +typing when it sends
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
-  if (/^\/about\s*$/i.test(v)) { openAbout(); return; }  // a dialog here, not a tab
+  if (/^\/about\s*$/i.test(v)) { openAbout(); return; }
+  if (/^\/keys\s*$/i.test(v)) { openKeys(); return; }  // like the terminal: the key list  // a dialog here, not a tab
   if (/^\/theme\s*$/i.test(v)) { openThemes(); return; }  // like the terminal: the theme picker
   if (/^\/set\s*$/i.test(v)) { $("#setbtn").click(); return; }  // like the terminal: the settings window
   if (/^\/servers\s*$/i.test(v)) { $("#addsrv").click(); return; }  // the Servers window
@@ -1931,7 +1991,7 @@ $("#input").onsubmit = async e => {
 // Alt+X stand in for Ctrl+W and Ctrl+X), plus the [keys] section, in the terminal's spelling ("M-Right")
 const KEYS_DEF = {"M-Right": "next_tab", "M-Left": "prev_tab", "M-a": "next_active", "M-x": "next_server", "M-w": "close_tab",
   "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down", "F6": "other_pane", "M-o": "other_pane",
-  "C-g": "find_tab", "M-j": "find_tab", "M-q": "quit"};
+  "C-g": "find_tab", "M-j": "find_tab", "M-q": "quit", "F1": "keys", "M-k": "keys"};
 for (let i = 1; i <= 10; i++) KEYS_DEF["M-" + i % 10] = "tab_" + i;
 let keymap = {...KEYS_DEF};
 function keyspec(e) {
@@ -1966,6 +2026,7 @@ function action(a) {
     $("#side").classList.add("open");
     tabq.focus(); tabq.select();
   }
+  else if (a === "keys") openKeys();
   else if (a === "toggle_topic") {
     const off = $("#topic").classList.toggle("hide");
     try { localStorage.setItem("topic", off ? "0" : "1"); } catch (e) {}

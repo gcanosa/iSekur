@@ -310,6 +310,7 @@ struct Core {
     std::vector<SetRow> setting_rows() const;
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     bool settings_servers = false;  // /servers: that window, at the first server
+    bool keys_win = false;      // /keys in the terminal: the TUI opens its key list
     bool theme_win = false;     // /theme alone in the terminal: the TUI opens its theme picker
     bool use_theme(const std::string& name, std::string& err);  // switch the theme, terminal and webchat, silently
     std::string cfg_path;

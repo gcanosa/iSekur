@@ -141,8 +141,11 @@ Not available on Cygwin.
 
 ## Keys
 
+`/keys`, F1 or Alt+K (Option+K on a Mac) shows all of them in a window, drawn as keycaps by group, your own `[keys]` bindings included (terminal and webchat).
+
 | Key | Action |
 |---|---|
+| F1, Alt+K | the key list (`/keys`) |
 | Alt+1..9, Alt+0 | go to tab N |
 | Alt+←/→, Ctrl+P/N | previous / next tab |
 | Ctrl+A, Alt+A | next tab with activity |
@@ -175,7 +178,7 @@ dropped instead of showing up as garbage.
 
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/ctcp`,
-`/theme`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
+`/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
 `/clear`, `/quit`. Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 

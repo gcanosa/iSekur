@@ -131,6 +131,11 @@ private:
     void draw_find(int W, int H);
     void find_key(int k, uint32_t ch);
     void find_mouse(int k, int x, int y);
+    // /keys, F1, Alt+K: every key binding as keycaps, by group, from the live keymap ([keys] included)
+    struct KeysWin { bool open = false; int top = 0, rows = 0, n = 0, x0 = 0, w = 0, list_y = 0; };
+    KeysWin kw;
+    void draw_keys(int W, int H);
+    void keys_key(int k, uint32_t ch);
     bool action(const std::string& a);
     void complete();
     // live list under the input line: config keys after "/set ", commands while
