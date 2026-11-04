@@ -329,6 +329,9 @@ static std::vector<std::string> theme_dirs() {
     dirs.push_back("themes");
     if (const char* x = getenv("XDG_CONFIG_HOME")) dirs.push_back(std::string(x) + "/isekur/themes");
     if (const char* h = getenv("HOME")) dirs.push_back(std::string(h) + "/.config/isekur/themes");
+    // XDG data dir: where PREFIX=~/.local make install puts them
+    if (const char* x = getenv("XDG_DATA_HOME")) dirs.push_back(std::string(x) + "/isekur/themes");
+    if (const char* h = getenv("HOME")) dirs.push_back(std::string(h) + "/.local/share/isekur/themes");
 #ifdef ISEKUR_DATADIR
     dirs.push_back(ISEKUR_DATADIR "/themes");
 #endif

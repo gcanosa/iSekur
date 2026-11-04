@@ -88,6 +88,13 @@ build/twitch.flag: FORCE | build
 notwitch:
 	$(MAKE) TWITCH=0
 
+# DATADIR (the themes path) is compiled into config.o: kept in build/datadir the same way,
+# so `make` then `PREFIX=~/.local make install` rebuilds instead of installing a binary
+# that looks in /usr/local
+build/config.o: build/datadir
+build/datadir: FORCE | build
+	@echo '$(DATADIR)' | cmp -s - $@ || echo '$(DATADIR)' > $@
+
 # the config template is compiled in too: /set lists its keys and defaults
 build/core.o: build/conf_template.h
 build/conf_template.h: iSekur.conf.example | build
