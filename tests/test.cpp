@@ -1000,6 +1000,11 @@ int main() {
         core.auto_away(ts, 1000);
         assert(sent() == "AWAY\r\nPRIVMSG #c :\x01" "ACTION is back\x01\r\n");
         ts->away = false;
+        core.exec(chb, "/sv");  // send version: the CTCP VERSION text as an action
+        std::string sv = sent();
+        assert(sv.rfind("PRIVMSG #c :\x01" "ACTION is using iSekur " ISEKUR_VERSION, 0) == 0 && sv.find("isekur-site") != std::string::npos);
+        core.exec(home, "/sv");
+        assert(sent().empty() && home->lines.back().kind == LK::ERROR);
         core.cfg["server.t"].erase("auto_away"), core.cfg["general"].erase("away_announce");
         ts->flood_ms = fl;
     }

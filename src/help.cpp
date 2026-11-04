@@ -117,6 +117,10 @@ static const std::vector<CmdInfo> CMDS = {
     {"me", "Chat", "action", "Send an action (/me waves)",
      "Shows as \"* yournick action\" in the channel or query.",
      {"/me waves", "/me is grabbing coffee"}},
+    {"sv", "Chat", "", "Show off your iSekur version",
+     "Sends \"* yournick is using iSekur <version> :: <OS> :: ... :: <website>\" as an action in the channel "
+     "or query, the same text a CTCP VERSION reply gives.",
+     {"/sv"}},
     {"notice", "Chat", "target text", "Send a notice",
      "Notices never trigger automatic replies, which is why bots use them.",
      {"/notice alice the build is green"}},

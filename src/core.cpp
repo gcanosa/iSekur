@@ -1723,6 +1723,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "me") { if (!args.empty()) say(b, args, true); return; }
+    if (cmd == "sv") { say(b, "is using " + ctcp_version(), true); return; }  // send version: the CTCP VERSION text, for all to see
     if (cmd == "autojoin" && !argv.empty() && argv[0] == "snap") {
         // autojoin = the open channel tabs (with their keys), every server or "here"; written now
         bool here = argv.size() > 1 && argv[1] == "here";
