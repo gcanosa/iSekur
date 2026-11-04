@@ -786,6 +786,18 @@ int main() {
     assert(!core.find(ts, "NickServ") && ts->status->lines.back().text.find("now identified") != std::string::npos);
     assert(ts->status->lines[ts->status->lines.size() - 2].text == "IDENTIFY ********");
     ts->ident_at = 0;
+    {  // a notice without a query: the server tab, not the tab you're on; after a /command, that command's tab
+        core.select(chb), ts->typed_at = 0;
+        size_t n = chb->lines.size();
+        feed(":NickServ!s@services NOTICE me :This nickname is registered.");
+        assert(chb->lines.size() == n && ts->status->lines.back().text == "This nickname is registered.");
+        feed(":CTCPServ!s@services PRIVMSG me :\x01VERSION\x01");
+        assert(chb->lines.size() == n && ts->status->lines.back().text.find("CTCP VERSION from CTCPServ") == 0);
+        sent();
+        core.exec(chb, "/msg bob hi");
+        feed(":bob!b@h NOTICE me :hello back");
+        assert(chb->lines.back().text == "hello back" && !core.find(ts, "bob"));
+    }
     ts->caps.erase("echo-message");
 
     // /typing: other people's messages get a typed_at, our own and info lines don't

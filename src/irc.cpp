@@ -1219,7 +1219,8 @@ void Core::handle(Server* s, const Msg& m) {
                     snprintf(rtt, sizeof rtt, "%.3fs", (now_ms() - atoll(arg.c_str())) / 1000.0);
                     arg = rtt;
                 }
-                print(reply_buf(), LK::INFO,
+                Buffer* cb = typed_buf();  // a reply to your /ctcp goes where you typed it; the rest, the server tab
+                print(cb ? cb : s->status, LK::INFO,
                       "CTCP " + verb + (notice ? " reply" : "") + " from " + m.nick +
                           (arg.empty() ? "" : ": " + arg) + note);
                 return;
@@ -1237,7 +1238,9 @@ void Core::handle(Server* s, const Msg& m) {
             b = find(s, peer);
             // our automatic IDENTIFY and what NickServ says to it: the server tab, not a new NickServ tab
             bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && s->lower(peer) == "nickserv";
-            if (!b) b = ident ? s->status : notice ? reply_buf() : open(s, BT::QUERY, peer);
+            // a notice without a query: the server tab (like WeeChat), or the tab of the /command it answers
+            if (!b && notice && !ident) b = typed_buf();
+            if (!b) b = ident || notice ? s->status : open(s, BT::QUERY, peer);
         }
         bool hl = !self && !snote && !muted(b) && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick, ini_get(cfg, "server." + s->cfg.name, "hilight_words")));
         std::string who = m.nick.empty() ? s->cfg.host : m.nick;
