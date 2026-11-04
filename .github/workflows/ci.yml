@@ -1,5 +1,9 @@
 name: ci
 on: [push, pull_request]
+# a newer push to the same branch cancels the run still queued or running (macOS runners are scarce)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   linux:
