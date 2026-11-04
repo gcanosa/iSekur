@@ -122,6 +122,9 @@ int main() {
 
     assert(json_str("a\"b\\\n\xe9") == "\"a\\\"b\\\\\\u000a\xc3\xa9\"");
     // attach / webchat audit lines
+    assert(typing_text({"a"}) == "a is typing\u2026" && typing_text({"a", "b"}) == "a and b are typing\u2026");
+    assert(typing_text({"a", "b", "c"}) == "a, b and c are typing\u2026" && typing_text({}) == "");
+    assert(typing_text({"a", "b", "c", "d", "e", "f"}) == "a, b and 4 others are typing\u2026");
     assert(fmt_dur(9) == "9s" && fmt_dur(2832) == "47m12s" && fmt_dur(90061) == "1d1h1m");
     assert(attach_who("203.0.113.7 52144 10.0.0.2 22", "/dev/ttys004") == "203.0.113.7 (ssh) on /dev/ttys004");
     assert(attach_who("", "/dev/ttys001") == "local on /dev/ttys001" && attach_who("", "") == "local");

@@ -241,6 +241,16 @@ int cpu_pct();
 bool mem_free(unsigned long long& avail, unsigned long long& total);
 int battery_pct();
 
+// "a is typing…", "a and b are…", "a, b and c are…", "a, b and 4 others are…": a busy channel can't fill the bar
+std::string typing_text(const std::vector<std::string>& n) {
+    if (n.empty()) return "";
+    std::string s = n[0];
+    size_t shown = n.size() > 3 ? 2 : n.size();
+    for (size_t i = 1; i < shown; i++) s += (i + 1 == shown && n.size() <= 3 ? " and " : ", ") + n[i];
+    if (n.size() > 3) s += " and " + std::to_string(n.size() - 2) + " others";
+    return s + (n.size() == 1 ? " is typing\u2026" : " are typing\u2026");
+}
+
 // uptime as 3d4h22m, seconds below a day
 std::string fmt_dur(long up) {
     std::string u;
@@ -808,12 +818,12 @@ void Tui::draw() {
         seg(s->state == SS::DISCONNECTED ? "disconnected" : "connecting", T.get("error"));
     }
     if (!b->typing.empty()) {  // +typing
-        std::string who;
+        std::vector<std::string> who;
         for (auto& kv : b->typing) {
             auto it = b->nicks.find(kv.first);
-            who += (who.empty() ? "" : ", ") + (it != b->nicks.end() ? it->second.nick : b->type == BT::QUERY ? b->name : kv.first);
+            who.push_back(it != b->nicks.end() ? it->second.nick : b->type == BT::QUERY ? b->name : kv.first);
         }
-        seg(who + (b->typing.size() == 1 ? " is typing\u2026" : " are typing\u2026"), ss);
+        seg(typing_text(who), ss);
     }
     std::string away;  // [away: net, net]: every network you're away on (the server's 306), whichever tab this is
     for (auto& sv : c.servers)
