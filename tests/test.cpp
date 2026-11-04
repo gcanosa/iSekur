@@ -1214,6 +1214,15 @@ int main() {
         size_t at = old.find("{\"t\":\"older\"");
         assert(at != std::string::npos && old.find("\"first\":" + std::to_string(std::max(base, have - 500)), at) != std::string::npos);
         assert(old.find("\"tf\":\"", at) != std::string::npos);  // the time stamp, formatted by iSekur
+        {  // a tab picked in the browser moves the session's focus: the one left behind gets activity again (a /join had focused it)
+            Buffer* was = core.active;
+            core.select(chb);
+            more(client_frame("{\"t\":\"focus\",\"buf\":" + std::to_string(core.bufs.front()->id) + "}"));
+            assert(core.active == core.bufs.front().get());
+            feed(":bob!u@h PRIVMSG #c :hi");
+            assert(chb->activity == 2);
+            core.select(was);
+        }
         close(ws);
         core.listener = nullptr;
         web.stop();

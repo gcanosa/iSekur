@@ -76,9 +76,9 @@ button, input { font: inherit; color: inherit; }
 #side .tab:hover .x { visibility: visible; }
 #side .tab .x:hover { opacity: 1; }
 #side .tab.active { background: var(--tab_active-bg, #ffffff12); color: var(--tab_active-fg, inherit); border-left-color: var(--accent); }
-#side .tab.a1 { color: var(--tab_data-fg, #9aa0c0); }
-#side .tab.a2 { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
-#side .tab.a3 { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
+#side .tab.a1:not(.active) { color: var(--tab_data-fg, #9aa0c0); }
+#side .tab.a2:not(.active) { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
+#side .tab.a3:not(.active) { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
 #side .tab.off { opacity: .55; }
 #side .ghost { opacity: .5; background: color-mix(in srgb, var(--accent) 14%, transparent); outline: 1px dashed var(--accent); outline-offset: -1px; }  /* where a dragged tab lands */  /* a dragged tab lands here */
 #side .tab.split { border-left-color: var(--muted); border-left-style: dashed; }  /* in the webchat's other /split pane */
@@ -1019,6 +1019,7 @@ const drafts = new Map();  // tab id -> its unsent input line (its history: hist
 function select(id) {
   if (!bufs.has(id)) return;
   if (active !== id && bufs.has(active)) send({t: "seen", buf: active});
+  if (active !== id) send({t: "focus", buf: id});  // the session's focus follows: its tab gets no activity, so it must be the one you look at
   if (id === split && id !== active) { split = active; $("#app").classList.toggle("flip"); }  // the other pane's tab: focus moves there
   if (active !== id) {  // each tab keeps its own unsent line
     if (line.value) drafts.set(active, line.value); else drafts.delete(active);
