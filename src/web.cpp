@@ -835,7 +835,8 @@ std::string Web::stat_json() {
     for (auto& s : c.servers) {
         char lag[16];
         snprintf(lag, sizeof lag, "%.1f", s->state == SS::CONNECTED ? s->lag : 0.0);
-        o += std::string(o.back() == '{' ? "" : ",") + json_str(s->network.empty() ? s->cfg.name : s->network) + ":[" + json_str(s->umodes) + "," + lag + "]";
+        o += std::string(o.back() == '{' ? "" : ",") + json_str(s->network.empty() ? s->cfg.name : s->network) + ":[" + json_str(s->umodes) + "," + lag + "," +
+             (s->away && s->state == SS::CONNECTED ? "1" : "0") + "]";  // away: the status bar's [away: ...]
     }
     return o + "},\"info\":" + status_info_json(c) + "}";
 }

@@ -1187,6 +1187,16 @@ int main() {
         std::string path = "build/test-web.conf", werr;
         std::swap(core.cfg_path, path);
         Web web(core);
+        {  // the status bar's [away: ...]: each network's 306 state, connected only
+            std::string key = json_str(ts->network.empty() ? ts->cfg.name : ts->network) + ":[";
+            auto flag = [&] { std::string j = web.stat_json(); size_t at = j.find(key); assert(at != std::string::npos); return j.substr(j.find(']', at) - 2, 2); };
+            assert(flag() == ",0");
+            ts->away = true;
+            assert(flag() == ",1");
+            ts->state = SS::DISCONNECTED;
+            assert(flag() == ",0");
+            ts->state = SS::CONNECTED, ts->away = false;
+        }
         assert(web.start(werr));
         core.listener = [&](Ev e, Buffer* b, const Line* l) { web.on_event(e, b, l); };
         auto step = [&] {

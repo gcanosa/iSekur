@@ -23,6 +23,7 @@ struct Web {
     void flush();  // once per loop pass: send coalesced buffer updates
     bool running() const { return lfd >= 0; }
     bool attached() const;  // a logged-in browser is connected
+    std::string stat_json();  // the status line: per network umodes, lag and away, status_info
 
 private:
     struct Client {
@@ -70,7 +71,6 @@ private:
     std::string lock_json();
     std::string update_json();   // /lock: on, msg (the box's error line)
     std::string split_json();  // the terminal's /split: buf (-1: none), first, mode, pm
-    std::string stat_json();  // the status line: per network umodes and lag, status_info
     std::string last_keys, last_stat;
     time_t last_stat_at = 0;
     time_t ws_seen = 0;  // last time a browser was attached

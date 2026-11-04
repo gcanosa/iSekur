@@ -810,6 +810,14 @@ void Tui::draw() {
         }
         seg(who + (b->typing.size() == 1 ? " is typing\u2026" : " are typing\u2026"), ss);
     }
+    std::string away;  // [away: net, net]: every network you're away on (the server's 306), whichever tab this is
+    for (auto& sv : c.servers)
+        if (sv->away && sv->state == SS::CONNECTED) away += (away.empty() ? "" : ", ") + (sv->network.empty() ? sv->cfg.name : sv->network);
+    if (!away.empty()) {
+        x = text(x, y, W, "[away: ", ss, false);
+        x = text(x, y, W, away, sh, false);
+        x = text(x, y, W, "] ", ss, false);
+    }
     if (!c.update_ver.empty()) {  // check_updates found a newer release; a click opens /about
         Style us = sh;
         us.attr |= A_BOLD;

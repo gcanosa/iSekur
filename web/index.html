@@ -871,7 +871,7 @@ function renderTopic() {
   renderStatus();
 }
 
-// the status line, like the terminal's: [time] [nick(+umodes)] [N:network/tab(+modes)] [Lag] [Act: ...] [-- MORE --] ... status_info
+// the status line, like the terminal's: [time] [nick(+umodes)] [N:network/tab(+modes)] [Lag] [away: ...] [Act: ...] [-- MORE --] ... status_info
 let stat = {srv: {}, info: []}, moreShown = false;
 const atBottom = () => { const m = $("#msgs"); return m.scrollHeight - m.scrollTop - m.clientHeight < 40; };
 function renderStatus() {
@@ -885,6 +885,8 @@ function renderStatus() {
   if (b.state !== "connected") seg(b.state === "disconnected" ? "disconnected" : "connecting", "err");
   else if (sv && sv[1] >= 1) seg("Lag " + sv[1].toFixed(1) + "s");
   if (b.typing && b.typing.length) st.append(b.typing.join(", ") + (b.typing.length === 1 ? " is typing\u2026 " : " are typing\u2026 "));
+  const away = Object.entries(stat.srv).filter(([, v]) => v[2]).map(([n]) => n);  // every network you're away on, any tab
+  if (away.length) st.append("[away: ", el("b", "", away.join(", ")), "] ");
   const acts = order.map((id, i) => [i + 1, id, bufs.get(id)]).filter(([, , x]) => x && x.act);
   if (acts.length) {
     st.append("[Act: ");
