@@ -248,6 +248,9 @@ int main() {
         assert(h->lines.empty());
         core.close(h);
         core.cfg["general"].erase("keep_history"), core.cfg["general"].erase("log_history");
+        core.hist_cache.clear(), core.hist_loaded = true;  // nothing to keep: no empty file left behind
+        core.save_history();
+        assert(access("build/test-hist.history", F_OK) != 0);
         unlink("build/test-hist.history"), core.cfg_path.clear();
     }
     {  // /move N: among the server's tabs, after its server tab; a drag runs it

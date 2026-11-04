@@ -658,6 +658,9 @@ void Core::save_history() {
         if (v.size() > (size_t)n) v.erase(v.begin(), v.end() - n);
     }
     std::string path = cfg_side(cfg_path, "history"), tmp = path + ".tmp";
+    bool any = false;
+    for (auto& kv : rows) any |= !kv.second.empty();
+    if (!any) { unlink(path.c_str()); return; }  // nothing kept: no file, not an empty one
     mode_t old = umask(077);  // chat lines are private, like the logs
     FILE* f = fopen(tmp.c_str(), "w");
     umask(old);
