@@ -1,6 +1,6 @@
 // Core state shared by every frontend: servers, buffers, theme, commands.
 #pragma once
-#define ISEKUR_VERSION "0.5"
+#define ISEKUR_VERSION "0.5.1"
 #include <atomic>
 #include <cstdint>
 #include <cstdio>

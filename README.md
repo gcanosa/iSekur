@@ -1,4 +1,4 @@
-# iSekur 0.5
+# iSekur 0.5.1
 
 [![Latest release](https://img.shields.io/github/v/release/gcanosa/iSekur?color=c792ea)](https://github.com/gcanosa/iSekur/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-ff5fd7)](LICENSE)
