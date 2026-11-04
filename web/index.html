@@ -1037,6 +1037,20 @@ $("#app").addEventListener("pointerdown", e => {
   splitDrag = true; $("#app").setPointerCapture(e.pointerId); e.preventDefault();
 });
 $("#app").addEventListener("pointerup", () => { if (splitDrag) splitDrag = false; });
+// copying lines: the grid columns (time, nick, text) have no spaces between them, so a copy came out as
+// "22:17+tucibeyinwhich provider?"; build "22:17 <+tucibeyin> which provider?" per line, like a log
+document.addEventListener("copy", e => {
+  const s = getSelection(); if (!s.rangeCount) return;
+  const r = s.getRangeAt(0), a = r.commonAncestorContainer, el = a.nodeType === 1 ? a : a.parentElement;
+  if (!el.closest("#msgs, #msgs2") || el.closest(".ts, .nk, .tx")) return;  // within one column: as is
+  const br = [...(theme.lay?.nick_brackets || "")].length === 2, out = [];
+  for (const d of r.cloneContents().querySelectorAll(".l")) {
+    const [ts, nk, tx] = [".ts", ".nk", ".tx"].map(q => d.querySelector(q)?.textContent || "");
+    out.push([ts, nk && d.classList.contains("k-msg") && !br ? "<" + nk + ">" : nk, tx].filter(Boolean).join(" "));
+  }
+  if (!out.length) return;
+  e.clipboardData.setData("text/plain", out.join("\n")); e.preventDefault();
+});
 $("#msgs2").addEventListener("click", () => { if (split !== null && (getSelection() || "").toString() === "") select(split); });
 
 // a burst of updates (a netsplit, a busy channel) draws once a frame, and not at all in a hidden tab
