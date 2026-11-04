@@ -329,6 +329,10 @@ int main() {
         ts->inbuf = "@label=i1 :me NICK :me3\r\r\n@label=i2 :me3 NICK :me\r\r\n";
         core.on_readable(ts, 0);
         assert(ts->nick == "me" && ts->inbuf.empty() && q->lines.back().text == "You are now known as me");
+        sent();
+        ts->auto_away = true;
+        core.exec(ts->status, "/back");  // /back: AWAY with nothing, auto-away handed back to you
+        assert(sent().find("AWAY\r\n") != std::string::npos && !ts->auto_away);
         core.close(q), core.select(was);
         core.exec(home, "/quit");  // /quit is one server's: not from a tab without one
         assert(!core.quit && home->lines.back().text.find("Not a server's tab") == 0);

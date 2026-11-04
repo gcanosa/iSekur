@@ -1731,6 +1731,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         else print(b, LK::ERROR, "Usage: /web [start|stop|restart|status]");
         return;
     }
+    if (cmd == "back") { exec(b, "/away"); return; }  // /away with no message
     if (cmd == "away" && s) s->auto_away = false;  // yours now; falls through to the server
     if (cmd == "grep") {  // /grep [-all] text: matching lines from scrollback, newest last
         bool all = !argv.empty() && argv[0] == "-all";

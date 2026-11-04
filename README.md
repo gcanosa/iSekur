@@ -180,7 +180,7 @@ dropped instead of showing up as garbage.
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
 `/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
-`/clear`, `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected). Any other command goes to the server unchanged
+`/clear`, `/back` (clears away), `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected). Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 
 Twitch chat is IRC: `/twitch` opens its tab and asks for your login and OAuth token if they're missing, or set up a `[server.twitch]` with `host = irc.chat.twitch.tv`, `port = 6697`, `tls = true`,
