@@ -299,7 +299,9 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
     }
     if (b->type == BT::SHELL) {  // /shell or /attach: keys go to the tab, so its menu is the way out
         bool remote = b->term && !b->term->host.empty();
-        m.push_back({remote ? "Disconnect (iSekur keeps running there)" : "Close", "/close"});
+        if (remote) m.push_back({"Disconnect", "?Disconnect from " + b->term->host + "? Only this link closes: the iSekur there keeps running "
+                                               "and stays on its networks. /attach brings it back.\n/close"});
+        else m.push_back({"Close", "/close"});
         return m;
     }
     if (b->type == BT::QUERY && s) {  // a private chat: the nick's menu (bar Query, Mention), then the tab's own

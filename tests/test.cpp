@@ -205,7 +205,7 @@ int main() {
     {  // a shell or remote tab gets a right-click menu: its keys all go to the tab
         Buffer* sh = core.open(nullptr, BT::SHELL, "vps");
         auto tm = core.tab_menu(sh);
-        assert(tm.size() == 1 && tm[0].second == "/close");
+        assert(tm.size() == 1 && tm[0].first == "Close" && tm[0].second == "/close");  // a remote one: "Disconnect", asking first
         core.close(sh);
     }
     core.from_web = true;
