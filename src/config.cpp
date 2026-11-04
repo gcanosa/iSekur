@@ -365,6 +365,7 @@ bool load_theme(const std::string& name, Theme& out, std::string& err) {
     for (std::string tok; pal >> tok;) t.nicks.push_back(parse_color(tok));
     if (t.nicks.empty()) t.nicks = {0xff5f5f, 0x5fff5f, 0xffff5f, 0x5f87ff, 0xff5fff, 0x5fffff};
     t.layout = ini["layout"];
+    mirc_colors = t.lay("mirc_colors", "on") != "off";
     out = t;
     return true;
 }
@@ -400,6 +401,7 @@ void utf8_put(std::string& o, uint32_t cp) {
 }
 
 // ---- mIRC formatting -------------------------------------------------------
+bool mirc_colors = true;
 static const RGB mirc_pal[99] = {
     0xffffff, 0x000000, 0x00007f, 0x009300, 0xff0000, 0x7f0000, 0x9c009c, 0xfc7f00, 0xffff00,
     0x00fc00, 0x009393, 0x00ffff, 0x0000fc, 0xff00ff, 0x7f7f7f, 0xd2d2d2, 0x470000, 0x472100,
@@ -453,6 +455,7 @@ void mirc_walk(const std::string& s, Style base,
                 num(bg);
                 st.bg = bg < 99 ? mirc_pal[bg] : base.bg;
             }
+            if (!mirc_colors) st.fg = base.fg, st.bg = base.bg;
             continue;
         }
         case 0x04: {
@@ -464,6 +467,7 @@ void mirc_walk(const std::string& s, Style base,
                 i++;
                 if (hex(bg)) st.bg = bg;
             }
+            if (!mirc_colors) st.fg = base.fg, st.bg = base.bg;
             continue;
         }
         }

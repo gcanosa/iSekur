@@ -123,6 +123,7 @@ private:
     std::vector<std::string> theme_list() const;  // the installed themes the filter matches
     void draw_themes(int W, int H);
     void theme_key(int k, uint32_t ch);
+    void ask_exit(std::string msg);  // /exit, Alt+Q
     void theme_mouse(int k, int x, int y);
     // Ctrl+G / Alt+J: go to a tab by typing part of its name (channel, query, network)
     struct FindWin {

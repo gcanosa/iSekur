@@ -57,12 +57,17 @@ static const std::vector<CmdInfo> CMDS = {
      "Sends QUIT to the server of the current tab and does not reconnect. Its tabs stay open; "
      "/connect brings it back and rejoins the channels.",
      {"/disconnect", "/disconnect brb, rebooting"}},
-    {"quit", "Connection", "[message]", "Quit every server and exit iSekur",
-     "Sends QUIT everywhere and exits. Alt+Q (Option+Q on a Mac) does it too, after asking. To keep "
-     "iSekur running in the background instead, use /detach or Alt+D (Option+D on a Mac).",
+    {"quit", "Connection", "[message]", "Quit the server of this tab",
+     "Sends QUIT to the server of the tab you're on, like /disconnect: its tabs stay and /connect comes back. "
+     "In a tab with no server (the home tab, a shell) it does nothing. To close iSekur, use /exit.",
      {"/quit", "/quit see you tomorrow"}},
+    {"exit", "Connection", "[-y] [message]", "Quit every server and close iSekur",
+     "Sends QUIT everywhere (with the message, else quit_message) and exits. While a network is connected it "
+     "asks first; -y doesn't ask. Alt+Q (Option+Q on a Mac) does the same. To keep iSekur running in the "
+     "background instead, use /detach or Alt+D (Option+D on a Mac).",
+     {"/exit", "/exit see you tomorrow", "/exit -y"}},
     {"nick", "Connection", "newnick", "Change your nickname",
-     "Changes your nick on the server of the current tab. When disconnected, it is used on the next connect. "
+     "Changes your nick on the server of the current tab; /nick alone shows it. When disconnected, it is used on the next connect. "
      "iSekur remembers it per network ([server.x] last_nick, written to the config at once), so "
      "reconnects and restarts use it; /set nick (or server.x.nick) goes back to the configured one.",
      {"/nick ethernet", "/nick ethernet_away"}},
@@ -567,7 +572,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/set server.sekurnet.sasl_user ") G_VAL("yournick"),
         "  " G_CMD("/set server.sekurnet.sasl_pass ") G_VAL("secret") "   then " G_CMD("/save") " and " G_CMD("/connect"),
         "",
-        "  " G_CMD("/disconnect") " leaves a server (tabs stay), " G_CMD("/connect") " comes back, " G_CMD("/quit") " exits iSekur.",
+        "  " G_CMD("/disconnect") " leaves a server (tabs stay), " G_CMD("/connect") " comes back, " G_CMD("/quit") " leaves this tab's server, " G_CMD("/exit") " closes iSekur.",
         "  " G_CMD("/servers") " manages them: " G_KEY("c") " connects, " G_KEY("x") " deletes, " G_KEY("n") " adds one.",
         "  Right-click a server tab: " BOLD "Connect at startup" RESET " or not, " BOLD "Delete server" RESET ".",
         G_NOTE BOLD "irc.SekurNet.org" RESET " is iSekur's own network: any other works the same way.",

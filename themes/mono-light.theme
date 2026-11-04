@@ -1,0 +1,59 @@
+# Mono light: no colors at all, greys on white; bold, italic and reverse do the work (a light theme). /theme mono-light
+# Nicks are all one grey and mIRC color codes in messages show as plain text ([layout] mirc_colors = off).
+[colors]
+default        = #262626 #ffffff
+topic          = #000000 #e4e4e4 bold
+tabbar         = #585858 #eeeeee
+tab_server     = #000000 #eeeeee bold
+tab_home       = #000000 #eeeeee bold
+tab_shell      = #000000 #eeeeee bold
+tab_active     = #ffffff #303030 bold
+tab_data       = #262626 #eeeeee underline
+tab_msg        = #000000 #eeeeee bold
+tab_hilight    = #000000 #eeeeee bold underline
+tab_quiet      = #808080 #eeeeee italic
+tab_quiet_act  = #ffffff #808080 bold
+status         = #585858 #eeeeee
+status_hi      = #000000 #eeeeee
+status_info    = #262626 #eeeeee
+status_ok      = #585858
+status_warn    = #262626
+status_high    = #000000 bold
+status_crit    = #ffffff #000000 bold
+status_bat     = #585858 #e4e4e4
+input          = #000000 #ffffff
+input_prompt   = #000000 #ffffff bold
+set_key        = #000000 #ffffff bold
+set_value      = #262626 #ffffff
+timestamp      = #808080 #ffffff
+separator      = #b2b2b2 #ffffff
+nicklist       = #262626 #ffffff
+nicklist_title = #585858 #ffffff italic
+nicklist_border= #b2b2b2 #ffffff
+nicklist_op    = #000000 #ffffff bold
+nicklist_voice = #262626 #ffffff italic
+menu           = #262626 #eeeeee
+menu_sel       = #ffffff #303030 bold
+menu_border    = #808080 #eeeeee
+msg_self       = #000000 #ffffff bold
+marker         = #000000
+hilight        = #ffffff #303030 bold
+hilight_text   = #000000 #ffffff bold
+join           = #585858 #ffffff
+part           = #585858 #ffffff italic
+quit           = #585858 #ffffff italic
+notice         = #000000 #ffffff bold
+action         = #262626 #ffffff italic
+info           = #585858 #ffffff
+error          = #000000 #ffffff bold underline
+
+[nicks]
+palette = #4e4e4e
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M
+mirc_colors    = off

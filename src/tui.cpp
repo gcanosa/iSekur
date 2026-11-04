@@ -1443,7 +1443,7 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
                   {"other_pane", "the other /split pane"}, {"close_tab", "close the tab"}}},
         {"View", {{"scroll_up", "scroll up half a page"}, {"scroll_down", "scroll down half a page"}, {"toggle_nicklist", "show or hide the nick list"},
                   {"toggle_topic", "show or hide the topic bar"}, {"toggle_mouse", "mouse on / off"}, {"keys", "this list"}}},
-        {"Session", {{"detach", "detach (stays connected)"}, {"quit", "quit (asks first)"}}},
+        {"Session", {{"detach", "detach (stays connected)"}, {"quit", "exit iSekur (asks first)"}}},
     };
     std::map<std::string, std::string> by;  // action -> its keys; Option-symbol twins (¬ ∆...) left out
     for (auto& [sp, act] : keymap)
@@ -1912,10 +1912,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "toggle_topic") topicbar = !topicbar;
     else if (a == "other_pane") { if (c.split_buf) c.select(c.split_buf); }
     else if (a == "detach") c.detach_req = true;
-    else if (a == "quit") {  // asks first, in the yes/no box (y quits; n, Esc or × don't)
-        confirm = "Quit iSekur? You leave every network and the webchat closes. Alt+D detaches instead: iSekur stays connected.\n/quit";
-        confirm_title = "Quit";
-    }
+    else if (a == "quit") ask_exit("");  // asks first, in the yes/no box (y quits; n, Esc or × don't)
     else if (a == "keys") kw = KeysWin{}, kw.open = true;
     else if (a == "find_tab") fw = FindWin{}, fw.open = true, fw.sel = std::max(0, c.index_of(c.active));
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
@@ -2048,7 +2045,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     // mIRC formatting: bold, color, reset, reverse, italic, underline
     case TB_KEY_CTRL_C:  // on an empty line it's the "how do I quit?" key: say so, once in a row
         if (input.empty()) {
-            const std::string hint = "Ctrl+C doesn't quit iSekur (it's the color key while typing): /quit exits, Ctrl+Z, Alt+D or /detach leave it running";
+            const std::string hint = "Ctrl+C doesn't quit iSekur (it's the color key while typing): /exit closes iSekur, Ctrl+Z, Alt+D or /detach leave it running";
             if (c.active->lines.empty() || c.active->lines.back().text != hint) {
                 Line l{time(nullptr), LK::INFO, "", hint};
                 l.nolog = true;
@@ -2347,7 +2344,19 @@ void Tui::submit() {
     if (hist.size() > 500) hist.erase(hist.begin());
     hpos = hist.size();
     c.active->scroll = 0;
+    if (line == "/exit" || line.rfind("/exit ", 0) == 0) { ask_exit(line.substr(5)); return; }
     c.exec(c.active, line);
+}
+
+// /exit and Alt+Q: the yes/no box while a network is connected, else straight out
+void Tui::ask_exit(std::string msg) {
+    while (!msg.empty() && msg[0] == ' ') msg.erase(0, 1);
+    bool on = false;
+    for (auto& sv : c.servers) on |= sv->state != SS::DISCONNECTED;
+    if (msg == "-y" || msg.rfind("-y ", 0) == 0) { c.exec(c.active, "/exit " + msg); return; }
+    if (!on) { c.exec(c.active, "/exit -y " + msg); return; }
+    confirm = "Exit iSekur? You leave every network and the webchat closes. Alt+D detaches instead: iSekur stays connected.\n/exit -y " + msg;
+    confirm_title = "Exit";
 }
 
 int Tui::suggest(std::vector<Sugg>& out) const {

@@ -56,6 +56,7 @@ struct Theme {
 extern std::string theme_dir;  // [general] theme_dir: searched first for <name>.theme
 bool load_theme(const std::string& name, Theme& out, std::string& err);
 std::vector<std::string> theme_names();  // installed themes, sorted
+extern bool mirc_colors;  // the theme's [layout] mirc_colors (off: mono, colour codes in text show as plain text)
 
 // mIRC formatting: walk text, emitting codepoints with their style.
 void mirc_walk(const std::string& s, Style base,

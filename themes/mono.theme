@@ -1,0 +1,59 @@
+# Mono: no colors at all, greys on black; bold, italic and reverse do the work. /theme mono
+# Nicks are all one grey and mIRC color codes in messages show as plain text ([layout] mirc_colors = off).
+[colors]
+default        = #d0d0d0 #000000
+topic          = #ffffff #1c1c1c bold
+tabbar         = #8a8a8a #121212
+tab_server     = #ffffff #121212 bold
+tab_home       = #ffffff #121212 bold
+tab_shell      = #ffffff #121212 bold
+tab_active     = #000000 #d0d0d0 bold
+tab_data       = #d0d0d0 #121212 underline
+tab_msg        = #ffffff #121212 bold
+tab_hilight    = #ffffff #121212 bold underline
+tab_quiet      = #6c6c6c #121212 italic
+tab_quiet_act  = #000000 #8a8a8a bold
+status         = #8a8a8a #121212
+status_hi      = #ffffff #121212
+status_info    = #d0d0d0 #121212
+status_ok      = #8a8a8a
+status_warn    = #d0d0d0
+status_high    = #ffffff bold
+status_crit    = #000000 #ffffff bold
+status_bat     = #8a8a8a #1c1c1c
+input          = #ffffff #000000
+input_prompt   = #ffffff #000000 bold
+set_key        = #ffffff #000000 bold
+set_value      = #d0d0d0 #000000
+timestamp      = #6c6c6c #000000
+separator      = #4e4e4e #000000
+nicklist       = #d0d0d0 #000000
+nicklist_title = #8a8a8a #000000 italic
+nicklist_border= #4e4e4e #000000
+nicklist_op    = #ffffff #000000 bold
+nicklist_voice = #d0d0d0 #000000 italic
+menu           = #d0d0d0 #1c1c1c
+menu_sel       = #000000 #d0d0d0 bold
+menu_border    = #6c6c6c #1c1c1c
+msg_self       = #ffffff #000000 bold
+marker         = #ffffff
+hilight        = #000000 #d0d0d0 bold
+hilight_text   = #ffffff #000000 bold
+join           = #8a8a8a #000000
+part           = #8a8a8a #000000 italic
+quit           = #8a8a8a #000000 italic
+notice         = #ffffff #000000 bold
+action         = #d0d0d0 #000000 italic
+info           = #8a8a8a #000000
+error          = #ffffff #000000 bold underline
+
+[nicks]
+palette = #b0b0b0
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M
+mirc_colors    = off

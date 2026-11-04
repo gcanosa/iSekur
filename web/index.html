@@ -665,14 +665,14 @@ function mirc(parent, s) {
       const m = /^(\d{1,2})(?:,(\d{1,2}))?/.exec(s.slice(i + 1));
       st = {...st};
       if (!m) { st.fg = st.bg = undefined; continue; }
-      st.fg = MIRC[+m[1]]; if (m[2] !== undefined) st.bg = MIRC[+m[2]];
+      if (theme.lay?.mirc_colors !== "off") { st.fg = MIRC[+m[1]]; if (m[2] !== undefined) st.bg = MIRC[+m[2]]; }
       i += m[0].length;
     } else if (c === "\x04") {
       flush();
       const m = /^([0-9a-fA-F]{6})(?:,([0-9a-fA-F]{6}))?/.exec(s.slice(i + 1));
       st = {...st};
       if (!m) { st.fg = st.bg = undefined; continue; }
-      st.fg = "#" + m[1]; if (m[2]) st.bg = "#" + m[2];
+      if (theme.lay?.mirc_colors !== "off") { st.fg = "#" + m[1]; if (m[2]) st.bg = "#" + m[2]; }
       i += m[0].length;
     } else if (c >= " ") buf += c;
   }
@@ -1626,7 +1626,7 @@ const KEY_GROUPS = [
             ["find_tab", "find a tab by name"], ["other_pane", "the other /split pane"], ["close_tab", "close the tab"]]],
   ["View", [["scroll_up", "scroll up half a page"], ["scroll_down", "scroll down half a page"], ["toggle_nicklist", "show or hide the nick list"],
             ["toggle_topic", "show or hide the topic bar"], ["keys", "this list"]]],
-  ["Session", [["quit", "quit (asks first)"]]],
+  ["Session", [["quit", "exit iSekur (asks first)"]]],
   ["Typing", [["Enter", "send the line"], ["Tab", "complete nick or command"], ["Up Down", "earlier lines you typed"],
               ["C-b C-c C-o", "bold, color, reset"], ["C-r C-i C-u", "reverse, italic, underline"], ["Esc", "cancel a password prompt"]], true]];
 const MAC = /Mac|iP(hone|ad)/.test(navigator.platform), escH = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
@@ -2025,6 +2025,8 @@ $("#input").onsubmit = async e => {
   if (/^\/theme\s*$/i.test(v)) { openThemes(); return; }  // like the terminal: the theme picker
   if (/^\/set\s*$/i.test(v)) { $("#setbtn").click(); return; }  // like the terminal: the settings window
   if (/^\/servers\s*$/i.test(v)) { $("#addsrv").click(); return; }  // the Servers window
+  const ex = /^\/exit(?:\s+(.*))?$/i.exec(v.trim());
+  if (ex) { askExit(ex[1] || ""); return; }  // asks first while connected
   const sp = /^\/(split|unsplit|merge)(?:\s+(.*))?$/i.exec(v.trim());
   if (sp) { splitCmd(sp[1].toLowerCase(), (sp[2] || "").trim()); return; }  // this browser's panes
   send({t: "input", buf: active, text: v});
@@ -2044,12 +2046,18 @@ function keyspec(e) {
   if (/^(Up|Down|Left|Right)$/.test(k)) return s + (e.ctrlKey ? "C-" : "") + (e.shiftKey ? "S-" : "") + k;
   return s + (e.ctrlKey && /^[a-z]$/.test(k) ? "C-" : "") + k;
 }
+// /exit and Alt+Q: asks while a network is connected (like the terminal), /exit -y doesn't
+function askExit(msg) {
+  msg = msg.trim();
+  if (/^-y(\s|$)/.test(msg)) return send({t: "input", buf: active, text: "/exit " + msg});
+  const on = [...bufs.values()].some(b => b.type === "status" && b.state !== "disconnected");
+  if (!on) return send({t: "input", buf: active, text: "/exit -y " + msg});
+  askBox({title: "Exit", text: "Exit iSekur? It leaves every network and this webchat closes; nothing keeps running.", ok: "Exit"})
+    .then(v => { if (v !== null) send({t: "input", buf: active, text: "/exit -y " + msg}); });
+}
 function action(a) {
   const n = order.indexOf(active), sz = order.length, at = i => order[((i % sz) + sz) % sz];
-  if (a === "quit") {  // like the terminal's: asks first
-    askBox({title: "Quit", text: "Quit iSekur? It leaves every network and this webchat closes; nothing keeps running.", ok: "Quit"})
-      .then(v => { if (v !== null) send({t: "input", buf: active, text: "/quit"}); });
-  }
+  if (a === "quit") askExit("");  // like the terminal's: asks first
   else if (a === "next_tab") select(at(n + 1));
   else if (a === "prev_tab") select(at(n - 1));
   else if (/^tab_\d+$/.test(a)) { const t = +a.slice(4) - 1; if (t >= 0 && t < sz) select(order[t]); }

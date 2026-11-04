@@ -310,6 +310,25 @@ int main() {
     feed(":me!u@h NICK XXX");  // a reconnect keeps the nick we had, not cfg.nick
     assert(ts->nick == "XXX" && ts->last_nick == "XXX");
     feed(":XXX!u@h NICK me");
+    {  // user modes: letters only (a stray byte after them showed in the status bar)
+        feed(":srv 221 me :+iwzT\x01");
+        assert(ts->umodes == "iwzT");
+        feed(":me!u@h MODE me :+x\x02-w");
+        assert(ts->umodes == "izTx");
+        ts->umodes.clear();
+        core.exec(ts->status, "/nick");  // alone: says which
+        assert(ts->status->lines.back().text == "Your nickname is me");
+        Buffer* was = core.active;
+        core.exec(ts->status, "/query bob");
+        Buffer* q = core.active;
+        assert(q && q->type == BT::QUERY && q->srv == ts);
+        feed(":me!u@h NICK me2");  // your own change shows in the tab you're on too
+        assert(q->lines.back().text == "You are now known as me2");
+        feed(":me2!u@h NICK me");
+        core.close(q), core.select(was);
+        core.exec(home, "/quit");  // /quit is one server's: not from a tab without one
+        assert(!core.quit && home->lines.back().text.find("Not a server's tab") == 0);
+    }
     feed(":srv 005 me MODES :are supported");  // no value: unlimited
     assert(ts->max_modes == 12);
     feed(":srv 904");  // a bare SASL failure numeric: no params to print, no crash
@@ -964,7 +983,17 @@ int main() {
         std::string terr;
         assert(load_theme(n, th, terr));
         for (const char* k : {"default", "status", "tab_active", "input", "timestamp", "join", "error"}) assert(th.el.count(k));
-        assert(th.nicks.size() >= (n.rfind("mirc", 0) == 0 ? 1u : 6u));  // mirc, mirc-dark: one nick color, like mIRC
+        assert(th.nicks.size() >= (n.rfind("mirc", 0) == 0 || n.rfind("mono", 0) == 0 ? 1u : 6u));  // mirc, mono: one nick color
+    }
+    {  // mono: mIRC color codes in text keep the base colors, bold still works
+        Theme th;
+        std::string terr;
+        auto walk = [] { std::vector<Style> v; mirc_walk("\x03" "04,02a\x04" "ff0000b\x02" "c", Style{0x111111, 0x222222, 0}, [&](uint32_t, const Style& st) { v.push_back(st); }); return v; };
+        assert(load_theme("mono", th, terr) && !mirc_colors);
+        auto v = walk();
+        assert(v.size() == 3 && v[0].fg == 0x111111 && v[0].bg == 0x222222 && v[1].fg == 0x111111 && (v[2].attr & A_BOLD));
+        assert(load_theme("mono-light", th, terr) && !mirc_colors && load_theme("default", th, terr) && mirc_colors);
+        assert(walk()[0].fg != 0x111111);
     }
     {  // theme_dir: themes from there too, the shipped ones still found after it
         char d[] = "/tmp/isekur-themes-XXXXXX";

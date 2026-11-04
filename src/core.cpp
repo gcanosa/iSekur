@@ -697,7 +697,7 @@ Buffer* Core::open(Server* s, BT t, const std::string& name) {
 void Core::close(Buffer* b, const std::string& part_msg) {
     Server* s = b->srv;
     if (b->type == BT::STATUS) {
-        if (!s) { print(b, LK::ERROR, "Can't close the main window; use /quit"); return; }
+        if (!s) { print(b, LK::ERROR, "Can't close the main window; use /exit"); return; }
         if (s->state != SS::DISCONNECTED) {
             s->user_quit = true;
             s->send_now("QUIT :" + bye(s, "quit_message"));
@@ -1504,7 +1504,14 @@ void Core::exec(Buffer* b, const std::string& input) {
         print(b, LK::INFO, "Saved " + cfg_path);
         return;
     }
-    if (cmd == "quit") {
+    if (cmd == "quit") {  // this tab's server only (mIRC's way); /exit closes iSekur
+        if (!s) { print(b, LK::ERROR, "Not a server's tab: /quit leaves the server of the tab you're on; /exit closes iSekur"); return; }
+        if (s->state == SS::DISCONNECTED) { print(b, LK::ERROR, "Not connected to " + s->cfg.name); return; }
+        exec(b, "/disconnect " + args);
+        return;
+    }
+    if (cmd == "exit") {  // the frontends ask first while connected (/exit -y skips that); here it just goes
+        if (args == "-y" || args.rfind("-y ", 0) == 0) args = args.size() > 3 ? args.substr(3) : "";
         quit_msg = args;
         for (auto& sv : servers)
             if (sv->state != SS::DISCONNECTED)
@@ -1768,14 +1775,18 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "nick") {
-        if (argv.empty()) return;
+        if (argv.empty()) {
+            if (s) print(b, LK::INFO, "Your nickname is " + (s->state != SS::DISCONNECTED ? s->nick : s->cfg.nick));
+            else print(b, LK::ERROR, "Not a server's tab");
+            return;
+        }
         if (s && s->isupport.count("NICKLEN") && atoi(s->isupport["NICKLEN"].c_str()) > 0 &&
             argv[0].size() > (size_t)atoi(s->isupport["NICKLEN"].c_str())) {
             print(b, LK::ERROR, "Nicks on " + s->cfg.name + " have " + s->isupport["NICKLEN"] + " characters at most");
             return;
         }
         if (s && s->state != SS::DISCONNECTED) s->send("NICK " + argv[0]);
-        else if (s) s->cfg.nick = argv[0];
+        else if (s) s->cfg.nick = argv[0], print(b, LK::INFO, "Not connected: you'll be " + argv[0] + " on the next connect");
         return;
     }
     if (cmd == "me") { if (!args.empty()) say(b, args, true); return; }

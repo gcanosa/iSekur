@@ -818,7 +818,12 @@ void Core::handle(Server* s, const Msg& m) {
         }
         return;
     }
-    if (cmd == "221") { s->umodes = m.p(1).substr(m.p(1).rfind('+', 0) == 0); dirty = true; return; }
+    if (cmd == "221") {  // letters only: a stray byte after them showed in the status bar
+        s->umodes.clear();
+        for (char ch : m.p(1)) if (isalpha((unsigned char)ch)) s->umodes += ch;
+        dirty = true;
+        return;
+    }
 
     if (cmd == "JOIN") {
         const std::string& ch = m.p(0);
@@ -900,6 +905,7 @@ void Core::handle(Server* s, const Msg& m) {
             s->e2e.erase(e);
             s->e2e[irc_lower(nn)] = moved;
         }
+        bool shown = false;  // your own change also lands in the tab you're on (a query, *raw...)
         for (auto& bp : bufs) {
             Buffer* b = bp.get();
             if (b->srv != s) continue;
@@ -915,8 +921,11 @@ void Core::handle(Server* s, const Msg& m) {
             if (query) b->name = nn;
             line(b, LK::NICK, m.nick,
                  me ? "You are now known as " + nn : m.nick + " is now known as " + nn, me);
+            shown |= b == active;
             notify(Ev::BUFFER, b);
         }
+        if (me && !shown && active && active->srv == s)
+            line(active, LK::NICK, m.nick, "You are now known as " + nn, true), notify(Ev::BUFFER, active);
         return;
     }
     if (cmd == "MODE") {
@@ -926,6 +935,7 @@ void Core::handle(Server* s, const Msg& m) {
                 bool add = true;
                 for (char ch : m.p(1)) {
                     if (ch == '+' || ch == '-') { add = ch == '+'; continue; }
+                    if (!isalpha((unsigned char)ch)) continue;
                     size_t at = s->umodes.find(ch);
                     if (add && at == std::string::npos) s->umodes += ch;
                     if (!add && at != std::string::npos) s->umodes.erase(at, 1);

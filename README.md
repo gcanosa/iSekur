@@ -14,12 +14,13 @@ that mirrors your live session in a browser, bouncer style.
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
 - Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
-- 35 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme` alone opens a live picker):
+- 37 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme` alone opens a live picker):
   - dark: default, neon, dracula, tokyonight, catppuccin-mocha, gruvbox, nord, onedark, rose-pine, kanagawa, solarized,
     github-dark, everforest, ayu, nightfox, night-owl, material, contrast-dark (high contrast)
   - light: tokyonight-day, catppuccin-latte, gruvbox-light, rose-pine-dawn, solarized-light, github-light, one-light,
     kanagawa-lotus, nord-light, everforest-light, ayu-light, dayfox, light-owl, material-lighter, contrast-light (high contrast)
   - mirc / mirc-dark: the classic mIRC look
+  - mono / mono-light: no colors at all, greys only (nicks one grey, mIRC color codes in messages shown plain)
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join, account-tag, chghost, setname,
   STS (a server that asks for TLS gets it, and keeps getting it), labeled-response, standard replies,
@@ -54,7 +55,7 @@ that mirrors your live session in a browser, bouncer style.
 - The status bar can show CPU, memory, load and a battery next to the uptime (`/statusbar`), colored by thresholds you can change (`cpu_levels`, `mem_levels`) and by the theme
 - Optional chat logs (`log = on`, rotated daily); without them, tabs still show their last lines after a restart (`keep_history`). CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
-Six of the 35 themes, same chat (mIRC, Rosé Pine, Ayu, Neon, Catppuccin Latte, Dracula):
+Six of the 37 themes, same chat (mIRC, Rosé Pine, Ayu, Neon, Catppuccin Latte, Dracula):
 
 | | |
 |---|---|
@@ -133,7 +134,7 @@ Several sessions side by side: one config each, in the same folder or not
 `ssh host isekur --list` shows what runs there).
 
 Closing the terminal or losing the SSH connection detaches too. One terminal is attached at a time;
-`/quit` ends it for real. It works through a socket next to the config, named after it
+`/exit` ends it for real. It works through a socket next to the config, named after it
 (`isekur.sock` for `isekur.conf`, `work.sock` for `work.conf`, only for your user); output from the
 background goes to `isekur.log` (`work.log`) there. On Linux servers where systemd kills
 your processes at logout (`KillUserProcesses=yes`), run `loginctl enable-linger $USER` once.
@@ -166,7 +167,7 @@ Not available on Cygwin.
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
 | Cmd+Backspace, Cmd+←/→ | delete to start, start / end (when the terminal forwards Cmd) |
-| Ctrl+B / C / O / V / ] / _ | bold, color (shown as ◆ in that color), reset, reverse, italic, underline. Ctrl+C on an empty line doesn't quit: it reminds you of /quit and Ctrl+Z / Alt+D |
+| Ctrl+B / C / O / V / ] / _ | bold, color (shown as ◆ in that color), reset, reverse, italic, underline. Ctrl+C on an empty line doesn't quit: it reminds you of /exit and Ctrl+Z / Alt+D |
 
 Rebind any of the actions in the `[keys]` section (`D-` is Cmd, `M-` Alt, `C-` Ctrl).
 
@@ -179,7 +180,7 @@ dropped instead of showing up as garbage.
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
 `/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
-`/clear`, `/quit`. Any other command goes to the server unchanged
+`/clear`, `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected). Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 
 Twitch chat is IRC: `/twitch` opens its tab and asks for your login and OAuth token if they're missing, or set up a `[server.twitch]` with `host = irc.chat.twitch.tv`, `port = 6697`, `tls = true`,
