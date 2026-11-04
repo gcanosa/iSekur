@@ -1,6 +1,8 @@
 // Buffers, config loading and user commands.
 #include <algorithm>
+#include <cerrno>
 #include <cstdlib>
+#include <cstring>
 #include <unistd.h>
 #include <pwd.h>
 #include <glob.h>
