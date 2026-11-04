@@ -1247,7 +1247,10 @@ int main() {
             Buffer* was = core.active;
             core.select(chb);  // a tab picked in the terminal (Ctrl+A...): the browsers follow
             assert(more("").find("{\"t\":\"active\",\"buf\":" + std::to_string(chb->id) + "}") != std::string::npos);
+            // an old page's echo (no "pick") moves nothing: two quick switches bounced between the tabs for ever
             more(client_frame("{\"t\":\"focus\",\"buf\":" + std::to_string(core.bufs.front()->id) + "}"));
+            assert(core.active == chb);
+            more(client_frame("{\"t\":\"focus\",\"buf\":" + std::to_string(core.bufs.front()->id) + ",\"pick\":\"1\"}"));
             assert(core.active == core.bufs.front().get());
             feed(":bob!u@h PRIVMSG #c :hi");
             assert(chb->activity == 2);

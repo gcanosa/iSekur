@@ -1039,10 +1039,12 @@ function later(f) {
 }
 
 const drafts = new Map();  // tab id -> its unsent input line (its history: hists)
-function select(id) {
+// follow: iSekur moved the session's focus (the terminal, autojoin, another browser); never echoed back, or two quick
+// switches (autojoin's channels on start) cross on the wire and send it back and forth between the tabs for ever
+function select(id, follow) {
   if (!bufs.has(id)) return;
   if (active !== id && bufs.has(active)) send({t: "seen", buf: active});
-  if (active !== id) send({t: "focus", buf: id});  // the session's focus follows: its tab gets no activity, so it must be the one you look at
+  if (active !== id && !follow) send({t: "focus", buf: id, pick: "1"});  // the session's focus follows: its tab gets no activity, so it must be the one you look at
   if (id === split && id !== active) { split = active; $("#app").classList.toggle("flip"); }  // the other pane's tab: focus moves there
   if (active !== id) {  // each tab keeps its own unsent line
     if (line.value) drafts.set(active, line.value); else drafts.delete(active);
@@ -1229,7 +1231,7 @@ function onMsg(ev) {
     order = m.ids;
     if (!bufs.has(active)) { active = order[0]; select(active); } else later(renderSide);
   } else if (m.t === "active") {
-    select(m.buf);
+    select(m.buf, true);
   } else if (m.t === "update") {  // check_updates: a newer release, "" = none
     const b = $("#aboutbtn");
     b.classList.toggle("upd", !!m.ver);
