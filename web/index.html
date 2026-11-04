@@ -2084,6 +2084,13 @@ $("#msgs").addEventListener("scroll", () => {
   const b = bufs.get(active), box = $("#msgs");
   if (b && box.scrollTop < 300 && !b.loading && !b.noMore && b.first !== undefined) b.loading = true, send({t: "more", buf: active, before: b.first});
 });
+// a resize (the nick list shown or hidden, the window, /split's divider) rewraps the lines: a pane that was
+// at the bottom stays there, no -- MORE -- for a line pushed off by the rewrap
+for (const m of [$("#msgs"), $("#msgs2")]) {
+  let pin = true;
+  m.addEventListener("scroll", () => { pin = m.scrollHeight - m.scrollTop - m.clientHeight < 40; });
+  new ResizeObserver(() => { if (pin) m.scrollTop = m.scrollHeight; }).observe(m);
+}
 // bell_notifications: a short beep, like the terminal's bell (browsers allow sound after a first click or key)
 let actx = null;
 const unlockAudio = () => { try { actx = actx || new AudioContext(); actx.resume(); } catch (e) {} };
