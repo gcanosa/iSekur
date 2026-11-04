@@ -1297,10 +1297,22 @@ void Core::handle(Server* s, const Msg& m) {
     static const std::set<std::string> whois_lines = {"301", "307", "310", "312", "313", "317", "319", "320",
                                                       "330", "335", "338", "378", "379", "671", "276"};
     // "me nick user host * :real name"; some servers (SekurIRCd) leave out the "*"
+    // ponytail: a framed row wrapped at ~60 bytes (at a space, else hard, UTF-8 safe) so a long host keeps the │ frame
+    auto boxed = [&](std::string t) {
+        const size_t W = 60;
+        for (bool first = true; ; first = false) {
+            std::string pre = first ? "│ " : "│   ";
+            if (t.size() <= W) { print(reply_buf(), LK::INFO, pre + t); return; }
+            size_t cut = t.rfind(' ', W);
+            if (cut == std::string::npos || cut < W / 3) { cut = W; while (cut && (t[cut] & 0xc0) == 0x80) cut--; }
+            print(reply_buf(), LK::INFO, pre + t.substr(0, cut));
+            t = t.substr(cut + (t[cut] == ' '));
+        }
+    };
     if (cmd == "311" && m.params.size() > 4) {
         s->whois = s->lower(m.p(1));
         print(reply_buf(), LK::INFO, "┌─ whois \x02" + m.p(1) + "\x02 ─────────");
-        print(reply_buf(), LK::INFO, "│ " + m.p(1) + " (" + m.p(2) + "@" + m.p(3) + "): " + m.params.back());
+        boxed(m.p(1) + " (" + m.p(2) + "@" + m.p(3) + "): " + m.params.back());
         return;
     }
     if (!s->whois.empty() && m.params.size() > 2 && s->lower(m.p(1)) == s->whois) {
@@ -1331,7 +1343,7 @@ void Core::handle(Server* s, const Msg& m) {
             else if (cmd == "301") txt = "away: " + m.p(2);
             else if (cmd == "330" && m.params.size() > 3) txt = "logged in as " + m.p(2);
             else for (size_t i = 2; i < m.params.size(); i++) txt += (i > 2 ? " " : "") + m.params[i];
-            print(reply_buf(), LK::INFO, "│ " + txt);
+            boxed(txt);
             return;
         }
     }

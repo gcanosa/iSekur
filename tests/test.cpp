@@ -753,6 +753,15 @@ int main() {
         assert(t.rfind("│ ", 0) == 0 && t.size() <= 64);
     }
     assert(mirc_strip(chb->lines[wb + 3].text).find("#bash") != std::string::npos);
+    wb = chb->lines.size();  // a long nick and host wrap inside the frame too
+    feed(":srv 311 me afofu1542904621975619051665290 ~AlpineFor ip-095-208-028-097.um33.pools.vodafone-ip.de * :The Lounge User");
+    feed(":srv 318 me afofu1542904621975619051665290 :End of /WHOIS list.");
+    assert(chb->lines.size() - wb == 5);
+    for (size_t k = wb + 1; k < wb + 4; k++) {
+        std::string t = mirc_strip(chb->lines[k].text);
+        assert(t.rfind("│ ", 0) == 0 && t.size() <= 66);
+    }
+    assert(mirc_strip(chb->lines[wb + 3].text) == "│   The Lounge User");
     wb = chb->lines.size();  // a 311 without the "*" (SekurIRCd) is framed too
     feed(":srv 311 me Erick erick c.example :Erick R");
     feed(":srv 318 me Erick :End of /WHOIS list.");
