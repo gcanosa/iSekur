@@ -2046,7 +2046,11 @@ function action(a) {
 try { if (localStorage.getItem("topic") === "0") $("#topic").classList.add("hide"); } catch (e) {}
 document.addEventListener("keydown", e => {
   if (locked || (e.target.closest && e.target.closest("dialog"))) return;
-  if (!e.altKey && !e.ctrlKey && !e.metaKey && e.target !== line && /^.$/.test(e.key)) return;  // typing elsewhere
+  if (!e.altKey && !e.ctrlKey && !e.metaKey && e.target !== line && /^.$/.test(e.key)) {  // typing elsewhere
+    // not in a field (a click in the chat, the nicklist...): the key goes to the input line, like the terminal
+    if (!e.target.closest || !e.target.closest("input, textarea, select, [contenteditable]")) line.focus();
+    return;
+  }
   const a = keymap[keyspec(e)];
   if (a && action(a)) e.preventDefault();
 });
