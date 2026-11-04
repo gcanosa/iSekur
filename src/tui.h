@@ -40,6 +40,7 @@ private:
     long long chat_click_ms = 0;
     long long nick_click_ms = 0;  // a nick opens a query on a double click: one stray click does nothing
     std::string nick_click;
+    std::vector<std::string> nick_sel;  // the nicklist's selection: a click picks one, shift/ctrl+click adds or drops
     int chat_click_y = -1;
     std::string word_at(int x, int y) const;
     // drag in the chat selects text, copied on release (OSC 52)

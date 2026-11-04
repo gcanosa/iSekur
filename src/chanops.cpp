@@ -219,6 +219,27 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
     Server* s = b->srv;
     if (!s) return m;
     auto add = [&](const std::string& l, const std::string& cmd) { m.push_back({l, cmd}); };
+    if (nick.find(' ') != std::string::npos) {  // "a b c": the nicklist's selection, all at once
+        auto who = split(nick, ' ');
+        std::string list, mention, kicks, kbs;
+        for (auto& n : who) {
+            list += " " + n, mention += (mention.empty() ? "" : ", ") + n;
+            kicks += "\n/kick " + b->name + " " + n, kbs += "\n/kb " + n;
+        }
+        std::string many = std::to_string(who.size()) + " users";
+        add("Mention", mention + ": ");
+        if (b->type != BT::CHANNEL || !b->joined) return m;
+        auto me = b->nicks.find(s->lower(s->nick));
+        std::string my = me == b->nicks.end() ? "" : me->second.prefix;
+        bool op = rank_ok(s, my, '@'), half = rank_ok(s, my, '%');
+        if (!half) return m;
+        add("", "");
+        if (op) add("Op", "/op" + list), add("Deop", "/deop" + list);
+        add("Voice", "/voice" + list), add("Devoice", "/devoice" + list);
+        add("Kick...", "?Kick " + many + " from " + b->name + "?" + kicks);
+        if (op) add("Kickban...", "?Kick and ban " + many + " from " + b->name + "?" + kbs);
+        return m;
+    }
     add("Query", "/query " + nick);
     add("Whois", "/whois " + nick);
     add("Mention", nick + ": ");  // ends in a space: goes to the input line

@@ -338,6 +338,7 @@ a.chan { cursor: context-menu; text-decoration: underline; }
 :is(#nicks, #nicks2) .voice { color: var(--nicklist_voice-fg, #9ece6a); }
 :is(#nicks, #nicks2) .away { opacity: .45; }
 :is(#nicks, #nicks2) .bot { font-style: italic; }
+:is(#nicks, #nicks2) div.u.sel { background: var(--dlg-sel-bg, var(--menu_sel-bg, var(--tab_active-bg, var(--accent)))); color: var(--dlg-sel-fg, var(--menu_sel-fg, var(--tab_active-fg, #111))); opacity: 1; }  /* the theme's readable menu pick, like the right-click menu's */
 @media (min-width: 761px) { #nicks.off, #nicks2.off { display: none !important; } }
 #nicks2 { grid-area: nicks2; display: none; }
 #status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
@@ -812,6 +813,12 @@ function renderStatus() {
 }
 setInterval(renderStatus, 10000);  // the clock
 
+let nickSel = {};  // per channel id, the nicks selected: a click picks one, shift/ctrl+click adds or drops
+const selMark = el => { for (const o of el.querySelectorAll("div.u")) o.classList.toggle("sel", (nickSel[o.dataset.buf] || []).includes(o.dataset.nick)); };
+document.addEventListener("click", e => {  // a click off the nicklist unselects
+  if (e.target.closest && e.target.closest("div.u[data-nick]")) return;
+  if (Object.keys(nickSel).length) { nickSel = {}; for (const el of document.querySelectorAll("#nicks, #nicks2")) selMark(el); }
+});
 function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /split pane's
   const b = bufs.get(id);
   el.style.display = b && b.type === "channel" ? "" : "none";
@@ -823,12 +830,22 @@ function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /sp
   const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = list.length + " users"; el.append(hd);
   for (const [p, n, away, bot, acct, real] of list) {
     const d = document.createElement("div");
-    d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "") + (bot ? " bot" : "");
+    d.className = "u" + (p ? (p[0] === "+" ? " voice" : " op") : "") + (away ? " away" : "") + (bot ? " bot" : "") + ((nickSel[id] || []).includes(n) ? " sel" : "");
+    d.dataset.nick = n, d.dataset.buf = id;
+    d.onclick = e => {
+      const s = nickSel[id] || [];
+      nickSel[id] = e.shiftKey || e.ctrlKey || e.metaKey ? (s.includes(n) ? s.filter(x => x !== n) : [...s, n])
+                  : s.includes(n) ? [] : [n];  // a selected one: unselects
+      selMark(el);
+    };
     d.textContent = (p ? p[0] : " ") + n;
     const tip = [real, acct ? "account: " + acct : "", bot ? "bot" : "", away ? "away" : ""].filter(Boolean).join(" \u00b7 ");
     if (tip) d.title = tip;
-    d.ondblclick = () => send({t: "input", buf: id, text: "/query " + n});  // double: one stray click does nothing
-    d.oncontextmenu = e => askMenu(e, n, id);  // a /split pane: its own channel, not the focused one
+    d.ondblclick = () => { nickSel[id] = [n]; selMark(el); send({t: "input", buf: id, text: "/query " + n}); };  // double: one stray click does nothing
+    d.oncontextmenu = e => {  // on the selection: a menu for all of it; else just this one
+      if (!(nickSel[id] || []).includes(n)) nickSel[id] = [n], selMark(el);
+      askMenu(e, nickSel[id].join(" "), id);
+    };  // a /split pane: its own channel, not the focused one
     el.append(d);
   }
 }
@@ -2070,7 +2087,7 @@ function showMenu(m) {
   closeMenu();
   if (!m.items.length) return;
   const box = document.createElement("div"); box.id = "ctx";
-  const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = m.nick; box.append(hd);
+  const hd = document.createElement("div"); hd.className = "hd"; hd.textContent = m.nick.includes(" ") ? m.nick.split(" ").length + " users" : m.nick; box.append(hd);
   for (const [label, cmd] of m.items) {
     if (!label) { box.append(document.createElement("hr")); continue; }
     const it = document.createElement("div"); it.className = "it";

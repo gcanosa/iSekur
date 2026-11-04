@@ -524,6 +524,12 @@ int main() {
     chb->nicks["me"].prefix = "";
     assert(has_item("Whois") && !has_item("Kick") && !has_item("Kickban"));
     chb->nicks["me"].prefix = "@";
+    {  // the nicklist's selection: one menu for all of them, kicks ask first
+        std::map<std::string, std::string> mm;
+        for (auto& [lab, cmd] : core.nick_menu(chb, "bob carol")) mm[lab] = cmd;
+        assert(mm["Op"] == "/op bob carol" && mm["Devoice"] == "/devoice bob carol" && mm["Mention"] == "bob, carol: ");
+        assert(mm["Kick..."] == "?Kick 2 users from #c?\n/kick #c bob\n/kick #c carol" && !mm.count("Query"));
+    }
     core.fold(ts->status);
     assert(ts->status->collapsed);
     core.fold(chb);  // only server tabs fold

@@ -483,7 +483,7 @@ void Tui::draw_nicks(Buffer* b, int sx, int top, int xend, int ch, bool focus) {
     });
     int sc = 0;
     if (focus) {
-        if (nl_buf != b) nl_buf = b, nl_scroll = 0;
+        if (nl_buf != b) nl_buf = b, nl_scroll = 0, nick_sel.clear();  // the selection is this list's
         sc = nl_scroll = std::max(0, std::min(nl_scroll, (int)v.size() - (ch - 1)));
     }
     v.erase(v.begin(), v.begin() + sc);
@@ -498,7 +498,9 @@ void Tui::draw_nicks(Buffer* b, int sx, int top, int xend, int ch, bool focus) {
                                        : sty(T, "nicklist_op", "nicklist");
         if (e->away) ns.attr |= A_DIM;
         if (e->bot) ns.attr |= A_ITALIC;  // the 005 BOT mode
-        fill(top + 1 + (int)i, sx + 1, xend, T.get("nicklist"));
+        bool sel = focus && std::find(nick_sel.begin(), nick_sel.end(), e->nick) != nick_sel.end();
+        if (sel) ns = sty(T, "menu_sel", "tab_active");
+        fill(top + 1 + (int)i, sx + 1, xend, sel ? ns : T.get("nicklist"));
         text(sx + 2, top + 1 + (int)i, xend, (e->prefix.empty() ? " " : e->prefix.substr(0, 1)) + e->nick, ns, false);
     }
     for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, sx + 1, xend, T.get("nicklist"));
@@ -2001,6 +2003,11 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (mod & TB_MOD_MOTION) return;
+    if (k == TB_KEY_MOUSE_LEFT && menu.items.empty() && !nick_sel.empty()) {  // a click off the nicklist unselects
+        bool on = false;
+        for (auto& h : hits) on |= h.y == y && x >= h.x0 && x < h.x1 && !h.nick.empty();
+        if (!on) nick_sel.clear(), c.dirty = true;
+    }
     if (k == TB_KEY_MOUSE_LEFT && menu.items.empty() && ((div_x >= 0 && x == div_x && y >= top && y < top + ch) || (div_y >= 0 && y == div_y))) {
         div_drag = true, div_moved = false;
         return;
@@ -2026,7 +2033,13 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (k == TB_KEY_MOUSE_RIGHT) {
         for (auto& h : hits) {
             if (h.y != y || x < h.x0 || x >= h.x1) continue;
-            if (!h.nick.empty()) { open_menu(h.nick, x, y); continue; }
+            if (!h.nick.empty()) {  // on the selection: a menu for all of it; else just this one
+                if (std::find(nick_sel.begin(), nick_sel.end(), h.nick) == nick_sel.end()) nick_sel = {h.nick};
+                std::string who;
+                for (auto& n : nick_sel) who += (who.empty() ? "" : " ") + n;
+                nick_click_ms = 0, open_menu(who, x, y);
+                continue;
+            }
             if (y < top_row() - tab_h || y >= top_row() || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
             Buffer* tb = c.bufs[(size_t)h.tab].get();
             if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY)  // its commands run there
@@ -2085,8 +2098,12 @@ void Tui::mouse(int mod, int k, int x, int y) {
         else if (!h.nick.empty()) {
             long long now = now_ms();
             bool dbl = h.nick == nick_click && now - nick_click_ms < 400;
-            nick_click = h.nick, nick_click_ms = dbl ? 0 : now;
-            if (dbl) c.exec(c.active, "/query " + h.nick);
+            nick_click = h.nick, nick_click_ms = dbl ? 0 : now, c.dirty = true;
+            auto at = std::find(nick_sel.begin(), nick_sel.end(), h.nick);
+            if (dbl) nick_sel = {h.nick}, c.exec(c.active, "/query " + h.nick);
+            else if (mod & (TB_MOD_SHIFT | TB_MOD_CTRL)) { if (at == nick_sel.end()) nick_sel.push_back(h.nick); else nick_sel.erase(at); }
+            else if (at != nick_sel.end()) nick_sel.clear();  // a selected one: unselects
+            else nick_sel = {h.nick};
         }
         return;
     }
@@ -2142,7 +2159,8 @@ std::pair<Buffer*, int> Tui::drop_at(int x, int y) {
 
 void Tui::open_menu(const std::string& nick, int x, int y) {
     if (!c.active->srv) return;
-    menu = Menu{x, y, 0, nick, c.nick_menu(c.active, nick)};
+    size_t n = std::count(nick.begin(), nick.end(), ' ') + 1;
+    menu = Menu{x, y, 0, n > 1 ? std::to_string(n) + " users" : nick, c.nick_menu(c.active, nick)};
     c.dirty = true;
 }
 
