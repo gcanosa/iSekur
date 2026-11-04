@@ -11,12 +11,46 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <algorithm>
+#if __has_include(<execinfo.h>)
+#include <execinfo.h>
+#endif
 #include "core.h"
 #include "session.h"
 #include "tui.h"
 #include "web.h"
 
 static volatile sig_atomic_t g_term = 0;
+
+// A crash (segfault, abort...) appends the signal and a backtrace to isekur.crash next to the
+// config, then dies as it would have (a core dump too, if ulimit -c allows). Only
+// async-signal-safe calls in the handler; the file is opened up front.
+// Read it with: addr2line -Cfpe isekur 0x... (Linux: the +0x offsets), or atos on macOS.
+static int g_crash_fd = -1;
+static char g_crash_head[256];
+static void on_crash(int sig) {
+    if (g_crash_fd >= 0) {
+        (void)!write(g_crash_fd, g_crash_head, strlen(g_crash_head));
+        char n[64];
+        int l = snprintf(n, sizeof n, "signal %d, at %lld\n", sig, (long long)time(nullptr));  // ponytail: snprintf isn't strictly signal-safe, fine in practice
+        (void)!write(g_crash_fd, n, (size_t)l);
+#if __has_include(<execinfo.h>)
+        void* bt[64];
+        backtrace_symbols_fd(bt, backtrace(bt, 64), g_crash_fd);
+#endif
+        (void)!write(g_crash_fd, "\n", 1);
+    }
+    signal(sig, SIG_DFL);
+    raise(sig);
+}
+static void crash_dumps(const std::string& path) {
+    g_crash_fd = open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+    snprintf(g_crash_head, sizeof g_crash_head, "--- %s crashed: ", version_string().c_str());
+#if __has_include(<execinfo.h>)
+    void* warm[1];
+    backtrace(warm, 1);  // loads libgcc now: the first call may malloc, not allowed in the handler
+#endif
+    for (int sig : {SIGSEGV, SIGBUS, SIGABRT, SIGFPE, SIGILL}) signal(sig, on_crash);
+}
 
 static int usage() {
     puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [-l|--list] [--web|--no-web] [--hash-password] [-v|--version]\n"
@@ -139,6 +173,7 @@ int main(int argc, char** argv) {
         if (d == 0) return attach_main(sock, how);
         signal(SIGHUP, SIG_IGN);
     }
+    crash_dumps(cfg_side(c.cfg_path, "crash"));
     signal(SIGTERM, [](int) { g_term = 1; });
     signal(SIGINT, [](int) { g_term = 1; });
 
