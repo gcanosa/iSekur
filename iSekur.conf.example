@@ -12,6 +12,7 @@ web_font      = theme      ; webchat font: theme (its font, else mono) | mono | 
 web_font_size = 14         ; webchat text size in px
 web_tree_lines = off       ; on: faint ├ └ lines join the webchat's channels to their network
 timestamp =                  ; e.g. %H:%M:%S (empty: the theme's, [%H:%M] in mirc)
+nick_width =                 ; nick column, longer nicks are cut (empty: the theme's, 12; 0: no column, mirc style)
 timestamp_align = left      ; left | right (the right edge of the chat, terminal and webchat)
 scrollback = 2000           ; lines kept in memory per tab (min 100); fewer = less memory
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256

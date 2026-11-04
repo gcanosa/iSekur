@@ -393,7 +393,7 @@ std::string status_info_json(const Core& c) {
 // full: a /typing line at its whole length, so its height holds still (scrolled back)
 static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false) {
     const Theme& T = c.theme;
-    int nw = atoi(T.lay("nick_width", "12").c_str());
+    int nw = atoi(ini_get(c.cfg, "general", "nick_width", T.lay("nick_width", "12")).c_str());  // /set nick_width beats the theme's
     std::string tsfmt = ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
     // timestamp_align = right: the time at the right edge of the first row, the text wraps short of it
     bool ts_right = ini_get(c.cfg, "general", "timestamp_align") == "right";

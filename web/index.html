@@ -325,7 +325,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .newmark { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: 11px; text-transform: uppercase;
   letter-spacing: .1em; color: var(--marker-fg, #c2185b); }
 .newmark::before, .newmark::after { content: ""; flex: 1; border-top: 1px solid currentColor; }
-.l { display: grid; grid-template-columns: auto 13ch 1fr; gap: 0 10px; padding: 1px 14px; }
+.l { display: grid; grid-template-columns: auto var(--nw, 13ch) 1fr; gap: 0 10px; padding: 1px 14px; }
 .l:hover { background: #ffffff06; }
 .l .ts { color: var(--timestamp-fg, var(--muted)); }
 .l .nk { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -336,7 +336,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .inline .l .nk { display: inline; border: 0; padding: 0; text-align: left; }
 .inline .l .ts::after, .inline .l .nk:not(:empty)::after { content: " "; }
 /* timestamp_align = right: the time in its own column at the right edge */
-.tsright .l { grid-template-columns: 13ch 1fr auto; }
+.tsright .l { grid-template-columns: var(--nw, 13ch) 1fr auto; }
 .tsright .l .ts { order: 3; }
 .inline.tsright .l { display: flow-root; }  /* an empty line keeps its floated time, not the next line's row */
 .inline.tsright .l .ts { float: right; margin-left: 10px; }
@@ -1112,6 +1112,7 @@ function applyTheme() {
   document.documentElement.classList.toggle("light", lum > 140);
   for (const p of ["#msgs", "#msgs2"]) {
     $(p).classList.toggle("inline", (theme.lay || {}).nick_width === "0");
+    $(p).style.setProperty("--nw", (+(theme.lay || {}).nick_width || 12) + 1 + "ch");  // nick_width (+1: the mode prefix)
     $(p).classList.toggle("tsright", theme.tsa === "right");  // /set timestamp_align right
   }
   // /set web_font wins; else the theme's (mirc: Fixedsys where it's installed); else ui-monospace...

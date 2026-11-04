@@ -674,6 +674,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/statusbar cpu on") " CPU, memory, load or battery in the status bar",
         "  " G_CMD("/set timestamp %H:%M:%S") "   seconds in the time stamps",
         "  " G_CMD("/set timestamp_align right") " the time at the right edge of the chat",
+        "  " G_CMD("/set nick_width 16") "     room for longer nicks before they're cut (0: no column)",
     }},
     {"Never miss a thing", {
         G_HEAD("Highlights"),
