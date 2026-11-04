@@ -51,6 +51,25 @@ button, input { font: inherit; color: inherit; }
 #side .srv[data-id]:hover { color: var(--fg); }
 #side .tab.home { color: var(--tab_home-fg, var(--info)); }
 #side .tab.server { color: var(--tab_server-fg, inherit); }
+/* a network's row is its server tab: the channels and queries below are indented under it */
+#side .tab.srv { margin-top: 8px; padding: 4px 14px; font-size: inherit; letter-spacing: 0; text-transform: none; }
+#side .tab.srv .nm { text-transform: uppercase; letter-spacing: .3px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+#side .tab .dot { margin-right: -2px; }
+#side .tab.child .nm { padding-left: 24px; overflow: hidden; text-overflow: ellipsis; }
+/* /set web_tree_lines on: faint ├ └ from the network's dot to its tabs, in the theme's muted color */
+#side.tree .tab.child { position: relative; }
+#side.tree .tab.child::before, #side.tree .tab.child::after { content: ""; position: absolute; left: calc(25px + 1.6em); pointer-events: none;
+  border-color: color-mix(in srgb, var(--muted) 35%, transparent); border-style: solid; border-width: 0; }
+#side.tree .tab.child::before { top: 0; bottom: 0; border-left-width: 1px; }
+#side.tree .tab.child.last::before { bottom: 50%; }
+#side.tree .tab.child::after { top: 50%; width: 14px; border-top-width: 1px; }
+#side .tab .fold { color: var(--muted); padding: 0 4px; }
+#side .tab .fold:hover { color: var(--fg); }
+#side .tab.active .fold { color: inherit; opacity: .7; }
+#side .tab.srv .x { display: none; }  /* its × only on hover: the name gets the room */
+#side .tab.srv:hover .x { display: inline; }
+#side .tab .more, #side .tab .fold { margin-left: auto; }
+#side .tab .more + .fold, #side .tab .more + .x, #side .tab .fold + .x { margin-left: 0; }
 #side .tab.shell { color: var(--tab_shell-fg, var(--tab_home-fg, inherit)); }
 #side .tab .more { color: var(--muted); }
 #side .tab .x { margin-left: auto; flex-shrink: 0; padding: 0 4px; font-weight: 400; opacity: .4; visibility: hidden; }  /* the tab's own color, faded: fits every theme and the active tab's */
@@ -666,7 +685,7 @@ function lineEl(b, l) {
 
 function label(b) { return b.type === "status" ? b.srv : b.name; }
 
-// a folded network (click its name here, or right click its tab in the terminal) lists only its
+// a folded network (click its ▾ here, or right click its tab in the terminal) lists only its
 // server tab with "+N" in the color of their activity; Alt+arrows and Alt+A still go through them
 // drag to reorder (/move): a channel or query among its network's tabs, a network (its name or server tab, with all
 // its tabs) among the networks. The list sorts live under the pointer; letting go keeps it, Esc puts it back.
@@ -737,12 +756,13 @@ function renderSide() {
       const hay = [label(b), b.name, b.srv, b.home ? "cmd console" : b.type === "status" ? "server" : b.type].join(" ").toLowerCase();
       if (!q.every(w => hay.includes(w))) return;
     }
+    const srvRow = b.type === "status" && !b.home;  // the network's name row is its server tab
     if (b.srv !== lastSrv) {
-      const h = document.createElement("div"); h.className = "srv"; lastSrv = b.srv; h.dataset.net = b.net;
-      st = b.type === "status" && !b.home ? b : null;
-      h.textContent = b.srv + (st ? (st.fold ? " ▸" : " ▾") : "");
-      if (st) { h.dataset.id = id; h.title = (st.fold ? "Show its channels" : "Hide its channels") + " · drag to reorder the networks"; h.onclick = () => send({t: "fold", buf: id}); dragTab(h, st, id); }
-      side.append(h);
+      lastSrv = b.srv, st = srvRow ? b : null;
+      if (!srvRow && !b.home) {  // filtered out its server tab: just the name
+        const h = document.createElement("div"); h.className = "srv"; h.dataset.net = b.net; h.textContent = b.srv;
+        side.append(h);
+      }
     }
     if (!q.length && st && st.fold && b !== st && id !== active) return;
     let act = b.act, hid = 0;
@@ -750,14 +770,25 @@ function renderSide() {
       for (const x of order) { const o = bufs.get(x); if (o && o !== b && o.srv === b.srv && x !== active) hid++, act = Math.max(act, o.act); }
     const t = document.createElement("div");
     t.className = "tab" + (id === active ? " active" : id === split ? " split" : "") + (act ? " a" + act : "") +
-      (b.home ? " home" : b.type === "status" ? " server" : b.type === "shell" ? " shell" : "") +
+      (b.home ? " home" : srvRow ? " server srv" : b.type === "shell" ? " shell" : "") +
+      (b.srv && !b.home && !srvRow ? " child" : "") +
       ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
     t.dataset.id = id, t.dataset.net = b.net;
     const n = document.createElement("span"); n.className = "n"; n.textContent = i + 1;
-    const nm = document.createElement("span"); nm.textContent = b.home ? "❯ console" : b.type === "status" ? "⌂ server" : b.name + (b.mute ? " 🔇" : "") + (b.e2e ? " 🔒" : "");
-    if (b.type === "status") t.title = b.home ? "Commands and iSekur's own messages" : b.srv + ": connection, MOTD, notices and replies";
-    t.append(n, nm);
+    const nm = document.createElement("span"); nm.className = "nm"; nm.textContent = b.home ? "❯ console" : srvRow ? b.srv : b.name + (b.mute ? " 🔇" : "") + (b.e2e ? " 🔒" : "");
+    if (b.type === "status") t.title = b.home ? "Commands and iSekur's own messages" : b.srv + " (" + b.state + "): connection, MOTD, notices and replies · drag to reorder the networks";
+    if (srvRow) {  // ● connected, ◐ on its way, ○ disconnected
+      const d = document.createElement("span"); d.className = "dot";
+      d.textContent = b.state === "connected" ? "●" : b.state === "disconnected" ? "○" : "◐";
+      t.append(n, d, nm);
+    } else t.append(n, nm);
     if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
+    if (srvRow) {
+      const f = document.createElement("span"); f.className = "fold"; f.textContent = b.fold ? "▸" : "▾";
+      f.title = b.fold ? "Show its channels" : "Hide its channels";
+      f.onclick = e => { e.stopPropagation(); send({t: "fold", buf: id}); };
+      t.append(f);
+    }
     if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) {  // the hover ×: same asks as the tab menu's Close
       const x = document.createElement("span"); x.className = "x"; x.textContent = "×"; x.title = "Close";
       x.onclick = async e => {
@@ -774,6 +805,7 @@ function renderSide() {
     if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) t.oncontextmenu = e => askMenu(e, "", id);  // a server tab: connect, fold, close
     side.append(t);
   });
+  for (const t of side.querySelectorAll(".tab.child")) if (!t.nextElementSibling || !t.nextElementSibling.classList.contains("child")) t.classList.add("last");  // └
 }
 
 function renderTopic() {
@@ -1010,6 +1042,7 @@ function applyTheme() {
   document.documentElement.classList.toggle("win-mac", win === "mac");
   document.documentElement.classList.toggle("win-95", win === "win95");
   const fs = parseInt(theme.fsize); set("--fsize", fs >= 8 && fs <= 40 ? fs + "px" : "");
+  $("#side").classList.toggle("tree", /^(on|true|yes)$/i.test(theme.tree || ""));  // /set web_tree_lines on
 }
 
 // The accent buttons (Apply & save, Connect, Unlock) are a gradient from input_prompt to msg_self: their text,

@@ -251,7 +251,7 @@ static const std::vector<CmdInfo> CMDS = {
      {"/unsplit"}, "merge"},
     {"fold", "Windows", "", "Hide or show a server's channels in the tab bar",
      "The server's tab shows +N for them, colored like their news; Ctrl+N/P, Ctrl+A and /win still go "
-     "to them. The same as a click on the server's name in the webchat, and in a server tab's right click menu.",
+     "to them. The same as a click on the ▾ next to the network's name in the webchat, and in a server tab's right click menu.",
      {"/fold"}},
     {"clear", "Windows", "", "Clear the current tab's scrollback",
      "Only clears what is on screen; logs are untouched.",
@@ -685,6 +685,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/split ") G_VAL("3") " and " G_CMD("/unsplit") " work there too, for that browser only.",
         "  The server-rack button lists your servers: edit, connect, delete or add one.",
         "  " G_CMD("/set web_font sans") " and " G_CMD("/set web_font_size 16") ": the browser's font and size.",
+        "  " G_CMD("/set web_tree_lines on") ": faint lines join each network to its channels.",
         "",
         G_TIP "Run it on a server with " G_CMD("isekur --daemon") ": always online, chat from anywhere.",
     }},

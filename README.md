@@ -157,7 +157,7 @@ Not available on Cygwin.
 | Cmd+click (Ctrl+click on Linux) on a link | opens it: links in messages and the topic are terminal hyperlinks (OSC 8), also when they wrap onto the next line. If your terminal gives the click to iSekur, hold Shift too or turn the mouse off with F3. In tmux: `set -as terminal-features ",*:hyperlinks"` |
 | right click on a nick | menu: query, whois, CTCPs, ignore, op / voice / kick / ban when your rank allows, kill / G-line when you are an IRC operator (Up/Down/Enter or click) |
 | right click on a channel tab | menu: quiet mode on/off, clear, add to or remove from autojoin, close (asks before leaving a joined channel); same in the webchat |
-| right click on a server tab | menu: connect, or reconnect / disconnect; hide or show its channels and queries in the tab bar ("+N" counts them, colored by their activity; Ctrl+N/P, Ctrl+A and `/win` still reach them; `/fold`, or in the webchat a click on the network name); close (asks while connected); same in the webchat |
+| right click on a server tab | menu: connect, or reconnect / disconnect; hide or show its channels and queries in the tab bar ("+N" counts them, colored by their activity; Ctrl+N/P, Ctrl+A and `/win` still reach them; `/fold`, or in the webchat a click on the ▾ next to the network name); close (asks while connected); same in the webchat |
 | Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
 | Up / Down while matches are listed | move through them; Enter or Tab puts the highlighted one in the input line without sending |
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
