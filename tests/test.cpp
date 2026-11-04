@@ -325,6 +325,10 @@ int main() {
         feed(":me!u@h NICK me2");  // your own change shows in the tab you're on too
         assert(q->lines.back().text == "You are now known as me2");
         feed(":me2!u@h NICK me");
+        // UnrealIRCd ends labeled replies with \r\r\n: every CR goes, or the nick keeps one and the next change isn't ours
+        ts->inbuf = "@label=i1 :me NICK :me3\r\r\n@label=i2 :me3 NICK :me\r\r\n";
+        core.on_readable(ts, 0);
+        assert(ts->nick == "me" && ts->inbuf.empty() && q->lines.back().text == "You are now known as me");
         core.close(q), core.select(was);
         core.exec(home, "/quit");  // /quit is one server's: not from a tab without one
         assert(!core.quit && home->lines.back().text.find("Not a server's tab") == 0);

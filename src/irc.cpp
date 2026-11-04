@@ -354,7 +354,7 @@ void Core::on_readable(Server* s, short rev) {
     while ((nl = s->inbuf.find('\n', at)) != std::string::npos) {
         line.assign(s->inbuf, at, nl - at);
         at = nl + 1;
-        if (!line.empty() && line.back() == '\r') line.pop_back();
+        while (!line.empty() && line.back() == '\r') line.pop_back();  // every CR: UnrealIRCd ends labeled replies with \r\r\n
         Msg m;
         s->last_rx = time(nullptr);
         if (s->raw_hook) s->raw_hook("\xe2\x86\x90", line);  // ←
