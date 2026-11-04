@@ -12,6 +12,7 @@
 #include "core.h"
 #include "net.h"
 #include "session.h"
+#include "web.h"  // check_password
 #include <thread>
 #include "version.h"
 #include "conf_template.h"
@@ -1329,6 +1330,18 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
+            return;
+        }
+        // exec_web lets the webchat run commands here, and lock guards it: whoever sits at this machine (or the
+        // webchat) types the lock password to change either, so a grabbed session can't switch /exec on
+        static bool lock_ok = false;
+        if (sec == "general" && (key == "exec_web" || key == "lock" || key == "lock_password_hash") && lock_on() && !lock_ok &&
+            val != ini_get(cfg, sec, key)) {
+            std::string line = in;
+            ask_pass(b, "lock password", [this, b, line](const std::string& p) {
+                if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: it stays as it was"); return; }
+                lock_ok = true, exec(b, line), lock_ok = false;
+            }, true, "Lock password", {"Changing " + key + ": the lock password first"});
             return;
         }
         if (!unsaved[sec].count(key)) set_was[sec][key] = cfg[sec][key];

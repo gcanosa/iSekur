@@ -312,7 +312,8 @@ static const std::vector<CmdInfo> CMDS = {
      "said in the tab you typed it in once the command ends, unless it is longer than "
      "paste_confirm lines (-y sends it anyway). Commands are killed after exec_timeout "
      "seconds (default 30) or 1000 lines. /exec alone lists the running ones. Off in the "
-     "webchat unless /set exec_web on, since it runs commands on this machine.",
+     "webchat unless /set exec_web on, since it runs commands on this machine; with a /lock "
+     "password set, turning exec_web on or off asks for it.",
      {"/exec ls -la", "/exec -o uptime", "/sh git log --oneline -5"}, "sh"},
     {"dcc", "Session", "[list] | get [number|nick] | send nick file | close number|nick", "Send and receive files (DCC)",
      "A file someone sends you is only offered: nothing is downloaded until you /dcc get it "

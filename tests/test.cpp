@@ -202,6 +202,21 @@ int main() {
     core.exec(home, "/attach vps");
     core.from_web = false;
     assert(home->lines.back().text == "/attach works in the terminal only" && core.bufs.size() == tabs);
+    {  // with a lock password, exec_web (and lock itself) change only after typing it
+        core.cfg["general"]["lock"] = "on", core.cfg["general"]["lock_password_hash"] = hash_password("pw");
+        core.exec(home, "/set exec_web on");
+        assert(core.pass_buf == home && ini_get(core.cfg, "general", "exec_web").empty());
+        core.exec(home, "nope");
+        assert(home->lines.back().text == "Wrong password: it stays as it was" && ini_get(core.cfg, "general", "exec_web").empty());
+        core.exec(home, "/set lock off"), core.exec(home, "nope");
+        assert(core.cfg["general"]["lock"] == "on");
+        core.exec(home, "/set exec_web on"), core.exec(home, "pw");
+        assert(core.cfg["general"]["exec_web"] == "on" && !core.pass_buf);
+        core.exec(home, "/set exec_web on");  // no change: nothing asked
+        assert(!core.pass_buf);
+        core.unsaved.clear(), core.set_was.clear();
+        for (auto k : {"lock", "lock_password_hash", "exec_web"}) core.cfg["general"].erase(k);
+    }
 
     // channel op commands against a fake connected server; flood_ms 0 = lines go out at once
     ServerCfg tc;
