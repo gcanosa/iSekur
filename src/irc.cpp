@@ -113,16 +113,21 @@ time_t parse_server_time(const std::string& iso) {
 }
 
 // ---- Server helpers --------------------------------------------------------
-static std::string wire(const std::string& line) {
+static std::string wire(const std::string& line, bool utf8only) {
     std::string l = line;
     for (auto& c : l)
         if (c == '\r' || c == '\n' || c == '\0') c = ' ';  // no command injection
+    if (utf8only) {  // UTF8ONLY in 005: invalid bytes (a Latin-1 paste or terminal) go out as their Latin-1 letters
+        std::string u;  // ponytail: a re-encoded byte grows to two, past 512 only for a line already at the limit
+        for (size_t i = 0; i < l.size();) utf8_put(u, utf8_next(l, i));
+        l.swap(u);
+    }
     return l + "\r\n";
 }
 
 void Server::send_now(const std::string& line) {
     if (raw_hook) raw_hook("\xe2\x86\x92", line);  // →
-    conn.out += wire(line);
+    conn.out += wire(line, isupport.count("UTF8ONLY"));
 }
 
 void Server::send(const std::string& line) {
@@ -136,7 +141,7 @@ void Server::send(const std::string& line) {
     }
     if (state != SS::CONNECTED || flood_ms <= 0) { send_now(l); return; }
     if (raw_hook) raw_hook("\xe2\x86\x92", l);  // ponytail: logged when queued, not when the flood limit lets it out
-    sendq.push_back(wire(l));
+    sendq.push_back(wire(l, isupport.count("UTF8ONLY")));
     drain(now_ms());
 }
 

@@ -24,7 +24,7 @@ that mirrors your live session in a browser, bouncer style.
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join, account-tag, chghost, setname,
   STS (a server that asks for TLS gets it, and keeps getting it), labeled-response, standard replies,
-  CASEMAPPING, WHOX (accounts, real names and bots in the nick list), bot mode, MONITOR (`/notify`),
+  CASEMAPPING, WHOX (accounts, real names and bots in the nick list), bot mode, UTF8ONLY, MONITOR (`/notify`),
   replies and reactions (`/reply`, `/react`), typing notifications both ways (`send_typing`), multiline
   pastes, message redaction (`/redact`), read markers synced with your other clients, channel renames,
   pre-away and account registration (`/register`, `/verify`)

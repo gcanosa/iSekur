@@ -1464,6 +1464,10 @@ int main() {
         assert(v->casemap == 1 && v->isupport["MONITOR"] == "2" && v->tag_ok("typing") && v->tag_ok("react") && !v->tag_ok("foo"));
         vf(":srv 005 me -NICKLEN :are supported");
         assert(!v->isupport.count("NICKLEN"));
+        // UTF8ONLY: invalid bytes go out as UTF-8 (Latin-1 é), valid UTF-8 unchanged
+        v->send("PRIVMSG #v3 :caf\xe9 \xc3\xa9"), assert(vs().find("caf\xe9 \xc3\xa9\r\n") != std::string::npos);
+        vf(":srv 005 me UTF8ONLY :are supported");
+        v->send("PRIVMSG #v3 :caf\xe9 \xc3\xa9"), assert(vs().find("caf\xc3\xa9 \xc3\xa9\r\n") != std::string::npos);
         // our join: NAMES, then WHOX fills accounts, real names, away and bots, and none of it is shown
         vf(":me!u@h JOIN #v3 * :Me");
         Buffer* vb = core.find(v, "#v3");
