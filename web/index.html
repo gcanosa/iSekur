@@ -445,6 +445,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #sugg .w { color: var(--set_key-fg, var(--info-fg, var(--accent))); }
 #sugg .s { color: var(--separator-fg, var(--muted)); }
 #sugg .v { color: var(--set_value-fg, var(--input-fg, var(--fg))); }
+#sugg .cmd .s { color: var(--sugg_usage-fg, var(--input-fg, var(--fg))); }  /* a command's usage: readable, not the separator's line color */
+#sugg .cmd .v { color: var(--sugg_desc-fg, var(--info-fg, var(--fg))); }
 #prompt { color: var(--input_prompt-fg, var(--accent)); align-self: center; white-space: nowrap; }
 #line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
 @media (pointer: coarse) { input, select, textarea { font-size: max(16px, 1em) !important; } }
@@ -2089,7 +2091,7 @@ function renderSugg() {
   if (suggSel >= sg.length) suggSel = -1;
   box.textContent = "";
   sg.forEach(([w, sp, val], i) => {
-    const d = el("div", i === suggSel ? "on" : "");
+    const d = el("div", (i === suggSel ? "on" : "") + (sp !== " = " ? " cmd" : ""));
     d.append(el("span", "w", w), el("span", "s", sp), el("span", "v", val));
     d.onmousedown = e => { e.preventDefault(); suggSel = i; take(); };
     box.append(d);

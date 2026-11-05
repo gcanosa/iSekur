@@ -772,8 +772,12 @@ void Tui::draw() {
         // scrolled so the highlight stays above the "... more" row
         int off = sugg_sel >= n - 1 ? sugg_sel - n + 2 : 0;
         if (off + n >= sz) off = sz - n;
-        Style ks = T.get("input"), kk = sty(T, "set_key", "info"), kv = sty(T, "set_value", "input"), ke = T.get("separator");
-        for (Style* st : {&kk, &kv, &ke})
+        // /set rows: key = value (the value in set_value); command rows: the name, its usage in the input's own color
+        // (the separator's is for lines, it can't be read), its summary in info's
+        Style ks = T.get("input"), kk = sty(T, "set_key", "info"), kv = sty(T, "set_value", "input"), ke = T.get("separator"),
+              ku = sty(T, "sugg_usage", "input"), kd = sty(T, "sugg_desc", "info");
+        ku.attr &= ~A_BOLD, kd.attr &= ~A_BOLD;
+        for (Style* st : {&kk, &kv, &ke, &ku, &kd})
             if (st->bg < 0) st->bg = ks.bg;
         for (int i = 0; i < n; i++) {
             int yy = top + ch - n + i, idx = off + i;
@@ -783,7 +787,8 @@ void Tui::draw() {
                 break;
             }
             const Sugg& g = sk[(size_t)idx];
-            Style rk = kk, re = ke, rv = kv;
+            bool cmd = g.sep != " = ";
+            Style rk = kk, re = cmd ? ku : ke, rv = cmd ? kd : kv;
             if (idx == sugg_sel) {
                 for (Style* st : {&rk, &re, &rv}) st->attr |= A_REV;
                 Style rs = ks;
