@@ -334,6 +334,7 @@ size_t input_secret(const std::string& buf, const std::string& line, size_t* end
 std::vector<Core::Setting> Core::settings() const {
     Ini all = defaults;
     all["general"]["timestamp"] = theme.lay("timestamp", "%H:%M");  // empty: the theme's, so that's its default
+    all["general"]["nick_width"] = theme.lay("nick_width", "12");
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv)
             if (!v.empty() || !all[sec].count(k)) all[sec][k] = v;  // "key =" keeps the default
@@ -439,8 +440,10 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         out.push_back(r);
         return out.back();
     };
-    // what [general] uses when a key isn't set: the template's value (the theme's timestamp)
-    auto gdef = [&](const std::string& k) { return k == "timestamp" ? theme.lay("timestamp", "%H:%M") : ini_get(defaults, "general", k); };
+    // what [general] uses when a key isn't set: the template's value (the theme's timestamp and nick column)
+    auto gdef = [&](const std::string& k) {
+        return k == "timestamp" ? theme.lay("timestamp", "%H:%M") : k == "nick_width" ? theme.lay("nick_width", "12") : ini_get(defaults, "general", k);
+    };
     std::vector<std::string> nets;
     for (auto& [sec, kv] : cfg)
         if (sec.rfind("server.", 0) == 0) nets.push_back(sec);
@@ -1392,6 +1395,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
+            if (sec == "general" && key == "timestamp") def = theme.lay("timestamp", "%H:%M") + ", the theme's";
+            if (sec == "general" && key == "nick_width") def = theme.lay("nick_width", "12") + ", the theme's";
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }

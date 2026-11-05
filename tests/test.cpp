@@ -1023,6 +1023,10 @@ int main() {
             }
             assert(over && !gen_theme && core.opt(ts, "log_history", "1") == "5" && core.opt(ts, "theme", "x") == ini_get(core.cfg, "general", "theme", "x"));
             core.cfg[sv].erase("log_history"), core.cfg[sv].erase("theme"), core.cfg["general"].erase("log_history");
+            // nick_width unset: its row shows the running theme's width (what the chat uses), not "(not set)"
+            bool nwrow = false;
+            for (auto& r : core.setting_rows()) nwrow |= r.sec == "general" && r.key == "nick_width" && r.def == core.theme.lay("nick_width", "12") && !r.def.empty();
+            assert(nwrow);
         }
         unlink(core.cfg_path.c_str());
         std::swap(core.cfg_path, path);
