@@ -11,6 +11,7 @@
 #include <memory>
 #include <set>
 #include <string>
+#include <variant>
 #include <vector>
 #include <poll.h>
 #include <sys/types.h>
@@ -207,6 +208,11 @@ struct Dcc {
 };
 
 struct Core;
+struct Plugin;  // plugin.cpp
+#define PLUGIN_API 1  // isekur.api: the catalog hides plugins that need a newer one
+bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
+// a plugin event's fields besides srv and target: strings and booleans
+using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool>>>;
 // twitch.cpp; with make notwitch twitch_host() is always false, so none of it runs
 bool twitch_host(const std::string& host);  // irc.chat.twitch.tv and the like
 struct Server {
@@ -484,6 +490,20 @@ struct Core {
     void e2e_note(Server* s, const std::string& nick, LK k, const std::string& text);
     void e2e_chan(Buffer* b, const std::string& pass);
     void e2e_keep(Server* s, bool now);
+
+    // Lua plugins (plugin.cpp): <config dir>/plugins/<name>.lua, loaded while [plugin.<name>] (or an
+    // @net, @net/#chan override) says enabled = on. Last member: unloaded first, with the rest still there
+    std::string plugin_dir() const;
+    void plugins_sync();  // load the enabled ones, unload the rest
+    void plugin_cmd(Buffer* b, const std::string& args);  // /plugin
+    bool plugin_run(Buffer* b, const std::string& cmd, const std::string& args);  // a plugin's /command; false: none has it
+    // ev to every plugin on in s/target (s null: every loaded one); true: a handler returned true (hide the line)
+    bool plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args = {});
+    // [plugin.name@net/#chan], then @net, then [plugin.name], then def; scope 'g' global only, 'n' up to the network
+    std::string plugin_opt(const std::string& name, const std::string& key, const Server* s, const std::string& target,
+                           const std::string& def, char scope = 'c') const;
+    int plugin_depth = 0;  // plugin code running: /plugin is refused, nothing is unloaded
+    std::vector<std::shared_ptr<Plugin>> plugins;
 };
 
 long long now_ms();

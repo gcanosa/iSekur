@@ -376,6 +376,17 @@ static const std::vector<CmdInfo> CMDS = {
      "it again. Three wrong tries wait a minute. While it's set, /exit asks for it as well. The config and "
      "logs are not encrypted by it.",
      {"/lock", "/lock on", "/lock off", "/set lock_idle 15"}},
+    {"plugin", "Session", "[list] | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name",
+     "Lua plugins: list, turn on and off, configure",
+     "Plugins are Lua 5.4 files in the plugins folder next to the config (<name>.lua), sandboxed: no files, no programs, "
+     "no network of their own. /plugin (or /plugins) lists them. /plugin enable name turns one on everywhere; "
+     "name@sekurnet only in that network, name@sekurnet/#chan only in that channel; disable the same way. "
+     "/plugin set name key value sets one of its options ([plugin.name] in the config), name@network or "
+     "name@network/#channel for that network or channel only; an empty value goes back to the default. "
+     "Every change is written to the config at once. /plugin reload name loads it again after you edited the file. "
+     "A plugin that errors 5 times in a row is unloaded until /plugin reload.",
+     {"/plugin", "/plugin enable seen", "/plugin enable seen@sekurnet/#isekur", "/plugin set seen@sekurnet reply on",
+      "/plugin reload seen"}, "plugins"},
     {"web", "Session", "[start|stop|restart|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one). /web restart picks up changed [web] settings.",

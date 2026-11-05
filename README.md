@@ -265,6 +265,14 @@ so a restart doesn't ask again; the file is 0600, and whoever can read it can re
 
 ![An encrypted channel: 🔒 on the tab and on every line, and a line sent with the wrong password](docs/e2e.png)
 
+Plugins: Lua 5.4 files in `plugins/` next to the config (`~/.config/isekur/plugins/<name>.lua`),
+each in its own sandbox (no files, programs or sockets of its own; a runaway loop is stopped and
+a plugin gets 32 MB at most). `/plugin` lists them; `/plugin enable seen` turns one on,
+`/plugin enable seen@sekurnet/#isekur` only in that channel (`seen@sekurnet` that network), and
+`/plugin set seen@sekurnet key value` sets an option there. It all goes to `[plugin.<name>]`
+sections of the config (`[plugin.seen@sekurnet/#isekur]` for a channel). `/plugin reload name`
+picks up an edited file. Writing one: [plugins/README.md](plugins/README.md).
+
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
 `/about` shows the version and where to find iSekur.

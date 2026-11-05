@@ -1,0 +1,86 @@
+# Writing iSekur plugins
+
+A plugin is one Lua 5.4 file, `<name>.lua` (letters, digits, `_`, `-`), in the `plugins` folder next
+to your config (`~/.config/isekur/plugins/`). It runs once when it loads: there it declares its
+settings, commands and event handlers. `/plugin enable <name>` loads it, `/plugin reload <name>`
+loads it again after you edit it.
+
+```lua
+-- hello.lua: /hello [nick], and a wave back at anyone who says "hi isekur"
+isekur.setting("greeting", "Hello", "c")  -- per channel, network or global; "Hello" by default
+
+isekur.command("hello", "[nick]", function(args, srv, target)
+  if not srv then return "Use /hello in a channel" end  -- a returned string is shown as an error
+  local who = args ~= "" and args or "everyone"
+  isekur.say(srv, target, isekur.opt("greeting", srv, target) .. ", " .. who .. "!")
+end)
+
+isekur.on("message", function(e)
+  if not e.self and e.text:lower():find("hi isekur", 1, true) then
+    isekur.say(e.srv, e.target, "\x01ACTION waves at " .. e.nick .. "\x01")
+  end
+end)
+```
+
+## The sandbox
+
+Only Lua's base library (without `load`, `loadfile`, `dofile`), `string`, `table`, `math` and `utf8`.
+No `io`, `os`, `package`, `require` or `debug`. A call that runs too long (about 10 million Lua
+instructions) is stopped with an error, and a plugin gets 32 MB of memory. Errors show in the main
+window as `[name] error: ...`; after 5 in a row the plugin is unloaded until `/plugin reload`.
+`print(...)` writes `[name] ...` to the main window.
+
+## Settings
+
+Options live in the config, one section per scope, and are looked up channel → network → global →
+the default the plugin declared:
+
+```ini
+[plugin.hello]                  ; enabled = on: everywhere
+greeting = Hi
+[plugin.hello@sekurnet]         ; this network
+greeting = Hey
+[plugin.hello@sekurnet/#isekur] ; this channel (lowercase)
+greeting = Welcome
+```
+
+`/plugin set hello@sekurnet/#isekur greeting Welcome` writes that last one.
+`enabled` works the same way: a plugin is loaded when any of its sections has `enabled = on`, and its
+events only come from the networks and channels where `enabled` resolves to on.
+
+- `isekur.setting(key, default, scope)`: declare an option. `scope` is `"g"` (global only), `"n"`
+  (up to the network) or `"c"` (up to the channel, the default). The default's type is what
+  `opt` returns: a boolean (`on`/`true`/`yes`/`1` are true), a number or a string.
+- `isekur.opt(key, srv, target)`: the option's value there; `srv`/`target` may be nil.
+
+## Events
+
+`isekur.on(event, function(e) ... end)`. `e.srv` (the network's name) and `e.target` (channel or
+query nick) are set when the event has them.
+
+| event | fields |
+|---|---|
+| `message` | `nick`, `text`, `self`, `hilight`, `notice`, `action`. Return `true` to hide the line. Your own lines only arrive when the server has echo-message |
+| `join` | `nick`, `host`, `self` |
+| `part` | `nick`, `reason`, `self`, `kick`, `by` (who kicked) |
+| `quit` | `nick`, `host`, `reason` (no target: it's the whole network) |
+| `tick` | every second, no fields |
+| `attach`, `detach` | a terminal or a browser came back / nobody is attached any more |
+
+## Calls
+
+| call | what it does |
+|---|---|
+| `isekur.command(name, usage, fn)` | adds `/name`; `fn(args, srv, target)` gets the rest of the line, the tab's network (nil in the main window) and the tab's name. iSekur's own commands can't be replaced |
+| `isekur.say(srv, target, text)` | says text (each line of it) in a channel or to a nick |
+| `isekur.send(srv, line)` | a raw IRC line (one line) |
+| `isekur.print(srv, target, text)` | shows text in that tab only (else the network's tab, else the main window) |
+| `isekur.exec(srv, target, "/cmd ...")` | runs a command as if typed in that tab (not `/plugin`) |
+| `isekur.store_get(key)`, `isekur.store_set(key, value)` | the plugin's own saved strings (`<name>.data`); `nil` removes a key |
+| `isekur.servers()` | names of the connected networks |
+| `isekur.channels(srv)` | the channels joined there |
+| `isekur.me(srv)` | your nick there, nil when not connected |
+| `isekur.rank(srv, chan, nick)` | the nick's prefix there (`"@"`, `"+"`, `""`), nil if it's not in the channel |
+| `isekur.away(srv)`, `isekur.attached()` | booleans |
+| `isekur.idle()`, `isekur.detached_for()`, `isekur.time()` | seconds since you typed, seconds nobody's been attached (0 while attached), the Unix time |
+| `isekur.name`, `isekur.api` | the plugin's name, the API version (1) |

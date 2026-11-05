@@ -59,9 +59,10 @@ CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS)
 
-SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp
+SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp src/plugin.cpp
 VTERM := $(wildcard vendor/libvterm/src/*.c)
-OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
+LUA  := $(wildcard vendor/lua/*.c)
+OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
 
 all: isekur
 
@@ -77,6 +78,10 @@ build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
 # libvterm 0.3.3 (MIT): the screen of /shell's terminal
 build/vterm_%.o: vendor/libvterm/src/%.c | build
 	$(CC) $(CFLAGS) -Ivendor/libvterm/include -w -c -o $@ $<
+
+# Lua 5.4.7 (MIT): plugins. LUA_USE_POSIX: mkstemp etc. in the parts the sandbox leaves out anyway
+build/lua_%.o: vendor/lua/%.c | build
+	$(CC) $(CFLAGS) -DLUA_USE_POSIX -w -c -o $@ $<
 
 # TWITCH=0 (make notwitch): twitch.cpp with ISEKUR_NO_TWITCH. The choice is kept in
 # build/twitch.flag, rewritten only when it changes, so switching rebuilds twitch.o
@@ -119,7 +124,7 @@ build:
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o)
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o build/plugin.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
 	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:

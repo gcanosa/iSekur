@@ -371,6 +371,7 @@ void Core::on_readable(Server* s, short rev) {
 }
 
 void Core::tick(time_t now) {
+    plugin_emit("tick", nullptr, "");
     dcc_tick(now);
     check_update(now);
     int lock_idle = atoi(opt(nullptr, "lock_idle", "0").c_str());  // minutes without input, 0 = never
@@ -418,6 +419,7 @@ void Core::set_attached(bool a) {
     attached = a;
     if (a) last_input = time(nullptr);  // coming back counts as activity
     else detached_at = time(nullptr);
+    plugin_emit(a ? "attach" : "detach", nullptr, "");
 }
 
 // auto_away (on): away when nobody has been attached for 30s (daemon mode,
@@ -850,6 +852,7 @@ void Core::handle(Server* s, const Msg& m) {
             line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
             if (!s->twitch()) s->send("MODE " + ch), s->who_auto.insert(s->lower(ch));  // Twitch: 421 unknown command
             if (fresh) select(b);  // the webchat follows too
+            plugin_emit("join", s, ch, {{"nick", m.nick}, {"host", host_of(m)}, {"self", true}});
             return;
         }
         Buffer* b = find(s, ch);
@@ -864,6 +867,7 @@ void Core::handle(Server* s, const Msg& m) {
         }
         line(b, LK::JOIN, m.nick, m.nick + " (" + host_of(m) + ")" + acct + " has joined " + ch);
         notify(Ev::BUFFER, b);
+        plugin_emit("join", s, ch, {{"nick", m.nick}, {"host", host_of(m)}, {"self", false}});
         return;
     }
     if (cmd == "PART" || cmd == "KICK") {
@@ -878,6 +882,7 @@ void Core::handle(Server* s, const Msg& m) {
         if (is_me(who)) b->joined = false, b->nicks.clear();
         line(b, LK::PART, who, txt, is_me(who));
         notify(Ev::BUFFER, b);
+        plugin_emit("part", s, b->name, {{"nick", who}, {"reason", why}, {"self", is_me(who)}, {"kick", kick}, {"by", kick ? m.nick : ""}});
         if (kick && is_me(who) && opt_on(s, "rejoin_on_kick", false)) {  // a ban makes it fail once (474), no loop
             std::string key;
             for (auto& e : s->cfg.autojoin)
@@ -897,6 +902,7 @@ void Core::handle(Server* s, const Msg& m) {
             line(b, LK::QUIT, m.nick, m.nick + " (" + host_of(m) + ") has quit (" + m.p(0) + ")");
             notify(Ev::BUFFER, b);
         }
+        plugin_emit("quit", s, "", {{"nick", m.nick}, {"host", host_of(m)}, {"reason", m.p(0)}});
         return;
     }
     if (cmd == "NICK") {
@@ -1282,6 +1288,10 @@ void Core::handle(Server* s, const Msg& m) {
             hl = false;  // old news: no alerts, no copies to window 1
         }
         b->typing.erase(s->lower(who));  // a message ends their typing
+        // a handler that returns true hides the line (ponytail: own lines only reach plugins with echo-message)
+        if (!replay && plugin_emit("message", s, b->name, {{"nick", who}, {"text", text}, {"self", self}, {"hilight", hl},
+                                                           {"notice", notice}, {"action", kind == LK::ACTION}}))
+            return;
         std::string rid = tagv("reply");
         if (!rid.empty()) {  // +draft/reply: "↪ alice: “what they said”" before the text
             Line* t = by_msgid(b, rid);

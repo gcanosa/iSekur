@@ -1675,5 +1675,115 @@ int main() {
     assert(sv.drain(1000) == 1001 && sv.sendq.size() == 1);
     assert(sv.drain(2000) == -1 && sv.conn.out == "L0\r\nL1\r\nL2\r\nL3\r\n");
 
+    {  // Lua plugins: the sandbox, the step and memory caps, scoped options, the store, enable/disable, events
+        char d[] = "/tmp/isekur-plugins-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d, pdir = dir + "/plugins";
+        Core pc;
+        pc.cfg_path = dir + "/isekur.conf";
+        Buffer* ph = pc.open(nullptr, BT::STATUS, "isekur");
+        auto last = [&](Buffer* b) { return b->lines.empty() ? std::string() : b->lines.back().text; };
+        auto said = [&](const std::string& t) {
+            for (auto& l : ph->lines) if (l.text.find(t) != std::string::npos) return true;
+            return false;
+        };
+        pc.exec(ph, "/plugin");
+        assert(last(ph) == "No plugins in " + pdir);
+        mkdir_p(pdir);
+        auto put = [&](const std::string& f, const std::string& body) { FILE* o = fopen((pdir + "/" + f).c_str(), "w"); fputs(body.c_str(), o), fclose(o); };
+        put("t.lua", R"LUA(
+isekur.setting("greet", "hi", "c")
+isekur.setting("loud", false, "n")
+assert(io == nil and os == nil and package == nil and debug == nil and load == nil and dofile == nil and loadfile == nil)
+isekur.command("ptest", "", function(args, srv, target)
+  if args == "loop" then while true do end end
+  if args == "mem" then local t = {} for i = 1, 1e8 do t[i] = string.rep("x", 1000) .. i end end
+  if args == "err" then error("boom") end
+  if args == "opt" then print(isekur.opt("greet"), isekur.opt("loud")) return end
+  if args == "store" then isekur.store_set("k", "a\tb\nc\\") print(isekur.store_get("k") == "a\tb\nc\\") return end
+  if args == "self" then isekur.exec(nil, nil, "/plugin disable t") return end
+  if args == "usage" then return "Usage: /ptest thing" end
+  print("ran " .. args .. " in " .. target)
+end)
+isekur.on("message", function(e) return e.text == "hideme" end)
+print("loaded")
+)LUA");
+        put("bad.lua", "this is not lua");
+        pc.exec(ph, "/plugins");
+        assert(said("t  off"));
+        pc.exec(ph, "/plugin enable ../t");
+        assert(last(ph) == "No plugin named ../t in " + pdir);
+        pc.exec(ph, "/plugin enable t");
+        assert(said("[t] loaded") && last(ph) == "t enabled" && pc.plugins.size() == 1);
+        Ini back;
+        assert(ini_load(pc.cfg_path, back) && back["plugin.t"]["enabled"] == "on");
+        pc.exec(ph, "/ptest x");
+        assert(last(ph) == "[t] ran x in isekur");
+        pc.exec(ph, "/ptest opt");
+        assert(last(ph) == "[t] hi false");
+        pc.exec(ph, "/plugin set t greet yo there");
+        pc.exec(ph, "/ptest opt");
+        assert(last(ph) == "[t] yo there false");
+        pc.exec(ph, "/ptest usage");
+        assert(last(ph) == "Usage: /ptest thing" && ph->lines.back().kind == LK::ERROR);
+        pc.exec(ph, "/ptest loop");  // killed by the step cap, still loaded
+        assert(last(ph).find("[t] error:") == 0 && last(ph).find("took too long") != std::string::npos && pc.plugins.size() == 1);
+        pc.exec(ph, "/ptest mem");
+        assert(last(ph).find("not enough memory") != std::string::npos);
+        pc.exec(ph, "/ptest store");
+        assert(last(ph) == "[t] true");
+        {
+            FILE* f = fopen((pdir + "/t.data").c_str(), "r");
+            char buf[64] = {};
+            assert(f && fread(buf, 1, sizeof buf - 1, f) > 0), fclose(f);
+            assert(std::string(buf) == "k\ta\\tb\\nc\\\\\n");
+        }
+        pc.exec(ph, "/ptest self");
+        assert(last(ph) == "/plugin can't be run by a plugin" && pc.plugins.size() == 1);
+        // scoped options: channel, then network, then global; a 'n' key skips the channel's
+        ServerCfg pcfg;
+        pcfg.name = "sn", pcfg.nick = "me";
+        Server* ps = pc.add_server(pcfg);
+        ps->state = SS::CONNECTED, ps->flood_ms = 0;
+        pc.exec(ph, "/plugin set t@sn/#Chan greet chan");
+        pc.exec(ph, "/plugin set t@sn loud on");
+        pc.exec(ph, "/plugin set t@sn/#chan loud off");
+        assert(pc.plugin_opt("t", "greet", ps, "#CHAN", "d") == "chan" && pc.plugin_opt("t", "greet", ps, "#other", "d") == "yo there");
+        assert(pc.plugin_opt("t", "greet", nullptr, "", "d") == "yo there" && pc.plugin_opt("t", "greet", ps, "#chan", "d", 'g') == "yo there");
+        assert(pc.plugin_opt("t", "loud", ps, "#chan", "off", 'n') == "on" && pc.plugin_opt("t", "loud", ps, "#chan", "x", 'c') == "off");
+        assert(pc.plugin_opt("t", "nope", ps, "#chan", "dflt") == "dflt");
+        // a message handler returning true hides the line
+        Buffer* pchan = pc.open(ps, BT::CHANNEL, "#chan");
+        Msg pm;
+        size_t n0 = pchan->lines.size();
+        assert(irc_parse(":bob!u@h PRIVMSG #chan :hideme", pm)), pc.handle(ps, pm);
+        assert(pchan->lines.size() == n0);
+        assert(irc_parse(":bob!u@h PRIVMSG #chan :showme", pm)), pc.handle(ps, pm);
+        assert(pchan->lines.size() == n0 + 1);
+        // on only in sn/#chan: its events, not #other's
+        pc.exec(ph, "/plugin disable t");
+        assert(pc.plugins.empty() && last(ph) == "t disabled");
+        pc.exec(ph, "/plugin enable t sn/#chan");
+        assert(pc.plugins.size() == 1 && last(ph) == "t enabled in sn/#chan");
+        assert(pc.plugin_emit("message", ps, "#Chan", {{"text", std::string("hideme")}}));
+        assert(!pc.plugin_emit("message", ps, "#other", {{"text", std::string("hideme")}}));
+        pc.exec(ph, "/plugins");
+        assert(said("t  on  in: sn/#chan  commands: /ptest"));
+        // 5 errors in a row: unloaded; reload brings it back
+        for (int i = 0; i < 5; i++) pc.exec(ph, "/ptest err");
+        assert(pc.plugins.empty() && said("[t] unloaded after 5 errors"));
+        pc.exec(ph, "/ptest x");  // no plugin has it now: off to the server, not to a dead plugin
+        pc.exec(ph, "/plugin reload t");
+        assert(pc.plugins.size() == 1 && last(ph) == "t reloaded");
+        // a file that isn't Lua: not loaded, said so
+        pc.exec(ph, "/plugin enable bad");
+        assert(said("[bad] not loaded:") && pc.plugins.size() == 1);
+        // /set and the settings window leave [plugin.*] to /plugin
+        for (auto& st : pc.settings()) assert(st.key.rfind("plugin.", 0) != 0);
+        for (auto& r : pc.setting_rows()) assert(r.sec.rfind("plugin.", 0) != 0);
+        for (auto f : {"t.lua", "bad.lua", "t.data"}) unlink((pdir + "/" + f).c_str());
+        rmdir(pdir.c_str()), unlink(pc.cfg_path.c_str()), rmdir(d);
+    }
+
     puts("all tests passed");
 }

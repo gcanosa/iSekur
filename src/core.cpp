@@ -80,6 +80,7 @@ void Core::load_config() {
         Server* s = add_server(server_cfg(n));
         if (s->cfg.autoconnect) connect(s);
     }
+    plugins_sync();
 }
 
 // The startup banner: each letter in a color of the theme's nick palette, the
@@ -342,7 +343,7 @@ std::vector<Core::Setting> Core::settings() const {
     all["general"]["nick_width"] = theme.lay("nick_width", "12");
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv)
-            if (!v.empty() || !all[sec].count(k)) all[sec][k] = v;  // "key =" keeps the default
+            if (sec.rfind("plugin.", 0) != 0 && (!v.empty() || !all[sec].count(k))) all[sec][k] = v;  // "key =" keeps the default; plugins: /plugin
     std::vector<Setting> out;
     for (auto& [sec, kv] : all)
         for (auto& [k, v] : kv) {
@@ -488,8 +489,8 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     std::vector<std::string> secs;
     for (auto& [sec, k] : conf_keys())
         if (sec != "general" && sec.rfind("server.", 0) != 0 && std::find(secs.begin(), secs.end(), sec) == secs.end()) secs.push_back(sec);
-    for (auto& [sec, kv] : cfg)
-        if (sec != "general" && sec.rfind("server.", 0) != 0 && std::find(secs.begin(), secs.end(), sec) == secs.end()) secs.push_back(sec);
+    for (auto& [sec, kv] : cfg)  // [plugin.*]: /plugin's
+        if (sec != "general" && sec.rfind("server.", 0) != 0 && sec.rfind("plugin.", 0) != 0 && std::find(secs.begin(), secs.end(), sec) == secs.end()) secs.push_back(sec);
     for (auto& sec : secs) {
         std::vector<std::string> ks;
         for (auto& [s2, k] : conf_keys())
@@ -888,6 +889,7 @@ void Core::reload(Buffer* b) {
         if (s->cfg.autoconnect) connect(s);
     }
     cfg_changed = dirty = true;
+    plugins_sync();  // enabled or disabled in the file
     size_t n = 0;
     for (auto& [sec, kv] : unsaved) n += kv.size();
     print(b, LK::INFO, "Reloaded " + cfg_path + (n ? " (" + std::to_string(n) + " unsaved /set changes kept on top)" : "") +
@@ -1344,6 +1346,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         return false;
     };
 
+    if (cmd == "plugin" || cmd == "plugins") { plugin_cmd(b, cmd == "plugins" ? "" : args); return; }
+    if (!find_command(cmd) && plugin_run(b, cmd, args)) return;  // a plugin's command; iSekur's own always win
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "about") { about(b); return; }
     if (cmd == "keys") {  // the terminal's window (the webchat opens its own dialog)
