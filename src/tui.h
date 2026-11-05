@@ -139,6 +139,24 @@ private:
     // /keys, F1, Alt+K: every key binding as keycaps, by group, from the live keymap ([keys] included)
     struct KeysWin { bool open = false; int top = 0, rows = 0, n = 0, x0 = 0, w = 0, list_y = 0; };
     KeysWin kw;
+    // /plugin alone: the installed plugins and the catalog's, a tab each; c configures one, per scope
+    struct PlugWin {
+        bool open = false, avail = false;  // avail: the Available tab
+        int sel = 0, top = 0, rows = 0, x0 = 0, w = 0, list_y = 0, tab_y = 0, tab_mid = 0;  // tab_mid: Installed | Available
+        std::string cfg;                   // configuring this plugin ("" = the lists)
+        int scope = 0;                     // index into Core::plugin_scopes()
+        bool editing = false;
+        std::u32string ed;
+        std::string ask;                   // remove this one? (y/n)
+        long long mark = -1;               // mb->added when an action ran: mb's newest line since then is the message
+        Buffer* mb = nullptr;
+        long long click_ms = 0;
+    };
+    PlugWin pw;
+    void draw_plugins(int W, int H);
+    void plugin_key(int k, uint32_t ch);
+    void plugin_mouse(int k, int x, int y);
+    void plug_run(const std::string& cmd);
     void draw_keys(int W, int H);
     void keys_key(int k, uint32_t ch);
     bool action(const std::string& a);

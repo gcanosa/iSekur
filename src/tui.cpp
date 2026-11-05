@@ -567,6 +567,7 @@ void Tui::draw() {
         tw.sel = std::max(0, (int)(std::find(l.begin(), l.end(), tw.orig) - l.begin()) % std::max(1, (int)l.size()));
     }
     if (c.keys_win) c.keys_win = false, kw = KeysWin{}, kw.open = true;
+    if (c.plugin_win) c.plugin_win = false, pw = PlugWin{}, pw.open = true;
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
@@ -925,6 +926,11 @@ void Tui::draw() {
         present();
         return;
     }
+    if (pw.open) {  // /plugin: the plugin window
+        draw_plugins(W, H);
+        present();
+        return;
+    }
     if (sw.open) {  // /set: the settings window has the keys
         draw_settings(W, H);
         present();
@@ -1092,6 +1098,7 @@ void Tui::draw_lock(int W, int H, long long ms) {
 //   │ ↑↓ move · e edit · Space on/off · d default · s save · q  │
 //   └───────────────────────────────────────────────────────────┘
 static std::string lower(std::string s) { for (auto& ch : s) ch = (char)tolower((unsigned char)ch); return s; }
+static bool truthy_str(const std::string& v) { return v == "on" || v == "true" || v == "yes" || v == "1"; }
 static std::string full_key(const Core::SetRow& r) { return (r.sec == "general" ? "" : r.sec + ".") + r.key; }
 
 // the categories with how many keys match the search, and the rows of the chosen one. Two levels:
@@ -1658,6 +1665,222 @@ void Tui::find_mouse(int k, int x, int y) {
     find_key(TB_KEY_ENTER, 0);
 }
 
+// ---- the plugin window (/plugin alone) --------------------------------------------------
+//   ┌─ Plugins ────────────────────────────────────────────┐
+//   │  Installed   Available                               │
+//   │ ▸ autoaway      on        1.0  Away when you're idle  │
+//   │   seen          off                                  │
+//   │ autoaway enabled                                     │
+//   │ Space on/off · c configure · u update · d remove ... │
+//   └──────────────────────────────────────────────────────┘
+// c: the plugin's settings at one scope (everywhere, a network, a channel; ←→), Enter edits one
+static std::string scope_name(const std::string& sc) { return sc.empty() ? "everywhere" : sc; }
+
+// the configure view's rows: enabled, then what the plugin declared that can be set at this scope
+static std::vector<PluginSet> cfg_rows(const PluginInfo& pi, const std::string& scope) {
+    int lvl = scope.empty() ? 0 : scope.find('/') == std::string::npos ? 1 : 2;
+    std::vector<PluginSet> out{{"enabled", "off", 'c', true}};
+    for (auto& st : pi.sets)
+        if (lvl == 0 || (lvl == 1 && st.scope != 'g') || (lvl == 2 && st.scope == 'c')) out.push_back(st);
+    return out;
+}
+
+void Tui::plug_run(const std::string& cmd) {
+    pw.mb = c.active, pw.mark = c.active ? c.active->added : -1;
+    if (c.active) c.exec(c.active, cmd);
+}
+
+void Tui::draw_plugins(int W, int H) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), es = T.get("error");
+    for (Style* st : {&ls, &dim, &es}) st->bg = bs.bg;
+    hs.attr |= A_BOLD;
+    auto info = c.plugin_info();
+    auto scopes = c.plugin_scopes();
+    const PluginInfo* cp = nullptr;
+    for (auto& pi : info) if (pi.name == pw.cfg) cp = &pi;
+    if (!pw.cfg.empty() && !cp) pw.cfg.clear(), pw.editing = false;  // removed meanwhile
+    pw.scope = std::max(0, std::min(pw.scope, (int)scopes.size() - 1));
+    std::string scope = scopes[(size_t)pw.scope];
+    // the rows, as text in columns
+    struct R { std::string a, b, c2, d; bool hint = false; };
+    std::vector<R> rows;
+    std::string empty;
+    if (cp) {
+        for (auto& st : cfg_rows(*cp, scope)) {
+            std::string at = c.plugin_at(cp->name, st.key, scope), eff = c.plugin_eff(cp->name, st.key, scope, st.def, st.scope);
+            rows.push_back({st.key, at.empty() ? eff : at, at.empty() ? (scope.empty() ? "(default)" : "(inherited)") : "", "", at.empty()});
+        }
+    } else if (!pw.avail) {
+        for (auto& pi : info) {
+            std::string st = pi.state;
+            if (st == "on" && std::find(pi.on_in.begin(), pi.on_in.end(), "") == pi.on_in.end()) {
+                st = "on in";
+                for (auto& o : pi.on_in) st += " " + o;
+            }
+            std::string cmds;
+            for (auto& x : pi.cmds) cmds += " /" + x;
+            rows.push_back({pi.name, st, pi.version + (pi.differs ? " (update)" : ""), pi.desc.empty() ? cmds : pi.desc});
+        }
+        if (info.empty()) empty = "None installed: Tab shows the catalog's";
+    } else {
+        for (auto& r : c.catalog_rows())
+            rows.push_back({r.name, r.version, r.too_new ? "needs a newer iSekur" : r.differs ? "update" : r.installed ? "installed" : "", r.desc});
+        if (rows.empty()) empty = c.catalog ? "Fetching the catalog..." : !c.catalog_err.empty() ? "Catalog: " + c.catalog_err + " (r: retry)"
+                                                                        : c.catalog_have ? "The catalog is empty" : "r fetches the catalog";
+    }
+    int n = (int)rows.size();
+    pw.rows = std::max(1, std::min({std::max(n, 1), H - 8, 14}));
+    pw.w = std::min(W - 2, 84), pw.x0 = (W - pw.w) / 2;
+    int bh = pw.rows + 6, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pw.x0 + pw.w;
+    pw.tab_y = y0 + 1, pw.list_y = y0 + 2;
+    if (pw.sel >= n) pw.sel = std::max(0, n - 1);
+    if (pw.sel < pw.top) pw.top = pw.sel;
+    if (pw.sel >= pw.top + pw.rows) pw.top = pw.sel - pw.rows + 1;
+    for (int yy = y0; yy < y0 + bh; yy++) fill(yy, pw.x0, x1, bs);
+    for (int xx = pw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
+    for (int yy = y0; yy < y0 + bh; yy++) cell(pw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
+    cell(pw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(pw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
+    if (auto cb = box_title(T, pw.x0, x1 - 1, y0, cp ? "Plugins · " + cp->name : "Plugins", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'g'};
+    if (cp) {
+        int x = text(pw.x0 + 2, pw.tab_y, x1 - 2, "Scope: ", hs, false);
+        x = text(x, pw.tab_y, x1 - 2, " ◂ " + scope_name(scope) + " ▸ ", sel, false);
+        text(x + 1, pw.tab_y, x1 - 2, std::to_string(pw.scope + 1) + "/" + std::to_string(scopes.size()), dim, false);
+    } else {
+        int x = text(pw.x0 + 2, pw.tab_y, x1 - 2, " Installed ", pw.avail ? bs : sel, false);
+        pw.tab_mid = x + 1;
+        text(x + 2, pw.tab_y, x1 - 2, " Available ", pw.avail ? sel : bs, false);
+    }
+    if (!n) text(pw.x0 + 3, pw.list_y, x1 - 2, empty, dim, false);
+    int ca = pw.x0 + 4, cb2 = ca + 16, cc = cb2 + (cp ? 26 : pw.avail ? 9 : 12), cd = cc + (cp ? 0 : pw.avail ? 22 : 15);
+    for (int i = 0; i < pw.rows && pw.top + i < n; i++) {
+        auto& r = rows[(size_t)(pw.top + i)];
+        bool on = pw.top + i == pw.sel;
+        Style st = on ? sel : bs, d = dim;
+        d.bg = st.bg;
+        int y = pw.list_y + i;
+        fill(y, pw.x0 + 1, x1 - 1, st);
+        text(pw.x0 + 2, y, x1 - 2, on ? "▸" : " ", st, false);
+        text(ca, y, x1 - 2, r.a, st, false);
+        if (cp && on && pw.editing) {
+            fill(y, cb2, x1 - 2, fs);
+            int ex = text(cb2, y, x1 - 2, to_utf8(pw.ed), fs, false);
+            tb_set_cursor(std::min(ex, x1 - 3), y);
+            continue;
+        }
+        text(cb2, y, x1 - 2, r.b, r.hint ? d : st, false);
+        if (cp) { if (!r.c2.empty()) text(std::min(cb2 + (int)r.b.size() + 2, x1 - 2), y, x1 - 2, r.c2, d, false); continue; }
+        text(cc, y, x1 - 2, r.c2, d, false);
+        text(cd, y, x1 - 2, r.d, d, false);
+    }
+    // the message: the newest line of the tab the last action ran in, once something came
+    bool live = false;
+    for (auto& b : c.bufs) live |= b.get() == pw.mb;
+    if (live && pw.mark >= 0 && pw.mb->added > pw.mark && !pw.mb->lines.empty()) {
+        auto& l = pw.mb->lines.back();
+        text(pw.x0 + 2, y0 + bh - 3, x1 - 2, mirc_strip(l.text), l.kind == LK::ERROR ? es : dim, false);
+    } else if (c.catalog) text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Fetching the catalog...", dim, false);
+    const char* hint = pw.editing ? "Enter set · empty: inherit or the default · Esc cancel"
+                       : cp       ? "Enter edit · Space on/off · Del clear here · ←→ scope · Esc back"
+                       : pw.avail ? "Enter or i install · r refresh · Tab installed · Esc close"
+                                  : "Space on/off · c configure · u update · d remove · r reload · Tab catalog · Esc";
+    text(pw.x0 + 2, y0 + bh - 2, x1 - 2, hint, dim, false);
+    if (!pw.ask.empty())
+        draw_dialog(W, H, "Remove plugin", wrap_words("Remove " + pw.ask + " with its settings and saved data?", 44), "", false, U"", 0,
+                    "y: yes · n or Esc: no", 0, 0, 'P');
+}
+
+void Tui::plugin_key(int k, uint32_t ch) {
+    if (ch == ' ') k = TB_KEY_SPACE, ch = 0;  // termbox gives Space as a character
+    if (!pw.ask.empty()) {  // remove it? (y/n)
+        std::string n = pw.ask;
+        pw.ask.clear();
+        if (ch == 'y' || ch == 'Y') plug_run("/plugin remove " + n), pw.sel = 0;
+        return;
+    }
+    auto info = c.plugin_info();
+    auto scopes = c.plugin_scopes();
+    pw.scope = std::max(0, std::min(pw.scope, (int)scopes.size() - 1));
+    std::string scope = scopes[(size_t)pw.scope];
+    bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
+    const PluginInfo* cp = nullptr;
+    for (auto& pi : info) if (pi.name == pw.cfg) cp = &pi;
+    std::string at = cp ? cp->name + (scope.empty() ? "" : "@" + scope) : "";
+    if (cp) {
+        auto rows = cfg_rows(*cp, scope);
+        int n = (int)rows.size();
+        pw.sel = std::max(0, std::min(pw.sel, n - 1));
+        const PluginSet& st = rows[(size_t)pw.sel];
+        auto set = [&](const std::string& v) {
+            if (st.key == "enabled") plug_run(v.empty() ? "/plugin set " + at + " enabled" : std::string("/plugin ") + (truthy_str(v) ? "enable " : "disable ") + at);
+            else plug_run("/plugin set " + at + " " + st.key + (v.empty() ? "" : " " + v));
+        };
+        if (pw.editing) {
+            if (k == TB_KEY_ESC) pw.editing = false;
+            else if (k == TB_KEY_ENTER) pw.editing = false, set(to_utf8(pw.ed));
+            else if (bs) { if (!pw.ed.empty()) pw.ed.pop_back(); }
+            else if (ch || k == TB_KEY_SPACE) pw.ed += ch ? (char32_t)ch : U' ';
+            return;
+        }
+        std::string eff = c.plugin_eff(cp->name, st.key, scope, st.def, st.scope);
+        if (k == TB_KEY_ESC || ch == 'q') pw.cfg.clear(), pw.sel = 0;
+        else if (k == TB_KEY_ARROW_DOWN) pw.sel = std::min(n - 1, pw.sel + 1);
+        else if (k == TB_KEY_ARROW_UP) pw.sel = std::max(0, pw.sel - 1);
+        else if (k == TB_KEY_ARROW_RIGHT || k == TB_KEY_TAB) pw.scope = (pw.scope + 1) % (int)scopes.size();
+        else if (k == TB_KEY_ARROW_LEFT) pw.scope = (pw.scope + (int)scopes.size() - 1) % (int)scopes.size();
+        else if (k == TB_KEY_SPACE && st.flag) set(truthy_str(eff) ? "off" : "on");
+        else if (k == TB_KEY_DELETE || bs) set("");
+        else if (k == TB_KEY_ENTER) {
+            if (st.flag) set(truthy_str(eff) ? "off" : "on");
+            else pw.editing = true, pw.ed = from_utf8(c.plugin_at(cp->name, st.key, scope));
+        }
+        return;
+    }
+    if (k == TB_KEY_ESC || ch == 'q') { pw.open = false; return; }
+    if (k == TB_KEY_TAB || k == TB_KEY_ARROW_LEFT || k == TB_KEY_ARROW_RIGHT) {
+        pw.avail = !pw.avail, pw.sel = pw.top = 0;
+        if (pw.avail && !c.catalog_have && !c.catalog) c.plugin_refresh(c.active);
+        return;
+    }
+    int n = pw.avail ? (int)c.catalog_rows().size() : (int)info.size();
+    if (k == TB_KEY_ARROW_DOWN) pw.sel = std::min(n - 1, pw.sel + 1);
+    else if (k == TB_KEY_ARROW_UP) pw.sel = std::max(0, pw.sel - 1);
+    else if (k == TB_KEY_PGDN) pw.sel = std::min(n - 1, pw.sel + pw.rows);
+    else if (k == TB_KEY_PGUP) pw.sel = std::max(0, pw.sel - pw.rows);
+    else if (pw.avail) {
+        auto cat = c.catalog_rows();
+        if (ch == 'r') c.plugin_refresh(c.active);
+        else if ((k == TB_KEY_ENTER || ch == 'i') && pw.sel < n) plug_run("/plugin install " + cat[(size_t)pw.sel].name);
+    } else if (pw.sel < n) {
+        const PluginInfo& pi = info[(size_t)pw.sel];
+        if (k == TB_KEY_SPACE) plug_run(std::string("/plugin ") + (pi.state == "off" ? "enable " : "disable ") + pi.name);
+        else if (ch == 'c' || k == TB_KEY_ENTER) pw.cfg = pi.name, pw.sel = pw.top = 0, pw.scope = 0;
+        else if (ch == 'u') plug_run("/plugin update " + pi.name);
+        else if (ch == 'r') plug_run("/plugin reload " + pi.name);
+        else if (ch == 'd' || k == TB_KEY_DELETE) pw.ask = pi.name;
+    }
+    pw.sel = std::max(0, std::min(pw.sel, n - 1));
+}
+
+// a click picks a tab or a row (again, or a double click: Enter); the wheel moves
+void Tui::plugin_mouse(int k, int x, int y) {
+    if (!pw.ask.empty()) return;
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { plugin_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
+    if (k != TB_KEY_MOUSE_LEFT || x <= pw.x0 || x >= pw.x0 + pw.w - 1) return;
+    if (y == pw.tab_y) {
+        if (pw.cfg.empty()) { if ((x >= pw.tab_mid) != pw.avail) plugin_key(TB_KEY_TAB, 0); }
+        else plugin_key(x < pw.x0 + pw.w / 2 ? TB_KEY_ARROW_LEFT : TB_KEY_ARROW_RIGHT, 0);
+        return;
+    }
+    int i = y - pw.list_y;
+    if (i < 0 || i >= pw.rows || pw.editing) return;
+    long long now = now_ms();
+    bool again = pw.sel == pw.top + i && now - pw.click_ms < 500;
+    pw.click_ms = now, pw.sel = pw.top + i;
+    if (again) plugin_key(TB_KEY_ENTER, 0);
+}
+
 // a click previews a theme (again, or a double click: keeps it); the wheel moves
 void Tui::theme_mouse(int k, int x, int y) {
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { theme_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
@@ -1887,7 +2110,7 @@ void Tui::on_readable() {
     while (tb_peek_event(&ev, 0) == TB_OK) {
         sync_input();  // a key may have switched tabs: the next one types into that tab's line
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || sw.open || tw.open || fw.open || kw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -1902,7 +2125,7 @@ void Tui::on_readable() {
         for (auto& b : c.bufs)
             if (b->id == typed_id) c.typed(b.get(), "");
     typed_id = id;
-    if (c.active) c.typed(c.active, c.locked || sw.open || tw.open || fw.open ? "" : to_utf8(input));
+    if (c.active) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open ? "" : to_utf8(input));
 }
 
 bool Tui::action(const std::string& a) {
@@ -1957,6 +2180,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (tw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) theme_key(k, ch); return; }
     if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
     if (kw.open) { keys_key(k, ch); return; }
+    if (pw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) plugin_key(k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -2131,6 +2355,8 @@ void Tui::close_box() {
     case 't': tw.q.clear(), theme_key(TB_KEY_ESC, 0); break;  // back to the theme it had
     case 'f': fw.open = false; break;
     case 'k': kw.open = false; break;
+    case 'g': pw.open = false; break;
+    case 'P': pw.ask.clear(); break;
     case 'a': input.clear(), cur = 0, c.exec(c.active, ""); break;  // a question: cancelled
     case 'c': confirm.clear(); break;
     case 'p': input = from_utf8(paste), cur = input.size(), paste.clear(); break;  // back to edit it
@@ -2145,6 +2371,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
     if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
+    if (pw.open) { if (!(mod & TB_MOD_MOTION)) plugin_mouse(k, x, y); return; }
     if (kw.open) {  // the wheel scrolls, a click outside closes
         if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) keys_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
         else if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1)) kw.open = false;

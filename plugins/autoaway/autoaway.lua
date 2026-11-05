@@ -2,13 +2,14 @@
 -- `idle` minutes without typing; back when you return. A manual /away is left alone.
 isekur.setting("idle", 0, "n")                         -- minutes without typing, 0 = only when detached
 isekur.setting("message", "Not here right now", "n")
-isekur.setting("announce", false, "c")                 -- /me it in your channels (many dislike it)
+isekur.setting("announce_away", false, "c")            -- "/me is away: <message>" in your channels (many dislike it)
+isekur.setting("announce_back", false, "c")            -- "/me is back" when you return
 
 local mine = {}  -- network -> true: we set that away
 
-local function announce(srv, text)
+local function announce(srv, key, text)
   for _, ch in ipairs(isekur.channels(srv)) do
-    if isekur.opt("announce", srv, ch) then isekur.exec(srv, ch, "/me " .. text) end
+    if isekur.opt(key, srv, ch) then isekur.exec(srv, ch, "/me " .. text) end
   end
 end
 
@@ -23,11 +24,11 @@ isekur.on("tick", function()
       mine[srv] = true
       local msg = isekur.opt("message", srv)
       isekur.send(srv, "AWAY :" .. msg)
-      announce(srv, "is away: " .. msg)
+      announce(srv, "announce_away", "is away: " .. msg)
     elseif not want and mine[srv] and isekur.away(srv) then
       mine[srv] = nil
       isekur.send(srv, "AWAY")
-      announce(srv, "is back")
+      announce(srv, "announce_back", "is back")
     end
   end
   for srv in pairs(mine) do if not live[srv] then mine[srv] = nil end end  -- disconnected: not away any more

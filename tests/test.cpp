@@ -1790,13 +1790,14 @@ print("loaded")
         assert(old_away_keys(pc));
         pc.exec(ph, "/plugin install autoaway");
         wait_catalog();
-        assert(said("autoaway: moved 5 auto-away settings") && said("autoaway 1.0 installed and on") && !old_away_keys(pc));
+        assert(said("autoaway: moved 6 auto-away settings") && said("autoaway 1.0 installed and on") && !old_away_keys(pc));
         {
             Ini back2;
             assert(ini_load(pc.cfg_path, back2));
             assert(!back2["general"].count("auto_away") && !back2["server.sn"].count("away_announce"));
             assert(back2["plugin.autoaway"]["message"] == "brb" && back2["plugin.autoaway"]["enabled"] == "on");
-            assert(back2["plugin.autoaway@sn"]["enabled"] == "off" && back2["plugin.autoaway@sn"]["announce"] == "on");
+            assert(back2["plugin.autoaway@sn"]["enabled"] == "off" && back2["plugin.autoaway@sn"]["announce_away"] == "on" &&
+                   back2["plugin.autoaway@sn"]["announce_back"] == "on");  // away_announce did both
         }
         // what core auto-away did: off on sn, then away when detached, /me in the channel, back when attached
         pc.exec(ph, "/plugin disable t");
@@ -1816,7 +1817,17 @@ print("loaded")
         assert(psent() == "AWAY\r\nPRIVMSG #chan :\x01" "ACTION is back\x01\r\n");
         assert(irc_parse(":srv 305 me :back", pm)), pc.handle(ps, pm);
         // a manual /away while auto-away: yours, coming back leaves it alone
-        pc.exec(ph, "/plugin set autoaway@sn announce off");
+        // each one on its own: back announced, away not (and per channel: off in #chan wins over sn)
+        pc.exec(ph, "/plugin set autoaway@sn announce_away off");
+        pc.set_attached(false), pc.detached_at = 0;
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent() == "AWAY :brb\r\n");
+        assert(irc_parse(":srv 306 me :away", pm)), pc.handle(ps, pm);
+        pc.set_attached(true);
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent() == "AWAY\r\nPRIVMSG #chan :\x01" "ACTION is back\x01\r\n");
+        assert(irc_parse(":srv 305 me :back", pm)), pc.handle(ps, pm);
+        pc.exec(ph, "/plugin set autoaway@sn/#chan announce_back off");
         pc.set_attached(false), pc.detached_at = 0;
         pc.plugin_emit("tick", nullptr, "");
         assert(psent() == "AWAY :brb\r\n");
@@ -1826,6 +1837,33 @@ print("loaded")
         pc.set_attached(true);
         pc.plugin_emit("tick", nullptr, "");
         assert(psent().empty());
+        // what the plugin windows show: installed ones with their state, scopes and settings, the catalog, the scopes
+        {
+            auto info = pc.plugin_info();
+            const PluginInfo* aw = nullptr;
+            for (auto& pi : info) if (pi.name == "autoaway") aw = &pi;
+            assert(aw && aw->state == "on" && aw->version == "1.0" && !aw->differs && !aw->desc.empty());
+            assert(std::find(aw->on_in.begin(), aw->on_in.end(), "") != aw->on_in.end() && std::find(aw->on_in.begin(), aw->on_in.end(), "sn") != aw->on_in.end());
+            assert(aw->sets.size() == 4 && aw->sets[0].key == "idle" && aw->sets[0].scope == 'n' && aw->sets[3].key == "announce_back" && aw->sets[3].flag);
+            auto cat = pc.catalog_rows();
+            assert(cat.size() == 1 && cat[0].name == "autoaway" && cat[0].installed && !cat[0].differs && !cat[0].too_new);
+            auto sc = pc.plugin_scopes();
+            assert(sc.front().empty() && std::find(sc.begin(), sc.end(), "sn") != sc.end() && std::find(sc.begin(), sc.end(), "sn/#chan") != sc.end());
+            pc.cfg["plugin.autoaway@sn/#chan"]["message"] = "chan msg";
+            assert(pc.plugin_at("autoaway", "message", "sn") == "" && pc.plugin_eff("autoaway", "message", "sn", "d", 'c') == "brb");
+            assert(pc.plugin_eff("autoaway", "message", "sn/#chan", "d", 'c') == "chan msg" && pc.plugin_eff("autoaway", "message", "sn/#chan", "d", 'n') == "brb");
+            assert(pc.plugin_eff("autoaway", "nope", "sn/#chan", "d") == "d");
+            pc.cfg.erase("plugin.autoaway@sn/#chan");
+            pc.tty = true;  // /plugin alone in the terminal: its window; from the webchat, the list
+            pc.exec(ph, "/plugin");
+            assert(pc.plugin_win);
+            pc.plugin_win = false, pc.from_web = true;
+            pc.exec(ph, "/plugin");
+            assert(!pc.plugin_win && said("autoaway  on"));
+            pc.from_web = pc.tty = false;
+            pc.exec(ph, "/plugin set autoaway@sn enabled");  // emptied: sn inherits the global on, and it's still loaded
+            assert(pc.plugin_eff("autoaway", "enabled", "sn", "off") == "on" && said("autoaway enabled = (default) in sn"));
+        }
         // remove: the file, its data and its sections
         pc.exec(ph, "/plugin remove autoaway");
         assert(last(ph) == "autoaway removed, with its settings and saved data" && access((pdir + "/autoaway.lua").c_str(), F_OK) != 0);

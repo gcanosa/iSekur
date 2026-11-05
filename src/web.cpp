@@ -699,6 +699,46 @@ void Web::ws_frames(Client& cl) {
                 o += "]," + json_str(r.cat) + "," + json_str(r.head) + "," + (r.shared ? "1" : "0") + "," + json_str(r.over) + "]";
             }
             cl.conn.out += ws_frame(o + "]}");
+        } else if (m["t"] == "plugref") {  // the plugin window's Available tab: fetch the catalog
+            c.plugin_refresh(b);
+        } else if (m["t"] == "plugins") {  // the plugin window: installed, the catalog, the scopes, and b's newest line (the last action's answer)
+            auto arr = [](const std::vector<std::string>& v) {
+                std::string o = "[";
+                for (auto& x : v) o += (o.size() > 1 ? "," : "") + json_str(x);
+                return o + "]";
+            };
+            std::string o = "{\"t\":\"plugins\",\"fetching\":" + std::string(c.catalog ? "1" : "0") + ",\"have\":" + (c.catalog_have ? "1" : "0") +
+                            ",\"err\":" + json_str(c.catalog_err) + ",\"scopes\":" + arr(c.plugin_scopes()) + ",\"added\":" + std::to_string(b->added) +
+                            ",\"last\":" + json_str(b->lines.empty() ? "" : mirc_strip(b->lines.back().text)) +
+                            ",\"lasterr\":" + (!b->lines.empty() && b->lines.back().kind == LK::ERROR ? "1" : "0") + ",\"installed\":[";
+            bool first = true;
+            for (auto& pi : c.plugin_info()) {
+                o += std::string(first ? "" : ",") + "{\"name\":" + json_str(pi.name) + ",\"state\":" + json_str(pi.state) + ",\"version\":" + json_str(pi.version) +
+                     ",\"desc\":" + json_str(pi.desc) + ",\"differs\":" + (pi.differs ? "1" : "0") + ",\"on\":" + arr(pi.on_in) + ",\"cmds\":" + arr(pi.cmds) + ",\"sets\":[";
+                first = false;
+                for (size_t i = 0; i < pi.sets.size(); i++)
+                    o += std::string(i ? "," : "") + "{\"key\":" + json_str(pi.sets[i].key) + ",\"def\":" + json_str(pi.sets[i].def) +
+                         ",\"scope\":\"" + pi.sets[i].scope + "\",\"flag\":" + (pi.sets[i].flag ? "1" : "0") + "}";
+                o += "],\"cfg\":{";  // what each of its sections sets: {"": {...}, "sekurnet": {...}}
+                bool f2 = true;
+                for (auto& [sec, kv] : c.cfg) {
+                    std::string base = "plugin." + pi.name;
+                    if (sec != base && sec.rfind(base + "@", 0) != 0) continue;
+                    o += std::string(f2 ? "" : ",") + json_str(sec == base ? "" : sec.substr(base.size() + 1)) + ":{";
+                    f2 = false;
+                    bool f3 = true;
+                    for (auto& [k, v] : kv) o += std::string(f3 ? "" : ",") + json_str(k) + ":" + json_str(v), f3 = false;
+                    o += "}";
+                }
+                o += "}}";
+            }
+            o += "],\"catalog\":[";
+            first = true;
+            for (auto& r : c.catalog_rows())
+                o += std::string(first ? "" : ",") + "{\"name\":" + json_str(r.name) + ",\"version\":" + json_str(r.version) + ",\"desc\":" + json_str(r.desc) +
+                     ",\"installed\":" + (r.installed ? "1" : "0") + ",\"differs\":" + (r.differs ? "1" : "0") + ",\"new\":" + (r.too_new ? "1" : "0") + "}",
+                first = false;
+            cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
             bool tab = m["nick"].empty();
             std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(!tab ? m["nick"] : b->type == BT::STATUS && b->srv ? b->srv->cfg.name : b->name) + ",\"items\":[";

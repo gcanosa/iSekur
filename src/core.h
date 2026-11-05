@@ -215,7 +215,17 @@ struct CatalogJob;
 std::string sha256_of(const std::string& s);  // hex
 // a plugin catalog's index.json: [{"name": ..., "version": ..., "api": 1, "description": ..., "sha256": ...}]
 std::vector<std::map<std::string, std::string>> plugin_index(const std::string& json, bool* ok = nullptr);
-bool old_away_keys(const Core& c);  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
+bool old_away_keys(const Core& c);
+// what the plugin windows (terminal and webchat) show
+struct PluginSet { std::string key, def; char scope; bool flag; };  // a declared setting; flag: on/off
+struct PluginInfo {
+    std::string name, state, version, desc;  // state: on, off, failed; version, desc: the catalog's, when it's been fetched
+    bool differs = false;                    // the file isn't the catalog's version
+    std::vector<std::string> on_in, cmds;    // the scopes where enabled = on ("" everywhere, "net", "net/#chan"); its /commands
+    std::vector<PluginSet> sets;             // what it declared (while loaded), in order
+};
+struct CatalogRow { std::string name, version, desc; bool installed, differs, too_new; };
+std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
 #define PLUGIN_API 1  // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings and booleans
@@ -508,6 +518,17 @@ struct Core {
     std::string plugin_opt(const std::string& name, const std::string& key, const Server* s, const std::string& target,
                            const std::string& def, char scope = 'c') const;
     void plugins_poll();  // tick(): a finished catalog fetch (/plugin available|install|update)
+    bool plugin_win = false;  // /plugin alone in the terminal: the TUI opens its plugin window
+    std::vector<PluginInfo> plugin_info() const;  // the installed ones
+    std::vector<CatalogRow> catalog_rows() const;  // the last fetched catalog
+    std::vector<std::map<std::string, std::string>> catalog_cache;  // its index
+    bool catalog_have = false;  // fetched at least once
+    std::string catalog_err;    // the last fetch's error, "" if it worked
+    void plugin_refresh(Buffer* b);  // fetch the catalog quietly, for the windows
+    std::vector<std::string> plugin_scopes() const;  // "", every network, every joined channel ("net/#chan"), every scope in the config
+    // a plugin's key in that scope: as set exactly there ("" = not), or with what it falls back to (channel, network, global, def)
+    std::string plugin_at(const std::string& name, const std::string& key, const std::string& scope) const;
+    std::string plugin_eff(const std::string& name, const std::string& key, const std::string& scope, const std::string& def, char sc = 'c') const;
     std::shared_ptr<CatalogJob> catalog;  // while one runs
     int plugin_depth = 0;  // plugin code running: /plugin is refused, nothing is unloaded
     std::vector<std::shared_ptr<Plugin>> plugins;

@@ -272,7 +272,10 @@ a plugin gets 32 MB at most). `/plugin available` lists the catalog (this repo's
 `/plugin install name` fetches one, checks its sha256 against the catalog and turns it on,
 `/plugin update` and `/plugin remove name` the same way. Auto-away is a plugin now:
 `/plugin install autoaway` moves your old `auto_away`, `auto_away_idle`, `away_message` and
-`away_announce` settings into it and out of the config. `/plugin` lists what's installed; `/plugin enable seen` turns one on,
+`away_announce` settings into it and out of the config (`away_announce` becomes `announce_away` and
+`announce_back`, each on or off on its own). `/plugin` alone opens the plugin window in the terminal
+(the puzzle button in the webchat): Installed and Available tabs, on/off, install, update, remove, and
+each plugin's settings for everywhere, a network or a channel. `/plugin list` prints them; `/plugin enable seen` turns one on,
 `/plugin enable seen@sekurnet/#isekur` only in that channel (`seen@sekurnet` that network), and
 `/plugin set seen@sekurnet key value` sets an option there. It all goes to `[plugin.<name>]`
 sections of the config (`[plugin.seen@sekurnet/#isekur]` for a channel). `/plugin reload name`
