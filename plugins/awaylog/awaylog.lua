@@ -1,10 +1,10 @@
--- version: 1.0
+-- version: 1.1
 -- awaylog: while you're away (or nothing is attached), it keeps your highlights and private messages.
 -- When you're back, a summary in the tab you're on: "While you were away (2h13m): 3 mentions in #isekur,
 -- 2 PMs from bob", then the lines. /awaylog shows the last one again, /awaylog clear forgets it.
-isekur.setting("show", 10, "g")         -- lines in the summary (the rest: /awaylog)
-isekur.setting("keep", 200, "g")        -- lines kept at most
-isekur.setting("detached", true, "g")   -- also while nothing is attached (--daemon, browser closed), not only while away
+isekur.setting("show", 10, "g", "lines in the summary when you're back (the rest: /awaylog)")
+isekur.setting("keep", 200, "g", "lines kept at most while you're away")
+isekur.setting("detached", true, "g", "also while nothing is attached (--daemon, browser closed), not only while away")
 
 -- ponytail: in memory only, a restart of iSekur forgets it; the store if that ever matters
 local log, gone_at = {}, nil   -- collecting now; gone_at: when you went away (seen by the tick)

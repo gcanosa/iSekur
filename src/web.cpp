@@ -718,7 +718,7 @@ void Web::ws_frames(Client& cl) {
                 first = false;
                 for (size_t i = 0; i < pi.sets.size(); i++)
                     o += std::string(i ? "," : "") + "{\"key\":" + json_str(pi.sets[i].key) + ",\"def\":" + json_str(pi.sets[i].def) +
-                         ",\"scope\":\"" + pi.sets[i].scope + "\",\"flag\":" + (pi.sets[i].flag ? "1" : "0") + "}";
+                         ",\"scope\":\"" + pi.sets[i].scope + "\",\"flag\":" + (pi.sets[i].flag ? "1" : "0") + ",\"help\":" + json_str(pi.sets[i].help) + "}";
                 o += "],\"cfg\":{";  // what each of its sections sets: {"": {...}, "sekurnet": {...}}
                 bool f2 = true;
                 for (auto& [sec, kv] : c.cfg) {
@@ -759,7 +759,7 @@ static std::string ts_fmt(const Core& c) { return ini_get(c.cfg, "general", "tim
 static std::string line_json(const Line& l, const std::string& fmt) {
     return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"tf\":" + json_str(fmt_time(l.ts, fmt)) + ",\"k\":\"" + KIND[(int)l.kind] +
            "\",\"n\":" + json_str(l.nick) + ",\"x\":" + json_str(l.text) +
-           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.note ? ",\"no\":1" : "") +
+           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.badge.empty() ? "" : ",\"bd\":" + json_str(l.badge) + ",\"bk\":\"" + std::string(1, l.badge_kind) + "\"") +
            (l.color >= 0 ? ",\"c\":\"" + rgb_hex(l.color) + "\"" : "") + "}";
 }
 
@@ -819,10 +819,8 @@ std::string Web::theme_json() {
              ",\"bg\":" + json_str(rgb_hex(st.bg)) + ",\"a\":" + std::to_string(st.attr) + "}";
         first = false;
     }
-    if (!c.theme.el.count("note")) {  // the INFO badge's colors, made from hilight like the terminal's
-        Style n = note_style(c.theme);
-        o += std::string(first ? "" : ",") + "\"note\":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}";
-    }
+    for (auto [k, n] : {std::pair<const char*, Style>{"note", note_style(c.theme)}, {"plugin", plugin_style(c.theme)}})  // the badges, made like the terminal's
+        if (!c.theme.el.count(k)) o += std::string(first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}", first = false;
     o += "},\"lay\":{";
     first = true;
     auto lay = c.theme.layout;

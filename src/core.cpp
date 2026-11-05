@@ -1065,7 +1065,13 @@ void Core::print(Buffer* b, LK k, const std::string& text) {
 
 void Core::info_note(Buffer* b, const std::string& text) {
     Line l{time(nullptr), LK::INFO, "", text};
-    l.note = true;
+    l.badge = "INFO", l.badge_kind = 'i';
+    add(b ? b : bufs.front().get(), l);
+}
+
+void Core::plug_print(Buffer* b, LK k, const std::string& text, const std::string& badge, char kind) {
+    Line l{time(nullptr), k, "", text};
+    l.badge = badge, l.badge_kind = kind;
     add(b ? b : bufs.front().get(), l);
 }
 

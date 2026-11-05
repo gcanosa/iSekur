@@ -1680,24 +1680,24 @@ print("loaded")
         pc.exec(ph, "/plugin enable ../t");
         assert(last(ph) == "No plugin named ../t in " + pdir);
         pc.exec(ph, "/plugin enable t");
-        assert(said("[t] loaded") && last(ph) == "t enabled" && pc.plugins.size() == 1);
+        assert(said("loaded") && last(ph) == "t enabled" && ph->lines.back().badge == "plugin" && pc.plugins.size() == 1);
         Ini back;
         assert(ini_load(pc.cfg_path, back) && back["plugin.t"]["enabled"] == "on");
         pc.exec(ph, "/ptest x");
-        assert(last(ph) == "[t] ran x in isekur");
+        assert(last(ph) == "ran x in isekur" && ph->lines.back().badge == "t" && ph->lines.back().badge_kind == 'p');
         pc.exec(ph, "/ptest opt");
-        assert(last(ph) == "[t] hi false");
+        assert(last(ph) == "hi false");
         pc.exec(ph, "/plugin set t greet yo there");
         pc.exec(ph, "/ptest opt");
-        assert(last(ph) == "[t] yo there false");
+        assert(last(ph) == "yo there false");
         pc.exec(ph, "/ptest usage");
         assert(last(ph) == "Usage: /ptest thing" && ph->lines.back().kind == LK::ERROR);
         pc.exec(ph, "/ptest loop");  // killed by the step cap, still loaded
-        assert(last(ph).find("[t] error:") == 0 && last(ph).find("took too long") != std::string::npos && pc.plugins.size() == 1);
+        assert(last(ph).find("error:") == 0 && ph->lines.back().badge == "t" && last(ph).find("took too long") != std::string::npos && pc.plugins.size() == 1);
         pc.exec(ph, "/ptest mem");
         assert(last(ph).find("not enough memory") != std::string::npos);
         pc.exec(ph, "/ptest store");
-        assert(last(ph) == "[t] true");
+        assert(last(ph) == "true");
         {
             pc.plugins_poll();  // the tick writes the store (batched, at most every 5s)
             FILE* f = fopen((pdir + "/t.data").c_str(), "r");
@@ -1738,13 +1738,13 @@ print("loaded")
         assert(said("t  on  in: sn/#chan  commands: /ptest"));
         // 5 errors in a row: unloaded; reload brings it back
         for (int i = 0; i < 5; i++) pc.exec(ph, "/ptest err");
-        assert(pc.plugins.empty() && said("[t] unloaded after 5 errors"));
+        assert(pc.plugins.empty() && said("unloaded after 5 errors"));
         pc.exec(ph, "/ptest x");  // no plugin has it now: off to the server, not to a dead plugin
         pc.exec(ph, "/plugin reload t");
         assert(pc.plugins.size() == 1 && last(ph) == "t reloaded");
         // a file that isn't Lua: not loaded, said so
         pc.exec(ph, "/plugin enable bad");
-        assert(said("[bad] not loaded:") && pc.plugins.size() == 1);
+        assert(said("not loaded:") && pc.plugins.size() == 1);
         // /set and the settings window leave [plugin.*] to /plugin
         for (auto& st : pc.settings()) assert(st.key.rfind("plugin.", 0) != 0);
         for (auto& r : pc.setting_rows()) assert(r.sec.rfind("plugin.", 0) != 0);
@@ -1806,7 +1806,7 @@ print("loaded")
         assert(old_away_keys(pc));
         pc.exec(ph, "/plugin install autoaway");
         wait_catalog();
-        assert(said("autoaway: moved 6 auto-away settings") && said("autoaway 1.0 installed and on") && !old_away_keys(pc));
+        assert(said("autoaway: moved 6 auto-away settings") && said("autoaway 1.1 installed and on") && !old_away_keys(pc));
         {
             Ini back2;
             assert(ini_load(pc.cfg_path, back2));
@@ -1858,12 +1858,12 @@ print("loaded")
             auto info = pc.plugin_info();
             const PluginInfo* aw = nullptr;
             for (auto& pi : info) if (pi.name == "autoaway") aw = &pi;
-            assert(aw && aw->state == "on" && aw->version == "1.0" && aw->local == "1.0" && !aw->update && !aw->edited && !aw->desc.empty());
+            assert(aw && aw->state == "on" && aw->version == "1.1" && aw->local == "1.1" && !aw->update && !aw->edited && !aw->desc.empty());
             assert(std::find(aw->on_in.begin(), aw->on_in.end(), "") != aw->on_in.end() && std::find(aw->on_in.begin(), aw->on_in.end(), "sn") != aw->on_in.end());
-            assert(aw->sets.size() == 4 && aw->sets[0].key == "idle" && aw->sets[0].scope == 'n' && aw->sets[3].key == "announce_back" && aw->sets[3].flag);
+            assert(aw->sets.size() == 4 && aw->sets[0].help.find("minutes") == 0 && aw->sets[0].key == "idle" && aw->sets[0].scope == 'n' && aw->sets[3].key == "announce_back" && aw->sets[3].flag);
             auto cat = pc.catalog_rows();
             assert(cat.size() >= 3 && cat[0].name == "autoaway" && cat[0].installed && !cat[0].update && !cat[0].edited && !cat[0].too_new);
-            assert(!cat[1].installed && cat[1].version == "1.0");
+            assert(!cat[1].installed && cat[1].version == "1.1");
             auto sc = pc.plugin_scopes();
             assert(sc.front().empty() && std::find(sc.begin(), sc.end(), "sn") != sc.end() && std::find(sc.begin(), sc.end(), "sn/#chan") != sc.end());
             pc.cfg["plugin.autoaway@sn/#chan"]["message"] = "chan msg";
@@ -1896,7 +1896,7 @@ print("loaded")
             assert(!p2.catalog && h2->lines.back().text.find("try again in a minute") != std::string::npos);
             p2.exec(h2, "/plugin available");  // from the cache
             bool listed = false;
-            for (auto& l : h2->lines) listed |= l.text.find("autoaway\x02 1.0") != std::string::npos && l.text.find("[installed]") != std::string::npos;
+            for (auto& l : h2->lines) listed |= l.text.find("autoaway\x02 1.1") != std::string::npos && l.text.find("[installed]") != std::string::npos;
             assert(listed && !p2.catalog);
         }
         // versions: edited here (same version, other contents) is not an update, and only a named update restores it
@@ -1907,13 +1907,13 @@ print("loaded")
             sleep(1);  // a new mtime for the sha cache
             { std::ofstream f(ap, std::ios::app); f << "\n"; }
             auto ri = pc.catalog_rows();  // sorted: autoaway first
-            assert(ri[0].name == "autoaway" && ri[0].edited && !ri[0].update && ri[0].local == "1.0");
+            assert(ri[0].name == "autoaway" && ri[0].edited && !ri[0].update && ri[0].local == "1.1");
             pc.exec(ph, "/plugin update");
             wait_catalog();
             assert(said("Your plugins are up to date with the catalog"));
             pc.exec(ph, "/plugin update autoaway");
             wait_catalog();
-            assert(said("autoaway 1.0 restored"));
+            assert(said("autoaway 1.1 restored"));
             std::ifstream f(ap); std::stringstream ss; ss << f.rdbuf();
             assert(ss.str() == orig);
         }
@@ -1944,7 +1944,7 @@ print("loaded")
         // awaylog: highlights and PMs while detached, one summary (INFO badge) in the tab you're on once you're back
         pc.exec(ph, "/plugin install awaylog");
         wait_catalog();
-        assert(said("awaylog 1.0 installed and on"));
+        assert(said("awaylog 1.1 installed and on"));
         pc.select(pchan);
         assert(irc_parse(":srv 305 me :back", pm)), pc.handle(ps, pm);  // the /away lunch above: back first
         pc.set_attached(false), pc.detached_at = 0;
@@ -1960,7 +1960,8 @@ print("loaded")
         {
             std::vector<std::string> got;
             for (size_t i = before_back; i < pchan->lines.size(); i++) got.push_back(pchan->lines[i].text);
-            assert(got.size() == 4 && pchan->lines[before_back].note);
+            assert(got.size() == 4 && pchan->lines[before_back].badge == "awaylog" && pchan->lines[before_back].badge_kind == 'i');
+            assert(pchan->lines[before_back + 1].badge == "awaylog" && pchan->lines[before_back + 1].badge_kind == 'p');
             assert(got[0].rfind("While you were away (", 0) == 0 && got[0].find("): 1 mention in #chan, 2 PMs from carol") != std::string::npos);
             assert(got[1].find("#chan <bob> me: are you there?") != std::string::npos && got[2].find("<carol> psst") != std::string::npos);
             assert(got[3].find("* carol waves") != std::string::npos);
@@ -1975,7 +1976,7 @@ print("loaded")
         // seen: what a nick did last; !seen answered where reply is on, once per 10s, telling only when for elsewhere
         pc.exec(ph, "/plugin install seen");
         wait_catalog();
-        assert(said("seen 1.0 installed and on"));
+        assert(said("seen 1.1 installed and on"));
         auto seen_q = [&](const std::string& who) { pc.exec(pchan, "/seen " + who); return pchan->lines.back().text; };
         assert(irc_parse(":dave!u@host JOIN #chan", pm)), pc.handle(ps, pm);
         assert(seen_q("dave") == "dave is here now, in #chan");

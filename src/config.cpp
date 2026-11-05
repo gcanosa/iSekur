@@ -331,6 +331,14 @@ Style note_style(const Theme& t) {
     return {(1.05 / (l + .05) >= (l + .05) / .05) ? 0xffffff : 0x000000, bg, A_BOLD};
 }
 
+Style plugin_style(const Theme& t) {
+    if (t.el.count("plugin")) return t.get("plugin");
+    Style a = t.get("tab_active"), d = t.get("default");
+    RGB bg = a.bg >= 0 && a.bg != d.bg ? a.bg : a.fg >= 0 ? a.fg : 0x5f87ff;
+    double l = rel_lum(bg);
+    return {(1.05 / (l + .05) >= (l + .05) / .05) ? 0xffffff : 0x000000, bg, A_BOLD};
+}
+
 Style Theme::get(const std::string& k) const {
     auto it = el.find(k);
     if (it != el.end()) return it->second;

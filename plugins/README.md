@@ -11,7 +11,7 @@ catalog (a newer version) from a file you edited yourself (same version, other c
 ```lua
 -- version: 1.0
 -- hello.lua: /hello [nick], and a wave back at anyone who says "hi isekur"
-isekur.setting("greeting", "Hello", "c")  -- per channel, network or global; "Hello" by default
+isekur.setting("greeting", "Hello", "c", "what /hello says first")  -- per channel, network or global
 
 isekur.command("hello", "[nick]", function(args, srv, target)
   if not srv then return "Use /hello in a channel" end  -- a returned string is shown as an error
@@ -32,7 +32,9 @@ Only Lua's base library (without `load`, `loadfile`, `dofile`), `string`, `table
 No `io`, `os`, `package`, `require` or `debug`. A call that runs too long (about 10 million Lua
 instructions) is stopped with an error, and a plugin gets 32 MB of memory. Errors show in the main
 window as `[name] error: ...`; after 5 in a row the plugin is unloaded until `/plugin reload`.
-`print(...)` writes `[name] ...` to the main window.
+`print(...)` writes to the main window. Everything a plugin prints carries a badge with its name
+(and `/plugin`'s own messages a `plugin` one), in the theme's `plugin` colors, so a line always
+says where it came from.
 
 ## Settings
 
@@ -52,7 +54,8 @@ greeting = Welcome
 `enabled` works the same way: a plugin is loaded when any of its sections has `enabled = on`, and its
 events only come from the networks and channels where `enabled` resolves to on.
 
-- `isekur.setting(key, default, scope)`: declare an option. `scope` is `"g"` (global only), `"n"`
+- `isekur.setting(key, default, scope, help)`: declare an option. `help` is a short line the plugin
+  windows show next to it: what it is and its unit ("minutes without typing; 0: never"). `scope` is `"g"` (global only), `"n"`
   (up to the network) or `"c"` (up to the channel, the default). The default's type is what
   `opt` returns: a boolean (`on`/`true`/`yes`/`1` are true), a number or a string.
 - `isekur.opt(key, srv, target)`: the option's value there; `srv`/`target` may be nil. `enabled` is

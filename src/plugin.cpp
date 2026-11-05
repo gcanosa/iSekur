@@ -27,7 +27,7 @@ struct Plugin {
     std::map<std::string, std::vector<int>> on;  // event -> handler refs
     struct Cmd { int fn; std::string usage; };
     std::map<std::string, Cmd> cmds;
-    struct Opt { std::string def; int type; char scope; };  // type: the default's Lua type, so opt() gives that type back
+    struct Opt { std::string def; int type; char scope; std::string help; };  // type: the default's Lua type, so opt() gives that type back
     std::map<std::string, Opt> opts;
     std::vector<std::string> order;  // opts in the order they were declared
     std::map<std::string, std::string> store;
@@ -61,11 +61,11 @@ static void hook(lua_State* L, lua_Debug*) {
 }
 
 static void say_err(Plugin* p, const std::string& what) {
-    p->c->print(nullptr, LK::ERROR, "[" + p->name + "] " + what);
+    p->c->plug_print(nullptr, LK::ERROR, what, p->name);
     if (++p->errors >= MAX_ERRORS && !p->dead) {
         p->dead = true;
-        p->c->print(nullptr, LK::ERROR, "[" + p->name + "] unloaded after " + std::to_string(MAX_ERRORS) +
-                                            " errors in a row: /plugin reload " + p->name + " once it's fixed");
+        p->c->plug_print(nullptr, LK::ERROR, "unloaded after " + std::to_string(MAX_ERRORS) +
+                                            " errors in a row: /plugin reload " + p->name + " once it's fixed", p->name);
     }
 }
 
@@ -130,22 +130,22 @@ static int l_command(lua_State* L) {
     p->cmds[name] = {luaL_ref(L, LUA_REGISTRYINDEX), usage};
     return 0;
 }
-static int l_setting(lua_State* L) {  // setting(key, default, scope "g"|"n"|"c")
+static int l_setting(lua_State* L) {  // setting(key, default, scope "g"|"n"|"c", help: what it is, its unit)
     std::string key = str_arg(L, 1), sc = luaL_optstring(L, 3, "c");
     int t = lua_type(L, 2);
     std::string def = t == LUA_TBOOLEAN ? (lua_toboolean(L, 2) ? "on" : "off") : t == LUA_TNIL ? "" : str_arg(L, 2);
     if (sc != "g" && sc != "n" && sc != "c") luaL_error(L, "scope is g, n or c");
     Plugin* p = self(L);
     if (!p->opts.count(key)) p->order.push_back(key);
-    p->opts[key] = {def, t, sc[0]};
+    p->opts[key] = {def, t, sc[0], one_line(opt_str(L, 4)).substr(0, 120)};
     return 0;
 }
 static int l_opt(lua_State* L) {  // opt(key, srv, target): channel, network, global, the default
     Plugin* p = self(L);
     std::string key = str_arg(L, 1);
     auto d = p->opts.find(key);
-    Plugin::Opt o = d != p->opts.end() ? d->second : Plugin::Opt{"", LUA_TSTRING, 'c'};
-    if (key == "enabled") o = {"off", LUA_TBOOLEAN, 'c'};  // iSekur's own: on there or not
+    Plugin::Opt o = d != p->opts.end() ? d->second : Plugin::Opt{"", LUA_TSTRING, 'c', ""};
+    if (key == "enabled") o = {"off", LUA_TBOOLEAN, 'c', ""};  // iSekur's own: on there or not
     std::string v = p->c->plugin_opt(p->name, key, srv_arg(L, 2), opt_str(L, 3), o.def, o.scope);
     if (o.type == LUA_TBOOLEAN) lua_pushboolean(L, truthy(v));
     else if (o.type == LUA_TNUMBER) lua_pushnumber(L, atof(v.c_str()));
@@ -166,8 +166,7 @@ static int l_say(lua_State* L) {
 static int l_send(lua_State* L) { live_srv(L, 1)->send(one_line(str_arg(L, 2))); return 0; }
 static int l_print(lua_State* L) {  // print(srv, target, text, note): note true adds the INFO badge
     Buffer* b = tab(L, 1, 2);
-    if (lua_toboolean(L, 4)) self(L)->c->info_note(b, str_arg(L, 3));
-    else self(L)->c->print(b, LK::INFO, str_arg(L, 3));
+    self(L)->c->plug_print(b, LK::INFO, str_arg(L, 3), self(L)->name, lua_toboolean(L, 4) ? 'i' : 'p');
     return 0;
 }
 static int l_exec(lua_State* L) {  // exec(srv, target, "/command ...") as if typed in that tab
@@ -175,10 +174,10 @@ static int l_exec(lua_State* L) {  // exec(srv, target, "/command ...") as if ty
     if (b) self(L)->c->exec(b, one_line(str_arg(L, 3)));
     return 0;
 }
-static int l_lua_print(lua_State* L) {  // print(...): the main window, [name] first
-    std::string out = "[" + self(L)->name + "]";
-    for (int i = 1; i <= lua_gettop(L); i++) out += " " + std::string(luaL_tolstring(L, i, nullptr)), lua_pop(L, 1);
-    self(L)->c->print(nullptr, LK::INFO, out);
+static int l_lua_print(lua_State* L) {  // print(...): the main window, with the plugin's badge
+    std::string out;
+    for (int i = 1; i <= lua_gettop(L); i++) out += (i > 1 ? " " : "") + std::string(luaL_tolstring(L, i, nullptr)), lua_pop(L, 1);
+    self(L)->c->plug_print(nullptr, LK::INFO, out, self(L)->name);
     return 0;
 }
 
@@ -396,7 +395,7 @@ static void reap(Core& c) {
 static void load_one(Core& c, const std::string& name) {
     std::string err;
     if (auto p = load(c, name, err)) c.plugins.push_back(p);
-    else if (err != "didn't load") c.print(nullptr, LK::ERROR, "[" + name + "] not loaded: " + err);
+    else if (err != "didn't load") c.plug_print(nullptr, LK::ERROR, "not loaded: " + err, name);
 }
 
 void Core::plugins_sync() {
@@ -449,7 +448,7 @@ bool Core::plugin_run(Buffer* b, const std::string& cmd, const std::string& args
         else lua_pushnil(L);
         lua_pushstring(L, b->name.c_str());
         if (call(p.get(), 3, 1)) {
-            if (lua_isstring(L, -1)) print(b, LK::ERROR, lua_tostring(L, -1));  // a returned string: an error to show (usage...)
+            if (lua_isstring(L, -1)) plug_print(b, LK::ERROR, lua_tostring(L, -1));  // a returned string: an error to show (usage...)
             lua_pop(L, 1);
         }
         reap(*this);
@@ -550,11 +549,11 @@ struct CatalogJob {
 };
 
 static void catalog_start(Core& c, Buffer* b, const std::string& sub, std::vector<std::string> want) {
-    if (c.catalog) { if (sub != "refresh") c.print(b, LK::ERROR, "Still fetching the plugin catalog: try again in a moment"); return; }
+    if (c.catalog) { if (sub != "refresh") c.plug_print(b, LK::ERROR, "Still fetching the plugin catalog: try again in a moment"); return; }
     auto j = std::make_shared<CatalogJob>();
     j->sub = sub, j->base = catalog_base(), j->want = std::move(want), j->buf = b->id;
     c.catalog = j;
-    if (sub != "refresh") c.print(b, LK::INFO, "Fetching the plugin catalog from " + j->base + "...");
+    if (sub != "refresh") c.plug_print(b, LK::INFO, "Fetching the plugin catalog from " + j->base + "...");
     std::thread([j] {
         if (fetch(j->base, "index.json", j->index)) {
             for (auto& n : j->want) {
@@ -652,10 +651,10 @@ static void migrate_autoaway(Core& c, Buffer* b) {
     std::set<std::string> old;
     for (auto& [k, nk] : AWAY_KEYS) old.insert(k);
     if (!c.cfg_path.empty() && ((!moved.empty() && !ini_save(c.cfg_path, moved, err)) || !ini_drop_keys_file(c.cfg_path, old, err))) {
-        c.print(b, LK::ERROR, "autoaway: " + err);
+        c.plug_print(b, LK::ERROR, "autoaway: " + err);
         return;
     }
-    if (n) c.print(b, LK::INFO, "autoaway: moved " + std::to_string(n) + " auto-away setting" + (n > 1 ? "s" : "") +
+    if (n) c.plug_print(b, LK::INFO, "autoaway: moved " + std::to_string(n) + " auto-away setting" + (n > 1 ? "s" : "") +
                                     " into [plugin.autoaway] sections; the old keys are gone from the config");
 }
 
@@ -666,12 +665,12 @@ static void list_available(Core& c, Buffer* b) {
         if (r.too_new) { newer++; continue; }
         std::string st = !r.installed ? "" : r.update ? "  [update: " + (r.local.empty() ? "?" : r.local) + " → " + r.version + ", /plugin update " + r.name + "]"
                                        : r.edited ? "  [installed, edited here: /plugin update " + r.name + " restores it]" : "  [installed]";
-        c.print(b, LK::INFO, "\x02" + r.name + "\x02 " + r.version + "  " + r.desc + st);
+        c.plug_print(b, LK::INFO, "\x02" + r.name + "\x02 " + r.version + "  " + r.desc + st);
         shown++;
     }
-    if (!shown) c.print(b, LK::INFO, "The catalog has no plugins for this iSekur yet");
-    else c.print(b, LK::INFO, "/plugin install name installs one · catalog from " + fmt_dur(time(nullptr) - c.catalog_at) + " ago, /plugin refresh fetches it again");
-    if (newer) c.print(b, LK::INFO, std::to_string(newer) + " more need a newer iSekur");
+    if (!shown) c.plug_print(b, LK::INFO, "The catalog has no plugins for this iSekur yet");
+    else c.plug_print(b, LK::INFO, "/plugin install name installs one · catalog from " + fmt_dur(time(nullptr) - c.catalog_at) + " ago, /plugin refresh fetches it again");
+    if (newer) c.plug_print(b, LK::INFO, std::to_string(newer) + " more need a newer iSekur");
 }
 
 void Core::plugins_poll() {
@@ -685,10 +684,10 @@ void Core::plugins_poll() {
     for (auto& x : bufs) if (x->id == j->buf) b = x.get();
     bool quiet = j->sub == "refresh";
     dirty = true;
-    if (j->err.size()) { catalog_err = j->err; if (!quiet) print(b, LK::ERROR, "Plugin catalog: " + j->err); return; }
+    if (j->err.size()) { catalog_err = j->err; if (!quiet) plug_print(b, LK::ERROR, "Plugin catalog: " + j->err); return; }
     bool ok;
     auto idx = plugin_index(j->index, &ok);
-    if (!ok) { catalog_err = "index.json isn't valid"; if (!quiet) print(b, LK::ERROR, "Plugin catalog: index.json isn't valid"); return; }
+    if (!ok) { catalog_err = "index.json isn't valid"; if (!quiet) plug_print(b, LK::ERROR, "Plugin catalog: index.json isn't valid"); return; }
     catalog_cache = idx, catalog_have = true, catalog_err.clear(), catalog_at = time(nullptr);
     if (!cfg_path.empty()) {  // kept for the next start and the windows: no fetch while it's fresh
         std::string path = catalog_file(*this), tmp = path + ".tmp";
@@ -701,7 +700,7 @@ void Core::plugins_poll() {
     }
     if (quiet) return;
     if (j->sub == "fetch") {
-        print(b, LK::INFO, "Catalog fetched: " + std::to_string(catalog_rows().size()) + " plugin" + (catalog_rows().size() == 1 ? "" : "s") + " (/plugin available)");
+        plug_print(b, LK::INFO, "Catalog fetched: " + std::to_string(catalog_rows().size()) + " plugin" + (catalog_rows().size() == 1 ? "" : "s") + " (/plugin available)");
         return;
     }
     std::map<std::string, std::map<std::string, std::string>> by;
@@ -714,9 +713,9 @@ void Core::plugins_poll() {
     int done = 0;
     for (auto& n : j->want) {
         auto e = by.find(n);
-        if (e == by.end()) { if (j->sub == "install") print(b, LK::ERROR, "No plugin named " + n + " in the catalog (/plugin available)"); continue; }
+        if (e == by.end()) { if (j->sub == "install") plug_print(b, LK::ERROR, "No plugin named " + n + " in the catalog (/plugin available)"); continue; }
         auto& en = e->second;
-        if (atoi(en["api"].c_str()) > PLUGIN_API) { print(b, LK::ERROR, n + " " + en["version"] + " needs a newer iSekur"); continue; }
+        if (atoi(en["api"].c_str()) > PLUGIN_API) { plug_print(b, LK::ERROR, n + " " + en["version"] + " needs a newer iSekur"); continue; }
         std::string lv = have(n) ? plugin_version(read_all(plugin_dir() + "/" + n + ".lua")) : "";
         if (j->sub == "update" && have(n)) {
             bool same = local_sha(n) == en["sha256"];
@@ -724,10 +723,10 @@ void Core::plugins_poll() {
             if (j->all && !newer_in_catalog(en["version"], lv, same)) continue;  // edited here, same version: only by name
         }
         auto f = j->files.find(n);
-        if (f == j->files.end()) { print(b, LK::ERROR, n + ": " + (j->errs.count(n) ? j->errs[n] : "not fetched")); continue; }
-        if (sha256_of(f->second) != en["sha256"]) { print(b, LK::ERROR, n + ": refused, its checksum doesn't match the catalog's"); continue; }
+        if (f == j->files.end()) { plug_print(b, LK::ERROR, n + ": " + (j->errs.count(n) ? j->errs[n] : "not fetched")); continue; }
+        if (sha256_of(f->second) != en["sha256"]) { plug_print(b, LK::ERROR, n + ": refused, its checksum doesn't match the catalog's"); continue; }
         std::string err;
-        if (!write_plugin(*this, n, f->second, err)) { print(b, LK::ERROR, n + ": " + err); continue; }
+        if (!write_plugin(*this, n, f->second, err)) { plug_print(b, LK::ERROR, n + ": " + err); continue; }
         done++;
         plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; }), plugins.end());
         bool on = true;
@@ -737,15 +736,15 @@ void Core::plugins_poll() {
             std::string err2;
             if (on) {  // installed means on, unless the config already says otherwise
                 cfg["plugin." + n]["enabled"] = "on";
-                if (!cfg_path.empty() && !ini_save(cfg_path, Ini{{"plugin." + n, {{"enabled", "on"}}}}, err2)) print(b, LK::ERROR, err2);
+                if (!cfg_path.empty() && !ini_save(cfg_path, Ini{{"plugin." + n, {{"enabled", "on"}}}}, err2)) plug_print(b, LK::ERROR, err2);
             }
         }
         plugins_sync();
         bool loaded = std::any_of(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; });
-        print(b, LK::INFO, n + " " + en["version"] + (j->sub == "install" ? " installed" : lv.empty() || lv == en["version"] ? " restored" : " updated from " + lv) +
+        plug_print(b, LK::INFO, n + " " + en["version"] + (j->sub == "install" ? " installed" : lv.empty() || lv == en["version"] ? " restored" : " updated from " + lv) +
                                (loaded ? " and on" : wanted(*this, n) ? " (it didn't load, see above)" : ": off in the config, /plugin enable " + n));
     }
-    if (j->sub == "update" && !done) print(b, LK::INFO, j->all ? "Your plugins are up to date with the catalog" : "Already the catalog's version");
+    if (j->sub == "update" && !done) plug_print(b, LK::INFO, j->all ? "Your plugins are up to date with the catalog" : "Already the catalog's version");
 }
 
 static void remove_plugin(Core& c, Buffer* b, const std::string& name) {
@@ -757,9 +756,9 @@ static void remove_plugin(Core& c, Buffer* b, const std::string& name) {
         if (k == "plugin." + name || k.rfind("plugin." + name + "@", 0) == 0) secs.push_back(k);
     for (auto& k : secs) {
         c.cfg.erase(k), c.unsaved.erase(k);
-        if (!c.cfg_path.empty() && !ini_drop_section(c.cfg_path, k, err)) c.print(b, LK::ERROR, err);
+        if (!c.cfg_path.empty() && !ini_drop_section(c.cfg_path, k, err)) c.plug_print(b, LK::ERROR, err);
     }
-    c.print(b, LK::INFO, name + " removed, with its settings and saved data");
+    c.plug_print(b, LK::INFO, name + " removed, with its settings and saved data");
 }
 
 
@@ -780,7 +779,7 @@ void Core::plugin_refresh(Buffer* b, bool force) {
     time_t now = time(nullptr);
     if (!force && catalog_have && now - catalog_at < CATALOG_TTL) return;  // fresh enough
     if (now - catalog_tried < (force ? CATALOG_FORCE : CATALOG_RETRY)) {
-        if (force) print(b, LK::INFO, "The catalog was last asked for " + fmt_dur(now - catalog_tried) + " ago: try again in a minute");
+        if (force) plug_print(b, LK::INFO, "The catalog was last asked for " + fmt_dur(now - catalog_tried) + " ago: try again in a minute");
         return;
     }
     catalog_tried = now;
@@ -829,7 +828,7 @@ std::vector<PluginInfo> Core::plugin_info() const {
             for (auto& [cmd, i] : p->cmds) pi.cmds.push_back(cmd);
             for (auto& k : p->order) {
                 auto& o = p->opts.at(k);
-                pi.sets.push_back({k, o.def, o.scope, o.type == LUA_TBOOLEAN});
+                pi.sets.push_back({k, o.def, o.scope, o.type == LUA_TBOOLEAN, o.help});
             }
         }
         auto [sha, local] = file_info(plugin_dir() + "/" + n + ".lua");
@@ -864,7 +863,7 @@ std::vector<CatalogRow> Core::catalog_rows() const {
 
 // /plugin [list] | enable|disable name[@net[/#chan]] | set name[@net[/#chan]] key value | reload name
 void Core::plugin_cmd(Buffer* b, const std::string& args) {
-    if (plugin_depth) { print(b, LK::ERROR, "/plugin can't be run by a plugin"); return; }
+    if (plugin_depth) { plug_print(b, LK::ERROR, "/plugin can't be run by a plugin"); return; }
     auto argv = split(args, ' ');
     argv.erase(std::remove(argv.begin(), argv.end(), std::string()), argv.end());
     if (argv.empty() && tty && !from_web) { plugin_win = dirty = true; return; }  // the terminal's window (the webchat opens its own)
@@ -877,7 +876,7 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         return nullptr;
     };
     if (sub == "list") {
-        if (files.empty()) { print(b, LK::INFO, "No plugins in " + dir + ": /plugin available lists the catalog's"); return; }
+        if (files.empty()) { plug_print(b, LK::INFO, "No plugins in " + dir + ": /plugin available lists the catalog's"); return; }
         for (auto& n : files) {
             std::string scopes;
             for (auto& [k, kv] : cfg)
@@ -885,7 +884,7 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
             Plugin* p = loaded(n);
             std::string cmds;
             if (p) for (auto& [c, i] : p->cmds) cmds += " /" + c;
-            print(b, LK::INFO, n + "  " + (p ? "on" : wanted(*this, n) ? "failed (see above, /plugin reload " + n + ")" : "off") +
+            plug_print(b, LK::INFO, n + "  " + (p ? "on" : wanted(*this, n) ? "failed (see above, /plugin reload " + n + ")" : "off") +
                                    (scopes.empty() ? "" : "  in:" + scopes) + (cmds.empty() ? "" : "  commands:" + cmds));
         }
         return;
@@ -894,7 +893,7 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         catalog_load();
         time_t now = time(nullptr);
         if (catalog_have && (now - catalog_at < CATALOG_TTL || now - catalog_tried < CATALOG_RETRY)) { list_available(*this, b); return; }
-        if (now - catalog_tried < CATALOG_RETRY) { print(b, LK::ERROR, "Plugin catalog: " + (catalog_err.empty() ? "fetched a moment ago" : catalog_err) + " (/plugin refresh tries again)"); return; }
+        if (now - catalog_tried < CATALOG_RETRY) { plug_print(b, LK::ERROR, "Plugin catalog: " + (catalog_err.empty() ? "fetched a moment ago" : catalog_err) + " (/plugin refresh tries again)"); return; }
         catalog_tried = now;
         catalog_start(*this, b, sub, {});
         return;
@@ -902,24 +901,24 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
     if (sub == "refresh") { plugin_refresh(b, true); return; }
     if (sub == "update") {  // update [name]: the installed ones whose file differs from the catalog's
         std::vector<std::string> want = argv.size() > 1 ? std::vector<std::string>{argv[1]} : files;
-        if (want.empty()) { print(b, LK::INFO, "No plugins installed: /plugin available"); return; }
+        if (want.empty()) { plug_print(b, LK::INFO, "No plugins installed: /plugin available"); return; }
         catalog_start(*this, b, sub, want);
         if (catalog && argv.size() == 1) catalog->all = true;
         return;
     }
     if (sub == "install") {
-        if (argv.size() != 2 || !plugin_name_ok(argv[1])) { print(b, LK::ERROR, "Usage: /plugin install name (/plugin available lists them)"); return; }
+        if (argv.size() != 2 || !plugin_name_ok(argv[1])) { plug_print(b, LK::ERROR, "Usage: /plugin install name (/plugin available lists them)"); return; }
         catalog_start(*this, b, sub, {argv[1]});
         return;
     }
     const char* usage = "Usage: /plugin [list] | available | refresh | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name";
-    if (argv.size() < 2) { print(b, LK::ERROR, usage); return; }
+    if (argv.size() < 2) { plug_print(b, LK::ERROR, usage); return; }
     // name@net or name@net/#chan: that scope; enable and disable also take it as a word after the name
     std::string name = argv[1].substr(0, argv[1].find('@'));
     std::string scope = argv[1].size() > name.size() ? argv[1].substr(name.size() + 1) : "";
     if (scope.empty() && argv.size() == 3 && (sub == "enable" || sub == "disable")) scope = argv[2];
     if (!plugin_name_ok(name) || std::find(files.begin(), files.end(), name) == files.end()) {
-        print(b, LK::ERROR, "No plugin named " + name + " in " + dir);
+        plug_print(b, LK::ERROR, "No plugin named " + name + " in " + dir);
         return;
     }
     // [plugin.name], [plugin.name@net] or [plugin.name@net/#chan] (the channel lowercased): written to the config at once
@@ -927,13 +926,13 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
     if (!scope.empty()) {
         size_t sl = scope.find('/');
         std::string net = scope.substr(0, sl);
-        if (!server_name_ok(net)) { print(b, LK::ERROR, "No network named " + net); return; }
+        if (!server_name_ok(net)) { plug_print(b, LK::ERROR, "No network named " + net); return; }
         sec += "@" + net;
         if (sl != std::string::npos) {
             Server* sv = nullptr;
             for (auto& s : servers) if (s->cfg.name == net) sv = s.get();
             std::string ch = scope.substr(sl + 1);
-            if (ch.empty()) { print(b, LK::ERROR, usage); return; }
+            if (ch.empty()) { plug_print(b, LK::ERROR, usage); return; }
             sec += "/" + (sv ? sv->lower(ch) : irc_lower(ch));
         }
     }
@@ -941,31 +940,31 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
     auto write = [&](const std::string& key, const std::string& val) {
         cfg[sec][key] = val;
         std::string err;
-        if (!cfg_path.empty() && !ini_save(cfg_path, Ini{{sec, {{key, val}}}}, err)) { print(b, LK::ERROR, err); return false; }
+        if (!cfg_path.empty() && !ini_save(cfg_path, Ini{{sec, {{key, val}}}}, err)) { plug_print(b, LK::ERROR, err); return false; }
         return true;
     };
     if (sub == "enable" || sub == "disable") {
         if (!write("enabled", sub == "enable" ? "on" : "off")) return;
         plugins_sync();
-        print(b, LK::INFO, name + (sub == "enable" ? " enabled" : " disabled") + where +
+        plug_print(b, LK::INFO, name + (sub == "enable" ? " enabled" : " disabled") + where +
                                (loaded(name) ? "" : wanted(*this, name) ? " (it didn't load, see above)" : ""));
         return;
     }
     if (sub == "set") {
-        if (argv.size() < 3) { print(b, LK::ERROR, usage); return; }
+        if (argv.size() < 3) { plug_print(b, LK::ERROR, usage); return; }
         std::string val = after_words(args, 3);
         if (!write(argv[2], val)) return;
         if (argv[2] == "enabled") plugins_sync();
-        print(b, LK::INFO, name + " " + argv[2] + " = " + (val.empty() ? "(default)" : val) + where);
+        plug_print(b, LK::INFO, name + " " + argv[2] + " = " + (val.empty() ? "(default)" : val) + where);
         return;
     }
     if (sub == "remove") { remove_plugin(*this, b, name); return; }
     if (sub == "reload") {
         plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == name; }), plugins.end());
-        if (!wanted(*this, name)) { print(b, LK::INFO, name + " is off: /plugin enable " + name); return; }
+        if (!wanted(*this, name)) { plug_print(b, LK::INFO, name + " is off: /plugin enable " + name); return; }
         load_one(*this, name);
-        if (loaded(name)) print(b, LK::INFO, name + " reloaded");
+        if (loaded(name)) plug_print(b, LK::INFO, name + " reloaded");
         return;
     }
-    print(b, LK::ERROR, "Unknown /plugin " + sub + ": list, available, refresh, install, update, remove, enable, disable, set, reload");
+    plug_print(b, LK::ERROR, "Unknown /plugin " + sub + ": list, available, refresh, install, update, remove, enable, disable, set, reload");
 }

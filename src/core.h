@@ -59,6 +59,7 @@ struct Theme {
 extern std::string theme_dir;  // [general] theme_dir: searched first for <name>.theme
 bool load_theme(const std::string& name, Theme& out, std::string& err);
 Style note_style(const Theme& t);  // the INFO badge on iSekur's own notices: [colors] note, else made from hilight
+Style plugin_style(const Theme& t);  // a plugin's badge: [colors] plugin, else made from tab_active
 std::vector<std::string> theme_names();  // installed themes, sorted
 std::vector<std::string> theme_dirs();   // where themes are looked for, in order
 extern bool mirc_colors;  // the theme's [layout] mirc_colors (off: mono, colour codes in text show as plain text)
@@ -95,7 +96,10 @@ struct Line {
     long long typed_at = 0;  // /typing: when it started typing itself out (ms), 0 = shown at once
     RGB color = -1;          // the nick's own color (Twitch "color" tag), -1 = theme's
     std::string msgid = {};  // IRCv3 msgid tag: what /reply, /react and REDACT point at
-    bool note = false;       // a notice from iSekur itself (an update, a hint): an INFO badge in the theme's note colors first
+    // a badge before the text, in its own theme colors: "INFO" on iSekur's notices (kind 'i'), a plugin's name on what it
+    // prints and "plugin" on /plugin's messages (kind 'p'); "" = none
+    std::string badge = {};
+    char badge_kind = 0;
 };
 // /typing: how many of a line's len visible characters show at now; ~30 a second, never over 2s a line
 inline size_t typed_chars(const Line& l, size_t len, long long now) {
@@ -219,7 +223,7 @@ std::string sha256_of(const std::string& s);  // hex
 std::vector<std::map<std::string, std::string>> plugin_index(const std::string& json, bool* ok = nullptr);
 bool old_away_keys(const Core& c);
 // what the plugin windows (terminal and webchat) show
-struct PluginSet { std::string key, def; char scope; bool flag; };  // a declared setting; flag: on/off
+struct PluginSet { std::string key, def; char scope; bool flag; std::string help = {}; };  // a declared setting; flag: on/off; help: its unit, what it does
 struct PluginInfo {
     std::string name, state, local, version, desc;  // state: on, off, failed; local: its "-- version:" line; version, desc: the catalog's
     bool update = false, edited = false;     // the catalog has a newer version; the same version, other contents (edited here)
@@ -453,6 +457,8 @@ struct Core {
     void add(Buffer* b, Line l);
     void print(Buffer* b, LK k, const std::string& text);
     void info_note(Buffer* b, const std::string& text);  // print with the INFO badge: things to act on, apart from the chatter
+    // print with a plugin's badge (its name, or "plugin" for /plugin itself); kind 'i': in the INFO colors (note = true)
+    void plug_print(Buffer* b, LK k, const std::string& text, const std::string& badge = "plugin", char kind = 'p');
     void rawlog(Buffer* b, const std::string& arg);  // /rawlog [on|off]: the server's *raw tab
     void notify(Ev e, Buffer* b, const Line* l = nullptr);
 

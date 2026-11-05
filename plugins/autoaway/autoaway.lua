@@ -1,10 +1,10 @@
--- version: 1.0
+-- version: 1.1
 -- autoaway: away when nobody is attached for 30s (--daemon with no browser open) or after
 -- `idle` minutes without typing; back when you return. A manual /away is left alone.
-isekur.setting("idle", 0, "n")                         -- minutes without typing, 0 = only when detached
-isekur.setting("message", "Not here right now", "n")
-isekur.setting("announce_away", false, "c")            -- "/me is away: <message>" in your channels (many dislike it)
-isekur.setting("announce_back", false, "c")            -- "/me is back" when you return
+isekur.setting("idle", 0, "n", "minutes without typing; 0: only when nothing is attached (after 30s)")
+isekur.setting("message", "Not here right now", "n", "the away message others see")
+isekur.setting("announce_away", false, "c", "say \"/me is away: <message>\" in this channel (many dislike it)")
+isekur.setting("announce_back", false, "c", "say \"/me is back\" in this channel when you return")
 
 local mine = {}  -- network -> true: we set that away
 

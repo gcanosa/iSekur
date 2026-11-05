@@ -1,9 +1,9 @@
--- version: 1.0
+-- version: 1.1
 -- seen: /seen nick says when and where a nick was last seen: talking, joining, leaving, quitting, renaming.
 -- It remembers what happens in the channels where it's on. With reply on in a channel
 -- (/plugin set seen@network/#channel reply on), !seen nick there gets an answer too.
-isekur.setting("reply", false, "c")   -- answer !seen nick in this channel
-isekur.setting("max", 5000, "g")      -- nicks remembered, all networks together; the oldest go first
+isekur.setting("reply", false, "c", "answer !seen nick in this channel (once every 10 seconds at most)")
+isekur.setting("max", 5000, "g", "nicks remembered, all networks together; the oldest go first")
 
 -- the store: "<network>\t<nick lowercased>" -> "<time>\t<nick>\t<channel or empty>\t<what they did>"
 local function key(srv, nick) return srv .. "\t" .. nick:lower() end

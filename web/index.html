@@ -235,6 +235,8 @@ dialog .btns .left { margin-right: auto; }
 #plugcfg .rows { display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 6px 14px; align-items: center; max-height: min(44vh, 400px); overflow-y: auto; font-size: 13px; }
 #plugcfg .rows > span { font-family: var(--mono, monospace); color: var(--fg); }
 #plugcfg .rows :is(input, select) { width: 100%; box-sizing: border-box; }
+#plugcfg .rows .ctl { display: grid; gap: 2px; }
+#plugcfg .rows .ctl small { color: var(--muted); font-size: 11.5px; }
 #plugcfg select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--fg); }  /* like the settings window's */
 #plugcfg .top select { min-width: 160px; }
 #plugmsg.err { color: var(--err, #e5534b); }
@@ -374,6 +376,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--event-fg, var(--info-fg, var(--info))); }
 .k-error .tx, .k-error .nk { color: var(--error-fg, var(--err)); }
 .l .badge { background: var(--note-bg, var(--hilight-bg, var(--hl-bg))); color: var(--note-fg, var(--hilight-fg, #fff)); font-weight: 700; padding: 0 6px; border-radius: 4px; }
+.l .badge.p { background: var(--plugin-bg, var(--accent)); color: var(--plugin-fg, #000); }
 .k-notice .nk { color: var(--notice-fg, var(--notice)); }
 .k-action .tx, .k-action .nk { color: var(--action-fg, var(--action)); font-style: italic; }
 .l .self { color: var(--msg_self-fg, var(--accent2)); }
@@ -734,7 +737,7 @@ function lineEl(b, l) {
   if (l.n && !l.s && b.type !== "status" && (l.k === "msg" || l.k === "notice")) nk.classList.add("who"), nk.dataset.nick = l.n;
   (tx.mark_ = () => markNicks(tx, b, l))();
   d.oncontextmenu = e => { const w = e.target.closest(".who"); if (w) askMenu(e, w.dataset.nick, b.id); };  // b.id: a /split pane's own tab
-  if (l.no) { const bg = el("span", "badge", "INFO"); tx.prepend(bg, " "); }  // iSekur's own notices, in the theme's note colors
+  if (l.bd) tx.prepend(el("span", "badge " + (l.bk || "p"), l.bd), " ");  // iSekur's notices (INFO), a plugin's lines (its name)
   d.append(ts, nk, tx);
   return d;
 }
@@ -1794,7 +1797,7 @@ function renderPlugCfg() {
   sel.onchange = () => { plugScope = sel.value; renderPlugins(); };
   top.append(el("span", "", "Scope"), sel);
   const lvl = !plugScope ? 0 : plugScope.includes("/") ? 2 : 1, at = plugCfg + (plugScope ? "@" + plugScope : "");
-  const rows = [{key: "enabled", def: "off", scope: "c", flag: 1}, ...p.sets.filter(s => !lvl || (lvl === 1 && s.scope !== "g") || (lvl === 2 && s.scope === "c"))];
+  const rows = [{key: "enabled", def: "off", scope: "c", flag: 1, help: "on or off here"}, ...p.sets.filter(s => !lvl || (lvl === 1 && s.scope !== "g") || (lvl === 2 && s.scope === "c"))];
   const R = el("div", "rows");
   for (const s of rows) {
     const own = (p.cfg[plugScope] || {})[s.key] || "", inh = plugInh(p, s.key, plugScope, s.def, s.scope);
@@ -1811,7 +1814,9 @@ function renderPlugCfg() {
       ctl.onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); ctl.blur(); } };
     }
     ctl.setAttribute("aria-label", s.key);
-    R.append(el("span", "", s.key), ctl);
+    const lab = el("span", "", s.key);
+    if (s.help) { lab.title = s.help; const w = el("div", "ctl"); w.append(ctl, el("small", "", s.help)); ctl = w; }  // its unit, what it does
+    R.append(lab, ctl);
   }
   C.append(top, R);
 }
