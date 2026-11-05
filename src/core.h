@@ -260,6 +260,7 @@ struct Server {
     std::map<std::string, Multi> multi;    // draft/multiline batches being received
     std::function<void(const char*, const std::string&)> raw_hook;  // /rawlog: every line in or out, set while its *raw tab is open
     std::set<std::string> who_auto;        // channels whose WHO we asked for on join: the replies aren't shown
+    std::set<std::string> mode_auto;       // channels whose MODE we asked for on join: their 324 isn't printed
     std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
     time_t ison_at = 0;
     bool motd_done = false;                // the first 376/422 of this connection: /notify starts

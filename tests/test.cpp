@@ -374,6 +374,24 @@ int main() {
         assert(ts->umodes == "iwzT");
         feed(":me!u@h MODE me :+x\x02-w");
         assert(ts->umodes == "izTx");
+        assert(ts->status->lines.back().text == "Your user mode is [+iwzT]");  // 221 at connect: status
+    }
+    {  // 324/329: our join's MODE fills the title quietly, a typed /mode prints; +k/+l track live
+        feed(":me!u@h JOIN #mt");
+        Buffer* mb = core.find(ts, "#mt");
+        assert(mb && sent().find("MODE #mt\r\n") != std::string::npos);
+        size_t n = mb->lines.size();
+        feed(":srv 324 me #mt +ntk sec");
+        assert(mb->modes == "ntk" && mb->lines.size() == n);
+        feed(":srv 329 me #mt 1700000000");
+        assert(mb->lines.back().text.rfind("Channel #mt created 2023-11-", 0) == 0);
+        feed(":srv 324 me #mt +ntk sec");  // the same reply to a typed /mode is shown
+        assert(mb->lines.back().text == "Channel #mt modes: [+ntk sec]");
+        feed(":op!u@h MODE #mt +lb 5 x!*@*");
+        assert(mb->modes == "ntkl");
+        feed(":op!u@h MODE #mt -lk sec");
+        assert(mb->modes == "nt");
+        core.close(mb);
         ts->umodes.clear();
         core.exec(ts->status, "/nick");  // alone: says which
         assert(ts->status->lines.back().text == "Your nickname is me");
