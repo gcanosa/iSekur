@@ -219,12 +219,13 @@ bool old_away_keys(const Core& c);
 // what the plugin windows (terminal and webchat) show
 struct PluginSet { std::string key, def; char scope; bool flag; };  // a declared setting; flag: on/off
 struct PluginInfo {
-    std::string name, state, version, desc;  // state: on, off, failed; version, desc: the catalog's, when it's been fetched
-    bool differs = false;                    // the file isn't the catalog's version
+    std::string name, state, local, version, desc;  // state: on, off, failed; local: its "-- version:" line; version, desc: the catalog's
+    bool update = false, edited = false;     // the catalog has a newer version; the same version, other contents (edited here)
     std::vector<std::string> on_in, cmds;    // the scopes where enabled = on ("" everywhere, "net", "net/#chan"); its /commands
     std::vector<PluginSet> sets;             // what it declared (while loaded), in order
 };
-struct CatalogRow { std::string name, version, desc; bool installed, differs, too_new; };
+struct CatalogRow { std::string name, version, local, desc; bool installed, update, edited, too_new; };  // local: the installed version
+std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
 #define PLUGIN_API 1  // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
@@ -524,7 +525,11 @@ struct Core {
     std::vector<std::map<std::string, std::string>> catalog_cache;  // its index
     bool catalog_have = false;  // fetched at least once
     std::string catalog_err;    // the last fetch's error, "" if it worked
-    void plugin_refresh(Buffer* b);  // fetch the catalog quietly, for the windows
+    // the windows' catalog: from <plugins>/.catalog.json while it's under 12h old; force (r, /plugin refresh): fetch now,
+    // at most once a minute. Not forced: quiet, and after a failed fetch not again for 10 minutes
+    void plugin_refresh(Buffer* b, bool force = false);
+    time_t catalog_at = 0, catalog_tried = 0;  // when the cached index was fetched; the last fetch started (index only)
+    void catalog_load();  // .catalog.json into catalog_cache, once
     std::vector<std::string> plugin_scopes() const;  // "", every network, every joined channel ("net/#chan"), every scope in the config
     // a plugin's key in that scope: as set exactly there ("" = not), or with what it falls back to (channel, network, global, def)
     std::string plugin_at(const std::string& name, const std::string& key, const std::string& scope) const;

@@ -5,7 +5,11 @@ to your config (`~/.config/isekur/plugins/`). It runs once when it loads: there 
 settings, commands and event handlers. `/plugin enable <name>` loads it, `/plugin reload <name>`
 loads it again after you edit it.
 
+Put its version in a `-- version:` line near the top. iSekur reads it to tell an update in the
+catalog (a newer version) from a file you edited yourself (same version, other contents).
+
 ```lua
+-- version: 1.0
 -- hello.lua: /hello [nick], and a wave back at anyone who says "hi isekur"
 isekur.setting("greeting", "Hello", "c")  -- per channel, network or global; "Hello" by default
 
@@ -99,6 +103,9 @@ query nick) are set when the event has them.
  "sha256": "<shasum -a 256 plugins/hello/hello.lua>"}
 ```
 
-The sha256 must match the file byte for byte: iSekur refuses the install otherwise (`make test`
-checks it for autoaway). `api` is the `isekur.api` the plugin needs; older iSekurs hide it.
+The sha256 must match the file byte for byte: iSekur refuses the install otherwise. `version` must
+be the file's own `-- version:` line; raise both with every change, or nobody is offered the
+update (`make test` checks both for every entry). iSekur keeps the index it fetched in
+`.catalog.json` in the user's plugins folder and fetches it again after 12 hours (`/plugin refresh`
+sooner), so a new version can take that long to show up. `api` is the `isekur.api` the plugin needs; older iSekurs hide it.
 `ISEKUR_PLUGIN_URL=file:///path/to/plugins/ isekur` installs from a local folder for testing.

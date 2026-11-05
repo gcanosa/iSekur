@@ -708,13 +708,13 @@ void Web::ws_frames(Client& cl) {
                 return o + "]";
             };
             std::string o = "{\"t\":\"plugins\",\"fetching\":" + std::string(c.catalog ? "1" : "0") + ",\"have\":" + (c.catalog_have ? "1" : "0") +
-                            ",\"err\":" + json_str(c.catalog_err) + ",\"scopes\":" + arr(c.plugin_scopes()) + ",\"added\":" + std::to_string(b->added) +
+                            ",\"err\":" + json_str(c.catalog_err) + ",\"age\":" + std::to_string(c.catalog_have ? (long long)(time(nullptr) - c.catalog_at) : -1) + ",\"scopes\":" + arr(c.plugin_scopes()) + ",\"added\":" + std::to_string(b->added) +
                             ",\"last\":" + json_str(b->lines.empty() ? "" : mirc_strip(b->lines.back().text)) +
                             ",\"lasterr\":" + (!b->lines.empty() && b->lines.back().kind == LK::ERROR ? "1" : "0") + ",\"installed\":[";
             bool first = true;
             for (auto& pi : c.plugin_info()) {
                 o += std::string(first ? "" : ",") + "{\"name\":" + json_str(pi.name) + ",\"state\":" + json_str(pi.state) + ",\"version\":" + json_str(pi.version) +
-                     ",\"desc\":" + json_str(pi.desc) + ",\"differs\":" + (pi.differs ? "1" : "0") + ",\"on\":" + arr(pi.on_in) + ",\"cmds\":" + arr(pi.cmds) + ",\"sets\":[";
+                     ",\"local\":" + json_str(pi.local) + ",\"desc\":" + json_str(pi.desc) + ",\"update\":" + (pi.update ? "1" : "0") + ",\"edited\":" + (pi.edited ? "1" : "0") + ",\"on\":" + arr(pi.on_in) + ",\"cmds\":" + arr(pi.cmds) + ",\"sets\":[";
                 first = false;
                 for (size_t i = 0; i < pi.sets.size(); i++)
                     o += std::string(i ? "," : "") + "{\"key\":" + json_str(pi.sets[i].key) + ",\"def\":" + json_str(pi.sets[i].def) +
@@ -736,7 +736,7 @@ void Web::ws_frames(Client& cl) {
             first = true;
             for (auto& r : c.catalog_rows())
                 o += std::string(first ? "" : ",") + "{\"name\":" + json_str(r.name) + ",\"version\":" + json_str(r.version) + ",\"desc\":" + json_str(r.desc) +
-                     ",\"installed\":" + (r.installed ? "1" : "0") + ",\"differs\":" + (r.differs ? "1" : "0") + ",\"new\":" + (r.too_new ? "1" : "0") + "}",
+                     ",\"local\":" + json_str(r.local) + ",\"installed\":" + (r.installed ? "1" : "0") + ",\"update\":" + (r.update ? "1" : "0") + ",\"edited\":" + (r.edited ? "1" : "0") + ",\"new\":" + (r.too_new ? "1" : "0") + "}",
                 first = false;
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only

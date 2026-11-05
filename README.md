@@ -270,7 +270,9 @@ Plugins: Lua 5.4 files in `plugins/` next to the config (`~/.config/isekur/plugi
 each in its own sandbox (no files, programs or sockets of its own; a runaway loop is stopped and
 a plugin gets 32 MB at most). `/plugin available` lists the catalog (this repo's `plugins/`),
 `/plugin install name` fetches one, checks its sha256 against the catalog and turns it on,
-`/plugin update` and `/plugin remove name` the same way. Auto-away is a plugin now:
+`/plugin update` and `/plugin remove name` the same way. The catalog is kept on disk (`.catalog.json`
+in your plugins folder) and fetched again after 12 hours, or with `/plugin refresh`; an update is a
+newer version than the `-- version:` line of the file you have. Auto-away is a plugin now:
 `/plugin install autoaway` moves your old `auto_away`, `auto_away_idle`, `away_message` and
 `away_announce` settings into it and out of the config (`away_announce` becomes `announce_away` and
 `announce_back`, each on or off on its own). `/plugin` alone opens the plugin window in the terminal

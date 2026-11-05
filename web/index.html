@@ -1722,7 +1722,7 @@ function openPlugins() {
 }
 dplug.onclose = () => clearInterval(plugTimer);
 $("#plugbtn").onclick = openPlugins;
-$("#plugref").onclick = () => send({t: "plugref", buf: active});
+$("#plugref").onclick = () => plugRun("/plugin refresh");  // at most once a minute; it says so
 $("#plugback").onclick = () => { plugCfg = ""; renderPlugins(); };
 for (const b of $("#plugtabs").children) b.onclick = () => {
   plugTab = b.dataset.tab; renderPlugins();
@@ -1745,7 +1745,9 @@ function renderPlugins() {
   $("#plugback").hidden = !plugCfg; $("#plugref").hidden = !!plugCfg || plugTab !== "cat";
   if (!plug) { L.textContent = ""; L.append(el("div", "none", "Loading…")); return; }
   const said = plugMark >= 0 && plug.added > plugMark;
-  M.textContent = said ? plug.last : plug.fetching ? "Fetching the catalog…" : plugCfg ? "Empty: the value it inherits (shown greyed)." : "";
+  const ago = s => s < 90 ? s + "s" : s < 5400 ? Math.round(s / 60) + "m" : s < 172800 ? Math.round(s / 3600) + "h" : Math.round(s / 86400) + "d";
+  M.textContent = said ? plug.last : plug.fetching ? "Fetching the catalog…" : plugCfg ? "Empty: the value it inherits (shown greyed)."
+    : plugTab === "cat" && plug.age >= 0 ? "Catalog from " + ago(plug.age) + " ago" + (plug.err ? " (refresh failed: " + plug.err + ")" : "") : "";
   M.classList.toggle("err", said && !!plug.lasterr);
   if (plugCfg) return renderPlugCfg();
   L.textContent = "";
@@ -1758,10 +1760,10 @@ function renderPlugins() {
       const b = el("div", "b");
       b.append(btn(off ? "Turn on" : "Turn off", () => plugRun("/plugin " + (off ? "enable " : "disable ") + p.name)),
                btn("Configure", () => { plugCfg = p.name; plugScope = ""; plugMark = -1; renderPlugins(); }));
-      if (p.differs) b.append(btn("Update", () => plugRun("/plugin update " + p.name)));
+      if (p.update || p.edited) b.append(btn(p.update ? "Update" : "Restore", () => plugRun("/plugin update " + p.name)));
       b.append(btn("Reload", () => plugRun("/plugin reload " + p.name)),
                btn("Remove", async () => { if (await askBox({title: "Remove plugin", text: "Remove " + p.name + " with its settings and saved data?", ok: "Remove"}) !== null) plugRun("/plugin remove " + p.name); }));
-      r.append(n, el("div", "m", st + (p.version ? " · " + p.version : "") + (p.differs ? " · update" : "")), b);
+      r.append(n, el("div", "m", st + (p.local ? " · " + p.local : "") + (p.update ? " → " + p.version : p.edited ? " · edited" : "")), b);
       L.append(r);
     }
   } else {
@@ -1770,9 +1772,9 @@ function renderPlugins() {
       const r = el("div", "r"), n = el("div", "n", c.name), b = el("div", "b");
       n.append(el("small", "", c.desc));
       if (c.new) b.append(el("span", "m", "needs a newer iSekur"));
-      else if (c.differs) b.append(btn("Update", () => plugRun("/plugin update " + c.name)));
+      else if (c.update) b.append(btn("Update", () => plugRun("/plugin update " + c.name)));
       else if (!c.installed) b.append(btn("Install", () => plugRun("/plugin install " + c.name)));
-      r.append(n, el("div", "m", c.version + (c.installed ? " · installed" : "")), b);
+      r.append(n, el("div", "m", c.version + (c.update ? " · you have " + (c.local || "?") : c.edited ? " · installed, edited" : c.installed ? " · installed" : "")), b);
       L.append(r);
     }
   }

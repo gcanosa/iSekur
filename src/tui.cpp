@@ -1721,12 +1721,14 @@ void Tui::draw_plugins(int W, int H) {
             }
             std::string cmds;
             for (auto& x : pi.cmds) cmds += " /" + x;
-            rows.push_back({pi.name, st, pi.version + (pi.differs ? " (update)" : ""), pi.desc.empty() ? cmds : pi.desc});
+            std::string ver = (pi.local.empty() ? "" : pi.local) + (pi.update ? " → " + pi.version : pi.edited ? " edited" : "");
+            rows.push_back({pi.name, st, ver, pi.desc.empty() ? cmds : pi.desc});
         }
         if (info.empty()) empty = "None installed: Tab shows the catalog's";
     } else {
         for (auto& r : c.catalog_rows())
-            rows.push_back({r.name, r.version, r.too_new ? "needs a newer iSekur" : r.differs ? "update" : r.installed ? "installed" : "", r.desc});
+            rows.push_back({r.name, r.version, r.too_new ? "needs a newer iSekur" : r.update ? "update from " + (r.local.empty() ? "?" : r.local)
+                                               : r.edited ? "installed, edited" : r.installed ? "installed" : "", r.desc});
         if (rows.empty()) empty = c.catalog ? "Fetching the catalog..." : !c.catalog_err.empty() ? "Catalog: " + c.catalog_err + " (r: retry)"
                                                                         : c.catalog_have ? "The catalog is empty" : "r fetches the catalog";
     }
@@ -1781,6 +1783,8 @@ void Tui::draw_plugins(int W, int H) {
         auto& l = pw.mb->lines.back();
         text(pw.x0 + 2, y0 + bh - 3, x1 - 2, mirc_strip(l.text), l.kind == LK::ERROR ? es : dim, false);
     } else if (c.catalog) text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Fetching the catalog...", dim, false);
+    else if (pw.avail && c.catalog_have)
+        text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Catalog from " + fmt_dur(time(nullptr) - c.catalog_at) + " ago" + (c.catalog_err.empty() ? "" : " (refresh failed: " + c.catalog_err + ")"), dim, false);
     const char* hint = pw.editing ? "Enter set · empty: inherit or the default · Esc cancel"
                        : cp       ? "Enter edit · Space on/off · Del clear here · ←→ scope · Esc back"
                        : pw.avail ? "Enter or i install · r refresh · Tab installed · Esc close"
@@ -1850,7 +1854,7 @@ void Tui::plugin_key(int k, uint32_t ch) {
     else if (k == TB_KEY_PGUP) pw.sel = std::max(0, pw.sel - pw.rows);
     else if (pw.avail) {
         auto cat = c.catalog_rows();
-        if (ch == 'r') c.plugin_refresh(c.active);
+        if (ch == 'r') plug_run("/plugin refresh");
         else if ((k == TB_KEY_ENTER || ch == 'i') && pw.sel < n) plug_run("/plugin install " + cat[(size_t)pw.sel].name);
     } else if (pw.sel < n) {
         const PluginInfo& pi = info[(size_t)pw.sel];

@@ -1,5 +1,5 @@
 [
   {"name": "autoaway", "version": "1.0", "api": 1,
    "description": "Away when you're idle or nobody is attached, back when you return; on or off per network, away and back announced per channel if you like",
-   "sha256": "ad6d70f728ea2cbd2f19435aaa41f69c3b86489ea62d509598bc315aa1e7bc8f"}
+   "sha256": "adcd6fb8a95d7ffce5fc047adf47159b2c129ae934b9e0f1ac93038e3ac662b6"}
 ]

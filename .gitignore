@@ -16,3 +16,5 @@ logs/
 # local planning notes
 SCRIPTING.md
 plans/
+# the plugin catalog cache: per user, next to their config
+.catalog.json

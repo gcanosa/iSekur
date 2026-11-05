@@ -354,6 +354,7 @@ static void load_one(Core& c, const std::string& name) {
 void Core::plugins_sync() {
     if (plugin_depth || cfg_path.empty()) return;
     reap(*this);
+    catalog_load();
     auto files = plugin_files(plugin_dir());
     plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) {
                       return !wanted(*this, p->name) || std::find(files.begin(), files.end(), p->name) == files.end();
@@ -496,6 +497,7 @@ struct CatalogJob {
     std::vector<std::string> want;         // the plugin files to fetch with the index
     std::map<std::string, std::string> files, errs;
     int buf = 0;                           // the tab /plugin was typed in
+    bool all = false;                      // update with no name: only newer versions, edited files left alone
     std::atomic<bool> done{false};
 };
 
@@ -533,6 +535,43 @@ static bool write_plugin(Core& c, const std::string& name, const std::string& bo
     ok = fclose(f) == 0 && ok && rename(tmp.c_str(), path.c_str()) == 0;
     if (!ok) err = "can't write " + path, unlink(tmp.c_str());
     return ok;
+}
+
+// ponytail: one shared cache file per config; ETag/If-None-Match if a 12h fetch per user ever counts on GitHub's side
+static const time_t CATALOG_TTL = 12 * 3600, CATALOG_RETRY = 600, CATALOG_FORCE = 60;
+static std::string catalog_file(const Core& c) { return c.plugin_dir() + "/.catalog.json"; }
+
+// "-- version: 1.2" in the first 20 lines: what the windows compare with the catalog's
+std::string plugin_version(const std::string& lua) {
+    size_t at = 0;
+    for (int i = 0; i < 20 && at < lua.size(); i++) {
+        size_t nl = lua.find('\n', at);
+        std::string l = lua.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
+        at = nl == std::string::npos ? lua.size() : nl + 1;
+        size_t k = l.find("-- version:");
+        if (k != 0) continue;
+        std::string v = l.substr(11);
+        v.erase(0, v.find_first_not_of(" \t"));
+        v.erase(v.find_last_not_of(" \t\r") + 1);
+        return v;
+    }
+    return "";
+}
+
+// the installed file's sha256 and version, read again only when its size or time changed
+static std::pair<std::string, std::string> file_info(const std::string& path) {
+    static std::map<std::string, std::pair<std::string, std::pair<std::string, std::string>>> cache;
+    struct stat st;
+    if (stat(path.c_str(), &st) != 0) return {};
+    std::string key = std::to_string(st.st_size) + ":" + std::to_string((long long)st.st_mtime);
+    auto& e = cache[path];
+    if (e.first != key) { std::string t = read_all(path); e = {key, {sha256_of(t), plugin_version(t)}}; }
+    return e.second;
+}
+static std::string file_sha(const std::string& path) { return file_info(path).first; }
+// newer: the catalog's version is above the installed one (or the file says none and isn't the catalog's)
+static bool newer_in_catalog(const std::string& cat, const std::string& local, bool same) {
+    return local.empty() ? !same : version_newer(cat, local);
 }
 
 // auto-away was in core: its [general] and [server.X] keys become [plugin.autoaway] and
@@ -573,6 +612,21 @@ static void migrate_autoaway(Core& c, Buffer* b) {
                                     " into [plugin.autoaway] sections; the old keys are gone from the config");
 }
 
+// /plugin available: the cached catalog, what's installed marked
+static void list_available(Core& c, Buffer* b) {
+    int newer = 0, shown = 0;
+    for (auto& r : c.catalog_rows()) {
+        if (r.too_new) { newer++; continue; }
+        std::string st = !r.installed ? "" : r.update ? "  [update: " + (r.local.empty() ? "?" : r.local) + " → " + r.version + ", /plugin update " + r.name + "]"
+                                       : r.edited ? "  [installed, edited here: /plugin update " + r.name + " restores it]" : "  [installed]";
+        c.print(b, LK::INFO, "\x02" + r.name + "\x02 " + r.version + "  " + r.desc + st);
+        shown++;
+    }
+    if (!shown) c.print(b, LK::INFO, "The catalog has no plugins for this iSekur yet");
+    else c.print(b, LK::INFO, "/plugin install name installs one · catalog from " + fmt_dur(time(nullptr) - c.catalog_at) + " ago, /plugin refresh fetches it again");
+    if (newer) c.print(b, LK::INFO, std::to_string(newer) + " more need a newer iSekur");
+}
+
 void Core::plugins_poll() {
     if (!catalog || !catalog->done.load(std::memory_order_acquire)) return;
     auto j = catalog;
@@ -585,26 +639,27 @@ void Core::plugins_poll() {
     bool ok;
     auto idx = plugin_index(j->index, &ok);
     if (!ok) { catalog_err = "index.json isn't valid"; if (!quiet) print(b, LK::ERROR, "Plugin catalog: index.json isn't valid"); return; }
-    catalog_cache = idx, catalog_have = true, catalog_err.clear();
+    catalog_cache = idx, catalog_have = true, catalog_err.clear(), catalog_at = time(nullptr);
+    if (!cfg_path.empty()) {  // kept for the next start and the windows: no fetch while it's fresh
+        std::string path = catalog_file(*this), tmp = path + ".tmp";
+        mkdir_p(plugin_dir());
+        if (FILE* f = fopen(tmp.c_str(), "w")) {
+            bool okw = fwrite(j->index.data(), 1, j->index.size(), f) == j->index.size();
+            if (fclose(f) == 0 && okw) rename(tmp.c_str(), path.c_str());
+            else unlink(tmp.c_str());
+        }
+    }
     if (quiet) return;
+    if (j->sub == "fetch") {
+        print(b, LK::INFO, "Catalog fetched: " + std::to_string(catalog_rows().size()) + " plugin" + (catalog_rows().size() == 1 ? "" : "s") + " (/plugin available)");
+        return;
+    }
     std::map<std::string, std::map<std::string, std::string>> by;
     for (auto& e : idx) if (plugin_name_ok(e["name"])) by[e["name"]] = e;
     auto files = plugin_files(plugin_dir());
     auto have = [&](const std::string& n) { return std::find(files.begin(), files.end(), n) != files.end(); };
     auto local_sha = [&](const std::string& n) { return sha256_of(read_all(plugin_dir() + "/" + n + ".lua")); };
-    if (j->sub == "available") {
-        int newer = 0, shown = 0;
-        for (auto& [n, e] : by) {
-            if (atoi(e["api"].c_str()) > PLUGIN_API) { newer++; continue; }
-            std::string st = !have(n) ? "" : local_sha(n) == e["sha256"] ? "  [installed]" : "  [installed, differs: /plugin update " + n + "]";
-            print(b, LK::INFO, "\x02" + n + "\x02 " + e["version"] + "  " + e["description"] + st);
-            shown++;
-        }
-        if (!shown) print(b, LK::INFO, "The catalog has no plugins for this iSekur yet");
-        else print(b, LK::INFO, "/plugin install name installs one");
-        if (newer) print(b, LK::INFO, std::to_string(newer) + " more need a newer iSekur");
-        return;
-    }
+    if (j->sub == "available") { list_available(*this, b); return; }
     // install and update: checked against the index, written, (re)loaded
     int done = 0;
     for (auto& n : j->want) {
@@ -612,7 +667,12 @@ void Core::plugins_poll() {
         if (e == by.end()) { if (j->sub == "install") print(b, LK::ERROR, "No plugin named " + n + " in the catalog (/plugin available)"); continue; }
         auto& en = e->second;
         if (atoi(en["api"].c_str()) > PLUGIN_API) { print(b, LK::ERROR, n + " " + en["version"] + " needs a newer iSekur"); continue; }
-        if (j->sub == "update" && have(n) && local_sha(n) == en["sha256"]) continue;
+        std::string lv = have(n) ? plugin_version(read_all(plugin_dir() + "/" + n + ".lua")) : "";
+        if (j->sub == "update" && have(n)) {
+            bool same = local_sha(n) == en["sha256"];
+            if (same) continue;  // already the catalog's
+            if (j->all && !newer_in_catalog(en["version"], lv, same)) continue;  // edited here, same version: only by name
+        }
         auto f = j->files.find(n);
         if (f == j->files.end()) { print(b, LK::ERROR, n + ": " + (j->errs.count(n) ? j->errs[n] : "not fetched")); continue; }
         if (sha256_of(f->second) != en["sha256"]) { print(b, LK::ERROR, n + ": refused, its checksum doesn't match the catalog's"); continue; }
@@ -632,10 +692,10 @@ void Core::plugins_poll() {
         }
         plugins_sync();
         bool loaded = std::any_of(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; });
-        print(b, LK::INFO, n + " " + en["version"] + (j->sub == "install" ? " installed" : " updated") +
+        print(b, LK::INFO, n + " " + en["version"] + (j->sub == "install" ? " installed" : lv.empty() || lv == en["version"] ? " restored" : " updated from " + lv) +
                                (loaded ? " and on" : wanted(*this, n) ? " (it didn't load, see above)" : ": off in the config, /plugin enable " + n));
     }
-    if (j->sub == "update" && !done) print(b, LK::INFO, "Your plugins are up to date with the catalog");
+    if (j->sub == "update" && !done) print(b, LK::INFO, j->all ? "Your plugins are up to date with the catalog" : "Already the catalog's version");
 }
 
 static void remove_plugin(Core& c, Buffer* b, const std::string& name) {
@@ -654,7 +714,28 @@ static void remove_plugin(Core& c, Buffer* b, const std::string& name) {
 
 
 // ---- what the plugin windows show -------------------------------------------------------
-void Core::plugin_refresh(Buffer* b) { if (b) catalog_start(*this, b, "refresh", {}); }
+void Core::catalog_load() {
+    if (catalog_have || cfg_path.empty()) return;
+    struct stat st;
+    std::string path = catalog_file(*this), text = read_all(path);
+    bool ok;
+    auto idx = plugin_index(text, &ok);
+    if (text.empty() || !ok || stat(path.c_str(), &st) != 0) return;
+    catalog_cache = idx, catalog_have = true, catalog_at = st.st_mtime;
+}
+
+void Core::plugin_refresh(Buffer* b, bool force) {
+    if (!b || catalog) return;
+    catalog_load();
+    time_t now = time(nullptr);
+    if (!force && catalog_have && now - catalog_at < CATALOG_TTL) return;  // fresh enough
+    if (now - catalog_tried < (force ? CATALOG_FORCE : CATALOG_RETRY)) {
+        if (force) print(b, LK::INFO, "The catalog was last asked for " + fmt_dur(now - catalog_tried) + " ago: try again in a minute");
+        return;
+    }
+    catalog_tried = now;
+    catalog_start(*this, b, force ? "fetch" : "refresh", {});
+}
 
 std::string plugin_sec(const std::string& name, const std::string& scope) { return "plugin." + name + (scope.empty() ? "" : "@" + scope); }
 
@@ -681,17 +762,6 @@ std::vector<std::string> Core::plugin_scopes() const {
     return {out.begin(), out.end()};
 }
 
-// the installed file's sha256, read again only when its size or time changed
-static std::string file_sha(const std::string& path) {
-    static std::map<std::string, std::pair<std::string, std::string>> cache;
-    struct stat st;
-    if (stat(path.c_str(), &st) != 0) return "";
-    std::string key = std::to_string(st.st_size) + ":" + std::to_string((long long)st.st_mtime);
-    auto& e = cache[path];
-    if (e.first != key) e = {key, sha256_of(read_all(path))};
-    return e.second;
-}
-
 std::vector<PluginInfo> Core::plugin_info() const {
     std::map<std::string, const std::map<std::string, std::string>*> cat;
     for (auto& e : catalog_cache) if (e.count("name")) cat[e.at("name")] = &e;
@@ -712,10 +782,14 @@ std::vector<PluginInfo> Core::plugin_info() const {
                 pi.sets.push_back({k, o.def, o.scope, o.type == LUA_TBOOLEAN});
             }
         }
+        auto [sha, local] = file_info(plugin_dir() + "/" + n + ".lua");
+        pi.local = local;
         if (auto e = cat.find(n); e != cat.end()) {
             auto get = [&](const char* k) { auto it = e->second->find(k); return it == e->second->end() ? std::string() : it->second; };
             pi.version = get("version"), pi.desc = get("description");
-            pi.differs = file_sha(plugin_dir() + "/" + n + ".lua") != get("sha256");
+            bool same = sha == get("sha256");
+            pi.update = newer_in_catalog(pi.version, local, same);
+            pi.edited = !same && !pi.update;
         }
         out.push_back(pi);
     }
@@ -730,8 +804,9 @@ std::vector<CatalogRow> Core::catalog_rows() const {
         std::string n = get("name");
         if (!plugin_name_ok(n)) continue;
         bool inst = std::find(files.begin(), files.end(), n) != files.end();
-        out.push_back({n, get("version"), get("description"), inst, inst && file_sha(plugin_dir() + "/" + n + ".lua") != get("sha256"),
-                       atoi(get("api").c_str()) > PLUGIN_API});
+        auto [sha, local] = inst ? file_info(plugin_dir() + "/" + n + ".lua") : std::pair<std::string, std::string>{};
+        bool same = sha == get("sha256"), up = inst && newer_in_catalog(get("version"), local, same);
+        out.push_back({n, get("version"), local, get("description"), inst, up, inst && !same && !up, atoi(get("api").c_str()) > PLUGIN_API});
     }
     std::sort(out.begin(), out.end(), [](auto& a, auto& b) { return a.name < b.name; });
     return out;
@@ -765,11 +840,21 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         }
         return;
     }
-    if (sub == "available") { catalog_start(*this, b, sub, {}); return; }
+    if (sub == "available") {  // the cached catalog while it's fresh, else fetched (at most every 10 minutes after a failure)
+        catalog_load();
+        time_t now = time(nullptr);
+        if (catalog_have && (now - catalog_at < CATALOG_TTL || now - catalog_tried < CATALOG_RETRY)) { list_available(*this, b); return; }
+        if (now - catalog_tried < CATALOG_RETRY) { print(b, LK::ERROR, "Plugin catalog: " + (catalog_err.empty() ? "fetched a moment ago" : catalog_err) + " (/plugin refresh tries again)"); return; }
+        catalog_tried = now;
+        catalog_start(*this, b, sub, {});
+        return;
+    }
+    if (sub == "refresh") { plugin_refresh(b, true); return; }
     if (sub == "update") {  // update [name]: the installed ones whose file differs from the catalog's
         std::vector<std::string> want = argv.size() > 1 ? std::vector<std::string>{argv[1]} : files;
         if (want.empty()) { print(b, LK::INFO, "No plugins installed: /plugin available"); return; }
         catalog_start(*this, b, sub, want);
+        if (catalog && argv.size() == 1) catalog->all = true;
         return;
     }
     if (sub == "install") {
@@ -777,7 +862,7 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         catalog_start(*this, b, sub, {argv[1]});
         return;
     }
-    const char* usage = "Usage: /plugin [list] | available | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name";
+    const char* usage = "Usage: /plugin [list] | available | refresh | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name";
     if (argv.size() < 2) { print(b, LK::ERROR, usage); return; }
     // name@net or name@net/#chan: that scope; enable and disable also take it as a word after the name
     std::string name = argv[1].substr(0, argv[1].find('@'));
@@ -832,5 +917,5 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         if (loaded(name)) print(b, LK::INFO, name + " reloaded");
         return;
     }
-    print(b, LK::ERROR, "Unknown /plugin " + sub + ": list, available, install, update, remove, enable, disable, set, reload");
+    print(b, LK::ERROR, "Unknown /plugin " + sub + ": list, available, refresh, install, update, remove, enable, disable, set, reload");
 }

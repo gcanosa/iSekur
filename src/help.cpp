@@ -379,9 +379,11 @@ static const std::vector<CmdInfo> CMDS = {
     {"plugin", "Session", "[list] | available | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name",
      "Lua plugins: install, turn on and off, configure",
      "Plugins are Lua 5.4 files in the plugins folder next to the config (<name>.lua), sandboxed: no files, no programs, "
-     "no network of their own. /plugin available lists the catalog (iSekur's repository); /plugin install name fetches one, "
-     "checks its sha256 against the catalog and turns it on; /plugin update [name] brings installed ones to the catalog's "
-     "version; /plugin remove name deletes it with its settings and saved data. Auto-away is a plugin: /plugin install autoaway "
+     "no network of their own. /plugin available lists the catalog (iSekur's repository), kept on disk and fetched again "
+     "after 12 hours, or now with /plugin refresh (once a minute at most); /plugin install name fetches one, "
+     "checks its sha256 against the catalog and turns it on; /plugin update installs every newer version (a plugin "
+     "says its own in a \"-- version: 1.2\" line), /plugin update name also puts back a file you edited; "
+     "/plugin remove name deletes it with its settings and saved data. Auto-away is a plugin: /plugin install autoaway "
      "(it moves your old auto_away settings into [plugin.autoaway]). "
      "/plugin (or /plugins) alone opens the plugin window: Installed and Available tabs, Space turns one on or off, "
      "c configures it (←→ picks everywhere, a network or a channel), i installs, d removes; the webchat's puzzle button "
