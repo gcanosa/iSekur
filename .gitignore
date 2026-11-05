@@ -12,3 +12,7 @@ web.sessions
 logs/
 *.log
 .codegraph/
+
+# local planning notes
+SCRIPTING.md
+plans/
