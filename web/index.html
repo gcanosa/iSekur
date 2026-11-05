@@ -373,6 +373,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .k-info .tx, .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-info .nk, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--info-fg, var(--info)); }
 .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--event-fg, var(--info-fg, var(--info))); }
 .k-error .tx, .k-error .nk { color: var(--error-fg, var(--err)); }
+.l .badge { background: var(--note-bg, var(--hilight-bg, var(--hl-bg))); color: var(--note-fg, var(--hilight-fg, #fff)); font-weight: 700; padding: 0 6px; border-radius: 4px; }
 .k-notice .nk { color: var(--notice-fg, var(--notice)); }
 .k-action .tx, .k-action .nk { color: var(--action-fg, var(--action)); font-style: italic; }
 .l .self { color: var(--msg_self-fg, var(--accent2)); }
@@ -733,6 +734,7 @@ function lineEl(b, l) {
   if (l.n && !l.s && b.type !== "status" && (l.k === "msg" || l.k === "notice")) nk.classList.add("who"), nk.dataset.nick = l.n;
   (tx.mark_ = () => markNicks(tx, b, l))();
   d.oncontextmenu = e => { const w = e.target.closest(".who"); if (w) askMenu(e, w.dataset.nick, b.id); };  // b.id: a /split pane's own tab
+  if (l.no) { const bg = el("span", "badge", "INFO"); tx.prepend(bg, " "); }  // iSekur's own notices, in the theme's note colors
   d.append(ts, nk, tx);
   return d;
 }

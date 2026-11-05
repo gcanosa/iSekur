@@ -568,7 +568,6 @@ static std::pair<std::string, std::string> file_info(const std::string& path) {
     if (e.first != key) { std::string t = read_all(path); e = {key, {sha256_of(t), plugin_version(t)}}; }
     return e.second;
 }
-static std::string file_sha(const std::string& path) { return file_info(path).first; }
 // newer: the catalog's version is above the installed one (or the file says none and isn't the catalog's)
 static bool newer_in_catalog(const std::string& cat, const std::string& local, bool same) {
     return local.empty() ? !same : version_newer(cat, local);

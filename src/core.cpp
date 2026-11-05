@@ -82,7 +82,7 @@ void Core::load_config() {
     }
     plugins_sync();
     if (old_away_keys(*this) && access((plugin_dir() + "/autoaway.lua").c_str(), F_OK) != 0)
-        print(home, LK::INFO, "Auto-away is a plugin now, and your config still has its settings: /plugin install autoaway "
+        info_note(home, "Auto-away is a plugin now, and your config still has its settings: /plugin install autoaway "
                               "moves them into it (until then nobody sets you away)");
 }
 
@@ -168,7 +168,7 @@ void Core::check_update(time_t now) {
         upd.reset();
         if (version_newer(v, ISEKUR_VERSION) && v != update_ver) {
             update_ver = v;
-            print(nullptr, LK::INFO, "\x02\u2191 A new release is available: iSekur " + v + "\x02 (you have " ISEKUR_VERSION ")");
+            info_note(nullptr, "\x02\u2191 A new release is available: iSekur " + v + "\x02 (you have " ISEKUR_VERSION ")");
             print(nullptr, LK::INFO, "  Update with \x02" "brew upgrade isekur\x02, or download it from https://github.com/gcanosa/iSekur/releases/latest · /about");
             if (Buffer* a = find(nullptr, "*about")) if (a == active) about(nullptr);
             notify(Ev::UPDATE, nullptr);
@@ -1061,6 +1061,12 @@ void Core::load_history(Buffer* b) {
 
 void Core::print(Buffer* b, LK k, const std::string& text) {
     add(b ? b : bufs.front().get(), Line{time(nullptr), k, "", text});
+}
+
+void Core::info_note(Buffer* b, const std::string& text) {
+    Line l{time(nullptr), LK::INFO, "", text};
+    l.note = true;
+    add(b ? b : bufs.front().get(), l);
 }
 
 // /rawlog: what a line shows with its secret blanked: PASS, OPER's password, SASL payloads,

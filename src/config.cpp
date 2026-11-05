@@ -1,5 +1,6 @@
 // INI parsing, colors, themes, mIRC formatting, UTF-8 and small helpers.
 #include <algorithm>
+#include <cmath>
 #include <cstdlib>
 #include <fstream>
 #include <sstream>
@@ -316,6 +317,20 @@ std::string rgb_hex(RGB c) {
 }
 
 // ---- theme -----------------------------------------------------------------
+// the INFO badge: the theme's note, else the hilight color as a block (its text color when its background is the page's,
+// as in mirc) with black or white text, whichever reads better on it
+static double rel_lum(RGB c) {
+    auto ch = [](int v) { double x = v / 255.0; return x <= .03928 ? x / 12.92 : std::pow((x + .055) / 1.055, 2.4); };
+    return .2126 * ch(c >> 16 & 255) + .7152 * ch(c >> 8 & 255) + .0722 * ch(c & 255);
+}
+Style note_style(const Theme& t) {
+    if (t.el.count("note")) return t.get("note");
+    Style h = t.get("hilight"), d = t.get("default");
+    RGB bg = h.bg >= 0 && h.bg != d.bg ? h.bg : h.fg >= 0 ? h.fg : 0xc2185b;
+    double l = rel_lum(bg);
+    return {(1.05 / (l + .05) >= (l + .05) / .05) ? 0xffffff : 0x000000, bg, A_BOLD};
+}
+
 Style Theme::get(const std::string& k) const {
     auto it = el.find(k);
     if (it != el.end()) return it->second;

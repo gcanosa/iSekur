@@ -451,6 +451,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         if (n < len) txt = mirc_prefix(txt, n) + "\x0f\u258C";
     }
     Row body_cells;
+    if (l.note) cells(body_cells, " INFO ", note_style(T), false), cells(body_cells, " ", body, false);  // iSekur's own notices
     cells(body_cells, txt, body);
     linkify(body_cells);
 

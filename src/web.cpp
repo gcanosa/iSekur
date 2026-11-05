@@ -759,7 +759,7 @@ static std::string ts_fmt(const Core& c) { return ini_get(c.cfg, "general", "tim
 static std::string line_json(const Line& l, const std::string& fmt) {
     return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"tf\":" + json_str(fmt_time(l.ts, fmt)) + ",\"k\":\"" + KIND[(int)l.kind] +
            "\",\"n\":" + json_str(l.nick) + ",\"x\":" + json_str(l.text) +
-           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") +
+           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.note ? ",\"no\":1" : "") +
            (l.color >= 0 ? ",\"c\":\"" + rgb_hex(l.color) + "\"" : "") + "}";
 }
 
@@ -818,6 +818,10 @@ std::string Web::theme_json() {
         o += (first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(st.fg)) +
              ",\"bg\":" + json_str(rgb_hex(st.bg)) + ",\"a\":" + std::to_string(st.attr) + "}";
         first = false;
+    }
+    if (!c.theme.el.count("note")) {  // the INFO badge's colors, made from hilight like the terminal's
+        Style n = note_style(c.theme);
+        o += std::string(first ? "" : ",") + "\"note\":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}";
     }
     o += "},\"lay\":{";
     first = true;
