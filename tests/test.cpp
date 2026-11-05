@@ -1699,6 +1699,7 @@ print("loaded")
         pc.exec(ph, "/ptest store");
         assert(last(ph) == "[t] true");
         {
+            pc.plugins_poll();  // the tick writes the store (batched, at most every 5s)
             FILE* f = fopen((pdir + "/t.data").c_str(), "r");
             char buf[64] = {};
             assert(f && fread(buf, 1, sizeof buf - 1, f) > 0), fclose(f);
@@ -1861,7 +1862,8 @@ print("loaded")
             assert(std::find(aw->on_in.begin(), aw->on_in.end(), "") != aw->on_in.end() && std::find(aw->on_in.begin(), aw->on_in.end(), "sn") != aw->on_in.end());
             assert(aw->sets.size() == 4 && aw->sets[0].key == "idle" && aw->sets[0].scope == 'n' && aw->sets[3].key == "announce_back" && aw->sets[3].flag);
             auto cat = pc.catalog_rows();
-            assert(cat.size() == 1 && cat[0].name == "autoaway" && cat[0].installed && !cat[0].update && !cat[0].edited && !cat[0].too_new);
+            assert(cat.size() >= 3 && cat[0].name == "autoaway" && cat[0].installed && !cat[0].update && !cat[0].edited && !cat[0].too_new);
+            assert(!cat[1].installed && cat[1].version == "1.0");
             auto sc = pc.plugin_scopes();
             assert(sc.front().empty() && std::find(sc.begin(), sc.end(), "sn") != sc.end() && std::find(sc.begin(), sc.end(), "sn/#chan") != sc.end());
             pc.cfg["plugin.autoaway@sn/#chan"]["message"] = "chan msg";
@@ -1886,7 +1888,7 @@ print("loaded")
             p2.cfg_path = pc.cfg_path;
             Buffer* h2 = p2.open(nullptr, BT::STATUS, "isekur");
             p2.plugins_sync();
-            assert(p2.catalog_have && p2.catalog_rows().size() == 1);
+            assert(p2.catalog_have && p2.catalog_rows().size() >= 3);
             p2.plugin_refresh(h2);  // fresh: no fetch
             assert(!p2.catalog);
             p2.catalog_tried = time(nullptr) - 10;
@@ -1904,8 +1906,8 @@ print("loaded")
             { std::ofstream f(ap, std::ios::app); f << "-- my change\n"; }
             sleep(1);  // a new mtime for the sha cache
             { std::ofstream f(ap, std::ios::app); f << "\n"; }
-            auto ri = pc.catalog_rows();
-            assert(ri[0].edited && !ri[0].update && ri[0].local == "1.0");
+            auto ri = pc.catalog_rows();  // sorted: autoaway first
+            assert(ri[0].name == "autoaway" && ri[0].edited && !ri[0].update && ri[0].local == "1.0");
             pc.exec(ph, "/plugin update");
             wait_catalog();
             assert(said("Your plugins are up to date with the catalog"));
@@ -1939,6 +1941,74 @@ print("loaded")
         pc.exec(ph, "/plugin remove autoaway");
         assert(last(ph) == "autoaway removed, with its settings and saved data" && access((pdir + "/autoaway.lua").c_str(), F_OK) != 0);
         assert(!pc.cfg.count("plugin.autoaway") && !pc.cfg.count("plugin.autoaway@sn"));
+        // awaylog: highlights and PMs while detached, one summary (INFO badge) in the tab you're on once you're back
+        pc.exec(ph, "/plugin install awaylog");
+        wait_catalog();
+        assert(said("awaylog 1.0 installed and on"));
+        pc.select(pchan);
+        assert(irc_parse(":srv 305 me :back", pm)), pc.handle(ps, pm);  // the /away lunch above: back first
+        pc.set_attached(false), pc.detached_at = 0;
+        pc.plugin_emit("tick", nullptr, "");  // it sees you go
+        assert(irc_parse(":bob!u@h PRIVMSG #chan :me: are you there?", pm)), pc.handle(ps, pm);
+        assert(irc_parse(":bob!u@h PRIVMSG #chan :nothing for you", pm)), pc.handle(ps, pm);
+        assert(irc_parse(":carol!u@h PRIVMSG me :psst", pm)), pc.handle(ps, pm);
+        assert(irc_parse(":carol!u@h PRIVMSG me :\x01" "ACTION waves\x01", pm)), pc.handle(ps, pm);
+        pc.plugin_emit("tick", nullptr, "");  // still away: nothing shown
+        size_t before_back = pchan->lines.size();
+        pc.set_attached(true);
+        pc.plugin_emit("tick", nullptr, "");
+        {
+            std::vector<std::string> got;
+            for (size_t i = before_back; i < pchan->lines.size(); i++) got.push_back(pchan->lines[i].text);
+            assert(got.size() == 4 && pchan->lines[before_back].note);
+            assert(got[0].rfind("While you were away (", 0) == 0 && got[0].find("): 1 mention in #chan, 2 PMs from carol") != std::string::npos);
+            assert(got[1].find("#chan <bob> me: are you there?") != std::string::npos && got[2].find("<carol> psst") != std::string::npos);
+            assert(got[3].find("* carol waves") != std::string::npos);
+        }
+        pc.plugin_emit("tick", nullptr, "");  // once
+        size_t n_after = pchan->lines.size();
+        pc.exec(ps->status, "/awaylog");  // again, in full
+        assert(ps->status->lines.back().text.find("* carol waves") != std::string::npos && pchan->lines.size() == n_after);
+        pc.exec(ps->status, "/awaylog clear");
+        pc.exec(ps->status, "/awaylog");
+        assert(ps->status->lines.back().text == "awaylog: nothing came while you were away");
+        // seen: what a nick did last; !seen answered where reply is on, once per 10s, telling only when for elsewhere
+        pc.exec(ph, "/plugin install seen");
+        wait_catalog();
+        assert(said("seen 1.0 installed and on"));
+        auto seen_q = [&](const std::string& who) { pc.exec(pchan, "/seen " + who); return pchan->lines.back().text; };
+        assert(irc_parse(":dave!u@host JOIN #chan", pm)), pc.handle(ps, pm);
+        assert(seen_q("dave") == "dave is here now, in #chan");
+        assert(irc_parse(":dave!u@host PRIVMSG #chan :hello all", pm)), pc.handle(ps, pm);
+        assert(irc_parse(":dave!u@host PART #chan :bye now", pm)), pc.handle(ps, pm);
+        assert(seen_q("DAVE").rfind("dave was last seen 0s ago (", 0) == 0 && seen_q("dave").find("), leaving #chan (bye now)") != std::string::npos);
+        assert(irc_parse(":erin!u@h PRIVMSG #chan :quick one", pm)), pc.handle(ps, pm);
+        assert(seen_q("erin").find("saying: quick one in #chan") != std::string::npos);
+        assert(irc_parse(":erin!u@h NICK erin_", pm)), pc.handle(ps, pm);
+        assert(seen_q("erin").find("changing nick to erin_") != std::string::npos && seen_q("erin_").find("changing nick from erin") != std::string::npos);
+        assert(irc_parse(":erin_!u@h QUIT :gone home", pm)), pc.handle(ps, pm);
+        assert(seen_q("erin_").find("quitting (gone home)") != std::string::npos);
+        assert(seen_q("nobody") == "I haven't seen nobody" && seen_q("me") == "That's you");
+        ps->conn.out.clear();
+        assert(irc_parse(":frank!u@h PRIVMSG #chan :!seen dave", pm)), pc.handle(ps, pm);
+        assert(psent().empty());  // reply is off
+        pc.exec(ph, "/plugin set seen@sn/#chan reply on");
+        assert(irc_parse(":frank!u@h PRIVMSG #chan :!seen dave", pm)), pc.handle(ps, pm);
+        {
+            std::string a = psent();
+            assert(a.rfind("PRIVMSG #chan :dave was last seen", 0) == 0 && a.find("leaving #chan (bye now)") != std::string::npos);
+        }
+        assert(irc_parse(":frank!u@h PRIVMSG #chan :!seen erin_", pm)), pc.handle(ps, pm);
+        assert(psent().empty());  // 10s between answers in a channel
+        pc.plugins_poll();  // the store reaches the disk on the tick
+        {
+            std::ifstream f(pdir + "/seen.data");
+            std::stringstream ss;
+            ss << f.rdbuf();
+            assert(ss.str().find("sn\\tdave\t") != std::string::npos && ss.str().find("leaving #chan") != std::string::npos);
+        }
+        pc.exec(ph, "/plugin remove awaylog");
+        pc.exec(ph, "/plugin remove seen");
         unsetenv("ISEKUR_PLUGIN_URL");
         unlink((cat + "/index.json").c_str()), unlink((cat + "/t2/t2.lua").c_str()), rmdir((cat + "/t2").c_str()), rmdir(cat.c_str());
         for (auto f : {"t.lua", "bad.lua", "t.data", ".catalog.json"}) unlink((pdir + "/" + f).c_str());
