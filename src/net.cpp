@@ -6,6 +6,7 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <poll.h>
+#include <sys/time.h>
 #include <thread>
 #include <unistd.h>
 #include <openssl/err.h>
@@ -111,6 +112,38 @@ std::string https_head(const std::string& host, const std::string& path) {
         while (got.find("\r\n\r\n") == std::string::npos && got.size() < 65536 && (n = BIO_read(b, buf, sizeof buf)) > 0) got.append(buf, (size_t)n);
     BIO_free_all(b);
     return got;
+}
+
+bool https_get(const std::string& host, const std::string& path, size_t cap, std::string& out) {
+    static SSL_CTX* ctx = new_client_ctx();
+    BIO* b = BIO_new_ssl_connect(ctx);
+    SSL* ssl = nullptr;
+    BIO_get_ssl(b, &ssl);
+    SSL_set_tlsext_host_name(ssl, host.c_str());
+    SSL_set1_host(ssl, host.c_str());
+    SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+    BIO_set_conn_hostname(b, (host + ":443").c_str());
+    // HTTP/1.0: no chunked bodies, the server closes at the end
+    std::string req = "GET " + path + " HTTP/1.0\r\nHost: " + host + "\r\nUser-Agent: iSekur\r\n\r\n", got;
+    out.clear();
+    if (BIO_do_connect(b) != 1) { out = "can't connect to " + host + ": " + ssl_errstr(); BIO_free_all(b); return false; }
+    timeval tv{20, 0};  // a stalled server doesn't park the thread for good
+    int fd = (int)BIO_get_fd(b, nullptr);
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv), setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+    char buf[16384];
+    int n;
+    if (BIO_write(b, req.data(), (int)req.size()) == (int)req.size())
+        while (got.size() <= cap + 65536 && (n = BIO_read(b, buf, sizeof buf)) > 0) got.append(buf, (size_t)n);
+    BIO_free_all(b);
+    size_t hdr = got.find("\r\n\r\n");
+    if (hdr == std::string::npos) { out = "no answer from " + host; return false; }
+    if (got.compare(0, 5, "HTTP/") != 0 || got.find(" 200 ") > got.find("\r\n")) {
+        out = host + ": " + got.substr(0, got.find("\r\n"));
+        return false;
+    }
+    if (got.size() - hdr - 4 > cap) { out = "too big (over " + std::to_string(cap / 1024) + " KB)"; return false; }
+    out = got.substr(hdr + 4);
+    return true;
 }
 
 bool Conn::start_tls() {

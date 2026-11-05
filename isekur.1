@@ -175,7 +175,15 @@ Several iSekurs run side by side with one config each
 .I config
 picks one.
 .B /plugin
-lists the Lua plugins;
+lists the Lua plugins,
+.B /plugin available
+the catalog's,
+.BI "/plugin install " name
+fetches one (checked by sha256),
+.B update
+and
+.B remove
+likewise;
 .BI "/plugin enable " name\fR[\fB@\fInetwork\fR[\fB/\fI#channel\fR]]
 and
 .B disable

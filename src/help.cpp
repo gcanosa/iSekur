@@ -299,7 +299,7 @@ static const std::vector<CmdInfo> CMDS = {
      "switches and a theme list. With a key it shows it; with a value it changes it right away. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
      "/set key \"\" empties it, which means its default again. 0 turns off a key that counts: no nick column "
-     "(nick_width), never (lock_idle, auto_away_idle, exec_timeout), no limit (paste_confirm), none (log_history, "
+     "(nick_width), never (lock_idle, exec_timeout), no limit (paste_confirm), none (log_history, "
      "history_fetch); a port of 0 is the usual one.",
      {"/set", "/set theme neon", "/set server.sekurnet.autojoin #a,#b", "/set log on"}},
     {"reload", "Settings", "", "Re-read the config file",
@@ -376,17 +376,21 @@ static const std::vector<CmdInfo> CMDS = {
      "it again. Three wrong tries wait a minute. While it's set, /exit asks for it as well. The config and "
      "logs are not encrypted by it.",
      {"/lock", "/lock on", "/lock off", "/set lock_idle 15"}},
-    {"plugin", "Session", "[list] | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name",
-     "Lua plugins: list, turn on and off, configure",
+    {"plugin", "Session", "[list] | available | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name",
+     "Lua plugins: install, turn on and off, configure",
      "Plugins are Lua 5.4 files in the plugins folder next to the config (<name>.lua), sandboxed: no files, no programs, "
-     "no network of their own. /plugin (or /plugins) lists them. /plugin enable name turns one on everywhere; "
+     "no network of their own. /plugin available lists the catalog (iSekur's repository); /plugin install name fetches one, "
+     "checks its sha256 against the catalog and turns it on; /plugin update [name] brings installed ones to the catalog's "
+     "version; /plugin remove name deletes it with its settings and saved data. Auto-away is a plugin: /plugin install autoaway "
+     "(it moves your old auto_away settings into [plugin.autoaway]). "
+     "/plugin (or /plugins) lists the installed ones. /plugin enable name turns one on everywhere; "
      "name@sekurnet only in that network, name@sekurnet/#chan only in that channel; disable the same way. "
      "/plugin set name key value sets one of its options ([plugin.name] in the config), name@network or "
      "name@network/#channel for that network or channel only; an empty value goes back to the default. "
      "Every change is written to the config at once. /plugin reload name loads it again after you edited the file. "
      "A plugin that errors 5 times in a row is unloaded until /plugin reload.",
-     {"/plugin", "/plugin enable seen", "/plugin enable seen@sekurnet/#isekur", "/plugin set seen@sekurnet reply on",
-      "/plugin reload seen"}, "plugins"},
+     {"/plugin available", "/plugin install autoaway", "/plugin set autoaway@sekurnet idle 15", "/plugin enable seen@sekurnet/#isekur",
+      "/plugin", "/plugin reload seen"}, "plugins"},
     {"web", "Session", "[start|stop|restart|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one). /web restart picks up changed [web] settings.",
@@ -423,8 +427,8 @@ static const std::vector<CmdInfo> CMDS = {
      "Unknown commands are sent to the server as typed, so everything your server supports works.",
      {"/whois alice"}},
     {"away", "Server", "[message]", "Set or clear away",
-     "With a message marks you away, without one (or /back) clears it. A manual /away turns off auto-away until you come back. "
-     "auto_away and away_announce (say it in your channels, off by default) can be set per network in its [server.name] section. "
+     "With a message marks you away, without one (or /back) clears it. Away by itself when you're idle or detached: /plugin install autoaway (a manual /away is left alone). "
+     "Its message, idle time and announcing it in your channels can be set per network (/help plugin). "
      "While you're away the status bar shows [away: network, ...] on every tab, the terminal's and the webchat's.",
      {"/away lunch", "/away", "/back"}},
     {"back", "Server", "", "Come back from away",

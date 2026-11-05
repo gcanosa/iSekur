@@ -81,6 +81,9 @@ void Core::load_config() {
         if (s->cfg.autoconnect) connect(s);
     }
     plugins_sync();
+    if (old_away_keys(*this) && access((plugin_dir() + "/autoaway.lua").c_str(), F_OK) != 0)
+        print(home, LK::INFO, "Auto-away is a plugin now, and your config still has its settings: /plugin install autoaway "
+                              "moves them into it (until then nobody sets you away)");
 }
 
 // The startup banner: each letter in a color of the theme's nick palette, the
@@ -376,7 +379,6 @@ static const std::vector<KeyInfo> KEYS = {
     {"ignore", "Messages", 'n'}, {"mute", "Messages", 'n'}, {"notify", "Messages", 'n'},
     {"ctcp_version", "Messages", 'b'}, {"ctcp_time", "Messages", 'b'}, {"ctcp_ping", "Messages", 'b'},
     {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
-    {"auto_away", "Away", 'b'}, {"auto_away_idle", "Away", 'b'}, {"away_message", "Away", 'b'}, {"away_announce", "Away", 'b'},
     {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
     {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
@@ -1346,6 +1348,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         return false;
     };
 
+    // what you type (not what plugins run): a handler returning true takes the command over
+    if (!plugin_depth && plugin_emit("command", s, b->name, {{"name", cmd}, {"args", args}})) return;
     if (cmd == "plugin" || cmd == "plugins") { plugin_cmd(b, cmd == "plugins" ? "" : args); return; }
     if (!find_command(cmd) && plugin_run(b, cmd, args)) return;  // a plugin's command; iSekur's own always win
     if (cmd == "help") { help(b, args); return; }
@@ -1775,7 +1779,6 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "back") { exec(b, "/away"); return; }  // /away with no message
-    if (cmd == "away" && s) s->auto_away = false;  // yours now; falls through to the server
     if (cmd == "grep") {  // /grep [-all] text: matching lines from scrollback, newest last
         bool all = !argv.empty() && argv[0] == "-all";
         std::string q = irc_lower(all ? rest(1) : args);

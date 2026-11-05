@@ -14,7 +14,7 @@ static const char* WANT_CAPS[] = {
     "echo-message", "batch", "server-time", "message-tags", "userhost-in-names",
     "invite-notify", "setname", "cap-notify", "account-tag", "sasl", "draft/chathistory",
     "labeled-response", "draft/multiline", "extended-monitor", "draft/read-marker", "draft/message-redaction",
-    "draft/channel-rename", "draft/pre-away", "draft/account-registration", "standard-replies",
+    "draft/channel-rename", "draft/account-registration", "standard-replies",
     // not asked for: sts (never requested, only read), no-implicit-names (the nick list needs NAMES)
     // ZNC: other clients' messages (self-message), backlog on request (playback, see 001),
     // and the pre-IRCv3 names of server-time and batch that ZNC 1.6 still offers
@@ -291,7 +291,7 @@ void Core::connect(Server* s) {
     s->user_quit = false;
     s->caps.clear(), s->caps_ls.clear();
     s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear(), s->list.clear(), s->listing = false;
-    s->away = s->auto_away = false;
+    s->away = false;
     s->hist_batches.clear(), s->cap_vals.clear(), s->isupport.clear(), s->casemap = 0;
     s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear();
     s->online.clear(), s->ison_at = 0, s->ison_wait = 0, s->typing_sent.clear(), s->motd_done = false, s->markread_off = false;
@@ -371,6 +371,7 @@ void Core::on_readable(Server* s, short rev) {
 }
 
 void Core::tick(time_t now) {
+    plugins_poll();
     plugin_emit("tick", nullptr, "");
     dcc_tick(now);
     check_update(now);
@@ -390,7 +391,6 @@ void Core::tick(time_t now) {
                 s->send_now("PING :LAG" + std::to_string(s->ping_sent_ms));
                 s->ping_at = now + 30;
             }
-            auto_away(s, now);
             chan_timers(s, now);
             mark_read(s, now);
             // /notify without MONITOR: ISON once a minute, from the end of the MOTD on
@@ -420,37 +420,6 @@ void Core::set_attached(bool a) {
     if (a) last_input = time(nullptr);  // coming back counts as activity
     else detached_at = time(nullptr);
     plugin_emit(a ? "attach" : "detach", nullptr, "");
-}
-
-// auto_away (on): away when nobody has been attached for 30s (daemon mode,
-// no browser) or, with auto_away_idle = N, after N minutes without input.
-// A manual /away is left alone. [server.X] auto_away = off turns it off on that
-// network only (and brings you back there if it had set you away).
-// away_announce (off): also /me it in that network's joined channels.
-bool Core::away_wanted(Server* s, time_t now) const {
-    int idle = atoi(opt(s, "auto_away_idle", "0").c_str());
-    return opt_on(s, "auto_away", true) && ((!attached && now - detached_at >= 30) || (idle > 0 && now - last_input >= idle * 60));
-}
-
-void Core::auto_away(Server* s, time_t now) {
-    bool want = away_wanted(s, now);
-    auto announce = [&](const std::string& t) {
-        if (!opt_on(s, "away_announce", false)) return;
-        std::vector<Buffer*> chans;  // say() may add lines: collect first
-        for (auto& b : bufs)
-            if (b->srv == s && b->type == BT::CHANNEL && b->joined) chans.push_back(b.get());
-        for (Buffer* b : chans) say(b, t, true);
-    };
-    std::string msg = opt(s, "away_message", "Not here right now");
-    if (want && !s->away && !s->auto_away) {
-        s->auto_away = true;
-        s->send("AWAY :" + msg);
-        announce("is away: " + msg);
-    } else if (!want && s->auto_away && s->away) {
-        s->auto_away = false;
-        s->send("AWAY");
-        announce("is back");
-    }
 }
 
 // ---- STS policies: "host port until" lines in sts next to the config ----------
@@ -662,9 +631,6 @@ void Core::handle(Server* s, const Msg& m) {
                 if (c[0] == '-') { s->caps.erase(c.substr(1)); continue; }
                 s->caps.insert(c);
                 if (c == "sasl") sasl = true;
-                // draft/pre-away: nobody's here (daemon, no browser): away from the start, not 30s in
-                if (c == "draft/pre-away" && s->state != SS::CONNECTED && away_wanted(s, time(nullptr)) && !s->away)
-                    s->auto_away = true, s->send("AWAY :" + opt(s, "away_message", "Not here right now"));
             }
             if (sasl && s->state != SS::CONNECTED) {
                 s->send("AUTHENTICATE " + sasl_mech(s));
@@ -686,8 +652,7 @@ void Core::handle(Server* s, const Msg& m) {
         cap_end(s);
         return;
     }
-    if (cmd == "305") s->away = s->auto_away = false;  // then printed as usual
-    if (cmd == "306") s->away = true;
+    if (cmd == "305" || cmd == "306") s->away = cmd == "306", plugin_emit("away", s, "", {{"away", s->away}});  // then printed as usual
     if (cmd == "001") {
         s->state = SS::CONNECTED;
         s->nick = m.p(0);

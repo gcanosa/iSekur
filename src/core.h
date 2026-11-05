@@ -36,6 +36,8 @@ std::string ini_rename(const std::string& text, const std::string& from, const s
 bool ini_rename_section(const std::string& path, const std::string& from, const std::string& to, std::string& err);
 std::string ini_get(const Ini& ini, const std::string& sec, const std::string& key,
                     const std::string& def = "");
+std::string ini_drop_keys(const std::string& text, const std::set<std::string>& keys);  // those keys gone, in every section
+bool ini_drop_keys_file(const std::string& path, const std::set<std::string>& keys, std::string& err);
 
 // ---- colors / theme --------------------------------------------------------
 using RGB = int32_t;  // 0xRRGGBB, -1 = terminal default
@@ -209,6 +211,11 @@ struct Dcc {
 
 struct Core;
 struct Plugin;  // plugin.cpp
+struct CatalogJob;
+std::string sha256_of(const std::string& s);  // hex
+// a plugin catalog's index.json: [{"name": ..., "version": ..., "api": 1, "description": ..., "sha256": ...}]
+std::vector<std::map<std::string, std::string>> plugin_index(const std::string& json, bool* ok = nullptr);
+bool old_away_keys(const Core& c);  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
 #define PLUGIN_API 1  // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings and booleans
@@ -270,7 +277,7 @@ struct Server {
     long long ping_sent_ms = 0;
     double lag = 0;
     bool user_quit = false;
-    bool away = false, auto_away = false;  // 305/306 state; auto_away: we set it
+    bool away = false;  // 305/306 state
     Buffer* status = nullptr;
 
     // Flood control: once registered, lines go through a token bucket
@@ -411,9 +418,7 @@ struct Core {
     void connect(Server* s);
     void disconnect(Server* s, const std::string& why);
     void on_readable(Server* s, short revents);
-    void tick(time_t now);  // pings, timeouts, reconnects, auto-away
-    void auto_away(Server* s, time_t now);
-    bool away_wanted(Server* s, time_t now) const;
+    void tick(time_t now);  // pings, timeouts, reconnects, plugins' tick
     void sts_load();                    // the STS policies file next to the config
     std::map<std::string, std::pair<int, time_t>> sts;  // host -> TLS port, until
     void sts_save();
@@ -502,6 +507,8 @@ struct Core {
     // [plugin.name@net/#chan], then @net, then [plugin.name], then def; scope 'g' global only, 'n' up to the network
     std::string plugin_opt(const std::string& name, const std::string& key, const Server* s, const std::string& target,
                            const std::string& def, char scope = 'c') const;
+    void plugins_poll();  // tick(): a finished catalog fetch (/plugin available|install|update)
+    std::shared_ptr<CatalogJob> catalog;  // while one runs
     int plugin_depth = 0;  // plugin code running: /plugin is refused, nothing is unloaded
     std::vector<std::shared_ptr<Plugin>> plugins;
 };

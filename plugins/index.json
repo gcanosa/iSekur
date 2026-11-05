@@ -1,0 +1,5 @@
+[
+  {"name": "autoaway", "version": "1.0", "api": 1,
+   "description": "Away when you're idle or nobody is attached, back when you return; per network, optionally announced",
+   "sha256": "30a35218d86911efea4f563c92a28237eb0637fe6328b9bc9e18a4423e7b7121"}
+]

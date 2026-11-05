@@ -94,16 +94,8 @@ complete_suffix = :
 # "bob is typing..." on their side. Theirs always shows in the status bar.
 send_typing = on
 
-# Mark yourself away when nobody is attached for 30s (--daemon with no browser
-# open), or after auto_away_idle minutes without typing (0 = only when detached).
-# Typing anything brings you back; a manual /away is left alone. A network can
-# turn it on or off for itself with auto_away in its [server.name] section.
-auto_away      = on
-auto_away_idle = 0
-away_message   = Not here right now
-# Also say it in your channels (/me is away: <message>, then /me is back) when
-# auto-away sets or clears it. Off by default; many channels dislike it.
-away_announce  = off
+# Away by yourself when idle or detached: the autoaway plugin (/plugin install autoaway).
+# Plugins keep their settings in [plugin.<name>] sections: /help plugin
 
 # On join, fetch what was said since the last line you have, from servers with
 # IRCv3 chathistory (max 500, 0 = off).
@@ -142,8 +134,6 @@ ignore    =                  ; this network only: spammer!*@* *!*@*.bad.host, or
 mute      =                  ; channels here that never hilight or alert: #busy #bots (/mute or the tab's menu)
 notify    =                  ; nicks to watch: "bob is online" / "went offline" (/notify add|del, MONITOR or ISON)
 ; send_typing = off          ; this network's own +typing choice (default: the one in [general])
-; auto_away = off            ; this network's own auto-away policy (default: the one in [general])
-; away_announce = on         ; announce auto-away in this network's channels (default: [general])
 ; sasl_pass, password and nickserv_pass are saved as enc:... (key in secret.key next to this file);
 ; type one in plain and iSekur encrypts it on the next start or /reload
 ; auto_identify = true     ; log in with SASL / NickServ on connect and reconnect (false: /msg NickServ yourself)

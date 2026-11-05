@@ -27,7 +27,7 @@ that mirrors your live session in a browser, bouncer style.
   CASEMAPPING, WHOX (accounts, real names and bots in the nick list), bot mode, UTF8ONLY (a stray Latin-1 byte is re-encoded, not refused), MONITOR (`/notify`),
   replies and reactions (`/reply`, `/react`), typing notifications both ways (`send_typing`), multiline
   pastes, message redaction (`/redact`), read markers synced with your other clients, channel renames,
-  pre-away and account registration (`/register`, `/verify`)
+  and account registration (`/register`, `/verify`)
 - Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel, `/autojoin snap` saves every open channel), SASL or
   `nickserv_pass` to identify on connect (`auto_identify = false` turns that off)
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout.
@@ -44,7 +44,8 @@ that mirrors your live session in a browser, bouncer style.
 - `/grep [-all] text` searches the scrollback
 - Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`
 - `/help` with colors, details and examples; commands complete with Tab as you type
-- Auto-away when nothing is attached (on or off per network, optionally announced in your channels), and catch-up from IRCv3 chathistory on join
+- Lua plugins, sandboxed, from a checked catalog (`/plugin install`), on everywhere or per network or channel; auto-away is one (`/plugin install autoaway`)
+- Catch-up from IRCv3 chathistory on join
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), a × on the hovered tab to close it (it asks before leaving a channel or disconnecting), folding networks, Alt+A for the next active tab and the theme's tab colors
@@ -267,7 +268,11 @@ so a restart doesn't ask again; the file is 0600, and whoever can read it can re
 
 Plugins: Lua 5.4 files in `plugins/` next to the config (`~/.config/isekur/plugins/<name>.lua`),
 each in its own sandbox (no files, programs or sockets of its own; a runaway loop is stopped and
-a plugin gets 32 MB at most). `/plugin` lists them; `/plugin enable seen` turns one on,
+a plugin gets 32 MB at most). `/plugin available` lists the catalog (this repo's `plugins/`),
+`/plugin install name` fetches one, checks its sha256 against the catalog and turns it on,
+`/plugin update` and `/plugin remove name` the same way. Auto-away is a plugin now:
+`/plugin install autoaway` moves your old `auto_away`, `auto_away_idle`, `away_message` and
+`away_announce` settings into it and out of the config. `/plugin` lists what's installed; `/plugin enable seen` turns one on,
 `/plugin enable seen@sekurnet/#isekur` only in that channel (`seen@sekurnet` that network), and
 `/plugin set seen@sekurnet key value` sets an option there. It all goes to `[plugin.<name>]`
 sections of the config (`[plugin.seen@sekurnet/#isekur]` for a channel). `/plugin reload name`

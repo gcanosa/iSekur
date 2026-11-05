@@ -51,7 +51,8 @@ events only come from the networks and channels where `enabled` resolves to on.
 - `isekur.setting(key, default, scope)`: declare an option. `scope` is `"g"` (global only), `"n"`
   (up to the network) or `"c"` (up to the channel, the default). The default's type is what
   `opt` returns: a boolean (`on`/`true`/`yes`/`1` are true), a number or a string.
-- `isekur.opt(key, srv, target)`: the option's value there; `srv`/`target` may be nil.
+- `isekur.opt(key, srv, target)`: the option's value there; `srv`/`target` may be nil. `enabled` is
+  always a boolean: whether the plugin is on there.
 
 ## Events
 
@@ -64,7 +65,9 @@ query nick) are set when the event has them.
 | `join` | `nick`, `host`, `self` |
 | `part` | `nick`, `reason`, `self`, `kick`, `by` (who kicked) |
 | `quit` | `nick`, `host`, `reason` (no target: it's the whole network) |
-| `tick` | every second, no fields |
+| `away` | `away`: the server says you're away (306) or back (305) |
+| `command` | `name`, `args`: you typed a /command (not one a plugin runs). Return `true` to take it over |
+| `tick` | every second, no fields: check `isekur.opt("enabled", srv)` for the networks you act on |
 | `attach`, `detach` | a terminal or a browser came back / nobody is attached any more |
 
 ## Calls
@@ -84,3 +87,18 @@ query nick) are set when the event has them.
 | `isekur.away(srv)`, `isekur.attached()` | booleans |
 | `isekur.idle()`, `isekur.detached_for()`, `isekur.time()` | seconds since you typed, seconds nobody's been attached (0 while attached), the Unix time |
 | `isekur.name`, `isekur.api` | the plugin's name, the API version (1) |
+
+## The catalog
+
+`/plugin available` and `/plugin install` read this folder from GitHub: `index.json` and
+`<name>/<name>.lua`. To add a plugin, put it in `plugins/<name>/<name>.lua` and an entry in
+`index.json`:
+
+```json
+{"name": "hello", "version": "1.0", "api": 1, "description": "Says hello",
+ "sha256": "<shasum -a 256 plugins/hello/hello.lua>"}
+```
+
+The sha256 must match the file byte for byte: iSekur refuses the install otherwise (`make test`
+checks it for autoaway). `api` is the `isekur.api` the plugin needs; older iSekurs hide it.
+`ISEKUR_PLUGIN_URL=file:///path/to/plugins/ isekur` installs from a local folder for testing.

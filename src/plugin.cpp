@@ -5,6 +5,10 @@
 #include <unistd.h>
 #include <algorithm>
 #include <cstring>
+#include <fstream>
+#include <sstream>
+#include <thread>
+#include <openssl/evp.h>
 #include "core.h"
 #include "lua/lua.hpp"
 
@@ -136,6 +140,7 @@ static int l_opt(lua_State* L) {  // opt(key, srv, target): channel, network, gl
     std::string key = str_arg(L, 1);
     auto d = p->opts.find(key);
     Plugin::Opt o = d != p->opts.end() ? d->second : Plugin::Opt{"", LUA_TSTRING, 'c'};
+    if (key == "enabled") o = {"off", LUA_TBOOLEAN, 'c'};  // iSekur's own: on there or not
     std::string v = p->c->plugin_opt(p->name, key, srv_arg(L, 2), opt_str(L, 3), o.def, o.scope);
     if (o.type == LUA_TBOOLEAN) lua_pushboolean(L, truthy(v));
     else if (o.type == LUA_TNUMBER) lua_pushnumber(L, atof(v.c_str()));
@@ -400,6 +405,244 @@ bool Core::plugin_run(Buffer* b, const std::string& cmd, const std::string& args
     return false;
 }
 
+
+// ---- the catalog: <base>index.json and <base><name>/<name>.lua ---------------------------
+// base: $ISEKUR_PLUGIN_URL (https://... or file:///dir/ for testing), else the repo's plugins/
+static std::string catalog_base() {
+    const char* e = getenv("ISEKUR_PLUGIN_URL");
+    std::string b = e && *e ? e : "https://raw.githubusercontent.com/gcanosa/iSekur/main/plugins/";
+    return b.back() == '/' ? b : b + "/";
+}
+static const size_t FETCH_CAP = 1 << 20;
+
+static bool fetch(const std::string& base, const std::string& rel, std::string& out) {
+    if (base.rfind("file://", 0) == 0) {
+        std::ifstream f(base.substr(7) + rel, std::ios::binary);
+        if (!f) { out = "can't read " + base.substr(7) + rel; return false; }
+        std::stringstream ss;
+        ss << f.rdbuf();
+        out = ss.str();
+        return true;
+    }
+    if (base.rfind("https://", 0) != 0) { out = "ISEKUR_PLUGIN_URL must be https:// or file://"; return false; }
+    size_t sl = base.find('/', 8);
+    return https_get(base.substr(8, sl - 8), base.substr(sl) + rel, FETCH_CAP, out);
+}
+
+std::string sha256_of(const std::string& s) {
+    unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned int n = 0;
+    EVP_Digest(s.data(), s.size(), md, &n, EVP_sha256(), nullptr);
+    std::string o;
+    char b[3];
+    for (unsigned i = 0; i < n; i++) snprintf(b, sizeof b, "%02x", md[i]), o += b;
+    return o;
+}
+
+// index.json: an array of flat objects, string/number/true/false/null values; ok false on bad JSON
+std::vector<std::map<std::string, std::string>> plugin_index(const std::string& j, bool* ok) {
+    std::vector<std::map<std::string, std::string>> out;
+    size_t i = 0;
+    auto ws = [&] { while (i < j.size() && isspace((unsigned char)j[i])) i++; };
+    auto eat = [&](char ch) { ws(); if (i < j.size() && j[i] == ch) { i++; return true; } return false; };
+    auto str = [&](std::string& v) {
+        if (!eat('"')) return false;
+        v.clear();
+        while (i < j.size() && j[i] != '"') {
+            char ch = j[i++];
+            if (ch != '\\') { v += ch; continue; }
+            if (i >= j.size()) return false;
+            ch = j[i++];
+            if (ch == 'u' && i + 4 <= j.size()) utf8_put(v, (uint32_t)strtoul(j.substr(i, 4).c_str(), nullptr, 16)), i += 4;
+            else v += ch == 'n' ? '\n' : ch == 't' ? '\t' : ch;  // \" \\ \/
+        }
+        return eat('"');
+    };
+    auto fail = [&] { if (ok) *ok = false; return std::vector<std::map<std::string, std::string>>{}; };
+    if (ok) *ok = true;
+    if (!eat('[')) return fail();
+    if (eat(']')) return out;
+    do {
+        if (!eat('{')) return fail();
+        std::map<std::string, std::string> o;
+        if (!eat('}')) {
+            do {
+                std::string k, v;
+                if (!str(k) || !eat(':')) return fail();
+                ws();
+                if (i < j.size() && j[i] == '"') { if (!str(v)) return fail(); }
+                else {
+                    size_t st = i;
+                    while (i < j.size() && (isalnum((unsigned char)j[i]) || j[i] == '.' || j[i] == '-' || j[i] == '+')) i++;
+                    if (st == i) return fail();
+                    v = j.substr(st, i - st);
+                }
+                o[k] = v;
+            } while (eat(','));
+            if (!eat('}')) return fail();
+        }
+        out.push_back(o);
+    } while (eat(','));
+    if (!eat(']')) return fail();
+    return out;
+}
+
+struct CatalogJob {
+    std::string sub, base, index, err;     // sub: available, install, update
+    std::vector<std::string> want;         // the plugin files to fetch with the index
+    std::map<std::string, std::string> files, errs;
+    int buf = 0;                           // the tab /plugin was typed in
+    std::atomic<bool> done{false};
+};
+
+static void catalog_start(Core& c, Buffer* b, const std::string& sub, std::vector<std::string> want) {
+    if (c.catalog) { c.print(b, LK::ERROR, "Still fetching the plugin catalog: try again in a moment"); return; }
+    auto j = std::make_shared<CatalogJob>();
+    j->sub = sub, j->base = catalog_base(), j->want = std::move(want), j->buf = b->id;
+    c.catalog = j;
+    c.print(b, LK::INFO, "Fetching the plugin catalog from " + j->base + "...");
+    std::thread([j] {
+        if (fetch(j->base, "index.json", j->index)) {
+            for (auto& n : j->want) {
+                std::string body;
+                if (fetch(j->base, n + "/" + n + ".lua", body)) j->files[n] = body;
+                else j->errs[n] = body;
+            }
+        } else j->err = j->index;
+        j->done.store(true, std::memory_order_release);
+    }).detach();
+}
+
+static std::string read_all(const std::string& path) {
+    std::ifstream f(path, std::ios::binary);
+    std::stringstream ss;
+    if (f) ss << f.rdbuf();
+    return ss.str();
+}
+
+static bool write_plugin(Core& c, const std::string& name, const std::string& body, std::string& err) {
+    std::string dir = c.plugin_dir(), path = dir + "/" + name + ".lua", tmp = path + ".tmp";
+    mkdir_p(dir);
+    FILE* f = fopen(tmp.c_str(), "w");
+    if (!f) { err = "can't write " + path; return false; }
+    bool ok = fwrite(body.data(), 1, body.size(), f) == body.size();
+    ok = fclose(f) == 0 && ok && rename(tmp.c_str(), path.c_str()) == 0;
+    if (!ok) err = "can't write " + path, unlink(tmp.c_str());
+    return ok;
+}
+
+// auto-away was in core: its [general] and [server.X] keys become [plugin.autoaway] and
+// [plugin.autoaway@X], and leave the config. false: the old auto_away = off said it was off
+static const std::map<std::string, std::string> AWAY_KEYS = {
+    {"auto_away", "enabled"}, {"auto_away_idle", "idle"}, {"away_message", "message"}, {"away_announce", "announce"}};
+bool old_away_keys(const Core& c) {
+    for (auto& [sec, kv] : c.cfg)
+        if (sec == "general" || sec.rfind("server.", 0) == 0)
+            for (auto& [k, v] : AWAY_KEYS) if (kv.count(k)) return true;
+    return false;
+}
+static void migrate_autoaway(Core& c, Buffer* b) {
+    Ini moved;
+    int n = 0;
+    for (auto& [sec, kv] : c.cfg) {
+        std::string to = sec == "general" ? "plugin.autoaway" : sec.rfind("server.", 0) == 0 ? "plugin.autoaway@" + sec.substr(7) : "";
+        if (to.empty()) continue;
+        for (auto& [k, nk] : AWAY_KEYS) {
+            auto it = kv.find(k);
+            if (it == kv.end()) continue;
+            if (!it->second.empty() && ini_get(c.cfg, to, nk).empty()) moved[to][nk] = it->second, n++;
+        }
+    }
+    for (auto& [sec, kv] : c.cfg)
+        for (auto& [k, nk] : AWAY_KEYS) kv.erase(k), c.unsaved[sec].erase(k);
+    for (auto& [sec, kv] : moved)
+        for (auto& [k, v] : kv) c.cfg[sec][k] = v;
+    std::string err;
+    std::set<std::string> old;
+    for (auto& [k, nk] : AWAY_KEYS) old.insert(k);
+    if (!c.cfg_path.empty() && ((!moved.empty() && !ini_save(c.cfg_path, moved, err)) || !ini_drop_keys_file(c.cfg_path, old, err))) {
+        c.print(b, LK::ERROR, "autoaway: " + err);
+        return;
+    }
+    if (n) c.print(b, LK::INFO, "autoaway: moved " + std::to_string(n) + " auto-away setting" + (n > 1 ? "s" : "") +
+                                    " into [plugin.autoaway] sections; the old keys are gone from the config");
+}
+
+void Core::plugins_poll() {
+    if (!catalog || !catalog->done.load(std::memory_order_acquire)) return;
+    auto j = catalog;
+    catalog.reset();
+    Buffer* b = nullptr;
+    for (auto& x : bufs) if (x->id == j->buf) b = x.get();
+    if (j->err.size()) { print(b, LK::ERROR, "Plugin catalog: " + j->err); return; }
+    bool ok;
+    auto idx = plugin_index(j->index, &ok);
+    if (!ok) { print(b, LK::ERROR, "Plugin catalog: index.json isn't valid"); return; }
+    std::map<std::string, std::map<std::string, std::string>> by;
+    for (auto& e : idx) if (plugin_name_ok(e["name"])) by[e["name"]] = e;
+    auto files = plugin_files(plugin_dir());
+    auto have = [&](const std::string& n) { return std::find(files.begin(), files.end(), n) != files.end(); };
+    auto local_sha = [&](const std::string& n) { return sha256_of(read_all(plugin_dir() + "/" + n + ".lua")); };
+    if (j->sub == "available") {
+        int newer = 0, shown = 0;
+        for (auto& [n, e] : by) {
+            if (atoi(e["api"].c_str()) > PLUGIN_API) { newer++; continue; }
+            std::string st = !have(n) ? "" : local_sha(n) == e["sha256"] ? "  [installed]" : "  [installed, differs: /plugin update " + n + "]";
+            print(b, LK::INFO, "\x02" + n + "\x02 " + e["version"] + "  " + e["description"] + st);
+            shown++;
+        }
+        if (!shown) print(b, LK::INFO, "The catalog has no plugins for this iSekur yet");
+        else print(b, LK::INFO, "/plugin install name installs one");
+        if (newer) print(b, LK::INFO, std::to_string(newer) + " more need a newer iSekur");
+        return;
+    }
+    // install and update: checked against the index, written, (re)loaded
+    int done = 0;
+    for (auto& n : j->want) {
+        auto e = by.find(n);
+        if (e == by.end()) { if (j->sub == "install") print(b, LK::ERROR, "No plugin named " + n + " in the catalog (/plugin available)"); continue; }
+        auto& en = e->second;
+        if (atoi(en["api"].c_str()) > PLUGIN_API) { print(b, LK::ERROR, n + " " + en["version"] + " needs a newer iSekur"); continue; }
+        if (j->sub == "update" && have(n) && local_sha(n) == en["sha256"]) continue;
+        auto f = j->files.find(n);
+        if (f == j->files.end()) { print(b, LK::ERROR, n + ": " + (j->errs.count(n) ? j->errs[n] : "not fetched")); continue; }
+        if (sha256_of(f->second) != en["sha256"]) { print(b, LK::ERROR, n + ": refused, its checksum doesn't match the catalog's"); continue; }
+        std::string err;
+        if (!write_plugin(*this, n, f->second, err)) { print(b, LK::ERROR, n + ": " + err); continue; }
+        done++;
+        plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; }), plugins.end());
+        bool on = true;
+        if (j->sub == "install") {
+            if (n == "autoaway") migrate_autoaway(*this, b), on = !(cfg.count("plugin.autoaway") && cfg["plugin.autoaway"].count("enabled"));
+            else on = !wanted(*this, n) && !(cfg.count("plugin." + n) && cfg["plugin." + n].count("enabled"));
+            std::string err2;
+            if (on) {  // installed means on, unless the config already says otherwise
+                cfg["plugin." + n]["enabled"] = "on";
+                if (!cfg_path.empty() && !ini_save(cfg_path, Ini{{"plugin." + n, {{"enabled", "on"}}}}, err2)) print(b, LK::ERROR, err2);
+            }
+        }
+        plugins_sync();
+        bool loaded = std::any_of(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; });
+        print(b, LK::INFO, n + " " + en["version"] + (j->sub == "install" ? " installed" : " updated") +
+                               (loaded ? " and on" : wanted(*this, n) ? " (it didn't load, see above)" : ": off in the config, /plugin enable " + n));
+    }
+    if (j->sub == "update" && !done) print(b, LK::INFO, "Your plugins are up to date with the catalog");
+}
+
+static void remove_plugin(Core& c, Buffer* b, const std::string& name) {
+    c.plugins.erase(std::remove_if(c.plugins.begin(), c.plugins.end(), [&](auto& p) { return p->name == name; }), c.plugins.end());
+    std::string dir = c.plugin_dir(), err;
+    unlink((dir + "/" + name + ".lua").c_str()), unlink((dir + "/" + name + ".data").c_str());
+    std::vector<std::string> secs;
+    for (auto& [k, kv] : c.cfg)
+        if (k == "plugin." + name || k.rfind("plugin." + name + "@", 0) == 0) secs.push_back(k);
+    for (auto& k : secs) {
+        c.cfg.erase(k), c.unsaved.erase(k);
+        if (!c.cfg_path.empty() && !ini_drop_section(c.cfg_path, k, err)) c.print(b, LK::ERROR, err);
+    }
+    c.print(b, LK::INFO, name + " removed, with its settings and saved data");
+}
+
 // /plugin [list] | enable|disable name[@net[/#chan]] | set name[@net[/#chan]] key value | reload name
 void Core::plugin_cmd(Buffer* b, const std::string& args) {
     if (plugin_depth) { print(b, LK::ERROR, "/plugin can't be run by a plugin"); return; }
@@ -414,7 +657,7 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         return nullptr;
     };
     if (sub == "list") {
-        if (files.empty()) { print(b, LK::INFO, "No plugins in " + dir); return; }
+        if (files.empty()) { print(b, LK::INFO, "No plugins in " + dir + ": /plugin available lists the catalog's"); return; }
         for (auto& n : files) {
             std::string scopes;
             for (auto& [k, kv] : cfg)
@@ -427,7 +670,19 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         }
         return;
     }
-    const char* usage = "Usage: /plugin [list] | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name";
+    if (sub == "available") { catalog_start(*this, b, sub, {}); return; }
+    if (sub == "update") {  // update [name]: the installed ones whose file differs from the catalog's
+        std::vector<std::string> want = argv.size() > 1 ? std::vector<std::string>{argv[1]} : files;
+        if (want.empty()) { print(b, LK::INFO, "No plugins installed: /plugin available"); return; }
+        catalog_start(*this, b, sub, want);
+        return;
+    }
+    if (sub == "install") {
+        if (argv.size() != 2 || !plugin_name_ok(argv[1])) { print(b, LK::ERROR, "Usage: /plugin install name (/plugin available lists them)"); return; }
+        catalog_start(*this, b, sub, {argv[1]});
+        return;
+    }
+    const char* usage = "Usage: /plugin [list] | available | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name";
     if (argv.size() < 2) { print(b, LK::ERROR, usage); return; }
     // name@net or name@net/#chan: that scope; enable and disable also take it as a word after the name
     std::string name = argv[1].substr(0, argv[1].find('@'));
@@ -472,6 +727,7 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         if (write(argv[2], val)) print(b, LK::INFO, name + " " + argv[2] + " = " + (val.empty() ? "(default)" : val) + where);
         return;
     }
+    if (sub == "remove") { remove_plugin(*this, b, name); return; }
     if (sub == "reload") {
         plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == name; }), plugins.end());
         if (!wanted(*this, name)) { print(b, LK::INFO, name + " is off: /plugin enable " + name); return; }
@@ -479,5 +735,5 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
         if (loaded(name)) print(b, LK::INFO, name + " reloaded");
         return;
     }
-    print(b, LK::ERROR, "Unknown /plugin " + sub + ": list, enable, disable, set, reload");
+    print(b, LK::ERROR, "Unknown /plugin " + sub + ": list, available, install, update, remove, enable, disable, set, reload");
 }

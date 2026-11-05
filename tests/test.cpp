@@ -388,9 +388,8 @@ int main() {
         core.on_readable(ts, 0);
         assert(ts->nick == "me" && ts->inbuf.empty() && q->lines.back().text == "You are now known as me");
         sent();
-        ts->auto_away = true;
-        core.exec(ts->status, "/back");  // /back: AWAY with nothing, auto-away handed back to you
-        assert(sent().find("AWAY\r\n") != std::string::npos && !ts->auto_away);
+        core.exec(ts->status, "/back");  // /back: AWAY with nothing
+        assert(sent().find("AWAY\r\n") != std::string::npos);
         core.close(q), core.select(was);
         core.exec(home, "/quit");  // /quit is one server's: not from a tab without one
         assert(!core.quit && home->lines.back().text.find("Not a server's tab") == 0);
@@ -1151,34 +1150,14 @@ int main() {
     assert(mirc_strip(lb->lines[2].text).rfind(" 1.  #big", 0) == 0);
     core.select(chb);
 
-    {  // auto-away per network; away_announce /me's it in the joined channels, off by default
+    {  // /sv: the CTCP VERSION text as an action
         int fl = ts->flood_ms;
         ts->flood_ms = 0, ts->sendq.clear(), sent();
-        core.attached = false, core.detached_at = 0;
-        core.cfg["server.t"]["auto_away"] = "off";
-        core.auto_away(ts, 1000);
-        assert(!ts->auto_away && sent().empty());
-        core.cfg["server.t"]["auto_away"] = "on";
-        core.auto_away(ts, 1000);
-        assert(ts->auto_away && sent() == "AWAY :Not here right now\r\n");  // no announce
-        ts->away = true;
-        core.cfg["server.t"]["auto_away"] = "off";  // turned off while away: back
-        core.auto_away(ts, 1000);
-        assert(!ts->auto_away && sent() == "AWAY\r\n");
-        ts->away = false;  // the server's 305
-        core.cfg["server.t"]["auto_away"] = "on", core.cfg["general"]["away_announce"] = "on";
-        core.auto_away(ts, 1000);
-        assert(sent() == "AWAY :Not here right now\r\nPRIVMSG #c :\x01" "ACTION is away: Not here right now\x01\r\n");
-        ts->away = true, core.attached = true;
-        core.auto_away(ts, 1000);
-        assert(sent() == "AWAY\r\nPRIVMSG #c :\x01" "ACTION is back\x01\r\n");
-        ts->away = false;
         core.exec(chb, "/sv");  // send version: the CTCP VERSION text as an action
         std::string sv = sent();
         assert(sv.rfind("PRIVMSG #c :\x01" "ACTION is using iSekur " ISEKUR_VERSION, 0) == 0 && sv.find("isekur-site") != std::string::npos);
         core.exec(home, "/sv");
         assert(sent().empty() && home->lines.back().kind == LK::ERROR);
-        core.cfg["server.t"].erase("auto_away"), core.cfg["general"].erase("away_announce");
         ts->flood_ms = fl;
     }
     core.exec(home, "/detach");  // nothing attached (the webchat typed it)
@@ -1645,20 +1624,6 @@ int main() {
         assert(vs() == "@+typing=done TAGMSG #v4\r\n");
         core.typed(vb, "/whois x");
         assert(vs().empty());
-        // draft/pre-away: nobody attached for a while: away before registration ends, not a tick later
-        {
-            ServerCfg pc;
-            pc.name = "pre", pc.nick = "pa";
-            Server* p = core.add_server(pc);
-            p->flood_ms = 0, p->state = SS::REGISTERING;
-            core.attached = false, core.detached_at = time(nullptr) - 100;
-            Msg mm;
-            assert(irc_parse(":srv CAP * ACK :draft/pre-away", mm));
-            core.handle(p, mm);
-            assert(p->conn.out == "AWAY :Not here right now\r\nCAP END\r\n" && p->auto_away);
-            core.attached = true;
-            core.close(p->status);
-        }
         // NICKLEN: refused here, not by the server
         vf(":srv 005 me NICKLEN=5 :are supported");
         core.exec(vb, "/nick waytoolong");
@@ -1688,7 +1653,7 @@ int main() {
             return false;
         };
         pc.exec(ph, "/plugin");
-        assert(last(ph) == "No plugins in " + pdir);
+        assert(last(ph) == "No plugins in " + pdir + ": /plugin available lists the catalog's");
         mkdir_p(pdir);
         auto put = [&](const std::string& f, const std::string& body) { FILE* o = fopen((pdir + "/" + f).c_str(), "w"); fputs(body.c_str(), o), fclose(o); };
         put("t.lua", R"LUA(
@@ -1781,6 +1746,92 @@ print("loaded")
         // /set and the settings window leave [plugin.*] to /plugin
         for (auto& st : pc.settings()) assert(st.key.rfind("plugin.", 0) != 0);
         for (auto& r : pc.setting_rows()) assert(r.sec.rfind("plugin.", 0) != 0);
+        // the catalog's index: flat objects; bad JSON is refused
+        bool jok;
+        auto ix = plugin_index(R"([{"name": "a\"b", "api": 1, "x": true}, {}])", &jok);
+        assert(jok && ix.size() == 2 && ix[0]["name"] == "a\"b" && ix[0]["api"] == "1" && ix[0]["x"] == "true");
+        assert(plugin_index("[{\"name\": }]", &jok).empty() && !jok);
+        assert(sha256_of("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+        // old keys (and the comments over them) out of a config's text
+        assert(ini_drop_keys("[general]\n# about it\n# more\nauto_away = on\nnick = x\n[server.a]\n; auto_away = off ; c\nhost = h\n", {"auto_away"}) ==
+               "[general]\nnick = x\n[server.a]\nhost = h\n");
+        auto wait_catalog = [&] {
+            for (int i = 0; i < 500 && pc.catalog; i++) usleep(10000), pc.plugins_poll();
+            assert(!pc.catalog);
+        };
+        // a catalog whose checksum is wrong: refused, nothing written
+        std::string cat = dir + "/cat";
+        mkdir_p(cat + "/t2");
+        {
+            FILE* o = fopen((cat + "/index.json").c_str(), "w");
+            fputs("[{\"name\": \"t2\", \"version\": \"1\", \"api\": 1, \"sha256\": \"00\"}, {\"name\": \"future\", \"api\": 99}]", o), fclose(o);
+            o = fopen((cat + "/t2/t2.lua").c_str(), "w");
+            fputs("print('t2')\n", o), fclose(o);
+        }
+        setenv("ISEKUR_PLUGIN_URL", ("file://" + cat + "/").c_str(), 1);
+        pc.exec(ph, "/plugin install t2");
+        wait_catalog();
+        assert(last(ph) == "t2: refused, its checksum doesn't match the catalog's" && access((pdir + "/t2.lua").c_str(), F_OK) != 0);
+        pc.exec(ph, "/plugin available");
+        wait_catalog();
+        assert(said("1 more need a newer iSekur") && !said("future"));
+        // autoaway from the repo's own catalog (so its sha256 in index.json must be right), with the old
+        // core settings moved into it and taken out of the config
+        char cwd[4096];
+        assert(getcwd(cwd, sizeof cwd));
+        setenv("ISEKUR_PLUGIN_URL", (std::string("file://") + cwd + "/plugins/").c_str(), 1);
+        {
+            std::string err;
+            Ini old{{"general", {{"auto_away", "on"}, {"away_message", "brb"}, {"auto_away_idle", "0"}}},
+                    {"server.sn", {{"auto_away", "off"}, {"away_announce", "on"}}}};
+            assert(ini_save(pc.cfg_path, old, err));
+            for (auto& [sec, kv] : old) for (auto& [k, v] : kv) pc.cfg[sec][k] = v;
+        }
+        assert(old_away_keys(pc));
+        pc.exec(ph, "/plugin install autoaway");
+        wait_catalog();
+        assert(said("autoaway: moved 5 auto-away settings") && said("autoaway 1.0 installed and on") && !old_away_keys(pc));
+        {
+            Ini back2;
+            assert(ini_load(pc.cfg_path, back2));
+            assert(!back2["general"].count("auto_away") && !back2["server.sn"].count("away_announce"));
+            assert(back2["plugin.autoaway"]["message"] == "brb" && back2["plugin.autoaway"]["enabled"] == "on");
+            assert(back2["plugin.autoaway@sn"]["enabled"] == "off" && back2["plugin.autoaway@sn"]["announce"] == "on");
+        }
+        // what core auto-away did: off on sn, then away when detached, /me in the channel, back when attached
+        pc.exec(ph, "/plugin disable t");
+        ps->nick = "me", pchan->joined = true, ps->conn.out.clear();
+        auto psent = [&] { std::string o = ps->conn.out; ps->conn.out.clear(); return o; };
+        pc.attached = false, pc.detached_at = 0;
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent().empty());  // off on sn
+        pc.exec(ph, "/plugin enable autoaway@sn");
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent() == "AWAY :brb\r\nPRIVMSG #chan :\x01" "ACTION is away: brb\x01\r\n");
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent().empty());  // once
+        assert(irc_parse(":srv 306 me :away", pm)), pc.handle(ps, pm);
+        pc.set_attached(true);
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent() == "AWAY\r\nPRIVMSG #chan :\x01" "ACTION is back\x01\r\n");
+        assert(irc_parse(":srv 305 me :back", pm)), pc.handle(ps, pm);
+        // a manual /away while auto-away: yours, coming back leaves it alone
+        pc.exec(ph, "/plugin set autoaway@sn announce off");
+        pc.set_attached(false), pc.detached_at = 0;
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent() == "AWAY :brb\r\n");
+        assert(irc_parse(":srv 306 me :away", pm)), pc.handle(ps, pm);
+        pc.exec(ps->status, "/away lunch");
+        assert(psent() == "AWAY :lunch\r\n");
+        pc.set_attached(true);
+        pc.plugin_emit("tick", nullptr, "");
+        assert(psent().empty());
+        // remove: the file, its data and its sections
+        pc.exec(ph, "/plugin remove autoaway");
+        assert(last(ph) == "autoaway removed, with its settings and saved data" && access((pdir + "/autoaway.lua").c_str(), F_OK) != 0);
+        assert(!pc.cfg.count("plugin.autoaway") && !pc.cfg.count("plugin.autoaway@sn"));
+        unsetenv("ISEKUR_PLUGIN_URL");
+        unlink((cat + "/index.json").c_str()), unlink((cat + "/t2/t2.lua").c_str()), rmdir((cat + "/t2").c_str()), rmdir(cat.c_str());
         for (auto f : {"t.lua", "bad.lua", "t.data"}) unlink((pdir + "/" + f).c_str());
         rmdir(pdir.c_str()), unlink(pc.cfg_path.c_str()), rmdir(d);
     }

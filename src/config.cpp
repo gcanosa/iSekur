@@ -157,6 +157,35 @@ std::string ini_drop(const std::string& text, const std::string& sec) {
     return out;
 }
 
+static bool write_file(const std::string& path, const std::string& text, std::string& err);
+
+// text without the lines setting keys (in any section), commented-out ones too ("; key = x"), and the
+// comment lines right above a dropped one: what they described is gone
+std::string ini_drop_keys(const std::string& text, const std::set<std::string>& keys) {
+    std::istringstream in(text);
+    std::string out, line, held;
+    while (std::getline(in, line)) {
+        std::string t = trim(line);
+        bool comment = !t.empty() && (t[0] == '#' || t[0] == ';');
+        std::string body = comment ? trim(t.substr(t.find_first_not_of("#;"))) : t;
+        size_t eq = body.find('=');
+        std::string key = eq == std::string::npos ? "" : trim(body.substr(0, eq));
+        bool is_key = !key.empty() && key.find(' ') == std::string::npos;
+        if (is_key && keys.count(key)) { held.clear(); continue; }
+        if (comment && !is_key) { held += line + "\n"; continue; }
+        out += held + line + "\n", held.clear();
+    }
+    return out + held;
+}
+
+bool ini_drop_keys_file(const std::string& path, const std::set<std::string>& keys, std::string& err) {
+    std::ifstream f(path);
+    if (!f) return true;
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return write_file(path, ini_drop_keys(ss.str(), keys), err);
+}
+
 // text into path through a temporary file, so a crash never leaves half a config
 static bool write_file(const std::string& path, const std::string& text, std::string& err) {
     std::string tmp = path + ".tmp";
