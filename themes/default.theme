@@ -6,7 +6,7 @@
 [colors]
 default        = default default
 topic          = #e6e6fa #3b2a6b
-tabbar         = #8a8fb0 #1c1d2b
+tabbar         = #9a9fbe #1c1d2b
 tab_server     = #b8a1ff #1c1d2b bold
 tab_home       = #7fdbca #1c1d2b bold
 tab_shell      = #ffcb6b #1c1d2b bold
@@ -14,9 +14,9 @@ tab_active     = #1c1d2b #c792ea bold
 tab_data       = #7aa2f7 #1c1d2b
 tab_msg        = #ffffff #1c1d2b bold
 tab_hilight    = #ff5fd7 #1c1d2b bold
-tab_quiet      = #7f849c #1c1d2b italic
-tab_quiet_act  = #1c1d2b #7f849c bold
-status         = #8a8fb0 #1c1d2b
+tab_quiet      = #9a9fbe #1c1d2b italic
+tab_quiet_act  = #1c1d2b #9a9fbe bold
+status         = #9a9fbe #1c1d2b
 status_hi      = #e0e0ff #1c1d2b
 # /statusbar: its text, cpu/mem past cpu_levels/mem_levels (warn, high, crit), the
 # battery bars (ok when full) and the battery body (fg: empty bars, bg: the body)
