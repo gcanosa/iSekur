@@ -362,7 +362,7 @@ void Core::list_table(Server* s) {
     for (auto& e : L) total += e.users, nw = std::max(nw, std::min<size_t>(len(e.chan), 30));
     const size_t shown = std::min<size_t>(L.size(), 1900), rw = std::to_string(std::max<size_t>(shown, 1)).size() + 1;
     out("\x02" "Channels on " + (s->network.empty() ? s->cfg.name : s->network) + "\x02  \x03" "14" + std::to_string(L.size()) +
-        " channels, " + std::to_string(total) + " users");
+        (L.size() == 1 ? " channel, " : " channels, ") + std::to_string(total) + " users");
     if (L.empty()) { out("\x03" "14Nothing matched. /list alone lists them all, /list *word* filters"); return; }
     const char* arrow = rev ? " \u25B2" : " \u25BC";  // ▼ the usual order: users high to low, names A-Z; ▲ reversed
     std::string head = " " + lpad("#", rw) + "  " + pad(std::string("Channel") + (by_name ? arrow : ""), nw) + "  " +

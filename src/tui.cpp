@@ -502,7 +502,7 @@ void Tui::draw_nicks(Buffer* b, int sx, int top, int xend, int ch, bool focus) {
     v.erase(v.begin(), v.begin() + sc);
     Style hs = sty(T, "nicklist_title", "nicklist");
     fill(top, sx + 1, xend, hs);
-    text(sx + 2, top, xend, std::to_string(v.size() + (size_t)sc) + " users" + (sc ? " ↑" : ""), hs, false);
+    text(sx + 2, top, xend, std::to_string(v.size() + (size_t)sc) + (v.size() + (size_t)sc == 1 ? " user" : " users") + (sc ? " ↑" : ""), hs, false);
     for (size_t i = 0; i < v.size() && (int)i < ch - 1; i++) {
         const NickEntry* e = v[i];
         if (focus) hits.push_back({top + 1 + (int)i, sx + 1, xend, -1, e->nick});

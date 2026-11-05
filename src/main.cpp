@@ -43,8 +43,14 @@ static void on_crash(int sig) {
     signal(sig, SIG_DFL);
     raise(sig);
 }
+static std::string g_crash_path;
 static void crash_dumps(const std::string& path) {
     g_crash_fd = open(path.c_str(), O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC, 0600);
+    g_crash_path = path;
+    atexit([] {  // a clean exit with no crash logged leaves no empty isekur.crash behind
+        struct stat st;
+        if (g_crash_fd >= 0 && fstat(g_crash_fd, &st) == 0 && st.st_size == 0) unlink(g_crash_path.c_str());
+    });
     snprintf(g_crash_head, sizeof g_crash_head, "--- %s crashed: ", version_string().c_str());
 #if __has_include(<execinfo.h>)
     void* warm[1];

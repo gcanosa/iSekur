@@ -289,7 +289,7 @@ void Core::connect(Server* s) {
     s->away = s->auto_away = false;
     s->hist_batches.clear(), s->cap_vals.clear(), s->isupport.clear(), s->casemap = 0;
     s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear();
-    s->online.clear(), s->ison_at = 0, s->ison_wait = 0, s->typing_sent.clear(), s->motd_done = false;
+    s->online.clear(), s->ison_at = 0, s->ison_wait = 0, s->typing_sent.clear(), s->motd_done = false, s->markread_off = false;
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
     s->nick = s->last_nick.empty() ? s->cfg.nick : s->last_nick;
@@ -477,7 +477,7 @@ void Core::sts_save() {
 
 // draft/read-marker: the tabs on screen are read up to their newest message, on every client of the account
 void Core::mark_read(Server* s, time_t now) {
-    if (!s->caps.count("draft/read-marker") || !attached) return;
+    if (!s->caps.count("draft/read-marker") || s->markread_off || !attached) return;
     for (Buffer* b : {active, split_buf}) {
         if (!b || b->srv != s || b->type == BT::STATUS || b->name[0] == '*') continue;
         time_t newest = 0;
@@ -672,7 +672,7 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "AUTHENTICATE") { sasl_step(*this, s, m.p(0)); return; }
-    if (cmd == "900") { print(s->status, LK::INFO, m.p(3)); return; }
+    if (cmd == "900") { s->markread_off = false; print(s->status, LK::INFO, m.p(3)); return; }
     if (cmd == "903") { print(s->status, LK::INFO, "SASL authentication successful"); s->sasl_ok = true; cap_end(s); return; }
     if (cmd == "902" || cmd == "904" || cmd == "905" || cmd == "906" || cmd == "908") {
         print(s->status, LK::ERROR, "SASL: " + (m.params.empty() ? cmd : m.params.back()));  // a bare "904" must not crash us
@@ -1077,6 +1077,8 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "FAIL" || cmd == "WARN" || cmd == "NOTE") {  // standard replies: CMD CODE [context...] :description
+        // read markers need an account here: stop sending them (and saying so on every line) until we log in
+        if (cmd == "FAIL" && m.p(0) == "MARKREAD" && m.p(1) == "ACCOUNT_REQUIRED") { s->markread_off = true; return; }
         std::string ctx;
         for (size_t i = 2; i + 1 < m.params.size(); i++) ctx += " " + m.params[i];
         print(reply_buf(), cmd == "NOTE" ? LK::INFO : LK::ERROR,
@@ -1218,7 +1220,8 @@ void Core::handle(Server* s, const Msg& m) {
             } else {
                 time_t now = time(nullptr);
                 std::string rep, note;
-                // self: our own request echoed back, unless it was sent to us
+                // self: our own request or reply echoed back (echo-message); /ctcp already said it was sent
+                if (self && !is_me(tgt)) return;
                 if (!notice && (!self || is_me(tgt))) {
                     if (verb == "VERSION" && opt_on(s, "ctcp_version", true))
                         rep = "VERSION " + ctcp_version();

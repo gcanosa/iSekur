@@ -905,6 +905,12 @@ int main() {
     size_t vn = 0;
     for (auto& b : core.bufs) for (auto& l : b->lines) vn += l.text.find("reply from me: x") != std::string::npos;
     assert(vn == 1);
+    // our /ctcp to someone else, echoed back: not answered, not shown as "CTCP PING from me"
+    size_t cl0 = 0, cl1 = 0;
+    for (auto& b : core.bufs) cl0 += b->lines.size();
+    feed(":me!u@h PRIVMSG bob :\x01PING 123\x01"), feed(":me!u@h NOTICE bob :\x01VERSION x\x01");
+    for (auto& b : core.bufs) cl1 += b->lines.size();
+    assert(sent().empty() && cl0 == cl1);
     // the automatic IDENTIFY echoed back: masked, in the server tab, and so is NickServ's answer; no NickServ tab
     assert(mask_services("NickServ", "identify me hunter2") == "identify me ********" && mask_services("#c", "IDENTIFY x") == "IDENTIFY x" &&
            mask_services("NickServ", "GHOST me pw") == "GHOST me ********" && mask_services("ChanServ", "IDENTIFY #c pw") == "IDENTIFY #c ********" &&
@@ -1525,6 +1531,20 @@ int main() {
         assert(vs() == "MARKREAD dave timestamp=2023-11-14T22:13:20.999Z\r\n");
         core.mark_read(v, time(nullptr));
         assert(vs().empty());
+        // not logged in: the server refuses read markers; no error per line, none sent until 900
+        size_t nl = dq->lines.size() + v->status->lines.size();
+        vf(":srv FAIL MARKREAD ACCOUNT_REQUIRED dave :You must be logged in");
+        core.add(dq, Line{1700000100, LK::MSG, "dave", "yo2"}), nl++;
+        core.mark_read(v, time(nullptr));
+        assert(vs().empty() && dq->lines.size() + v->status->lines.size() == nl);
+        vf(":srv 900 me me!u@h me :You are now logged in as me");
+        core.mark_read(v, time(nullptr));
+        assert(vs().rfind("MARKREAD dave ", 0) == 0);
+        // /topic #other text: that channel, not "#other text" as this one's topic
+        core.exec(vb, "/topic #elsewhere new words");
+        assert(vs().find("TOPIC #elsewhere :new words\r\n") != std::string::npos);
+        core.exec(vb, "/topic #elsewhere");
+        assert(vs().find("TOPIC #elsewhere\r\n") != std::string::npos);
         core.select(vb);
         vf(":srv RENAME #v3 #v4 :moved");
         assert(vb->name == "#v4" && core.find(v, "#v4") == vb && core.find(v, "#v3") == nullptr);

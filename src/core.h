@@ -233,6 +233,7 @@ struct Server {
     std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
     time_t ison_at = 0;
     bool motd_done = false;                // the first 376/422 of this connection: /notify starts
+    bool markread_off = false;             // draft/read-marker refused (not logged in): quiet until 900
     int ison_wait = 0;                     // our ISONs not yet answered: their 303s aren't shown
     std::map<std::string, std::pair<long long, bool>> typing_sent;  // our +typing per target: when, active
     std::string reg_pass;                  // /register: the password, for sasl_pass once it worked

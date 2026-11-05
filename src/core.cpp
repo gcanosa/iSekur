@@ -1994,12 +1994,15 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "topic") {
-        if (b->type != BT::CHANNEL) { print(b, LK::ERROR, "Not a channel"); return; }
-        if (args.empty()) print(b, LK::TOPIC, "Topic: " + b->topic);
+        std::string chan = b->name;  // /topic #chan [text]: that channel, from any tab
+        if (!argv.empty() && s->is_chan(argv[0])) chan = argv[0], args = args.size() > chan.size() ? args.substr(chan.size() + 1) : "";
+        else if (b->type != BT::CHANNEL) { print(b, LK::ERROR, "Not a channel"); return; }
+        if (args.empty() && chan == b->name) print(b, LK::TOPIC, "Topic: " + b->topic);
+        else if (args.empty()) s->send("TOPIC " + chan);
         else {
             int max = s->isupport.count("TOPICLEN") ? atoi(s->isupport["TOPICLEN"].c_str()) : 0;
             if (max > 0 && args.size() > (size_t)max) print(b, LK::ERROR, "That topic is " + std::to_string(args.size()) + " bytes: " + s->cfg.name + " keeps " + std::to_string(max));
-            s->send("TOPIC " + b->name + " :" + args);
+            s->send("TOPIC " + chan + " :" + args);
         }
         return;
     }
