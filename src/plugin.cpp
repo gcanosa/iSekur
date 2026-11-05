@@ -606,13 +606,31 @@ std::string plugin_version(const std::string& lua) {
 }
 
 // the installed file's sha256 and version, read again only when its size or time changed
-static std::pair<std::string, std::string> file_info(const std::string& path) {
-    static std::map<std::string, std::pair<std::string, std::pair<std::string, std::string>>> cache;
+// its header comment's first sentence ("-- name: what it does. More..."): the description until the catalog's comes
+static std::string plugin_blurb(const std::string& lua, const std::string& name) {
+    std::string out;
+    bool in = false;
+    for (auto& l : split(lua, '\n')) {
+        if (l.rfind("--", 0) != 0) { if (in) break; continue; }
+        std::string t = l.substr(2);
+        t.erase(0, t.find_first_not_of(" \t")), t.erase(t.find_last_not_of(" \t\r") + 1);
+        if (!in) { if (t.rfind(name + ":", 0) != 0) continue; in = true, t = t.substr(name.size() + 1); t.erase(0, t.find_first_not_of(' ')); }
+        if (t.empty()) break;
+        out += (out.empty() ? "" : " ") + t;
+        if (size_t e = out.find(". "); e != std::string::npos) { out.resize(e + 1); break; }
+    }
+    if (!out.empty() && islower((unsigned char)out[0])) out[0] = (char)toupper((unsigned char)out[0]);
+    return out;
+}
+
+struct FileInfo { std::string sha, version, blurb; };
+static FileInfo file_info(const std::string& path, const std::string& name) {  // name: for the blurb (cached by path)
+    static std::map<std::string, std::pair<std::string, FileInfo>> cache;
     struct stat st;
     if (stat(path.c_str(), &st) != 0) return {};
     std::string key = std::to_string(st.st_size) + ":" + std::to_string((long long)st.st_mtime);
     auto& e = cache[path];
-    if (e.first != key) { std::string t = read_all(path); e = {key, {sha256_of(t), plugin_version(t)}}; }
+    if (e.first != key) { std::string t = read_all(path); e = {key, {sha256_of(t), plugin_version(t), plugin_blurb(t, name)}}; }
     return e.second;
 }
 // newer: the catalog's version is above the installed one (or the file says none and isn't the catalog's)
@@ -831,11 +849,14 @@ std::vector<PluginInfo> Core::plugin_info() const {
                 pi.sets.push_back({k, o.def, o.scope, o.type == LUA_TBOOLEAN, o.help});
             }
         }
-        auto [sha, local] = file_info(plugin_dir() + "/" + n + ".lua");
-        pi.local = local;
+        auto fi = file_info(plugin_dir() + "/" + n + ".lua", n);
+        const std::string& sha = fi.sha;
+        std::string local = fi.version;
+        pi.local = local, pi.desc = fi.blurb;
         if (auto e = cat.find(n); e != cat.end()) {
             auto get = [&](const char* k) { auto it = e->second->find(k); return it == e->second->end() ? std::string() : it->second; };
-            pi.version = get("version"), pi.desc = get("description");
+            pi.version = get("version");
+            if (!get("description").empty()) pi.desc = get("description");
             bool same = sha == get("sha256");
             pi.update = newer_in_catalog(pi.version, local, same);
             pi.edited = !same && !pi.update;
@@ -853,7 +874,8 @@ std::vector<CatalogRow> Core::catalog_rows() const {
         std::string n = get("name");
         if (!plugin_name_ok(n)) continue;
         bool inst = std::find(files.begin(), files.end(), n) != files.end();
-        auto [sha, local] = inst ? file_info(plugin_dir() + "/" + n + ".lua") : std::pair<std::string, std::string>{};
+        FileInfo fi = inst ? file_info(plugin_dir() + "/" + n + ".lua", n) : FileInfo{};
+        const std::string &sha = fi.sha, &local = fi.version;
         bool same = sha == get("sha256"), up = inst && newer_in_catalog(get("version"), local, same);
         out.push_back({n, get("version"), local, get("description"), inst, up, inst && !same && !up, atoi(get("api").c_str()) > PLUGIN_API});
     }

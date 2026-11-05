@@ -1673,13 +1673,19 @@ void Tui::find_mouse(int k, int x, int y) {
 }
 
 // ---- the plugin window (/plugin alone) --------------------------------------------------
-//   ┌─ Plugins ────────────────────────────────────────────┐
-//   │  Installed   Available                               │
-//   │ ▸ autoaway      on        1.0  Away when you're idle  │
-//   │   seen          off                                  │
-//   │ autoaway enabled                                     │
-//   │ Space on/off · c configure · u update · d remove ... │
-//   └──────────────────────────────────────────────────────┘
+//   ┌─ Plugins ──────────────────────────────────────────────────────┐
+//   │  Installed 3    Available 4 ↑1                                  │
+//   │     PLUGIN           STATUS        VERSION      DESCRIPTION     │
+//   │ ▸ ✓ autoaway         on            1.2 ↑ 1.3    Away when you'… │
+//   │   ○ seen             off           1.0          /seen nick: w…  │
+//   ├─────────────────────────────────────────────────────────────────┤
+//   │  autoaway 1.2 · on everywhere · 1.3 available: u updates        │
+//   │  Away when you're idle or nobody's watching: sets /away after   │
+//   │  a while without typing, and comes back when you do             │
+//   │  Commands: /autoaway                                            │
+//   │                                                                 │
+//   │  Space turn off  c configure  u update  d remove  r reload  ... │
+//   └─────────────────────────────────────────────────────────────────┘
 // c: the plugin's settings at one scope (everywhere, a network, a channel; ←→), Enter edits one
 static std::string scope_name(const std::string& sc) { return sc.empty() ? "everywhere" : sc; }
 
@@ -1701,110 +1707,202 @@ void Tui::plug_run(const std::string& cmd) {
 void Tui::draw_plugins(int W, int H) {
     const Theme& T = c.theme;
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
-          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), es = T.get("error");
-    for (Style* st : {&ls, &dim, &es}) st->bg = bs.bg;
-    hs.attr |= A_BOLD;
+          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), es = T.get("error"), keyst = sty(T, "set_key", "info"),
+          ok = T.get("join"), up = sty(T, "input_prompt", "hilight");
+    for (Style* st : {&ls, &dim, &es, &keyst, &ok, &up}) st->bg = bs.bg, st->attr = 0;
+    for (Style* st : {&dim, &es, &keyst, &ok, &up}) st->fg = readable(st->fg, bs.bg);  // a theme's join green on its menu gray
+    hs.attr |= A_BOLD, keyst.attr |= A_BOLD;
     auto info = c.plugin_info();
     auto scopes = c.plugin_scopes();
+    auto cat = c.catalog_rows();
     const PluginInfo* cp = nullptr;
     for (auto& pi : info) if (pi.name == pw.cfg) cp = &pi;
     if (!pw.cfg.empty() && !cp) pw.cfg.clear(), pw.editing = false;  // removed meanwhile
     pw.scope = std::max(0, std::min(pw.scope, (int)scopes.size() - 1));
     std::string scope = scopes[(size_t)pw.scope];
-    // the rows, as text in columns
-    struct R { std::string a, b, c2, d; bool hint = false; };
-    std::vector<R> rows;
-    std::string empty;
-    if (cp) {
-        for (auto& st : cfg_rows(*cp, scope)) {
-            std::string at = c.plugin_at(cp->name, st.key, scope), eff = c.plugin_eff(cp->name, st.key, scope, st.def, st.scope);
-            rows.push_back({st.key, at.empty() ? eff : at, at.empty() ? (scope.empty() ? "(default)" : "(inherited)") : "", st.help, at.empty()});
-        }
-    } else if (!pw.avail) {
-        for (auto& pi : info) {
-            std::string st = pi.state;
-            if (st == "on" && std::find(pi.on_in.begin(), pi.on_in.end(), "") == pi.on_in.end()) {
-                st = "on in";
-                for (auto& o : pi.on_in) st += " " + o;
-            }
-            std::string cmds;
-            for (auto& x : pi.cmds) cmds += " /" + x;
-            std::string ver = (pi.local.empty() ? "" : pi.local) + (pi.update ? " → " + pi.version : pi.edited ? " edited" : "");
-            rows.push_back({pi.name, st, ver, pi.desc.empty() ? cmds : pi.desc});
-        }
-        if (info.empty()) empty = "None installed: Tab shows the catalog's";
-    } else {
-        for (auto& r : c.catalog_rows())
-            rows.push_back({r.name, r.version, r.too_new ? "needs a newer iSekur" : r.update ? "update from " + (r.local.empty() ? "?" : r.local)
-                                               : r.edited ? "installed, edited" : r.installed ? "installed" : "", r.desc});
-        if (rows.empty()) empty = c.catalog ? "Fetching the catalog..." : !c.catalog_err.empty() ? "Catalog: " + c.catalog_err + " (r: retry)"
-                                                                        : c.catalog_have ? "The catalog is empty" : "r fetches the catalog";
-    }
-    int n = (int)rows.size();
-    pw.rows = std::max(1, std::min({std::max(n, 1), H - 8, 14}));
-    pw.w = std::min(W - 2, 84), pw.x0 = (W - pw.w) / 2;
-    int bh = pw.rows + 6, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pw.x0 + pw.w;
-    pw.tab_y = y0 + 1, pw.list_y = y0 + 2;
+    std::vector<PluginSet> cfg;
+    if (cp) cfg = cfg_rows(*cp, scope);
+    int n = cp ? (int)cfg.size() : pw.avail ? (int)cat.size() : (int)info.size();
+    int ups = 0;
+    for (auto& r : cat) ups += r.update;
+
+    const int DET = 4;  // the selected one's details under the list
+    pw.rows = std::max(1, std::min({std::max(n, 1), H - 13, 12}));
+    pw.w = std::min(W - 2, 88), pw.x0 = (W - pw.w) / 2;
+    int bh = pw.rows + DET + 7, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pw.x0 + pw.w, xm = x1 - 2;
+    pw.tab_y = y0 + 1, pw.list_y = y0 + 3;
+    int sep_y = pw.list_y + pw.rows, det_y = sep_y + 1, msg_y = det_y + DET, hint_y = msg_y + 1;
     if (pw.sel >= n) pw.sel = std::max(0, n - 1);
     if (pw.sel < pw.top) pw.top = pw.sel;
     if (pw.sel >= pw.top + pw.rows) pw.top = pw.sel - pw.rows + 1;
     for (int yy = y0; yy < y0 + bh; yy++) fill(yy, pw.x0, x1, bs);
-    for (int xx = pw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
+    for (int xx = pw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls), cell(xx, sep_y, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(pw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
     cell(pw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(pw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
+    cell(pw.x0, sep_y, U'├', ls), cell(x1 - 1, sep_y, U'┤', ls);
     if (auto cb = box_title(T, pw.x0, x1 - 1, y0, cp ? "Plugins · " + cp->name : "Plugins", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'g'};
+
+    // tabs (or the scope), then the column titles
+    int ca = pw.x0 + 6, cb2 = ca + 17, cc = cb2 + (cp ? 33 : 14), cd = cc + (cp ? 0 : 13);  // cp: value, where from (cc - 11), what it is (cc)
     if (cp) {
-        int x = text(pw.x0 + 2, pw.tab_y, x1 - 2, "Scope: ", hs, false);
-        x = text(x, pw.tab_y, x1 - 2, " ◂ " + scope_name(scope) + " ▸ ", sel, false);
-        text(x + 1, pw.tab_y, x1 - 2, std::to_string(pw.scope + 1) + "/" + std::to_string(scopes.size()), dim, false);
+        int x = text(pw.x0 + 2, pw.tab_y, xm, "Scope ", hs, false);
+        x = text(x, pw.tab_y, xm, " ◂ " + scope_name(scope) + " ▸ ", sel, false);
+        x = text(x + 1, pw.tab_y, xm, std::to_string(pw.scope + 1) + "/" + std::to_string(scopes.size()), dim, false);
+        text(x + 2, pw.tab_y, xm, scope.empty() ? "all networks and channels" : scope.find('/') == std::string::npos ? "this network's channels" : "this channel only", dim, false);
+        text(ca, pw.tab_y + 1, xm, "SETTING", dim, false), text(cb2, pw.tab_y + 1, xm, "VALUE", dim, false), text(cc, pw.tab_y + 1, xm, "WHAT IT DOES", dim, false);
     } else {
-        int x = text(pw.x0 + 2, pw.tab_y, x1 - 2, " Installed ", pw.avail ? bs : sel, false);
+        Style ti = pw.avail ? bs : sel, ta = pw.avail ? sel : bs;
+        int x = text(pw.x0 + 2, pw.tab_y, xm, " Installed ", ti, false);
+        x = text(x, pw.tab_y, xm, std::to_string(info.size()) + " ", ti, false);
         pw.tab_mid = x + 1;
-        text(x + 2, pw.tab_y, x1 - 2, " Available ", pw.avail ? sel : bs, false);
+        x = text(x + 2, pw.tab_y, xm, " Available ", ta, false);
+        x = text(x, pw.tab_y, xm, (c.catalog_have ? std::to_string(cat.size()) : std::string("?")) + " ", ta, false);
+        if (ups) { Style u = up; if (pw.avail) u.bg = sel.bg; text(x, pw.tab_y, xm, "↑" + std::to_string(ups) + " ", u, false); }
+        text(ca, pw.tab_y + 1, xm, "PLUGIN", dim, false), text(cb2, pw.tab_y + 1, xm, pw.avail ? "VERSION" : "STATUS", dim, false);
+        text(cc, pw.tab_y + 1, xm, pw.avail ? "" : "VERSION", dim, false), text(pw.avail ? cc : cd, pw.tab_y + 1, xm, "DESCRIPTION", dim, false);
     }
-    if (!n) text(pw.x0 + 3, pw.list_y, x1 - 2, empty, dim, false);
-    int ca = pw.x0 + 4, cb2 = ca + 16, cc = cb2 + (cp ? 26 : pw.avail ? 9 : 12), cd = cc + (cp ? 0 : pw.avail ? 22 : 15);
+
+    // the list
+    if (!n) {
+        std::string empty = cp ? "" : !pw.avail ? "None installed yet: Tab shows the catalog's"
+                          : c.catalog ? "Fetching the catalog..." : !c.catalog_err.empty() ? "Catalog: " + c.catalog_err + " (r retries)"
+                          : c.catalog_have ? "The catalog is empty" : "r fetches the catalog";
+        text(ca, pw.list_y, xm, empty, dim, false);
+    }
+    auto onstr = [](const PluginInfo& pi) {
+        if (pi.state == "failed") return std::string("didn't load");
+        if (pi.state != "on") return std::string("off");
+        if (std::find(pi.on_in.begin(), pi.on_in.end(), "") != pi.on_in.end()) return std::string("on");
+        std::string s = "on in";
+        for (size_t i = 0; i < pi.on_in.size(); i++) s += (i ? ", " : " ") + pi.on_in[i];
+        return s;
+    };
     for (int i = 0; i < pw.rows && pw.top + i < n; i++) {
-        auto& r = rows[(size_t)(pw.top + i)];
-        bool on = pw.top + i == pw.sel;
-        Style st = on ? sel : bs, d = dim;
-        d.bg = st.bg;
-        int y = pw.list_y + i;
+        int k = pw.top + i, y = pw.list_y + i;
+        bool on = k == pw.sel;
+        Style st = on ? sel : bs, d = dim, g = dim;
+        auto mk = [&](Style s) { if (on) s.bg = sel.bg, s.fg = sel.fg; else s.bg = bs.bg; return s; };  // the selected row in one color: it must read
         fill(y, pw.x0 + 1, x1 - 1, st);
-        text(pw.x0 + 2, y, x1 - 2, on ? "▸" : " ", st, false);
-        text(ca, y, x1 - 2, r.a, st, false);
-        if (cp && on && pw.editing) {
-            fill(y, cb2, x1 - 2, fs);
-            int ex = text(cb2, y, x1 - 2, to_utf8(pw.ed), fs, false);
-            tb_set_cursor(std::min(ex, x1 - 3), y);
+        text(pw.x0 + 2, y, xm, on ? "▸" : " ", st, false);
+        if (cp) {
+            const PluginSet& s = cfg[(size_t)k];
+            std::string at = c.plugin_at(cp->name, s.key, scope), eff = c.plugin_eff(cp->name, s.key, scope, s.def, s.scope);
+            text(pw.x0 + 4, y, xm, at.empty() ? " " : "●", mk(keyst), false);  // set at this scope
+            text(ca, y, cb2 - 1, s.key, on ? st : keyst, false);
+            if (on && pw.editing) {
+                fill(y, cb2, xm, fs);
+                int ex = text(cb2, y, xm, to_utf8(pw.ed), fs, false);
+                tb_set_cursor(std::min(ex, x1 - 3), y);
+                continue;
+            }
+            std::string v = s.flag ? std::string(truthy_str(eff) ? "● on" : "○ off") : eff.empty() ? "(empty)" : eff;
+            text(cb2, y, cc - 12, v, at.empty() ? mk(d) : st, false);
+            text(cc - 11, y, cc - 1, at.empty() ? (scope.empty() ? "default" : "inherited") : "set here", at.empty() ? mk(d) : mk(keyst), false);
+            if (!s.help.empty()) text(cc, y, xm, s.help, mk(d), false);
             continue;
         }
-        text(cb2, y, x1 - 2, r.b, r.hint ? d : st, false);
-        if (cp) {  // value, (default)/(inherited), then what it is: "minutes without typing..."
-            int vx = text(cb2, y, x1 - 2, r.b, r.hint ? d : st, false);
-            if (!r.c2.empty()) vx = text(vx + 2, y, x1 - 2, r.c2, d, false);
-            if (!r.d.empty()) text(std::max(vx + 2, cb2 + 24), y, x1 - 2, r.d, d, false);
-            continue;
+        if (!pw.avail) {
+            const PluginInfo& pi = info[(size_t)k];
+            bool fail = pi.state == "failed", off = pi.state == "off";
+            g = fail ? es : off ? dim : ok;
+            text(pw.x0 + 4, y, xm, fail ? "✗" : off ? "○" : "✓", mk(g), false);
+            text(ca, y, cb2 - 1, pi.name, on ? st : hs, false);
+            text(cb2, y, cc - 1, onstr(pi), mk(g), false);
+            int vx = text(cc, y, cd - 1, pi.local.empty() ? "?" : pi.local, st, false);
+            if (pi.update) text(vx + 1, y, cd - 1, "↑ " + pi.version, mk(up), false);
+            else if (pi.edited) text(vx + 1, y, cd - 1, "edited", mk(d), false);
+            std::string ds = pi.desc;
+            if (ds.empty()) for (auto& x : pi.cmds) ds += (ds.empty() ? "/" : " /") + x;
+            text(cd, y, xm, ds, mk(d), false);
+        } else {
+            const CatalogRow& r = cat[(size_t)k];
+            g = r.too_new ? es : r.update ? up : r.installed ? ok : dim;
+            text(pw.x0 + 4, y, xm, r.too_new ? "✗" : r.update ? "↑" : r.installed ? "✓" : "·", mk(g), false);
+            text(ca, y, cb2 - 1, r.name, on ? st : hs, false);
+            text(cb2, y, cc - 1, r.version, st, false);
+            text(cc, y, xm, r.desc, mk(d), false);
         }
-        text(cc, y, x1 - 2, r.c2, d, false);
-        text(cd, y, x1 - 2, r.d, d, false);
     }
+
+    // the selected one in full: what it is, its state, what to do next
+    std::vector<std::pair<std::string, Style>> det;  // lines; the first is the headline
+    auto add_wrapped = [&](const std::string& s, Style st) { for (auto& l : wrap_words(s, pw.w - 6)) det.push_back({l, st}); };
+    std::string head, state;
+    Style state_st = dim;
+    if (cp && n) {
+        const PluginSet& s = cfg[(size_t)pw.sel];
+        std::string at = c.plugin_at(cp->name, s.key, scope), eff = c.plugin_eff(cp->name, s.key, scope, s.def, s.scope);
+        head = s.key;
+        state = at.empty() ? (scope.empty() ? "default " : "inherits ") + (eff.empty() ? "(empty)" : eff) : "set to " + at + " " + (scope.empty() ? "everywhere" : "for " + scope);
+        state_st = at.empty() ? dim : keyst;
+        if (!s.help.empty()) add_wrapped(s.help, bs);
+        add_wrapped(std::string("Applies ") + (s.scope == 'g' ? "everywhere only" : s.scope == 'n' ? "everywhere or per network" : "everywhere, per network or per channel")
+                    + (at.empty() ? "" : " · Del clears it here"), dim);
+    } else if (!cp && !pw.avail && n) {
+        const PluginInfo& pi = info[(size_t)pw.sel];
+        head = pi.name + (pi.local.empty() ? "" : " " + pi.local);
+        state = pi.state == "failed" ? "didn't load: the console tab says why" : pi.state == "off" ? "off" : onstr(pi) == "on" ? "on everywhere" : onstr(pi);
+        state_st = pi.state == "failed" ? es : pi.state == "off" ? dim : ok;
+        if (!pi.desc.empty()) add_wrapped(pi.desc, bs);
+        std::string cmds;
+        for (auto& x : pi.cmds) cmds += " /" + x;
+        if (!cmds.empty()) det.push_back({"Commands:" + cmds, dim});
+        if (pi.update) det.push_back({pi.version + " is available: u updates it", up});
+        else if (pi.edited) det.push_back({"Edited here: u restores the catalog's " + pi.version, dim});
+    } else if (!cp && n) {
+        const CatalogRow& r = cat[(size_t)pw.sel];
+        head = r.name + " " + r.version;
+        state = r.too_new ? "needs a newer iSekur" : r.update ? "update: you have " + (r.local.empty() ? "?" : r.local) : r.edited ? "installed, edited here" : r.installed ? "installed" : "not installed";
+        state_st = r.too_new ? es : r.update ? up : r.installed ? ok : dim;
+        add_wrapped(r.desc, bs);
+        if (!r.too_new && (r.update || !r.installed)) det.push_back({r.update ? "Enter updates it" : "Enter installs it, then Tab to turn it on and configure it", dim});
+    }
+    if (!head.empty()) {
+        int x = text(pw.x0 + 3, det_y, xm, head, hs, false);
+        x = text(x, det_y, xm, " · ", dim, false);
+        text(x, det_y, xm, state, state_st, false);
+    }
+    for (int i = 0; i < DET - 1 && i < (int)det.size(); i++) {
+        bool cut = i == DET - 2 && (int)det.size() > DET - 1;
+        text(pw.x0 + 3, det_y + 1 + i, xm, det[(size_t)i].first + (cut ? " …" : ""), det[(size_t)i].second, false);
+    }
+
     // the message: the newest line of the tab the last action ran in, once something came
     bool live = false;
     for (auto& b : c.bufs) live |= b.get() == pw.mb;
     if (live && pw.mark >= 0 && pw.mb->added > pw.mark && !pw.mb->lines.empty()) {
         auto& l = pw.mb->lines.back();
-        text(pw.x0 + 2, y0 + bh - 3, x1 - 2, mirc_strip(l.text), l.kind == LK::ERROR ? es : dim, false);
-    } else if (cp && pw.sel < n && !rows[(size_t)pw.sel].d.empty())  // the selected setting's description in full
-        text(pw.x0 + 2, y0 + bh - 3, x1 - 2, rows[(size_t)pw.sel].a + ": " + rows[(size_t)pw.sel].d, dim, false);
-    else if (c.catalog) text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Fetching the catalog...", dim, false);
-    else if (pw.avail && c.catalog_have)
-        text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Catalog from " + fmt_dur(time(nullptr) - c.catalog_at) + " ago" + (c.catalog_err.empty() ? "" : " (refresh failed: " + c.catalog_err + ")"), dim, false);
-    const char* hint = pw.editing ? "Enter set · empty: inherit or the default · Esc cancel"
-                       : cp       ? "Enter edit · Space on/off · Del clear here · ←→ scope · Esc back"
-                       : pw.avail ? "Enter or i install · r refresh · Tab installed · Esc close"
-                                  : "Space on/off · c configure · u update · d remove · r reload · Tab catalog · Esc";
-    text(pw.x0 + 2, y0 + bh - 2, x1 - 2, hint, dim, false);
+        text(pw.x0 + 3, msg_y, xm, "» " + mirc_strip(l.text), l.kind == LK::ERROR ? es : keyst, false);
+    } else if (c.catalog) text(pw.x0 + 3, msg_y, xm, "Fetching the catalog...", dim, false);
+    else if (pw.avail && !cp && c.catalog_have)
+        text(pw.x0 + 3, msg_y, xm, "Catalog from " + fmt_dur(time(nullptr) - c.catalog_at) + " ago" + (c.catalog_err.empty() ? "" : " (refresh failed: " + c.catalog_err + ")"), dim, false);
+
+    // the keys for what's selected: the key bold, what it does dim
+    std::vector<std::pair<std::string, std::string>> keys;
+    if (pw.editing) keys = {{"Enter", "set"}, {"empty", "inherit or the default"}, {"Esc", "cancel"}};
+    else if (cp) {
+        bool flag = n && cfg[(size_t)pw.sel].flag;
+        keys = {{"Enter", flag ? "switch" : "edit"}};
+        if (flag) keys.push_back({"Space", "on/off"});
+        keys.insert(keys.end(), {{"Del", "clear here"}, {"←→", "scope"}, {"Esc", "back"}});
+    } else if (pw.avail) {
+        if (n && !cat[(size_t)pw.sel].too_new && (cat[(size_t)pw.sel].update || !cat[(size_t)pw.sel].installed))
+            keys.push_back({"Enter", cat[(size_t)pw.sel].update ? "update" : "install"});
+        keys.insert(keys.end(), {{"r", "refresh"}, {"Tab", "installed"}, {"Esc", "close"}});
+    } else {
+        if (n) {
+            const PluginInfo& pi = info[(size_t)pw.sel];
+            keys = {{"Space", pi.state == "off" ? "turn on" : "turn off"}, {"c", "configure"}};
+            if (pi.update || pi.edited) keys.push_back({"u", pi.update ? "update" : "restore"});
+            keys.insert(keys.end(), {{"r", "reload"}, {"d", "remove"}});
+        }
+        keys.insert(keys.end(), {{"Tab", "catalog"}, {"Esc", "close"}});
+    }
+    int hx = pw.x0 + 3;
+    for (auto& [kk, what] : keys) {
+        hx = text(hx, hint_y, xm, kk, keyst, false);
+        hx = text(hx + 1, hint_y, xm, what, dim, false) + 2;
+    }
     if (!pw.ask.empty())
         draw_dialog(W, H, "Remove plugin", wrap_words("Remove " + pw.ask + " with its settings and saved data?", 44), "", false, U"", 0,
                     "y: yes · n or Esc: no", 0, 0, 'P');
@@ -1870,7 +1968,7 @@ void Tui::plugin_key(int k, uint32_t ch) {
     else if (pw.avail) {
         auto cat = c.catalog_rows();
         if (ch == 'r') plug_run("/plugin refresh");
-        else if ((k == TB_KEY_ENTER || ch == 'i') && pw.sel < n) plug_run("/plugin install " + cat[(size_t)pw.sel].name);
+        else if ((k == TB_KEY_ENTER || ch == 'i') && pw.sel < n) plug_run((cat[(size_t)pw.sel].update ? "/plugin update " : "/plugin install ") + cat[(size_t)pw.sel].name);
     } else if (pw.sel < n) {
         const PluginInfo& pi = info[(size_t)pw.sel];
         if (k == TB_KEY_SPACE) plug_run(std::string("/plugin ") + (pi.state == "off" ? "enable " : "disable ") + pi.name);

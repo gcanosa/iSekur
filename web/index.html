@@ -241,7 +241,34 @@ dialog .btns .left { margin-right: auto; }
 #plugcfg .top select { min-width: 160px; }
 #plugmsg.err { color: var(--err, #e5534b); }
 #dplug [hidden] { display: none !important; }  /* the lists and the configure view take turns; their display rules would win */
-@media (max-width: 560px) { #pluglist .r { grid-template-columns: 1fr auto; } #pluglist .r .b { grid-column: 1 / -1; flex-wrap: wrap; } }
+/* a row: a status icon, the name with its badges over the description (wrapped, not cut), the buttons with icons */
+#pluglist .r { grid-template-columns: auto 1fr; align-items: start; gap: 6px 10px; padding: 9px 8px; }
+#pluglist .r + .r { border-top: 1px solid var(--line); border-radius: 0; }
+#pluglist .r .ic { width: 18px; height: 18px; margin-top: 1px; display: grid; place-items: center; color: var(--muted); }
+#pluglist .r .ic.on { color: var(--join, #57ab5a); }
+#pluglist .r .ic.bad { color: var(--err, #e5534b); }
+#pluglist .r .ic.up { color: var(--accent); }
+#pluglist .r .n { white-space: normal; overflow: visible; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
+#pluglist .r .n b { font-weight: 600; font-size: 14px; }
+#pluglist .r .n small { flex-basis: 100%; margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--fg); opacity: .78; }
+#pluglist .r .tag { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+#pluglist .r .tag.on { color: var(--join, #57ab5a); border-color: currentColor; }
+#pluglist .r .tag.bad { color: var(--err, #e5534b); border-color: currentColor; }
+#pluglist .r .tag.up { color: var(--accent); border-color: currentColor; }
+#pluglist .r .b { grid-column: 2; flex-wrap: wrap; }
+#pluglist .r .b:empty { display: none; }
+#pluglist .r .b button { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; }
+#pluglist .r .b button svg { flex: none; }
+#pluglist .r .b button.up { border-color: var(--accent); color: var(--accent); }
+#pluglist .r .b button.del:hover { border-color: var(--err, #e5534b); color: var(--err, #e5534b); }
+.win-95 #dplug svg.px { display: block; }
+.win-95 #dplug :is(.b, .ic, .tag) svg:not(.px) { display: none; }
+.win-95 #pluglist .r + .r { border-top: 1px dotted #808080; }
+.win-95 #pluglist .r .n small { color: #000; opacity: 1; }
+.win-95 #pluglist .r .tag { border-radius: 0; color: #000; border-color: #808080; background: #fff; }
+.win-95 #pluglist .r .tag.on { color: #006400; } .win-95 #pluglist .r .tag.bad { color: #a00000; } .win-95 #pluglist .r .tag.up { color: #000080; }
+.win-95 #pluglist .r .b button.up { color: #000; font-weight: bold; }
+.win-95 #pluglist .r .b button.del:hover { color: #000; }
 /* /keys, F1, Alt+K: every key binding as keycaps, by group (the terminal's window is the same list) */
 #dkeys { width: min(620px, calc(100vw - 32px)); }
 #klist { max-height: min(62vh, 560px); overflow-y: auto; display: grid; grid-template-columns: auto 1fr; gap: 5px 18px; align-items: center; padding-right: 4px; }
@@ -1750,42 +1777,76 @@ function renderPlugins() {
   $("#dplug-h").textContent = plugCfg ? "Plugins · " + plugCfg : "Plugins";
   $("#plugtabs").hidden = L.hidden = !!plugCfg; C.hidden = !plugCfg;
   $("#plugback").hidden = !plugCfg; $("#plugref").hidden = !!plugCfg || plugTab !== "cat";
-  if (!plug) { L.textContent = ""; L.append(el("div", "none", "Loading…")); return; }
+  if (!plug) { renderPlugins.sig = ""; L.textContent = ""; L.append(el("div", "none", "Loading…")); return; }
   const said = plugMark >= 0 && plug.added > plugMark;
   const ago = s => s < 90 ? s + "s" : s < 5400 ? Math.round(s / 60) + "m" : s < 172800 ? Math.round(s / 3600) + "h" : Math.round(s / 86400) + "d";
   M.textContent = said ? plug.last : plug.fetching ? "Fetching the catalog…" : plugCfg ? "Empty: the value it inherits (shown greyed)."
     : plugTab === "cat" && plug.age >= 0 ? "Catalog from " + ago(plug.age) + " ago" + (plug.err ? " (refresh failed: " + plug.err + ")" : "") : "";
   M.classList.toggle("err", said && !!plug.lasterr);
   if (plugCfg) return renderPlugCfg();
+  // the 1s refresh rebuilds the list only on a change: a rebuild under the pointer loses the hover
+  const sig = JSON.stringify([plugTab, plug.installed, plug.catalog, plug.fetching, plug.have, plug.err]);
+  if (sig === renderPlugins.sig && L.firstChild) return;
+  renderPlugins.sig = sig;
   L.textContent = "";
+  // name, badges [class, icon, text] and the description; the status icon in front
+  const row = (ic, icc, name, tags, desc) => {
+    const r = el("div", "r"), i = el("div", "ic " + icc), n = el("div", "n");
+    i.innerHTML = plugIcon(ic, 16);  // our own constant markup
+    n.append(el("b", "", name));
+    for (const [c, k, t] of tags) { const g = el("span", "tag " + c); if (k) g.innerHTML = plugIcon(k, 11); g.append(t); n.append(g); }
+    if (desc) n.append(el("small", "", desc));
+    r.append(i, n); return r;
+  };
   if (plugTab === "inst") {
     if (!plug.installed.length) L.append(el("div", "none", "None installed yet: the Available tab lists the catalog's."));
     for (const p of plug.installed) {
-      const r = el("div", "r"), n = el("div", "n", p.name), off = p.state === "off";
-      n.append(el("small", "", p.desc || p.cmds.map(c => "/" + c).join(" ")));
-      const st = p.state === "on" ? (p.on.includes("") ? "on" : "on in " + p.on.join(", ")) : p.state === "failed" ? "didn't load" : "off";
+      const off = p.state === "off", bad = p.state === "failed";
+      const tags = [[bad ? "bad" : off ? "" : "on", bad ? "warn" : off ? "" : "check", p.state === "on" ? (p.on.includes("") ? "on" : "on in " + p.on.join(", ")) : bad ? "didn't load" : "off"]];
+      if (p.local) tags.push(["", "", "v" + p.local]);
+      if (p.update) tags.push(["up", "update", "v" + p.version + " available"]);
+      else if (p.edited) tags.push(["", "", "edited"]);
+      const r = row(bad ? "warn" : p.update ? "update" : off ? "plug" : "check", bad ? "bad" : p.update ? "up" : off ? "" : "on", p.name, tags, p.desc || p.cmds.map(c => "/" + c).join(" "));
       const b = el("div", "b");
-      b.append(btn(off ? "Turn on" : "Turn off", () => plugRun("/plugin " + (off ? "enable " : "disable ") + p.name)),
-               btn("Configure", () => { plugCfg = p.name; plugScope = ""; plugMark = -1; renderPlugins(); }));
-      if (p.update || p.edited) b.append(btn(p.update ? "Update" : "Restore", () => plugRun("/plugin update " + p.name)));
-      b.append(btn("Reload", () => plugRun("/plugin reload " + p.name)),
-               btn("Remove", async () => { if (await askBox({title: "Remove plugin", text: "Remove " + p.name + " with its settings and saved data?", ok: "Remove"}) !== null) plugRun("/plugin remove " + p.name); }));
-      r.append(n, el("div", "m", st + (p.local ? " · " + p.local : "") + (p.update ? " → " + p.version : p.edited ? " · edited" : "")), b);
-      L.append(r);
+      if (p.update || p.edited) b.append(plugBtn(p.update ? "update" : "restore", p.update ? "Update" : "Restore", () => plugRun("/plugin update " + p.name), p.update ? "up" : ""));
+      b.append(plugBtn(off ? "on" : "off", off ? "Turn on" : "Turn off", () => plugRun("/plugin " + (off ? "enable " : "disable ") + p.name)),
+               plugBtn("cfg", "Configure", () => { plugCfg = p.name; plugScope = ""; plugMark = -1; renderPlugins(); }),
+               plugBtn("reload", "Reload", () => plugRun("/plugin reload " + p.name)),
+               plugBtn("trash", "Remove", async () => { if (await askBox({title: "Remove plugin", text: "Remove " + p.name + " with its settings and saved data?", ok: "Remove"}) !== null) plugRun("/plugin remove " + p.name); }, "del"));
+      r.append(b); L.append(r);
     }
   } else {
     if (!plug.catalog.length) L.append(el("div", "none", plug.fetching || !plug.have && !plug.err ? "Fetching the catalog…" : plug.err ? "Catalog: " + plug.err : "The catalog is empty."));
     for (const c of plug.catalog) {
-      const r = el("div", "r"), n = el("div", "n", c.name), b = el("div", "b");
-      n.append(el("small", "", c.desc));
-      if (c.new) b.append(el("span", "m", "needs a newer iSekur"));
-      else if (c.update) b.append(btn("Update", () => plugRun("/plugin update " + c.name)));
-      else if (!c.installed) b.append(btn("Install", () => plugRun("/plugin install " + c.name)));
-      r.append(n, el("div", "m", c.version + (c.update ? " · you have " + (c.local || "?") : c.edited ? " · installed, edited" : c.installed ? " · installed" : "")), b);
-      L.append(r);
+      const tags = [["", "", "v" + c.version]];
+      if (c.update) tags.push(["up", "update", "update · you have v" + (c.local || "?")]);
+      else if (c.installed) tags.push(["on", "check", c.edited ? "installed, edited" : "installed"]);
+      if (c.new) tags.push(["bad", "warn", "needs a newer iSekur"]);
+      const r = row(c.update ? "update" : c.installed ? "check" : "plug", c.update ? "up" : c.installed ? "on" : "", c.name, tags, c.desc), b = el("div", "b");
+      if (c.new) ;  // the badge says why there's no button
+      else if (c.update) b.append(plugBtn("update", "Update", () => plugRun("/plugin update " + c.name), "up"));
+      else if (!c.installed) b.append(plugBtn("install", "Install", () => plugRun("/plugin install " + c.name)));
+      r.append(b); L.append(r);
     }
   }
 }
+// the plugin window's icons: [24×24 line drawing, 16×16 Windows 2000 style (.px, window = win95)]
+const PLUG_ICONS = {
+  check: ['<path d="M20 6L9 17l-5-5"/>', '<defs><linearGradient id="plck" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9be08a"/><stop offset="1" stop-color="#1f8a2a"/></linearGradient></defs><path d="M1.5 8.5l2.5-2.5 2.5 2.5 5.5-6 2.5 2.5-8 8.5z" fill="url(#plck)" stroke="#0e4a14" stroke-linejoin="round"/>'],
+  warn: ['<path d="M10.3 3.9L1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0zM12 9v4M12 17h.01"/>', '<defs><linearGradient id="plwn" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff6a8"/><stop offset="1" stop-color="#e8b000"/></linearGradient></defs><path d="M8 1.2L15 14.5H1z" fill="url(#plwn)" stroke="#7a5600" stroke-linejoin="round"/><path d="M7.2 5.5h1.6l-.3 5h-1zM7.2 11.6h1.6v1.5H7.2z" fill="#000"/>'],
+  plug: ['<path d="M9.5 4.5a2.5 2.5 0 0 1 5 0V6H18a1 1 0 0 1 1 1v3.5h-1.5a2.5 2.5 0 0 0 0 5H19V19a1 1 0 0 1-1 1h-3.5v-1.5a2.5 2.5 0 0 0-5 0V20H6a1 1 0 0 1-1-1v-3.5h1.5a2.5 2.5 0 0 0 0-5H5V7a1 1 0 0 1 1-1h3.5z"/>', '<path d="M6 2.5a2 2 0 0 1 4 0V4h3.5v3.5H12a1.5 1.5 0 0 0 0 3h1.5V14H10v-1.5a2 2 0 0 0-4 0V14H2.5v-3.5H4a1.5 1.5 0 0 0 0-3H2.5V4H6z" fill="#c0c0c0" stroke="#404040" stroke-linejoin="round"/>'],
+  update: ['<circle cx="12" cy="12" r="10"/><path d="M16 12l-4-4-4 4M12 16V8"/>', '<defs><radialGradient id="plup" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#9fd0ff"/><stop offset="1" stop-color="#0a3cb4"/></radialGradient></defs><circle cx="8" cy="8" r="7" fill="url(#plup)" stroke="#06266e"/><path d="M8 3.5l4 4.2H9.5v4.3h-3V7.7H4z" fill="#fff"/>'],
+  restore: ['<path d="M3 12a9 9 0 1 0 3-6.7L3 8M3 3v5h5"/>', '<path d="M3.5 8.5a5 5 0 1 0 1.6-3.7" fill="none" stroke="#06266e" stroke-width="3.2"/><path d="M3.5 8.5a5 5 0 1 0 1.6-3.7" fill="none" stroke="#3a8ae8" stroke-width="1.6"/><path d="M1 2.5h5.5V8z" fill="#3a8ae8" stroke="#06266e" stroke-linejoin="round"/>'],
+  on: ['<path d="M18.4 6.6a9 9 0 1 1-12.8 0M12 2v10"/>', '<defs><radialGradient id="plon" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#b8ffb0"/><stop offset="1" stop-color="#118a10"/></radialGradient></defs><circle cx="8" cy="8" r="7" fill="url(#plon)" stroke="#0e4a14"/><path d="M10.6 5.2a3.8 3.8 0 1 1-5.2 0M8 3v5" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>'],
+  off: ['<path d="M18.4 6.6a9 9 0 1 1-12.8 0M12 2v10"/>', '<defs><radialGradient id="ploff" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#ffb0a8"/><stop offset="1" stop-color="#b41010"/></radialGradient></defs><circle cx="8" cy="8" r="7" fill="url(#ploff)" stroke="#6a0606"/><path d="M10.6 5.2a3.8 3.8 0 1 1-5.2 0M8 3v5" fill="none" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/>'],
+  cfg: ['<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>', '<defs><linearGradient id="plcf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6f6f6"/><stop offset="1" stop-color="#7d7f8c"/></linearGradient></defs><path d="M12.94 6.36L15.25 6.53L15.25 9.47L12.94 9.64L12.65 10.33L14.17 12.09L12.09 14.17L10.33 12.65L9.64 12.94L9.47 15.25L6.53 15.25L6.36 12.94L5.67 12.65L3.91 14.17L1.83 12.09L3.35 10.33L3.06 9.64L0.75 9.47L0.75 6.53L3.06 6.36L3.35 5.67L1.83 3.91L3.91 1.83L5.67 3.35L6.36 3.06L6.53 0.75L9.47 0.75L9.64 3.06L10.33 3.35L12.09 1.83L14.17 3.91L12.65 5.67Z M10.4 8a2.4 2.4 0 1 0-4.8 0a2.4 2.4 0 1 0 4.8 0Z" fill="url(#plcf)" fill-rule="evenodd" stroke="#3c3c46" stroke-width=".9" stroke-linejoin="round"/>'],
+  reload: ['<path d="M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/>', '<path d="M13 8a5 5 0 1 1-1.5-3.6" fill="none" stroke="#0e4a14" stroke-width="3.2"/><path d="M13 8a5 5 0 1 1-1.5-3.6" fill="none" stroke="#3cb43c" stroke-width="1.6"/><path d="M15 1.5V7H9.5z" fill="#3cb43c" stroke="#0e4a14" stroke-linejoin="round"/>'],
+  trash: ['<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>', '<defs><linearGradient id="pldl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a80"/><stop offset="1" stop-color="#b41010"/></linearGradient></defs><path d="M2 4.5L4.5 2 8 5.5 11.5 2 14 4.5 10.5 8 14 11.5 11.5 14 8 10.5 4.5 14 2 11.5 5.5 8z" fill="url(#pldl)" stroke="#6a0606" stroke-linejoin="round"/>'],
+  install: ['<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>', '<defs><linearGradient id="plin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9be08a"/><stop offset="1" stop-color="#1f8a2a"/></linearGradient></defs><path d="M1.5 10.5v4h13v-4" fill="#c0c0c0" stroke="#404040" stroke-linejoin="round"/><path d="M6.5 1.5h3v5h2.5L8 11 4 6.5h2.5z" fill="url(#plin)" stroke="#0e4a14" stroke-linejoin="round"/>'],
+};
+const plugIcon = (k, s) => '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + PLUG_ICONS[k][0]
+  + '</svg><svg class="px" viewBox="0 0 16 16" width="' + Math.max(s, 12) + '" height="' + Math.max(s, 12) + '" aria-hidden="true">' + PLUG_ICONS[k][1] + "</svg>";
+function plugBtn(ic, text, f, cls) { const b = btn(text, f); b.insertAdjacentHTML("afterbegin", plugIcon(ic, 14)); if (cls) b.className = cls; return b; }
 function renderPlugCfg() {
   const C = $("#plugcfg"), p = plug.installed.find(x => x.name === plugCfg);
   if (!p) { plugCfg = ""; return renderPlugins(); }
