@@ -244,6 +244,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 #thlist button:hover { background: #ffffff0a; }
 #thlist button.on { background: var(--menu_sel-bg, var(--tab_active-bg, #ffffff14)); color: var(--menu_sel-fg, var(--fg)); }
 #thlist button small, #thlist .none { color: var(--muted); }
+#thlist .ck { display: inline-block; width: 1.2em; color: var(--accent); font-weight: 700; }  /* the running theme's accent; the highlighted row's own color over its bar */
+#thlist button.on .ck { color: inherit; }
 /* categories on the left (All, general, keys, web, server.*), their keys on the right */
 #setbody { display: grid; grid-template-columns: 170px 1fr; gap: 14px; height: min(60vh, 560px); }
 #setnav { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); padding-right: 10px; }
@@ -286,7 +288,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 #logout { position: relative; color: var(--fg); display: inline-flex; align-items: center; align-self: stretch; }
 #logout:hover::after, #logout:focus-visible::after { content: "Logout"; position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; white-space: nowrap;
   background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
-#menu { display: none; }
+#topic #menu { display: none; }  /* #topic button is more specific than #menu */
 #ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
 #ctx .hd { padding: 4px 12px 4px 35px; font-weight: 700; }  /* lined up with the labels, past the icons */
@@ -441,7 +443,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   #side.open ~ #foot { display: flex; position: fixed; left: 0; right: 30%; bottom: 0; z-index: 6; }
   #nicks { display: none; position: fixed; inset: var(--toph, 44px) 0 0 40%; z-index: 5; width: auto; box-shadow: 0 0 40px #000; }
   #nicks.open { display: block; }
-  #menu { display: inline-block; }
+  #topic #menu { display: inline-flex; }
   #topic button { padding: 4px 10px; }  /* a finger, not a mouse */
   #prompt { max-width: 30%; overflow: hidden; text-overflow: ellipsis; }
   .l { display: block; padding: 2px 10px; }
@@ -1624,7 +1626,7 @@ function renderThemes() {
   l.forEach((n, i) => {
     const b = document.createElement("button");
     b.type = "button"; b.textContent = n; b.className = i === thSel ? "on" : ""; b.setAttribute("role", "option"); b.setAttribute("aria-selected", i === thSel);
-    if (n === thOrig) { const w = document.createElement("small"); w.textContent = "  (was)"; b.append(w); }
+    const c = document.createElement("span"); c.className = "ck"; c.textContent = n === thOrig ? "✓" : ""; b.prepend(c);  // ✓ the theme in use, in its accent
     b.onclick = () => { thSel = i; thPick(); $("#thq").focus(); };
     b.ondblclick = () => dtheme.close("ok");
     box.append(b);
@@ -1632,7 +1634,7 @@ function renderThemes() {
   box.children[thSel]?.scrollIntoView({block: "nearest"});
 }
 function thPick() { const n = thList()[thSel]; if (n && n !== theme.name) send({t: "theme", buf: active, name: n}); renderThemes(); }  // the live preview
-function openThemes() { thOrig = theme.name; $("#thq").value = ""; thSel = Math.max(0, (theme.themes || []).indexOf(thOrig)); dtheme.returnValue = ""; renderThemes(); dtheme.showModal(); $("#thq").focus(); }
+function openThemes() { thOrig = theme.name; $("#thq").value = ""; thSel = Math.max(0, (theme.themes || []).indexOf(thOrig)); dtheme.returnValue = ""; dtheme.showModal(); renderThemes(); $("#thq").focus(); }  // render once open: scrollIntoView does nothing in a closed dialog
 $("#thq").oninput = () => { thSel = 0; thPick(); };
 $("#thq").onkeydown = e => {
   const n = thList().length, d = {ArrowDown: 1, ArrowUp: -1, PageDown: 8, PageUp: -8}[e.key];
