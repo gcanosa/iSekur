@@ -2425,7 +2425,7 @@ void Tui::complete() {
             if (b->type == BT::QUERY && irc_lower(b->name).rfind(pfx, 0) == 0) comp.push_back(b->name);
             std::sort(comp.begin(), comp.end(),
                       [](auto& x, auto& y) { return irc_lower(x) < irc_lower(y); });
-            for (auto& n : comp) n += st == 0 ? ": " : " ";
+            for (auto& n : comp) n += st == 0 ? c.complete_suffix() + " " : " ";  // "bob: " at the line's start
         }
         if (comp.empty()) return;
         completing = true, comp_i = 0, comp_start = st;

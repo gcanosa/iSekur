@@ -86,6 +86,10 @@ lock_idle = 0
 # Servers with IRCv3 draft/multiline get a paste as one message.
 paste_confirm = 5
 
+# Tab (and a tapped suggestion in the webchat on phones) completing a nick at the start of
+# a line adds this and a space: "bob: hi". E.g. , for "bob, hi"; off for just "bob hi".
+complete_suffix = :
+
 # Tell the others in a channel or query that you're typing (IRCv3 +typing):
 # "bob is typing..." on their side. Theirs always shows in the status bar.
 send_typing = on

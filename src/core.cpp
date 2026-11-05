@@ -331,6 +331,11 @@ size_t input_secret(const std::string& buf, const std::string& line, size_t* end
     return p == std::string::npos ? p : e + 1 + p;
 }
 
+std::string Core::complete_suffix() const {
+    std::string v = ini_get(cfg, "general", "complete_suffix", ":");
+    return v == "off" || v == "none" ? "" : v;
+}
+
 std::vector<Core::Setting> Core::settings() const {
     Ini all = defaults;
     all["general"]["timestamp"] = theme.lay("timestamp", "%H:%M");  // empty: the theme's, so that's its default
@@ -366,7 +371,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
     {"hilight_words", "Messages", 'n'}, {"hilight_window", "Messages", 'b'}, {"bell_notifications", "Messages", 'b'},
-    {"paste_confirm", "Messages", 'b'}, {"send_typing", "Messages", 'b'}, {"quit_message", "Messages", 'b'}, {"part_message", "Messages", 'b'},
+    {"paste_confirm", "Messages", 'b'}, {"complete_suffix", "Messages", 'g'}, {"send_typing", "Messages", 'b'}, {"quit_message", "Messages", 'b'}, {"part_message", "Messages", 'b'},
     {"ignore", "Messages", 'n'}, {"mute", "Messages", 'n'}, {"notify", "Messages", 'n'},
     {"ctcp_version", "Messages", 'b'}, {"ctcp_time", "Messages", 'b'}, {"ctcp_ping", "Messages", 'b'},
     {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
@@ -1453,7 +1458,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         if (sec == "keys") cfg_changed = true;
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
-        if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key.rfind("web_font", 0) == 0 || key == "web_tree_lines")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
+        if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key == "web_tree_lines")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         dirty = true;
         if (saved_now) { print(b, LK::INFO, argv[0] + " = " + val + "  (saved)"); return; }

@@ -1027,6 +1027,13 @@ int main() {
             bool nwrow = false;
             for (auto& r : core.setting_rows()) nwrow |= r.sec == "general" && r.key == "nick_width" && r.def == core.theme.lay("nick_width", "12") && !r.def.empty();
             assert(nwrow);
+            // complete_suffix: ":" by default, any text, off/none for nothing (Tab and the webchat add the space)
+            assert(core.complete_suffix() == ":");
+            core.cfg["general"]["complete_suffix"] = ",";
+            assert(core.complete_suffix() == ",");
+            core.cfg["general"]["complete_suffix"] = "off";
+            assert(core.complete_suffix().empty());
+            core.cfg["general"].erase("complete_suffix");
         }
         unlink(core.cfg_path.c_str());
         std::swap(core.cfg_path, path);

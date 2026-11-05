@@ -1867,6 +1867,7 @@ function applyAsk() {
 }
 const asking = () => { const b = bufs.get(active); return !!(b && b.ask); };
 // like the terminal's: [from, [[word, sep, value], ...]]; from -1: none, -2: only the command's usage
+const csuffix = () => (theme.lay || {}).complete_suffix ?? ":";  // [general] complete_suffix: "bob: " at a line's start
 const touch = matchMedia("(pointer: coarse)").matches;  // phones/tablets: no Tab key, so nicks are offered as you type
 function suggest(s) {
   if (asking()) return [-1, []];
@@ -1874,7 +1875,7 @@ function suggest(s) {
     const b = bufs.get(active), pfx = ircLower(s), out = [];
     if (!b) return [-1, []];
     for (const n of b.nicks.map(n => n[1]).concat(b.type === "query" ? [b.name] : []))
-      if (ircLower(n).startsWith(pfx)) out.push([n + ":", "", ""]);
+      if (ircLower(n).startsWith(pfx)) out.push([n + csuffix(), "", ""]);
     return [0, out.sort((x, y) => ircLower(x[0]).localeCompare(ircLower(y[0]))).slice(0, 8)];
   }
   if (s[0] !== "/" || s.startsWith("//")) return [-1, []];
@@ -2025,7 +2026,7 @@ line.addEventListener("keydown", e => {
         const pfx = ircLower(v.slice(start, end));
         if (!pfx) return;
         list = b.nicks.map(n => n[1]).concat(b.type === "query" ? [b.name] : []).filter(n => ircLower(n).startsWith(pfx))
-          .sort((x, y) => ircLower(x).localeCompare(ircLower(y))).map(n => n + (start === 0 ? ": " : " "));
+          .sort((x, y) => ircLower(x).localeCompare(ircLower(y))).map(n => n + (start === 0 ? csuffix() + " " : " "));
       }
       if (!list.length) return;
       comp = {list, i: -1, start, end, v};

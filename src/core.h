@@ -341,6 +341,7 @@ struct Core {
     void set_attached(bool a);
     std::string quit_msg;  // from /quit text; else quit_message
     std::string bye(const Server* s, const std::string& key) const;  // quit_message / part_message
+    std::string complete_suffix() const;  // after a nick completed at the start of a line (": " less the space); "" for off
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend
     // /web start|stop|restart: done by main() after the event pass, since a stop asked
     // from the browser must not tear down the connection it is still reading

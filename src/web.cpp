@@ -781,6 +781,7 @@ std::string Web::theme_json() {
     first = true;
     auto lay = c.theme.layout;
     if (auto nw = ini_get(c.cfg, "general", "nick_width"); !nw.empty()) lay["nick_width"] = nw;  // /set nick_width beats the theme's
+    lay["complete_suffix"] = c.complete_suffix();  // nick completion at a line's start, like the terminal's
     for (auto& [k, v] : lay) o += (first ? "" : ",") + json_str(k) + ":" + json_str(v), first = false;
     o += "},\"nicks\":[";
     for (size_t i = 0; i < c.theme.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(c.theme.nicks[i]));
