@@ -2464,10 +2464,12 @@ static int load_terminfo(void) {
         return TB_ERR;
     }
 
-    // If TERMINFO is set, try that directory and stop
+    // If TERMINFO is set, try that directory first. iSekur: then go on like ncurses does, not stop:
+    // Ghostty sets TERMINFO to its own app bundle, tmux passes it on, and tmux-256color (only in the
+    // system database) fell back to the built-in screen caps, without italics
     const char *terminfo = getenv("TERMINFO");
     if (terminfo) {
-        return load_terminfo_from_path(terminfo, term);
+        if_ok_return(rv, load_terminfo_from_path(terminfo, term));
     }
 
     // Next try ~/.terminfo
