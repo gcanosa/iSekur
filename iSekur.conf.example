@@ -82,7 +82,7 @@ lock_idle = 0
 # /shell checks the login and password with this PAM service
 #pam_service = login
 
-# Ask before sending a paste longer than this many lines (0 = never ask).
+# Ask before sending a paste (or /exec -o output) longer than this many lines (0 = never ask).
 # Servers with IRCv3 draft/multiline get a paste as one message.
 paste_confirm = 5
 
@@ -133,7 +133,7 @@ dcc_web   = off
 # unless autoconnect = false.
 [server.sekurnet]
 host      = irc.sekurnet.org
-port      = 6697
+port      = 6697                ; empty or 0: 6697 with tls, 6667 without
 tls       = true
 tls_verify = true            ; false only for self-signed test servers
 autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
@@ -180,7 +180,7 @@ autoconnect = false
 [web]
 autostart     = off
 bind          = 127.0.0.1
-port          = 8443
+port          = 8443         ; empty or 0: 8443
 user          = me
 password_hash =              ; run: isekur --hash-password
 cert          =              ; e.g. /path/fullchain.pem (empty: self-signed)

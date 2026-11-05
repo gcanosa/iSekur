@@ -133,8 +133,8 @@ void Core::jobs_poll(const std::vector<pollfd>& fds, size_t from) {
         } else if (index_of(j.to) < 0) {
             // the tab is gone: nothing to say it in
         } else {
-            size_t cap = (size_t)std::max(1, atoi(opt(j.to->srv, "paste_confirm", "5").c_str()));
-            if (j.out.size() > cap && !j.yes)
+            int cap = atoi(opt(j.to->srv, "paste_confirm", "5").c_str());  // 0: never ask, as for a paste
+            if (cap > 0 && j.out.size() > (size_t)cap && !j.yes)
                 print(j.to, LK::ERROR, j.cmd + ": " + std::to_string(j.out.size()) + " lines, more than paste_confirm (" +
                                            std::to_string(cap) + "), not sent. /exec -o -y sends them anyway");
             else

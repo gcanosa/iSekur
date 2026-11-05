@@ -567,7 +567,8 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.name = name;
     sc.host = ini_get(cfg, sec, "host", sc.name);
     sc.tls = ini_get(cfg, sec, "tls", "false") == "true";
-    sc.port = atoi(ini_get(cfg, sec, "port", sc.tls ? "6697" : "6667").c_str());
+    sc.port = atoi(ini_get(cfg, sec, "port").c_str());
+    if (sc.port <= 0 || sc.port > 65535) sc.port = sc.tls ? 6697 : 6667;  // port 0 or junk: the usual one
     sc.tls_verify = ini_get(cfg, sec, "tls_verify", "true") == "true";
     sc.autoconnect = ini_get(cfg, sec, "autoconnect", "true") == "true";
     sc.auto_identify = ini_get(cfg, sec, "auto_identify", "true") == "true";
@@ -1428,7 +1429,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string err;
         bool saved_now = false;
         if (sec == "general" && key == "theme") {
-            if (load_theme(val, theme, err)) {
+            if (load_theme(val.empty() ? "default" : val, theme, err)) {  // "": the default theme, as at start
                 Ini part;
                 part["general"]["theme"] = val;
                 // a theme with its own font (mirc: Fixedsys) brings it; a /set web_font after this wins again
@@ -1461,8 +1462,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key == "web_tree_lines")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         dirty = true;
-        if (saved_now) { print(b, LK::INFO, argv[0] + " = " + val + "  (saved)"); return; }
-        print(b, LK::INFO, argv[0] + " = " + (secret(key) ? "********" : val) +
+        std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : val;  // "": back to the default
+        if (saved_now) { print(b, LK::INFO, argv[0] + " = " + shown + "  (saved)"); return; }
+        print(b, LK::INFO, argv[0] + " = " + shown +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
                                 : sec == "web"              ? "  (applies after /web restart)"
                                                             : "") +

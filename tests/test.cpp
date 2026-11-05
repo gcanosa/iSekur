@@ -993,6 +993,28 @@ int main() {
             core.exec(home, "/set " + sv + ".tls_verify " + (was.empty() ? "\"\"" : was));
             assert(!core.unsaved.count(sv) || !core.unsaved[sv].count("tls_verify"));
         }
+        // /set key "": back to the default; theme "" is the default theme, not "theme '' not found"
+        core.exec(home, "/set theme \"\"");
+        assert(core.theme.name == "default" && home->lines.back().text.find("(default)") != std::string::npos);
+        // every /set key takes "" and 0 without breaking what reads it; port 0 is the usual port
+        {
+            Ini keep = core.cfg;
+            auto keep_unsaved = core.unsaved;
+            std::string sv = "server." + ts->cfg.name;
+            for (auto& k : setting_keys()) {
+                if (k.key == "name" || k.key == "lock" || k.key == "exec_web" || k.key == "lock_password_hash") continue;
+                std::string full = (k.scope == 'n' ? sv + "." : "") + k.key;
+                for (const char* v : {"0", "\"\""}) {
+                    core.exec(home, "/set " + full + " " + v);
+                    core.setting_rows(), core.settings(), core.server_cfg(ts->cfg.name);
+                }
+            }
+            core.exec(home, "/set " + sv + ".port 0");
+            assert(core.server_cfg(ts->cfg.name).port == 6667 || core.server_cfg(ts->cfg.name).port == 6697);
+            core.cfg = keep, core.unsaved = keep_unsaved;
+            core.exec(home, "/set theme \"\"");
+            core.exec(home, "/set scrollback \"\"");
+        }
         // ...in a sensible order: [general] first (by the template), then the servers (host first, nick next to
         // altnick, auto_identify among the login keys, unknown keys last)
         {

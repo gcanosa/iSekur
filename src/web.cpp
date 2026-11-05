@@ -284,7 +284,8 @@ bool Web::start(std::string& err) {
 bool Web::start_(std::string& err) {
     const Ini& cfg = c.cfg;
     std::string bind = ini_get(cfg, "web", "bind", "127.0.0.1");
-    int port = atoi(ini_get(cfg, "web", "port", "8443").c_str());
+    int port = atoi(ini_get(cfg, "web", "port").c_str());
+    if (port <= 0 || port > 65535) port = 8443;  // port 0 or junk: the default
     user = ini_get(cfg, "web", "user");
     pass_hash = ini_get(cfg, "web", "password_hash");
     if (user.empty() || pass_hash.rfind("pbkdf2$", 0) != 0) {

@@ -24,7 +24,7 @@ that mirrors your live session in a browser, bouncer style.
 - TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join, account-tag, chghost, setname,
   STS (a server that asks for TLS gets it, and keeps getting it), labeled-response, standard replies,
-  CASEMAPPING, WHOX (accounts, real names and bots in the nick list), bot mode, UTF8ONLY, MONITOR (`/notify`),
+  CASEMAPPING, WHOX (accounts, real names and bots in the nick list), bot mode, UTF8ONLY (a stray Latin-1 byte is re-encoded, not refused), MONITOR (`/notify`),
   replies and reactions (`/reply`, `/react`), typing notifications both ways (`send_typing`), multiline
   pastes, message redaction (`/redact`), read markers synced with your other clients, channel renames,
   pre-away and account registration (`/register`, `/verify`)
@@ -49,7 +49,7 @@ that mirrors your live session in a browser, bouncer style.
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), a × on the hovered tab to close it (it asks before leaving a channel or disconnecting), folding networks, Alt+A for the next active tab and the theme's tab colors
 - It also has the terminal's input line and status bar: live suggestions (`/jo`, `/set key`, `/help k`; Up/Down, Tab), hidden password prompts (`/oper`, `/e2e`; Esc cancels, never in the history), pastes with newlines shown as ↵ and `paste_confirm`, mIRC formatting keys (Ctrl+B, Ctrl+C without a selection, Ctrl+O, Ctrl+R, Ctrl+I, Ctrl+U), clock, user modes, lag, clickable `[Act: ...]`, `-- MORE --` and `status_info`, double click the topic to edit it, the bell, and your `[keys]` bindings (Alt+W closes a tab and Alt+X goes to the next server, since browsers keep Ctrl+W and Ctrl+X)
-- `/set` alone opens a settings window in the terminal: Global by topic, then each network with its own keys and every Global one it can override (shown as inherited or overriding), `/` to search, `e` to edit in place, Space to switch on/off or step through the themes, `s` saves (the webchat's ⚙ has switches and a theme list)
+- `/set` alone opens a settings window in the terminal: Global by topic, then each network with its own keys and every Global one it can override (shown as inherited or overriding), `/` to search, `e` to edit in place, Space to switch on/off or step through the themes, `s` saves (the webchat's ⚙ has switches and a theme list); `/set key ""` puts a key's default back
 - Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about
 - `/list` opens a sortable channel table in its own tab (click Channel or Users); double click a #channel anywhere to join it
 - The status bar can show CPU, memory, load and a battery next to the uptime (`/statusbar`), colored by thresholds you can change (`cpu_levels`, `mem_levels`) and by the theme
@@ -162,7 +162,7 @@ Not available on Cygwin.
 | right click on a nick | menu: query, whois, CTCPs, ignore, op / voice / kick / ban when your rank allows, kill / G-line when you are an IRC operator (Up/Down/Enter or click) |
 | right click on a channel tab | menu: quiet mode on/off, clear, add to or remove from autojoin, close (asks before leaving a joined channel); same in the webchat |
 | right click on a server tab | menu: connect, or reconnect / disconnect; hide or show its channels and queries in the tab bar ("+N" counts them, colored by their activity; Ctrl+N/P, Ctrl+A and `/win` still reach them; `/fold`, or in the webchat a click on the ▾ next to the network name); close (asks while connected); same in the webchat |
-| Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type) |
+| Tab | complete a command after `/`, a command after `/help`, the key after `/set`, or a nick (matches are listed as you type; a nick first on the line gets `complete_suffix`, `bob: `; on phones the webchat lists the nicks to tap) |
 | Up / Down while matches are listed | move through them; Enter or Tab puts the highlighted one in the input line without sending |
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
@@ -204,7 +204,7 @@ the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`of
 
 Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab without blocking
 the chat; `/exec -o uptime` says it in the current channel or query (longer than `paste_confirm`
-lines needs `-y`). Commands are killed after `exec_timeout` seconds; the webchat can't run them
+lines needs `-y`; `paste_confirm = 0` sends any length). Commands are killed after `exec_timeout` seconds; the webchat can't run them
 unless `exec_web = on`.
 
 Files (DCC): what's sent to you is only offered until you `/dcc get` it; it downloads in the

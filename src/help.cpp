@@ -297,7 +297,9 @@ static const std::vector<CmdInfo> CMDS = {
      "back, s or Ctrl+S saves, q or Esc closes; the mouse works too. The webchat's ⚙ is the same, with "
      "switches and a theme list. With a key it shows it; with a value it changes it right away. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
-     "/set key \"\" empties it, which means its default again.",
+     "/set key \"\" empties it, which means its default again. 0 turns off a key that counts: no nick column "
+     "(nick_width), never (lock_idle, auto_away_idle, exec_timeout), no limit (paste_confirm), none (log_history, "
+     "history_fetch); a port of 0 is the usual one.",
      {"/set", "/set theme neon", "/set server.sekurnet.autojoin #a,#b", "/set log on"}},
     {"reload", "Settings", "", "Re-read the config file",
      "Applies an edited config without restarting: theme, keys, mouse, colors, bell, logging and "
@@ -325,7 +327,7 @@ static const std::vector<CmdInfo> CMDS = {
     {"exec", "Session", "[-o] [-y] command", "Run a shell command",
      "The output shows up in the cmd tab as it comes, without blocking the chat. With -o it is "
      "said in the tab you typed it in once the command ends, unless it is longer than "
-     "paste_confirm lines (-y sends it anyway). Commands are killed after exec_timeout "
+     "paste_confirm lines (0: no limit; -y sends it anyway). Commands are killed after exec_timeout "
      "seconds (default 30) or 1000 lines. /exec alone lists the running ones. Off in the "
      "webchat unless /set exec_web on, since it runs commands on this machine; with a /lock "
      "password set, turning exec_web on or off asks for it.",
