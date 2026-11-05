@@ -379,7 +379,7 @@ static const std::vector<CmdInfo> CMDS = {
     {"plugin", "Session", "[list] | available | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name",
      "Lua plugins: install, turn on and off, configure",
      "Plugins are Lua 5.4 files in the plugins folder next to the config (<name>.lua), sandboxed: no files, no programs, "
-     "no network of their own. /plugin available lists the catalog (iSekur's repository), kept on disk and fetched again "
+     "no network of their own. /plugin available lists the catalog (github.com/gcanosa/isekur-plugins), kept on disk and fetched again "
      "after 12 hours, or now with /plugin refresh (once a minute at most); /plugin install name fetches one, "
      "checks its sha256 against the catalog and turns it on; /plugin update installs every newer version (a plugin "
      "says its own in a \"-- version: 1.2\" line), /plugin update name also puts back a file you edited; "

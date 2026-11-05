@@ -268,7 +268,7 @@ so a restart doesn't ask again; the file is 0600, and whoever can read it can re
 
 Plugins: Lua 5.4 files in `plugins/` next to the config (`~/.config/isekur/plugins/<name>.lua`),
 each in its own sandbox (no files, programs or sockets of its own; a runaway loop is stopped and
-a plugin gets 32 MB at most). `/plugin available` lists the catalog (this repo's `plugins/`),
+a plugin gets 32 MB at most). `/plugin available` lists the catalog ([isekur-plugins](https://github.com/gcanosa/isekur-plugins), its own repository; nothing of it comes with iSekur),
 `/plugin install name` fetches one, checks its sha256 against the catalog and turns it on,
 `/plugin update` and `/plugin remove name` the same way. The catalog is kept on disk (`.catalog.json`
 in your plugins folder) and fetched again after 12 hours, or with `/plugin refresh`; an update is a
@@ -282,7 +282,7 @@ each plugin's settings for everywhere, a network or a channel. `/plugin list` pr
 `/plugin enable seen@sekurnet/#isekur` only in that channel (`seen@sekurnet` that network), and
 `/plugin set seen@sekurnet key value` sets an option there. It all goes to `[plugin.<name>]`
 sections of the config (`[plugin.seen@sekurnet/#isekur]` for a channel). `/plugin reload name`
-picks up an edited file. Writing one: [plugins/README.md](plugins/README.md).
+picks up an edited file. Writing one: [WRITING.md](https://github.com/gcanosa/isekur-plugins/blob/main/WRITING.md) in isekur-plugins.
 
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.

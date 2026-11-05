@@ -18,3 +18,6 @@ SCRIPTING.md
 plans/
 # the plugin catalog cache: per user, next to their config
 .catalog.json
+
+# a checkout of github.com/gcanosa/isekur-plugins (the catalog) for make test; CI puts it here
+isekur-plugins/

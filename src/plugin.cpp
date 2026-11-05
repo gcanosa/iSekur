@@ -462,7 +462,7 @@ bool Core::plugin_run(Buffer* b, const std::string& cmd, const std::string& args
 // base: $ISEKUR_PLUGIN_URL (https://... or file:///dir/ for testing), else the repo's plugins/
 static std::string catalog_base() {
     const char* e = getenv("ISEKUR_PLUGIN_URL");
-    std::string b = e && *e ? e : "https://raw.githubusercontent.com/gcanosa/iSekur/main/plugins/";
+    std::string b = e && *e ? e : "https://raw.githubusercontent.com/gcanosa/isekur-plugins/main/";
     return b.back() == '/' ? b : b + "/";
 }
 static const size_t FETCH_CAP = 1 << 20;
@@ -801,11 +801,11 @@ std::string Core::plugin_eff(const std::string& name, const std::string& key, co
     return ini_get(cfg, plugin_sec(name, ""), key, def);
 }
 
+// the windows' scopes: everywhere and each network. A channel only when the config already has one for it
+// (made with /plugin set name@net/#chan): enough for a window, and a channel's own can still be changed there
 std::vector<std::string> Core::plugin_scopes() const {
     std::set<std::string> out{""};
     for (auto& s : servers) out.insert(s->cfg.name);
-    for (auto& b : bufs)
-        if (b->srv && b->type == BT::CHANNEL && b->joined) out.insert(b->srv->cfg.name + "/" + b->srv->lower(b->name));
     for (auto& [k, kv] : cfg)
         if (size_t at = k.find('@'); k.rfind("plugin.", 0) == 0 && at != std::string::npos) out.insert(k.substr(at + 1));
     return {out.begin(), out.end()};

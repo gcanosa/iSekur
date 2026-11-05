@@ -13,6 +13,8 @@ jobs:
         cxx: [g++, clang++]
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
       - run: sudo apt-get update && sudo apt-get install -y libssl-dev libpam0g-dev
       - run: make CXX=${{ matrix.cxx }} && make test CXX=${{ matrix.cxx }}
 
@@ -20,6 +22,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
       - run: sudo apt-get update && sudo apt-get install -y libssl-dev libpam0g-dev
       - run: make test OPT="-O1 -fsanitize=address,undefined -fno-sanitize-recover=all" LDFLAGS="-fsanitize=address,undefined"
 
@@ -27,12 +31,16 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
       - run: make && make test
 
   freebsd:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
       - uses: vmactions/freebsd-vm@v1
         with:
           prepare: pkg install -y gmake
@@ -47,6 +55,8 @@ jobs:
       - run: git config --global core.autocrlf input
         shell: cmd
       - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
       - uses: cygwin/cygwin-install-action@v4
         with:
           packages: gcc-g++ make libssl-devel

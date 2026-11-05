@@ -1795,11 +1795,19 @@ print("loaded")
         pc.exec(ph, "/plugin available");
         wait_catalog();
         assert(said("1 more need a newer iSekur") && !said("future"));
-        // autoaway from the repo's own catalog (so its sha256 in index.json must be right), with the old
-        // core settings moved into it and taken out of the config
-        char cwd[4096];
-        assert(getcwd(cwd, sizeof cwd));
-        setenv("ISEKUR_PLUGIN_URL", (std::string("file://") + cwd + "/plugins/").c_str(), 1);
+        // the catalog's own plugins, from a checkout of github.com/gcanosa/isekur-plugins: isekur-plugins/ here
+        // (CI puts it there) or next to iSekur. Without one this part is skipped; their versions come from its index
+        std::string cdir;
+        for (std::string d : {"isekur-plugins", "../isekur-plugins"}) {
+            char rp[4096];
+            if (access((d + "/index.json").c_str(), F_OK) == 0 && realpath(d.c_str(), rp)) { cdir = rp; break; }
+        }
+        if (cdir.empty()) puts("no isekur-plugins checkout here or next to iSekur: skipping the catalog plugins' tests");
+        else {
+        // autoaway from that catalog (so its sha256 in index.json must be right), with the old core settings
+        // moved into it and taken out of the config
+        setenv("ISEKUR_PLUGIN_URL", ("file://" + cdir + "/").c_str(), 1);
+        std::map<std::string, std::string> ver;  // name -> its version in the catalog
         {
             std::string err;
             Ini old{{"general", {{"auto_away", "on"}, {"away_message", "brb"}, {"auto_away_idle", "0"}}},
@@ -1808,14 +1816,15 @@ print("loaded")
             for (auto& [sec, kv] : old) for (auto& [k, v] : kv) pc.cfg[sec][k] = v;
         }
         {  // the repo's catalog: every entry's file says the same version, and has the same sha256
-            std::ifstream f(std::string(cwd) + "/plugins/index.json");
+            std::ifstream f(cdir + "/index.json");
             std::stringstream ss;
             ss << f.rdbuf();
             bool iok;
             auto idx = plugin_index(ss.str(), &iok);
             assert(iok && !idx.empty());
             for (auto& e : idx) {
-                std::ifstream lf(std::string(cwd) + "/plugins/" + e["name"] + "/" + e["name"] + ".lua");
+                ver[e["name"]] = e["version"];
+                std::ifstream lf(cdir + "/" + e["name"] + "/" + e["name"] + ".lua");
                 std::stringstream ls;
                 ls << lf.rdbuf();
                 assert(plugin_version(ls.str()) == e["version"] && sha256_of(ls.str()) == e["sha256"]);
@@ -1824,7 +1833,7 @@ print("loaded")
         assert(old_away_keys(pc));
         pc.exec(ph, "/plugin install autoaway");
         wait_catalog();
-        assert(said("autoaway: moved 6 auto-away settings") && said("autoaway 1.1 installed and on") && !old_away_keys(pc));
+        assert(said("autoaway: moved 6 auto-away settings") && said("autoaway " + ver["autoaway"] + " installed and on") && !old_away_keys(pc));
         {
             Ini back2;
             assert(ini_load(pc.cfg_path, back2));
@@ -1876,12 +1885,12 @@ print("loaded")
             auto info = pc.plugin_info();
             const PluginInfo* aw = nullptr;
             for (auto& pi : info) if (pi.name == "autoaway") aw = &pi;
-            assert(aw && aw->state == "on" && aw->version == "1.1" && aw->local == "1.1" && !aw->update && !aw->edited && !aw->desc.empty());
+            assert(aw && aw->state == "on" && aw->version == ver["autoaway"] && aw->local == ver["autoaway"] && !aw->update && !aw->edited && !aw->desc.empty());
             assert(std::find(aw->on_in.begin(), aw->on_in.end(), "") != aw->on_in.end() && std::find(aw->on_in.begin(), aw->on_in.end(), "sn") != aw->on_in.end());
             assert(aw->sets.size() == 4 && aw->sets[0].help.find("minutes") == 0 && aw->sets[0].key == "idle" && aw->sets[0].scope == 'n' && aw->sets[3].key == "announce_back" && aw->sets[3].flag);
             auto cat = pc.catalog_rows();
             assert(cat.size() >= 3 && cat[0].name == "autoaway" && cat[0].installed && !cat[0].update && !cat[0].edited && !cat[0].too_new);
-            assert(!cat[1].installed && cat[1].version == "1.1");
+            assert(!cat[1].installed && cat[1].version == ver[cat[1].name]);
             auto sc = pc.plugin_scopes();
             assert(sc.front().empty() && std::find(sc.begin(), sc.end(), "sn") != sc.end() && std::find(sc.begin(), sc.end(), "sn/#chan") != sc.end());
             pc.cfg["plugin.autoaway@sn/#chan"]["message"] = "chan msg";
@@ -1914,7 +1923,7 @@ print("loaded")
             assert(!p2.catalog && h2->lines.back().text.find("try again in a minute") != std::string::npos);
             p2.exec(h2, "/plugin available");  // from the cache
             bool listed = false;
-            for (auto& l : h2->lines) listed |= l.text.find("autoaway\x02 1.1") != std::string::npos && l.text.find("[installed]") != std::string::npos;
+            for (auto& l : h2->lines) listed |= l.text.find("autoaway\x02 " + ver["autoaway"]) != std::string::npos && l.text.find("[installed]") != std::string::npos;
             assert(listed && !p2.catalog);
         }
         // versions: edited here (same version, other contents) is not an update, and only a named update restores it
@@ -1925,13 +1934,13 @@ print("loaded")
             sleep(1);  // a new mtime for the sha cache
             { std::ofstream f(ap, std::ios::app); f << "\n"; }
             auto ri = pc.catalog_rows();  // sorted: autoaway first
-            assert(ri[0].name == "autoaway" && ri[0].edited && !ri[0].update && ri[0].local == "1.1");
+            assert(ri[0].name == "autoaway" && ri[0].edited && !ri[0].update && ri[0].local == ver["autoaway"]);
             pc.exec(ph, "/plugin update");
             wait_catalog();
             assert(said("Your plugins are up to date with the catalog"));
             pc.exec(ph, "/plugin update autoaway");
             wait_catalog();
-            assert(said("autoaway 1.1 restored"));
+            assert(said("autoaway " + ver["autoaway"] + " restored"));
             std::ifstream f(ap); std::stringstream ss; ss << f.rdbuf();
             assert(ss.str() == orig);
         }
@@ -1953,7 +1962,7 @@ print("loaded")
             wait_catalog();
             assert(said("t2 2 updated from 1"));
             unlink((pdir + "/t2.lua").c_str()), pc.cfg.erase("plugin.t2");
-            setenv("ISEKUR_PLUGIN_URL", (std::string("file://") + cwd + "/plugins/").c_str(), 1);
+            setenv("ISEKUR_PLUGIN_URL", ("file://" + cdir + "/").c_str(), 1);
         }
         // remove: the file, its data and its sections
         pc.exec(ph, "/plugin remove autoaway");
@@ -1962,7 +1971,7 @@ print("loaded")
         // awaylog: highlights and PMs while detached, one summary (INFO badge) in the tab you're on once you're back
         pc.exec(ph, "/plugin install awaylog");
         wait_catalog();
-        assert(said("awaylog 1.1 installed and on"));
+        assert(said("awaylog " + ver["awaylog"] + " installed and on"));
         pc.select(pchan);
         assert(irc_parse(":srv 305 me :back", pm)), pc.handle(ps, pm);  // the /away lunch above: back first
         pc.set_attached(false), pc.detached_at = 0;
@@ -1994,7 +2003,7 @@ print("loaded")
         // seen: what a nick did last; !seen answered where reply is on, once per 10s, telling only when for elsewhere
         pc.exec(ph, "/plugin install seen");
         wait_catalog();
-        assert(said("seen 1.1 installed and on"));
+        assert(said("seen " + ver["seen"] + " installed and on"));
         auto seen_q = [&](const std::string& who) { pc.exec(pchan, "/seen " + who); return pchan->lines.back().text; };
         assert(irc_parse(":dave!u@host JOIN #chan", pm)), pc.handle(ps, pm);
         assert(seen_q("dave") == "dave is here now, in #chan");
@@ -2033,6 +2042,7 @@ print("loaded")
         }
         pc.exec(ph, "/plugin remove awaylog");
         pc.exec(ph, "/plugin remove seen");
+        }  // the catalog's plugins
         unsetenv("ISEKUR_PLUGIN_URL");
         unlink((cat + "/index.json").c_str()), unlink((cat + "/t2/t2.lua").c_str()), rmdir((cat + "/t2").c_str()), rmdir(cat.c_str());
         for (auto f : {"t.lua", "bad.lua", "t.data", ".catalog.json"}) unlink((pdir + "/" + f).c_str());
