@@ -45,8 +45,9 @@ void Core::load_config() {
     defaults["general"]["nick"] = defaults["general"]["altnick"] = defaults["web"]["user"] = "";  // placeholders
     std::string err;
     theme_dir = ini_get(cfg, "general", "theme_dir", "themes");
+    bool no_themes = false;
     if (!load_theme(ini_get(cfg, "general", "theme", "default"), theme, err)) {
-        if (!load_theme("default", theme, err)) theme = Theme{};
+        if (!load_theme("default", theme, err)) theme = Theme{}, no_themes = true;
     }
     Buffer* home = open(nullptr, BT::STATUS, "cmd");
     for (auto& l : banner_lines(theme, opt_on(nullptr, "banner_mono", false))) print(home, LK::INFO, l);
@@ -59,6 +60,12 @@ void Core::load_config() {
     print(home, LK::INFO, "Welcome to " + version_string() + ". /help lists commands.");
     print(home, LK::INFO, "\x03" "01,09" "\x02" " NEW HERE? " "\x0f" " Type " "\x03" "11" "\x02" "/guide" "\x0f"
                           " for a quick tour of the first steps and features");
+    if (no_themes) {  // else it just looks plain and nobody says why
+        std::string ds;
+        for (auto& d : theme_dirs()) ds += (ds.empty() ? "" : ", ") + d;
+        print(home, LK::ERROR, "No themes found (running uncoloured). Looked in: " + ds +
+                                   ". Put the .theme files in one of these, or set [general] theme_dir");
+    }
     print(home, LK::INFO, "");  // room before what comes next (webchat, connecting...)
     if (!found || opt_on(nullptr, "show_guide", false)) guide(home, "");  // a new config has show_guide = on
 

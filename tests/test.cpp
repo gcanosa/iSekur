@@ -183,6 +183,26 @@ int main() {
         unlink(path.c_str()), rmdir(d);
     }
 
+    {  // no .theme anywhere: it runs uncoloured and says where it looked
+        char d[] = "/tmp/isekur-nothemes-XXXXXX";
+        assert(mkdtemp(d));
+        std::string conf = std::string(d) + "/isekur.conf", oldhome = getenv("HOME") ? getenv("HOME") : "";
+        FILE* f = fopen(conf.c_str(), "w");
+        fputs("[general]\ntheme = nope\ntheme_dir = /nonexistent\n", f), fclose(f);
+        setenv("HOME", d, 1), unsetenv("XDG_CONFIG_HOME"), unsetenv("XDG_DATA_HOME");
+        assert(chdir("build") == 0);  // away from the repo's themes/
+        Core nt;
+        nt.cfg_path = conf;
+        nt.load_config();
+        assert(chdir("..") == 0);
+        setenv("HOME", oldhome.c_str(), 1);
+        bool said = false;
+        for (auto& l : nt.bufs.front()->lines)
+            said |= l.kind == LK::ERROR && l.text.find("No themes found") != std::string::npos && l.text.find("/nonexistent") != std::string::npos;
+        assert(said && nt.theme.el.empty());
+        unlink(conf.c_str()), rmdir(d);
+    }
+
     Core core;
 
     Buffer* home = core.open(nullptr, BT::STATUS, "isekur");  // /grep: case-insensitive, nick or text

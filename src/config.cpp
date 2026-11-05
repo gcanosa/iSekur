@@ -320,7 +320,7 @@ static Style parse_style(const std::string& v) {
 std::string theme_dir = "themes";  // [general] theme_dir, set by Core
 
 // where themes are looked for, first match wins: theme_dir, then the usual places (shipped ones stay found)
-static std::vector<std::string> theme_dirs() {
+std::vector<std::string> theme_dirs() {
     std::string d = theme_dir;
     if (d.rfind("~/", 0) == 0)
         if (const char* h = getenv("HOME")) d = h + d.substr(1);
