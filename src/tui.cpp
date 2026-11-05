@@ -451,7 +451,8 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         if (n < len) txt = mirc_prefix(txt, n) + "\x0f\u258C";
     }
     Row body_cells;
-    if (l.note) cells(body_cells, " INFO ", note_style(T), false), cells(body_cells, " ", body, false);  // iSekur's own notices
+    if (!l.badge.empty())  // iSekur's notices (INFO), a plugin's lines (its name)
+        cells(body_cells, " " + l.badge + " ", l.badge_kind == 'i' ? note_style(T) : plugin_style(T), false), cells(body_cells, " ", body, false);
     cells(body_cells, txt, body);
     linkify(body_cells);
 
@@ -1680,7 +1681,7 @@ static std::string scope_name(const std::string& sc) { return sc.empty() ? "ever
 // the configure view's rows: enabled, then what the plugin declared that can be set at this scope
 static std::vector<PluginSet> cfg_rows(const PluginInfo& pi, const std::string& scope) {
     int lvl = scope.empty() ? 0 : scope.find('/') == std::string::npos ? 1 : 2;
-    std::vector<PluginSet> out{{"enabled", "off", 'c', true}};
+    std::vector<PluginSet> out{{"enabled", "off", 'c', true, "on or off here"}};
     for (auto& st : pi.sets)
         if (lvl == 0 || (lvl == 1 && st.scope != 'g') || (lvl == 2 && st.scope == 'c')) out.push_back(st);
     return out;
@@ -1711,7 +1712,7 @@ void Tui::draw_plugins(int W, int H) {
     if (cp) {
         for (auto& st : cfg_rows(*cp, scope)) {
             std::string at = c.plugin_at(cp->name, st.key, scope), eff = c.plugin_eff(cp->name, st.key, scope, st.def, st.scope);
-            rows.push_back({st.key, at.empty() ? eff : at, at.empty() ? (scope.empty() ? "(default)" : "(inherited)") : "", "", at.empty()});
+            rows.push_back({st.key, at.empty() ? eff : at, at.empty() ? (scope.empty() ? "(default)" : "(inherited)") : "", st.help, at.empty()});
         }
     } else if (!pw.avail) {
         for (auto& pi : info) {
@@ -1773,7 +1774,12 @@ void Tui::draw_plugins(int W, int H) {
             continue;
         }
         text(cb2, y, x1 - 2, r.b, r.hint ? d : st, false);
-        if (cp) { if (!r.c2.empty()) text(std::min(cb2 + (int)r.b.size() + 2, x1 - 2), y, x1 - 2, r.c2, d, false); continue; }
+        if (cp) {  // value, (default)/(inherited), then what it is: "minutes without typing..."
+            int vx = text(cb2, y, x1 - 2, r.b, r.hint ? d : st, false);
+            if (!r.c2.empty()) vx = text(vx + 2, y, x1 - 2, r.c2, d, false);
+            if (!r.d.empty()) text(std::max(vx + 2, cb2 + 24), y, x1 - 2, r.d, d, false);
+            continue;
+        }
         text(cc, y, x1 - 2, r.c2, d, false);
         text(cd, y, x1 - 2, r.d, d, false);
     }
@@ -1783,7 +1789,9 @@ void Tui::draw_plugins(int W, int H) {
     if (live && pw.mark >= 0 && pw.mb->added > pw.mark && !pw.mb->lines.empty()) {
         auto& l = pw.mb->lines.back();
         text(pw.x0 + 2, y0 + bh - 3, x1 - 2, mirc_strip(l.text), l.kind == LK::ERROR ? es : dim, false);
-    } else if (c.catalog) text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Fetching the catalog...", dim, false);
+    } else if (cp && pw.sel < n && !rows[(size_t)pw.sel].d.empty())  // the selected setting's description in full
+        text(pw.x0 + 2, y0 + bh - 3, x1 - 2, rows[(size_t)pw.sel].a + ": " + rows[(size_t)pw.sel].d, dim, false);
+    else if (c.catalog) text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Fetching the catalog...", dim, false);
     else if (pw.avail && c.catalog_have)
         text(pw.x0 + 2, y0 + bh - 3, x1 - 2, "Catalog from " + fmt_dur(time(nullptr) - c.catalog_at) + " ago" + (c.catalog_err.empty() ? "" : " (refresh failed: " + c.catalog_err + ")"), dim, false);
     const char* hint = pw.editing ? "Enter set · empty: inherit or the default · Esc cancel"
@@ -2111,9 +2119,10 @@ void Tui::on_readable() {
     tb_event ev;
     // An Enter followed by more input in the same read is a paste: it becomes
     // a newline in the input line instead of sending each line as it comes.
-    bool enter = false;
+    bool enter = false, keyed = false;  // keyed: a key came (typing goes out only then, or on a tab change)
     while (tb_peek_event(&ev, 0) == TB_OK) {
         sync_input();  // a key may have switched tabs: the next one types into that tab's line
+        keyed |= ev.type == TB_EVENT_KEY;
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
         if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
@@ -2129,8 +2138,10 @@ void Tui::on_readable() {
     if (id != typed_id)
         for (auto& b : c.bufs)
             if (b->id == typed_id) c.typed(b.get(), "");
+    bool moved = id != typed_id;
     typed_id = id;
-    if (c.active) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open ? "" : to_utf8(input));
+    // only after keys here (or a tab change): a mouse move or a resize must not say "done" while you type in the webchat
+    if (c.active && (keyed || moved)) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open ? "" : to_utf8(input));
 }
 
 bool Tui::action(const std::string& a) {
