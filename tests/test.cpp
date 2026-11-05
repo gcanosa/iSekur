@@ -1591,6 +1591,15 @@ int main() {
         assert(vs().find("TOPIC #elsewhere :new words\r\n") != std::string::npos);
         core.exec(vb, "/topic #elsewhere");
         assert(vs().find("TOPIC #elsewhere\r\n") != std::string::npos);
+        // clearing: /topic -delete sends "TOPIC #c :"; the server's empty TOPIC and 331 say it's gone
+        core.exec(vb, "/topic -delete");
+        assert(vs().find("TOPIC " + vb->name + " :\r\n") != std::string::npos);
+        vb->topic = "old words";
+        vf(":bob!u@h TOPIC " + vb->name + " :");
+        assert(vb->topic.empty() && vb->lines.back().text == "bob removed the topic");
+        vb->topic = "stale";
+        vf(":srv 331 me " + vb->name + " :No topic is set");
+        assert(vb->topic.empty() && vb->lines.back().text == "No topic is set");
         core.select(vb);
         vf(":srv RENAME #v3 #v4 :moved");
         assert(vb->name == "#v4" && core.find(v, "#v4") == vb && core.find(v, "#v3") == nullptr);

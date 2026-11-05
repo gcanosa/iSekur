@@ -777,9 +777,15 @@ void Core::handle(Server* s, const Msg& m) {
         Buffer* b = find(s, m.p(num ? 1 : 0));
         if (!b) return;
         b->topic = m.p(num ? 2 : 1);
-        line(b, LK::TOPIC, m.nick,
-             num ? "Topic: " + b->topic : m.nick + " changed the topic to: " + b->topic);
+        line(b, LK::TOPIC, m.nick,  // "TOPIC #c :" (empty): the topic is gone
+             num ? "Topic: " + b->topic : b->topic.empty() ? m.nick + " removed the topic" : m.nick + " changed the topic to: " + b->topic);
         notify(Ev::BUFFER, b);
+        return;
+    }
+    if (cmd == "331") {  // RPL_NOTOPIC, to a TOPIC query: none (anymore)
+        Buffer* b = find(s, m.p(1));
+        if (b) b->topic.clear(), notify(Ev::BUFFER, b);
+        line(b ? b : reply_buf(), LK::TOPIC, "", "No topic is set" + (b ? std::string() : " in " + m.p(1)));
         return;
     }
     if (cmd == "333") return;  // topic setter

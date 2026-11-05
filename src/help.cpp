@@ -131,10 +131,11 @@ static const std::vector<CmdInfo> CMDS = {
     {"notice", "Chat", "target text", "Send a notice",
      "Notices never trigger automatic replies, which is why bots use them.",
      {"/notice alice the build is green"}},
-    {"topic", "Chat", "[text]", "Show or set the channel topic",
-     "Without text, shows the topic. With text, sets it (channels with +t need ops). A double click "
+    {"topic", "Chat", "[#channel] [text|-delete]", "Show, set or clear the channel topic",
+     "Without text, shows the topic. With text, sets it (channels with +t need ops); -delete clears it. "
+     "A #channel first works on that one from any tab. A double click "
      "on the topic bar opens it in a box to edit, in the terminal and the webchat, when you may change it.",
-     {"/topic", "/topic Welcome! Rules: be nice | https://example.org"}},
+     {"/topic", "/topic Welcome! Rules: be nice | https://example.org", "/topic -delete", "/topic #isekur"}},
     {"quiet", "Chat", "[on|off]", "Hide joins, parts, quits and nick changes in this tab",
      "Toggles for the current tab only. Hidden lines are still logged and come back with /quiet off. "
      "Your own joins and parts stay visible.",

@@ -2040,7 +2040,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string chan = b->name;  // /topic #chan [text]: that channel, from any tab
         if (!argv.empty() && s->is_chan(argv[0])) chan = argv[0], args = args.size() > chan.size() ? args.substr(chan.size() + 1) : "";
         else if (b->type != BT::CHANNEL) { print(b, LK::ERROR, "Not a channel"); return; }
-        if (args.empty() && chan == b->name) print(b, LK::TOPIC, "Topic: " + b->topic);
+        if (args == "-delete") s->send("TOPIC " + chan + " :");  // like irssi and WeeChat: "TOPIC #c :" clears it
+        else if (args.empty() && chan == b->name) print(b, LK::TOPIC, b->topic.empty() ? "No topic is set" : "Topic: " + b->topic);
         else if (args.empty()) s->send("TOPIC " + chan);
         else {
             int max = s->isupport.count("TOPICLEN") ? atoi(s->isupport["TOPICLEN"].c_str()) : 0;
