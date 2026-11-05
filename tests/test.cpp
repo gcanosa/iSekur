@@ -3,6 +3,7 @@
 #include <cassert>
 #include <sys/stat.h>
 #include <cstdio>
+#include <filesystem>
 #include <fstream>
 #include <sstream>
 #include <csignal>
@@ -798,7 +799,7 @@ int main() {
     {
         assert(ini_rename("[a]\n# note\nk = 1\n[b]\n", "a", "z") == "[z]\n# note\nk = 1\n[b]\n");
         std::string path = "build/test-rename.conf", logs = "build/test-rename-logs";
-        system(("rm -rf " + logs).c_str());
+        std::filesystem::remove_all(logs);
         { std::ofstream f(path); f << "[general]\nnick = me\n\n[server.old1]\n# mine\nhost = irc.invalid\nautoconnect = false\n"; }
         std::swap(core.cfg_path, path);
         core.cfg["server.old1"]["host"] = "irc.invalid", core.cfg["server.old1"]["autoconnect"] = "false";
@@ -822,7 +823,7 @@ int main() {
         core.exec(home, "/server del new1");
         core.cfg["general"].erase("server_order");
         remove(core.cfg_path.c_str());
-        system(("rm -rf " + logs).c_str());
+        std::filesystem::remove_all(logs);
         std::swap(core.cfg_path, path);
     }
 
@@ -1031,7 +1032,8 @@ int main() {
             auto keep_unsaved = core.unsaved;
             std::string sv = "server." + ts->cfg.name;
             for (auto& k : setting_keys()) {
-                if (k.key == "name" || k.key == "lock" || k.key == "exec_web" || k.key == "lock_password_hash") continue;
+                std::string_view key = k.key;
+                if (key == "name" || key == "lock" || key == "exec_web" || key == "lock_password_hash") continue;
                 std::string full = (k.scope == 'n' ? sv + "." : "") + k.key;
                 for (const char* v : {"0", "\"\""}) {
                     core.exec(home, "/set " + full + " " + v);
@@ -1211,7 +1213,7 @@ int main() {
         socklen_t ll = sizeof la;
         getsockname(lfd, (sockaddr*)&la, &ll);
         std::string port = std::to_string(ntohs(la.sin_port));
-        system("rm -rf build/dcctest");
+        std::filesystem::remove_all("build/dcctest");
         core.cfg["general"]["dcc_dir"] = "build/dcctest";
         core.cfg["server.t"]["dcc"] = "on";  // a server's own dcc isn't read: [general] decides
         core.cfg["general"]["dcc"] = "off";  // off: the offer is dropped, /dcc get and send refused
@@ -1372,7 +1374,8 @@ int main() {
         size_t ck = login.find("isekur_sid=");
         assert(login.rfind("HTTP/1.1 200", 0) == 0 && ck != std::string::npos);
         std::string cookie = login.substr(ck, login.find(';', ck) - ck);
-        auto [ws, snap] = talk("GET /ws HTTP/1.1\r\nHost: x\r\nCookie: " + cookie + "\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", 1 << 30);
+        auto [ws0, snap] = talk("GET /ws HTTP/1.1\r\nHost: x\r\nCookie: " + cookie + "\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", 1 << 30);
+        int ws = ws0;  // lambdas below capture it; capturing a structured binding is C++20
         std::string me = "{\"t\":\"buf\",\"id\":" + std::to_string(chb->id) + ",";
         auto buf_msg = [&](const std::string& all) { size_t at = all.rfind(me); assert(at != std::string::npos); return all.substr(at, all.find("\"t\":\"", at + 5) - at); };
         assert(snap.find("101 Switching") != std::string::npos && buf_msg(snap).find("\"nicks\":[") != std::string::npos);
