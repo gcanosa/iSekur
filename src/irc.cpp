@@ -902,6 +902,7 @@ void Core::handle(Server* s, const Msg& m) {
         }
         if (me && !shown && active && active->srv == s)
             line(active, LK::NICK, m.nick, "You are now known as " + nn, true), notify(Ev::BUFFER, active);
+        plugin_emit("nick", s, "", {{"nick", m.nick}, {"new", nn}, {"self", me}});
         return;
     }
     if (cmd == "MODE") {

@@ -69,6 +69,7 @@ query nick) are set when the event has them.
 | `join` | `nick`, `host`, `self` |
 | `part` | `nick`, `reason`, `self`, `kick`, `by` (who kicked) |
 | `quit` | `nick`, `host`, `reason` (no target: it's the whole network) |
+| `nick` | `nick` (the old one), `new`, `self` (no target) |
 | `away` | `away`: the server says you're away (306) or back (305) |
 | `command` | `name`, `args`: you typed a /command (not one a plugin runs). Return `true` to take it over |
 | `tick` | every second, no fields: check `isekur.opt("enabled", srv)` for the networks you act on |
@@ -81,9 +82,13 @@ query nick) are set when the event has them.
 | `isekur.command(name, usage, fn)` | adds `/name`; `fn(args, srv, target)` gets the rest of the line, the tab's network (nil in the main window) and the tab's name. iSekur's own commands can't be replaced |
 | `isekur.say(srv, target, text)` | says text (each line of it) in a channel or to a nick |
 | `isekur.send(srv, line)` | a raw IRC line (one line) |
-| `isekur.print(srv, target, text)` | shows text in that tab only (else the network's tab, else the main window) |
+| `isekur.print(srv, target, text, note)` | shows text in that tab only (else the network's tab, else the main window); `note` true puts the INFO badge first |
 | `isekur.exec(srv, target, "/cmd ...")` | runs a command as if typed in that tab (not `/plugin`) |
-| `isekur.store_get(key)`, `isekur.store_set(key, value)` | the plugin's own saved strings (`<name>.data`); `nil` removes a key |
+| `isekur.store_get(key)`, `isekur.store_set(key, value)` | the plugin's own saved strings (`<name>.data`); `nil` removes a key. Written within 5 seconds, and when it's unloaded or iSekur exits |
+| `isekur.store_keys()` | every key in the store |
+| `isekur.active()` | the tab you're on: its network (nil for the main window) and its name |
+| `isekur.date(t, fmt)` | `t` (default now) as local time with strftime's `fmt` (default: your timestamp format) |
+| `isekur.is_chan(srv, name)` | a channel name by that network's own prefixes |
 | `isekur.servers()` | names of the connected networks |
 | `isekur.channels(srv)` | the channels joined there |
 | `isekur.me(srv)` | your nick there, nil when not connected |

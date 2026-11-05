@@ -31,8 +31,9 @@ struct Plugin {
     std::map<std::string, Opt> opts;
     std::vector<std::string> order;  // opts in the order they were declared
     std::map<std::string, std::string> store;
-    bool store_read = false;
-    ~Plugin() { if (L) lua_close(L); }
+    bool store_read = false, store_dirty = false;  // dirty: written by store_flush within STORE_EVERY seconds
+    time_t store_at = 0;                           // when it was last written
+    ~Plugin();
 };
 
 static bool truthy(const std::string& v) { return v == "on" || v == "true" || v == "yes" || v == "1"; }
@@ -163,7 +164,12 @@ static int l_say(lua_State* L) {
     return 0;
 }
 static int l_send(lua_State* L) { live_srv(L, 1)->send(one_line(str_arg(L, 2))); return 0; }
-static int l_print(lua_State* L) { self(L)->c->print(tab(L, 1, 2), LK::INFO, str_arg(L, 3)); return 0; }
+static int l_print(lua_State* L) {  // print(srv, target, text, note): note true adds the INFO badge
+    Buffer* b = tab(L, 1, 2);
+    if (lua_toboolean(L, 4)) self(L)->c->info_note(b, str_arg(L, 3));
+    else self(L)->c->print(b, LK::INFO, str_arg(L, 3));
+    return 0;
+}
 static int l_exec(lua_State* L) {  // exec(srv, target, "/command ...") as if typed in that tab
     Buffer* b = tab(L, 1, 2);
     if (b) self(L)->c->exec(b, one_line(str_arg(L, 3)));
@@ -211,22 +217,63 @@ static int l_store_get(lua_State* L) {
     else lua_pushlstring(L, it->second.data(), it->second.size());
     return 1;
 }
-static int l_store_set(lua_State* L) {  // store_set(key, value): nil removes it; written at once
+// the whole file through a temporary one; false: it couldn't be written (it stays dirty, tried again later)
+static const time_t STORE_EVERY = 5;  // seconds: a busy channel's seen updates are one write, not one per line
+static bool store_flush(Plugin* p) {
+    if (!p->store_dirty) return true;
+    std::string path = store_path(p), tmp = path + ".tmp";
+    mkdir_p(p->c->plugin_dir());
+    FILE* f = fopen(tmp.c_str(), "w");
+    p->store_at = time(nullptr);
+    if (!f) return false;
+    chmod(tmp.c_str(), 0600);
+    for (auto& [kk, v] : p->store) fprintf(f, "%s\t%s\n", esc(kk).c_str(), esc(v).c_str());
+    bool ok = fclose(f) == 0 && rename(tmp.c_str(), path.c_str()) == 0;
+    if (ok) p->store_dirty = false;
+    else unlink(tmp.c_str());
+    return ok;
+}
+Plugin::~Plugin() {
+    if (L) lua_close(L);
+    store_flush(this);  // unloaded, removed, or iSekur exiting: nothing set is lost
+}
+static int l_store_set(lua_State* L) {  // store_set(key, value): nil removes it; on disk within STORE_EVERY seconds
     Plugin* p = self(L);
     store_load(p);
     std::string k = str_arg(L, 1);
     if (lua_isnoneornil(L, 2)) p->store.erase(k);
     else p->store[k] = luaL_tolstring(L, 2, nullptr), lua_pop(L, 1);
-    // ponytail: the whole file on every set; an in-memory batch with a flush on tick if a plugin writes a lot
-    std::string path = store_path(p), tmp = path + ".tmp";
-    mkdir_p(p->c->plugin_dir());
-    FILE* f = fopen(tmp.c_str(), "w");
-    if (!f) return luaL_error(L, "can't write %s", path.c_str());
-    chmod(tmp.c_str(), 0600);
-    for (auto& [kk, v] : p->store) fprintf(f, "%s\t%s\n", esc(kk).c_str(), esc(v).c_str());
-    bool ok = fclose(f) == 0 && rename(tmp.c_str(), path.c_str()) == 0;
-    if (!ok) return luaL_error(L, "can't write %s", path.c_str());
+    p->store_dirty = true;
     return 0;
+}
+static int l_store_keys(lua_State* L) {  // every key in the store (unordered)
+    Plugin* p = self(L);
+    store_load(p);
+    lua_createtable(L, (int)p->store.size(), 0);
+    int i = 1;
+    for (auto& [k, v] : p->store) lua_pushlstring(L, k.data(), k.size()), lua_rawseti(L, -2, i++);
+    return 1;
+}
+static int l_active(lua_State* L) {  // the tab you're on: its network (nil: none) and name
+    Core& c = *self(L)->c;
+    if (!c.active) return 0;
+    if (c.active->srv) lua_pushstring(L, c.active->srv->cfg.name.c_str());
+    else lua_pushnil(L);
+    lua_pushstring(L, c.active->name.c_str());
+    return 2;
+}
+static int l_date(lua_State* L) {  // date(t, fmt): strftime in local time; fmt defaults to the [general] timestamp
+    Core& c = *self(L)->c;
+    time_t t = (time_t)luaL_optinteger(L, 1, time(nullptr));
+    std::string fmt = luaL_optstring(L, 2, ini_get(c.cfg, "general", "timestamp", c.theme.lay("timestamp", "%H:%M")).c_str());
+    std::string out = fmt_time(t, fmt.substr(0, 64));
+    lua_pushlstring(L, out.data(), out.size());
+    return 1;
+}
+static int l_is_chan(lua_State* L) {  // is_chan(srv, name): a channel by that network's CHANTYPES
+    Server* s = srv_arg(L, 1);
+    lua_pushboolean(L, s ? s->is_chan(str_arg(L, 2)) : !str_arg(L, 2).empty() && (str_arg(L, 2)[0] == '#' || str_arg(L, 2)[0] == '&'));
+    return 1;
 }
 static int l_servers(lua_State* L) {  // the connected ones' names
     lua_newtable(L);
@@ -283,7 +330,8 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
     static const luaL_Reg api[] = {
         {"on", l_on}, {"command", l_command}, {"setting", l_setting}, {"opt", l_opt},
         {"say", l_say}, {"send", l_send}, {"print", l_print}, {"exec", l_exec},
-        {"store_get", l_store_get}, {"store_set", l_store_set},
+        {"store_get", l_store_get}, {"store_set", l_store_set}, {"store_keys", l_store_keys},
+        {"active", l_active}, {"date", l_date}, {"is_chan", l_is_chan},
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"rank", l_rank},
         {nullptr, nullptr}};
@@ -627,6 +675,9 @@ static void list_available(Core& c, Buffer* b) {
 }
 
 void Core::plugins_poll() {
+    time_t now = time(nullptr);
+    for (auto& p : plugins)
+        if (p->store_dirty && now - p->store_at >= STORE_EVERY) store_flush(p.get());
     if (!catalog || !catalog->done.load(std::memory_order_acquire)) return;
     auto j = catalog;
     catalog.reset();
