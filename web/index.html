@@ -1730,7 +1730,7 @@ function openPlugins() {
 dplug.onclose = () => clearInterval(plugTimer);
 $("#plugbtn").onclick = openPlugins;
 $("#plugref").onclick = () => plugRun("/plugin refresh");  // at most once a minute; it says so
-$("#plugback").onclick = () => { plugCfg = ""; renderPlugins(); };
+$("#plugback").onclick = () => { plugCfg = ""; renderPlugCfg.sig = ""; renderPlugins(); };
 for (const b of $("#plugtabs").children) b.onclick = () => {
   plugTab = b.dataset.tab; renderPlugins();
   if (plugTab === "cat" && plug && !plug.have && !plug.fetching) send({t: "plugref", buf: active});
@@ -1791,6 +1791,10 @@ function renderPlugCfg() {
   if (!p) { plugCfg = ""; return renderPlugins(); }
   if (C.contains(document.activeElement) && document.activeElement.tagName === "INPUT") return;  // typing: the 1s refresh waits
   if (!plug.scopes.includes(plugScope)) plugScope = "";
+  // the 1s refresh rebuilds only on a change: rebuilding an open dropdown closed it before you could pick
+  const sig = JSON.stringify([p.cfg, p.sets, plug.scopes, plugScope]);
+  if (sig === renderPlugCfg.sig && C.firstChild) return;
+  renderPlugCfg.sig = sig;
   C.textContent = "";
   const top = el("div", "top"), sel = el("select");
   sel.setAttribute("aria-label", "Scope");
@@ -1817,8 +1821,9 @@ function renderPlugCfg() {
     }
     ctl.setAttribute("aria-label", s.key);
     const lab = el("span", "", s.key);
-    if (s.help) { lab.title = s.help; const w = el("div", "ctl"); w.append(ctl, el("small", "", s.help)); ctl = w; }  // its unit, what it does
-    R.append(lab, ctl);
+    let cell = ctl;  // the control itself keeps the handlers above: they read ctl.value
+    if (s.help) { lab.title = s.help; cell = el("div", "ctl"); cell.append(ctl, el("small", "", s.help)); }  // its unit, what it does
+    R.append(lab, cell);
   }
   C.append(top, R);
 }
