@@ -2012,6 +2012,11 @@ print("loaded")
         assert(irc_parse(":frank!u@h PRIVMSG #chan :!seen dave", pm)), pc.handle(ps, pm);
         assert(psent().empty());  // reply is off
         pc.exec(ph, "/plugin set seen@sn/#chan reply on");
+        {  // /plugin typed in a channel: its answer goes to the console tab, the channel stays as it was
+            size_t nc = pchan->lines.size();
+            pc.exec(pchan, "/plugin set seen max 6000");
+            assert(pchan->lines.size() == nc && last(ph) == "seen max = 6000" && ph->lines.back().badge == "plugin");
+        }
         assert(irc_parse(":frank!u@h PRIVMSG #chan :!seen dave", pm)), pc.handle(ps, pm);
         {
             std::string a = psent();

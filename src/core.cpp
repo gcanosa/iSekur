@@ -1070,6 +1070,7 @@ void Core::info_note(Buffer* b, const std::string& text) {
 }
 
 void Core::plug_print(Buffer* b, LK k, const std::string& text, const std::string& badge, char kind) {
+    if (badge == "plugin" && kind == 'p') b = nullptr;  // /plugin's own messages (install, settings): the console tab, not the chat
     Line l{time(nullptr), k, "", text};
     l.badge = badge, l.badge_kind = kind;
     add(b ? b : bufs.front().get(), l);

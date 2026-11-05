@@ -1693,7 +1693,8 @@ static std::vector<PluginSet> cfg_rows(const PluginInfo& pi, const std::string& 
 }
 
 void Tui::plug_run(const std::string& cmd) {
-    pw.mb = c.active, pw.mark = c.active ? c.active->added : -1;
+    pw.mb = c.bufs.empty() ? nullptr : c.bufs.front().get();  // /plugin answers in the console tab: its newest line is the message
+    pw.mark = pw.mb ? pw.mb->added : -1;
     if (c.active) c.exec(c.active, cmd);
 }
 

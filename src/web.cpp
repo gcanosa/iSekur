@@ -701,16 +701,17 @@ void Web::ws_frames(Client& cl) {
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "plugref") {  // the plugin window's Available tab: fetch the catalog
             c.plugin_refresh(b);
-        } else if (m["t"] == "plugins") {  // the plugin window: installed, the catalog, the scopes, and b's newest line (the last action's answer)
+        } else if (m["t"] == "plugins") {  // the plugin window: installed, the catalog, the scopes, and the console's newest line (the last action's answer)
+            Buffer* con = c.bufs.front().get();
             auto arr = [](const std::vector<std::string>& v) {
                 std::string o = "[";
                 for (auto& x : v) o += (o.size() > 1 ? "," : "") + json_str(x);
                 return o + "]";
             };
             std::string o = "{\"t\":\"plugins\",\"fetching\":" + std::string(c.catalog ? "1" : "0") + ",\"have\":" + (c.catalog_have ? "1" : "0") +
-                            ",\"err\":" + json_str(c.catalog_err) + ",\"age\":" + std::to_string(c.catalog_have ? (long long)(time(nullptr) - c.catalog_at) : -1) + ",\"scopes\":" + arr(c.plugin_scopes()) + ",\"added\":" + std::to_string(b->added) +
-                            ",\"last\":" + json_str(b->lines.empty() ? "" : mirc_strip(b->lines.back().text)) +
-                            ",\"lasterr\":" + (!b->lines.empty() && b->lines.back().kind == LK::ERROR ? "1" : "0") + ",\"installed\":[";
+                            ",\"err\":" + json_str(c.catalog_err) + ",\"age\":" + std::to_string(c.catalog_have ? (long long)(time(nullptr) - c.catalog_at) : -1) + ",\"scopes\":" + arr(c.plugin_scopes()) + ",\"added\":" + std::to_string(con->added) +
+                            ",\"last\":" + json_str(con->lines.empty() ? "" : mirc_strip(con->lines.back().text)) +
+                            ",\"lasterr\":" + (!con->lines.empty() && con->lines.back().kind == LK::ERROR ? "1" : "0") + ",\"installed\":[";
             bool first = true;
             for (auto& pi : c.plugin_info()) {
                 o += std::string(first ? "" : ",") + "{\"name\":" + json_str(pi.name) + ",\"state\":" + json_str(pi.state) + ",\"version\":" + json_str(pi.version) +
