@@ -121,11 +121,14 @@ FORCE:
 build:
 	mkdir -p build
 
+# gcc gives up tracking variables in the test's huge main() and says so; skip that tracking up front (clang has no such flag)
+TEST_FLAGS := $(shell $(CXX) -fno-var-tracking-assignments -E -x c++ /dev/null >/dev/null 2>&1 && echo -fno-var-tracking-assignments)
+
 test: build/test
 	./build/test
 
 build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/e2e.o build/exec.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o build/plugin.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
-	$(CXX) $(CXXFLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
+	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:
 	$(MAKE) clean
