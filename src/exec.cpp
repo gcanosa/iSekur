@@ -491,6 +491,12 @@ static bool save_general(Core& c, const std::map<std::string, std::string>& kv, 
     return false;
 }
 
+// the lock key: locks at once, terminal and webchat. Without a password it only says how to set one
+void Core::lock_now(Buffer* b) {
+    if (lock_on()) set_lock(true);
+    else print(b, LK::INFO, "No lock password yet: /lock sets one and locks");
+}
+
 // /lock: lock now (no password yet: set one first); /lock on: set the password; /lock off: stop
 // off and a change ask for the current password, so the webchat may run them too
 void Core::lock_cmd(Buffer* b, const std::string& args) {

@@ -196,3 +196,4 @@ key           =              ; e.g. /path/privkey.pem
 ; next_tab = M-Right C-n
 ; toggle_nicklist = C-l M-l F2
 ; toggle_topic = C-t M-t
+; lock = M-s

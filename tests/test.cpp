@@ -267,8 +267,13 @@ int main() {
         assert(core.pass_buf == home && !core.quit);
         core.exec(home, "");  // Esc / empty: cancelled
         assert(!core.quit && !core.pass_buf);
+        core.lock_now(home);  // the lock key (Alt+S): locks at once, no prompt
+        assert(core.locked && !core.pass_buf);
+        core.set_lock(false);
         core.unsaved.clear(), core.set_was.clear();
         for (auto k : {"lock", "lock_password_hash", "exec_web"}) core.cfg["general"].erase(k);
+        core.lock_now(home);  // no password: only says how
+        assert(!core.locked && !core.pass_buf && home->lines.back().text == "No lock password yet: /lock sets one and locks");
     }
 
     // channel op commands against a fake connected server; flood_ms 0 = lines go out at once

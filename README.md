@@ -150,6 +150,7 @@ Not available on Cygwin.
 | Alt+1..9, Alt+0 | go to tab N |
 | Alt+←/→, Ctrl+P/N | previous / next tab |
 | Ctrl+A, Alt+A | next tab with activity |
+| Alt+S (Option+S on a Mac) | lock the terminal and the webchat now (`/lock`; with no lock password yet it says how to set one) |
 | Alt+D (Option+D on a Mac), Ctrl+Z | detach: iSekur keeps running in the background |
 | Ctrl+X | next server |
 | Ctrl+G, Alt+J | find a tab: type part of a channel, nick or network name, Enter goes there (the webchat's filter box on top of the tab list) |

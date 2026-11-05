@@ -373,6 +373,7 @@ struct Core {
     std::string lock_msg;  // the box's error line ("!...")
     bool lock_on() const;
     void lock_cmd(Buffer* b, const std::string& args);
+    void lock_now(Buffer* b);  // the lock key (Alt+S): locks if a password is set, else says how
     void unlock(const std::string& pass);
     bool asking(const Buffer* b) const { return b && pass_buf == b && !pass_web; }  // the TUI's dialog is up on b
     bool twitch_handle(Server* s, const Msg& m, time_t ts);  // Twitch-only commands; true: handled

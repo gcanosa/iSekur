@@ -367,7 +367,7 @@ static const std::vector<CmdInfo> CMDS = {
      "The mouse isn't passed on. Terminal only: never from the webchat.",
      {"/attach vps", "/attach me@irc.example.org", "/attach -p 2222 me@irc.example.org", "/attach vps ~/.config/isekur/work.conf"}},
     {"lock", "Session", "[on|off]", "Lock the session (terminal and webchat) with a password",
-     "/lock locks now: the terminal and every webchat show only a password box, and the webchat "
+     "/lock or Alt+S (Option+S on a Mac) locks now: the terminal and every webchat show only a password box, and the webchat "
      "gets nothing of the session until it's typed (in either one). The first time it asks for "
      "a password (twice) and keeps it: from then on iSekur also locks at startup and on every "
      "--attach. /lock on sets or changes it (the current one first) without locking; /lock off "
@@ -643,6 +643,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_KEY("Ctrl+A") "           next tab with news    " G_KEY("Ctrl+X") "          next server",
         "  " G_KEY("Ctrl+W") "           close this tab        " G_KEY("PgUp") " " G_KEY("PgDn") "     scroll the chat",
         "  " G_KEY("Ctrl+G") " " G_KEY("Alt+J") "    find a tab by name (channel, query, network)",
+        "  " G_KEY("Alt+S") "            lock the screen now (with a " G_CMD("/lock") " password)",
         "  " G_KEY("Alt+Q") "            quit iSekur (asks first; " G_KEY("Alt+D") " detaches instead)",
         "",
         G_HEAD("Showing and hiding"),

@@ -1458,7 +1458,7 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
                   {"other_pane", "the other /split pane"}, {"close_tab", "close the tab"}}},
         {"View", {{"scroll_up", "scroll up half a page"}, {"scroll_down", "scroll down half a page"}, {"toggle_nicklist", "show or hide the nick list"},
                   {"toggle_topic", "show or hide the topic bar"}, {"toggle_mouse", "mouse on / off"}, {"keys", "this list"}}},
-        {"Session", {{"detach", "detach (stays connected)"}, {"quit", "exit iSekur (asks first)"}}},
+        {"Session", {{"lock", "lock the screen now (/lock)"}, {"detach", "detach (stays connected)"}, {"quit", "exit iSekur (asks first)"}}},
     };
     std::map<std::string, std::string> by;  // action -> its keys; Option-symbol twins (¬ ∆...) left out
     for (auto& [sp, act] : keymap)
@@ -1851,6 +1851,7 @@ void Tui::load_keys() {
     keymap["F6"] = keymap["M-o"] = keymap["ø"] = "other_pane";  // /split; ø: Option+O on a Mac
     keymap["M-q"] = keymap["œ"] = "quit";  // œ: Option+Q on a Mac without "Option as Meta"; it asks first
     keymap["F1"] = keymap["M-k"] = keymap["˚"] = "keys";  // ˚: Option+K on a Mac
+    keymap["M-s"] = keymap["ß"] = "lock";  // ß: Option+S on a Mac without "Option as Meta"
     keymap["M-d"] = keymap["∂"] = keymap["C-z"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"; C-z: detach (still connected) where a shell would suspend
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
@@ -1927,6 +1928,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "toggle_topic") topicbar = !topicbar;
     else if (a == "other_pane") { if (c.split_buf) c.select(c.split_buf); }
     else if (a == "detach") c.detach_req = true;
+    else if (a == "lock") c.lock_now(c.active);
     else if (a == "quit") ask_exit("");  // asks first, in the yes/no box (y quits; n, Esc or × don't)
     else if (a == "keys") kw = KeysWin{}, kw.open = true;
     else if (a == "find_tab") fw = FindWin{}, fw.open = true, fw.sel = std::max(0, c.index_of(c.active));
