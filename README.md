@@ -180,7 +180,7 @@ dropped instead of showing up as garbage.
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
 `/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
-`/clear`, `/back` (clears away), `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected). Any other command goes to the server unchanged
+`/clear`, `/back` (clears away), `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected, and for the lock password when one is set). Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 
 Twitch chat is IRC: `/twitch` opens its tab and asks for your login and OAuth token if they're missing, or set up a `[server.twitch]` with `host = irc.chat.twitch.tv`, `port = 6697`, `tls = true`,
@@ -237,7 +237,8 @@ mouse isn't passed on. `/attach host config` picks one of several iSekurs there 
 `/lock on` sets a master password (off by default): from then on iSekur shows only a password
 box at startup, on every `--attach` and after `/lock`, before any tab, log or message. It's
 stored hashed in the config; three wrong tries wait a minute; `/lock off` asks for it before
-turning it off, and `/lock on` again changes it (current password first). Forgot it? Stop
+turning it off, `/lock on` again changes it (current password first), and `/exit` asks for it
+too, so an unlocked terminal or an open webchat can't close iSekur (Alt+D still detaches). Forgot it? Stop
 iSekur (`pkill isekur`), set `lock = off` in the config and start it again. It locks the screen, not the files: the config and logs aren't encrypted, and
 the webchat keeps its own login.
 

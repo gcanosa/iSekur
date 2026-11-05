@@ -64,8 +64,9 @@ static const std::vector<CmdInfo> CMDS = {
      {"/quit", "/quit see you tomorrow"}},
     {"exit", "Connection", "[-y] [message]", "Quit every server and close iSekur",
      "Sends QUIT everywhere (with the message, else quit_message) and exits. While a network is connected it "
-     "asks first; -y doesn't ask. Alt+Q (Option+Q on a Mac) does the same. To keep iSekur running in the "
-     "background instead, use /detach or Alt+D (Option+D on a Mac).",
+     "asks first; -y doesn't ask. With a lock password (/lock on) it asks for that too, -y or not, so an "
+     "unlocked terminal or an open webchat can't close iSekur. Alt+Q (Option+Q on a Mac) does the same. To keep "
+     "iSekur running in the background instead, use /detach or Alt+D (Option+D on a Mac).",
      {"/exit", "/exit see you tomorrow", "/exit -y"}},
     {"nick", "Connection", "newnick", "Change your nickname",
      "Changes your nick on the server of the current tab; /nick alone shows it. When disconnected, it is used on the next connect. "
@@ -372,7 +373,8 @@ static const std::vector<CmdInfo> CMDS = {
      "--attach. /lock on sets or changes it (the current one first) without locking; /lock off "
      "asks for it and turns locking off. lock_idle = N locks after N minutes without typing "
      "(0, the default: never). Forgot it? Stop iSekur, set lock = off in the config and start "
-     "it again. Three wrong tries wait a minute. The config and logs are not encrypted by it.",
+     "it again. Three wrong tries wait a minute. While it's set, /exit asks for it as well. The config and "
+     "logs are not encrypted by it.",
      {"/lock", "/lock on", "/lock off", "/set lock_idle 15"}},
     {"web", "Session", "[start|stop|restart|status]", "Control the built-in webchat",
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "

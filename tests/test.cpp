@@ -261,6 +261,12 @@ int main() {
         assert(core.cfg["general"]["exec_web"] == "on" && !core.pass_buf);
         core.exec(home, "/set exec_web on");  // no change: nothing asked
         assert(!core.pass_buf);
+        core.exec(home, "/exit -y"), core.exec(home, "nope");  // /exit too: the lock password, or iSekur stays
+        assert(home->lines.back().text == "Wrong password: iSekur keeps running" && !core.quit);
+        core.exec(home, "/exit -y");
+        assert(core.pass_buf == home && !core.quit);
+        core.exec(home, "");  // Esc / empty: cancelled
+        assert(!core.quit && !core.pass_buf);
         core.unsaved.clear(), core.set_was.clear();
         for (auto k : {"lock", "lock_password_hash", "exec_web"}) core.cfg["general"].erase(k);
     }

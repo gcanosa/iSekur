@@ -1530,6 +1530,17 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "exit") {  // the frontends ask first while connected (/exit -y skips that); here it just goes
+        // with a lock password, that password too: an unlocked terminal or a webchat left open can't close iSekur
+        // (Alt+D still detaches freely: everything stays connected)
+        static bool exit_ok = false;
+        if (lock_on() && !exit_ok) {
+            std::string line = in;
+            ask_pass(b, "lock password", [this, b, line](const std::string& p) {
+                if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: iSekur keeps running"); return; }
+                exit_ok = true, exec(b, line), exit_ok = false;
+            }, true, "Exit", {"Locking is on: the lock password closes iSekur", "Alt+D detaches instead"});
+            return;
+        }
         if (args == "-y" || args.rfind("-y ", 0) == 0) args = args.size() > 3 ? args.substr(3) : "";
         quit_msg = args;
         for (auto& sv : servers)
