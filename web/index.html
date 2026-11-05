@@ -419,6 +419,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #sugg:empty, #input:not(:focus-within) #sugg { display: none; }
 #sugg div { padding: 2px 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 #sugg div.on { background: var(--tab_active-bg, var(--line)); }
+@media (pointer: coarse) { #sugg div { padding: 9px 14px; } }  /* finger-sized rows on phones */
 #sugg .w { color: var(--set_key-fg, var(--info-fg, var(--accent))); }
 #sugg .s { color: var(--separator-fg, var(--muted)); }
 #sugg .v { color: var(--set_value-fg, var(--input-fg, var(--fg))); }
@@ -1866,8 +1867,17 @@ function applyAsk() {
 }
 const asking = () => { const b = bufs.get(active); return !!(b && b.ask); };
 // like the terminal's: [from, [[word, sep, value], ...]]; from -1: none, -2: only the command's usage
+const touch = matchMedia("(pointer: coarse)").matches;  // phones/tablets: no Tab key, so nicks are offered as you type
 function suggest(s) {
-  if (asking() || s[0] !== "/" || s.startsWith("//")) return [-1, []];
+  if (asking()) return [-1, []];
+  if (touch && s && !/[\s\/]/.test(s)) {  // the line's first word: nicks here that start with it, tapped in as "nick: "
+    const b = bufs.get(active), pfx = ircLower(s), out = [];
+    if (!b) return [-1, []];
+    for (const n of b.nicks.map(n => n[1]).concat(b.type === "query" ? [b.name] : []))
+      if (ircLower(n).startsWith(pfx)) out.push([n + ":", "", ""]);
+    return [0, out.sort((x, y) => ircLower(x[0]).localeCompare(ircLower(y[0]))).slice(0, 8)];
+  }
+  if (s[0] !== "/" || s.startsWith("//")) return [-1, []];
   const sp = s.indexOf(" "), out = [];
   const cm = (pfx, slash) => { for (const [n, u, sum] of cmds) if (n.startsWith(ircLower(pfx))) out.push([(slash ? "/" : "") + n, (u ? " " + u : "") + "  ", sum]); };
   if (sp < 0) { cm(s.slice(1), true); return [0, out]; }
