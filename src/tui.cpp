@@ -391,6 +391,28 @@ std::string status_info_json(const Core& c) {
 
 // ---- line layout -----------------------------------------------------------
 // full: a /typing line at its whole length, so its height holds still (scrolled back)
+std::map<std::string, std::string> json_flat(const std::string& s);  // web.cpp
+
+// Line::embeds ("{...},{...}") as one map per object: commas inside strings don't split
+static std::vector<std::map<std::string, std::string>> embed_list(const std::string& s) {
+    std::vector<std::map<std::string, std::string>> out;
+    size_t start = 0;
+    bool str = false, esc = false;
+    for (size_t i = 0; i < s.size(); i++) {
+        char ch = s[i];
+        if (str) { if (esc) esc = false; else if (ch == '\\') esc = true; else if (ch == '"') str = false; }
+        else if (ch == '"') str = true;
+        else if (ch == '}') out.push_back(json_flat(s.substr(start, i + 1 - start))), start = i + 2;
+    }
+    return out;
+}
+// r cut to w columns, "…" at the end when it was longer
+static void clip(Row& r, int w, Style st) {
+    if (width(r) <= w) return;
+    while (!r.empty() && width(r) > w - 1) r.pop_back();
+    r.push_back({U'…', st, 1});
+}
+
 static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false) {
     const Theme& T = c.theme;
     int nw = atoi(ini_get(c.cfg, "general", "nick_width", T.lay("nick_width", "12")).c_str());  // /set nick_width beats the theme's
@@ -479,6 +501,29 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         for (int w = width(r0); w < width_ - (tsw - 1); w++) r0.push_back({' ', T.get("default"), 1});
         r0.insert(r0.end(), tsr.begin(), tsr.end());
     }
+    // a plugin's link previews (isekur.embed), as the webchat's cards but text only: "▎ site · title", "▎ description",
+    // a row each. Pictures and players are the webchat's alone. Untrusted text: no mIRC codes read in it
+    if (!l.embeds.empty())
+        for (auto& e : embed_list(l.embeds)) {
+            if (e["type"] != "link" || e["title"].empty() || e["term"] == "false") continue;
+            Style bar = sty(T, "embed_bar", "separator"), dim = T.get("timestamp"), tit = T.get("default");
+            tit.attr |= A_BOLD;
+            int room = std::max(4, avail - 2);
+            auto row = [&](Row part) {
+                Row r((size_t)indent, Cell{' ', T.get("default"), 1});
+                cells(r, "\u258e ", bar, false);
+                r.insert(r.end(), part.begin(), part.end());
+                rows.push_back(r);
+            };
+            Row t;
+            if (!e["site"].empty()) cells(t, e["site"] + " \u00b7 ", dim, false);
+            cells(t, e["title"], tit, false);
+            clip(t, room, tit), row(t);
+            if (e["desc"].empty()) continue;
+            Row d;
+            cells(d, e["desc"], dim, false);
+            clip(d, room, dim), row(d);
+        }
     return rows;
 }
 

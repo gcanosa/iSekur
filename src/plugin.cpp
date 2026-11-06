@@ -409,6 +409,7 @@ static int l_embed(lua_State* L) {
     if (!l || o.size() > 4096 || l->embeds.size() + o.size() > 16384) return lua_pushboolean(L, 0), 1;  // gone, or too much
     l->embeds += (l->embeds.empty() ? "" : ",") + o;
     c.notify(Ev::EMBED, b, l);
+    c.dirty = true;  // the terminal draws link previews too
     lua_pushboolean(L, 1);
     return 1;
 }

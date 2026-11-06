@@ -395,15 +395,22 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .l .em { grid-column: 3; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin: 3px 0 5px; white-space: normal; min-width: 0; }
 .tsright .l .em { grid-column: 2; }
 .em a { color: inherit; text-decoration: none; }
-.em-card { display: flex; gap: 10px; max-width: min(520px, 100%); min-width: 0; padding: 7px 10px; border-left: 2px solid var(--accent2);
+.em-card { display: flex; gap: 10px; max-width: min(640px, 100%); min-width: 0; padding: 7px 10px; border-left: 2px solid var(--accent2);
   border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--fg) 5%, transparent); font-size: 12.5px; line-height: 1.35; }
 .em-card:hover { background: color-mix(in srgb, var(--fg) 9%, transparent); }
-.em-card img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; flex: none; }
+/* the picture whole, at its own shape: a wide logo stays wide (up to twice its height), never cropped or stretched */
+.em-card img { height: 48px; width: auto; max-width: 96px; object-fit: contain; align-self: center; border-radius: 4px; flex: none; }
 .em-card .b { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .em-card .s { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .em-card .t { color: var(--accent2); font-weight: 600; }
 .em-card .d { opacity: .78; }
-.em-card :is(.t, .d) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.em-card .b { flex: 1; }
+.em-card :is(.t, .d) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }  /* a line each; More opens them */
+.em-card.open :is(.t, .d) { white-space: normal; }
+.em-card .top { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
+.em-card .top .s { flex: 1; }
+.em-card .more { flex: none; color: var(--accent2); font-size: 11.5px; cursor: pointer; user-select: none; }
+.em-card .more:hover { text-decoration: underline; }
 .em-pic img { display: block; max-width: min(200px, 100%); max-height: 120px; border-radius: 6px; border: 1px solid var(--line); }
 .em audio { width: min(340px, 100%); height: 34px; }
 .em video { display: block; width: min(240px, 100%); max-height: 200px; aspect-ratio: 16 / 9; border-radius: 6px; background: color-mix(in srgb, var(--fg) 8%, transparent); }
@@ -412,10 +419,10 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .l:hover .em .x, .em .x:focus-visible { opacity: 1; }
 .win-95 :is(.em-card, .em-pic img, .em video) { border-radius: 0; }
 /* the plugin's size setting: small (above), medium, large */
-.em-card.md img { width: 64px; height: 64px; } .em-card.lg img { width: 88px; height: 88px; }
+.em-card.md img { height: 64px; max-width: 128px; } .em-card.lg img { height: 88px; max-width: 176px; }
 .em-pic.md img { max-width: min(320px, 100%); max-height: 200px; } .em-pic.lg img { max-width: min(480px, 100%); max-height: 320px; }
 video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(480px, 100%); max-height: 360px; }
-.em-card.lg { max-width: min(600px, 100%); }
+.em-card.lg { max-width: min(760px, 100%); }
 .l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
 .l.hl { background: var(--hilight_line-bg, #ff00aa10); }
@@ -788,9 +795,15 @@ function embedsEl(list) {
     } else if (e.type === "link" && e.title) {
       const x = a(e.url, "em-card " + sz), b = el("span", "b"); x.title = e.url;
       if (okUrl(e.image)) x.append(pic(e.image));
-      b.append(el("span", "s", e.site || new URL(e.url).hostname), el("span", "t", e.title));
+      const top = el("span", "top"), more = el("span", "more", "\u25b8 More");
+      more.hidden = true; more.setAttribute("role", "button");
+      more.onclick = ev => { ev.preventDefault(); ev.stopPropagation(); more.textContent = x.classList.toggle("open") ? "\u25be Less" : "\u25b8 More"; };
+      top.append(el("span", "s", e.site || new URL(e.url).hostname), more);
+      b.append(top, el("span", "t", e.title));
       if (e.desc) b.append(el("span", "d", e.desc));
       x.append(b); box.append(x);
+      // More only where something is cut: measured once the card is on the page
+      requestAnimationFrame(() => { more.hidden = ![...b.querySelectorAll(".t, .d")].some(n => n.scrollWidth > n.clientWidth + 1); });
     }
   }
   if (!box.childElementCount) return null;
