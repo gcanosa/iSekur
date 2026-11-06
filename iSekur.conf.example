@@ -11,6 +11,7 @@ theme_dir = themes           ; where themes are looked for first, e.g. ~/mytheme
 web_font      = theme      ; webchat font: theme (its font, else mono) | mono | sans | serif
 web_font_size = 14         ; webchat text size in px
 web_tree_lines = off       ; on: faint ├ └ lines join the webchat's channels to their network
+web_tree_width = 220       ; the webchat's tab list width in px (120-600)
 timestamp =                  ; e.g. %H:%M:%S (empty: the theme's, [%H:%M] in mirc)
 nick_width =                 ; nick column, longer nicks are cut (empty: the theme's, 12; 0: no column, mirc style)
 timestamp_align = left      ; left | right (the right edge of the chat, terminal and webchat)

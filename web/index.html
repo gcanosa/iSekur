@@ -38,7 +38,7 @@ button, input { font: inherit; color: inherit; }
 #ver { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: var(--muted); opacity: .6; }
 #loginerr { color: var(--err); min-height: 1.4em; font-size: 13px; }
 
-#app { display: none; height: var(--vvh, 100dvh); grid-template-columns: 220px 1fr auto;
+#app { display: none; height: var(--vvh, 100dvh); grid-template-columns: var(--treew, 220px) 1fr auto;
   grid-template-rows: auto 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "foot input input"; }
 #side { grid-area: side; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); overflow-y: auto; padding: 8px 0; }
 #side .srv { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
@@ -414,12 +414,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
    .flip puts #msgs on the right, so the panes stay where they are when the focus moves */
 #msgs2 { grid-area: msgs2; display: none; cursor: pointer; }
 @media (min-width: 761px) {
-  #app.split { grid-template-columns: 220px minmax(0, var(--sa, 1fr)) auto minmax(0, var(--sb, 1fr)) auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "foot input input input input"; }
+  #app.split { grid-template-columns: var(--treew, 220px) minmax(0, var(--sa, 1fr)) auto minmax(0, var(--sb, 1fr)) auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "foot input input input input"; }
   #app.split.flip { grid-template-areas: "side topic topic topic topic" "side msgs2 nicks2 msgs nicks" "side status status status status" "foot input input input input"; }
   #app.split.noside { grid-template-columns: 34px minmax(0, var(--sa, 1fr)) auto minmax(0, var(--sb, 1fr)) auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "side input input input input"; }
   #app.split.noside.flip { grid-template-areas: "side topic topic topic topic" "side msgs2 nicks2 msgs nicks" "side status status status status" "side input input input input"; }
   /* /split stack: one over the other (and by the window's width when neither was asked for) */
-  #app.split.stack { grid-template-columns: 220px 1fr auto; grid-template-rows: auto minmax(0, var(--sa, 1fr)) minmax(0, var(--sb, 1fr)) auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "foot input input"; }
+  #app.split.stack { grid-template-columns: var(--treew, 220px) 1fr auto; grid-template-rows: auto minmax(0, var(--sa, 1fr)) minmax(0, var(--sb, 1fr)) auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "foot input input"; }
   #app.split.stack.flip { grid-template-areas: "side topic topic" "side msgs2 nicks2" "side msgs nicks" "side status status" "foot input input"; }
   #app.split.stack.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side msgs2 nicks2" "side status status" "side input input"; }
   #app.split.stack.noside.flip { grid-template-areas: "side topic topic" "side msgs2 nicks2" "side msgs nicks" "side status status" "side input input"; }
@@ -1350,6 +1350,7 @@ function applyTheme() {
   document.documentElement.classList.toggle("win-mac", win === "mac");
   document.documentElement.classList.toggle("win-95", win === "win95");
   const fs = parseInt(theme.fsize); set("--fsize", fs >= 8 && fs <= 40 ? fs + "px" : "");
+  const tw = parseInt(theme.treew); set("--treew", tw >= 120 && tw <= 600 ? tw + "px" : "");  // /set web_tree_width
   $("#side").classList.toggle("tree", /^(on|true|yes)$/i.test(theme.tree || ""));  // /set web_tree_lines on
 }
 

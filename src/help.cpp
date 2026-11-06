@@ -750,6 +750,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  The server-rack button lists your servers: edit, connect, delete or add one.",
         "  " G_CMD("/set web_font sans") " and " G_CMD("/set web_font_size 16") ": the browser's font and size.",
         "  " G_CMD("/set web_tree_lines on") ": faint lines join each network to its channels.",
+        "  " G_CMD("/set web_tree_width 280") ": the tab list's width in px (120 to 600).",
         "",
         G_TIP "Run it on a server with " G_CMD("isekur --daemon") ": always online, chat from anywhere.",
     }},

@@ -1736,8 +1736,8 @@ isekur.on("message", function(e)
   if e.text:match("^embed") then  -- now (the line isn't added yet) and once a fetch answers
     assert(isekur.embed(e.srv, e.target, e.id, {type = "audio", url = "https://x.test/a.mp3", n = 3, skip = {}}))
     assert(not isekur.embed(e.srv, e.target, "999999", {type = "x"}))
-    local ok, why = isekur.http("http://x.test/", function() end)
-    assert(not ok and why:find("https://", 1, true))
+    local ok, why = isekur.http("ftp://x.test/", function() end)
+    assert(not ok and why:find("http(s)://", 1, true))
     assert(isekur.http(e.text:match("^embed (.*)"), function(r)
       isekur.embed(e.srv, e.target, e.id, {type = "link", url = r.url, title = r.error or "?"})
     end))
@@ -1800,7 +1800,7 @@ print("loaded")
         assert(irc_parse(":bob!u@h PRIVMSG #chan :showme", pm)), pc.handle(ps, pm);
         assert(pchan->lines.size() == n0 + 1);
         // isekur.embed: on the line its message event is for, then (isekur.http answered) one more. http refuses the LAN
-        for (std::string url : {"https://127.0.0.1/", "https://[::1]:8443/x", "https://10.1.2.3/", "https://localhost/"}) {
+        for (std::string url : {"https://127.0.0.1/", "http://192.168.1.1:3366/r/x", "https://[::1]:8443/x", "https://10.1.2.3/", "https://localhost/"}) {
             assert(irc_parse(":bob!u@h PRIVMSG #chan :embed " + url, pm)), pc.handle(ps, pm);
             Line& el = pchan->lines.back();
             assert(el.id && el.embeds == R"({"n":3,"type":"audio","url":"https://x.test/a.mp3"})");

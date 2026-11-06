@@ -168,16 +168,18 @@ bool public_addr(const sockaddr* sa) {
     return !(zero || (b[0] & 0xfe) == 0xfc || (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) || b[0] == 0xff);  // ::, ::1, fc00::/7, fe80::/10, ff00::/8
 }
 
-// https://host[:port]/path -> host, port, path; false: not that
-static bool split_https(const std::string& url, std::string& host, std::string& port, std::string& path) {
-    if (url.size() < 9 || strncasecmp(url.c_str(), "https://", 8)) return false;
-    size_t e = url.find_first_of("/?#", 8);
-    std::string hp = url.substr(8, e == std::string::npos ? std::string::npos : e - 8);
+// https://host[:port]/path (or http://, tls false) -> host, port, path; false: not that
+static bool split_https(const std::string& url, std::string& host, std::string& port, std::string& path, bool* tls = nullptr) {
+    bool plain = url.size() > 8 && !strncasecmp(url.c_str(), "http://", 7);
+    if (plain ? !tls : url.size() < 9 || strncasecmp(url.c_str(), "https://", 8)) return false;
+    if (tls) *tls = !plain;
+    size_t at = plain ? 7 : 8, e = url.find_first_of("/?#", at);
+    std::string hp = url.substr(at, e == std::string::npos ? std::string::npos : e - at);
     path = e == std::string::npos ? "/" : url.substr(e);
     path = path.substr(0, path.find('#'));
     if (path.empty() || path[0] != '/') path = "/" + path;
     if (hp.find('@') != std::string::npos) return false;  // user:pass@: not for links people post
-    port = "443";
+    port = plain ? "80" : "443";
     if (!hp.empty() && hp[0] == '[') {  // [::1]:443
         size_t c = hp.find(']');
         if (c == std::string::npos) return false;
@@ -195,14 +197,16 @@ static bool split_https(const std::string& url, std::string& host, std::string& 
 
 std::string https_fetch_err(const std::string& url) {
     std::string h, p, path;
-    return split_https(url, h, p, path) ? "" : "not an https:// URL: " + url.substr(0, 200);
+    bool tls;
+    return split_https(url, h, p, path, &tls) ? "" : "not an http(s):// URL: " + url.substr(0, 200);
 }
 
 // one GET: false with err on a failure; true with the status line's code, headers and up to cap bytes of body
 static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err) {
     static SSL_CTX* ctx = new_client_ctx();
     std::string host, port, path;
-    if (!split_https(url, host, port, path)) { err = https_fetch_err(url); return false; }
+    bool tls = true;
+    if (!split_https(url, host, port, path, &tls)) { err = https_fetch_err(url); return false; }
     addrinfo hints{}, *ai = nullptr;
     hints.ai_socktype = SOCK_STREAM;
     if (int e = getaddrinfo(host.c_str(), port.c_str(), &hints, &ai)) { err = host + ": " + gai_strerror(e); return false; }
@@ -225,26 +229,30 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
     fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
     timeval tv{15, 0};
     setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv), setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
-    SSL* ssl = SSL_new(ctx);
-    SSL_set_fd(ssl, fd);
-    in6_addr ip;
-    bool literal = inet_pton(AF_INET, host.c_str(), &ip) == 1 || inet_pton(AF_INET6, host.c_str(), &ip) == 1;
-    if (!literal) SSL_set_tlsext_host_name(ssl, host.c_str()), SSL_set1_host(ssl, host.c_str());
-    else X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), host.c_str());
-    SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
-    std::string got, req = "GET " + path + " HTTP/1.0\r\nHost: " + host + (port == "443" ? "" : ":" + port) +
+    SSL* ssl = tls ? SSL_new(ctx) : nullptr;  // plain http: the same request, read straight off the socket
+    if (ssl) {
+        SSL_set_fd(ssl, fd);
+        in6_addr ip;
+        bool literal = inet_pton(AF_INET, host.c_str(), &ip) == 1 || inet_pton(AF_INET6, host.c_str(), &ip) == 1;
+        if (!literal) SSL_set_tlsext_host_name(ssl, host.c_str()), SSL_set1_host(ssl, host.c_str());
+        else X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), host.c_str());
+        SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+    }
+    std::string got, req = "GET " + path + " HTTP/1.0\r\nHost: " + host + (port == (tls ? "443" : "80") ? "" : ":" + port) +
                              "\r\nUser-Agent: Mozilla/5.0 (compatible; iSekur link preview)\r\nAccept: text/html,*/*;q=0.8\r\n\r\n";
-    bool ok = SSL_connect(ssl) == 1 && SSL_write(ssl, req.data(), (int)req.size()) == (int)req.size();
-    if (!ok) err = "TLS with " + host + ": " + ssl_errstr();
+    bool ok = ssl ? SSL_connect(ssl) == 1 && SSL_write(ssl, req.data(), (int)req.size()) == (int)req.size()
+                  : ::send(fd, req.data(), req.size(), 0) == (ssize_t)req.size();
+    if (!ok) err = ssl ? "TLS with " + host + ": " + ssl_errstr() : "can't send to " + host;
     char buf[16384];
     int n;
     size_t hdr = std::string::npos;
-    while (ok && (n = SSL_read(ssl, buf, sizeof buf)) > 0) {
+    while (ok && (n = ssl ? SSL_read(ssl, buf, sizeof buf) : (int)::recv(fd, buf, sizeof buf, 0)) > 0) {
         got.append(buf, (size_t)n);
         if (hdr == std::string::npos) hdr = got.find("\r\n\r\n");
         if (hdr == std::string::npos ? got.size() > 65536 : got.size() - hdr - 4 >= cap) break;  // enough: the rest isn't read
     }
-    SSL_free(ssl), ::close(fd);
+    if (ssl) SSL_free(ssl);
+    ::close(fd);
     if (!ok) return false;
     if (hdr == std::string::npos || got.compare(0, 5, "HTTP/")) { err = "no answer from " + host; return false; }
     status = atoi(got.c_str() + got.find(' ') + 1);
@@ -276,9 +284,9 @@ bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, 
             ctype = header(hdrs, "content-type:");
             return true;
         }
-        if (loc.rfind("//", 0) == 0) loc = "https:" + loc;  // relative ones: from this URL's host or folder
+        if (loc.rfind("//", 0) == 0) loc = url.substr(0, url.find(':') + 1) + loc;  // relative ones: from this URL's host or folder
         else if (loc.find("://") == std::string::npos) {
-            size_t root = url.find('/', 8);
+            size_t root = url.find('/', url.find("://") + 3);
             std::string base = root == std::string::npos ? url : url.substr(0, root);
             if (loc[0] == '/') loc = base + loc;
             else {
