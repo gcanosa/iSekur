@@ -1041,6 +1041,21 @@ int main() {
         core.exec(home, "/set nick me");
         assert(ts->last_nick.empty() && ini_get(core.cfg, "server." + ts->cfg.name, "last_nick").empty());
         feed(":newme!u@h NICK me");
+        {  // open queries are remembered too, and a server added with them reopens them
+            Buffer* q = core.open(ts, BT::QUERY, "Pal");
+            core.save_history();
+            assert(ini_get(core.cfg, "server." + ts->cfg.name, "open_queries") == "Pal");
+            core.close(q);
+            core.save_history();
+            assert(ini_get(core.cfg, "server." + ts->cfg.name, "open_queries").empty());
+            core.cfg["server.qtest"]["open_queries"] = "Pal Bud";
+            ServerCfg qc = ts->cfg;
+            qc.name = "qtest";
+            Server* qs = core.add_server(qc);
+            assert(core.find(qs, "Pal") && core.find(qs, "Bud") && core.find(qs, "Bud")->type == BT::QUERY);
+            core.close(qs->status);
+            core.cfg.erase("server.qtest");
+        }
         // the settings window lists the usual server keys even when unset, with what they fall back to
         bool nick_row = false, tls_row = false;
         for (auto& r : core.setting_rows())
@@ -1400,6 +1415,18 @@ int main() {
             }
             return std::make_pair(fd, got);
         };
+        {  // [web] html: served from disk, re-read on every load; unreadable falls back to the built-in page
+            std::string hp = "build/test-web.html";
+            auto get = [&] { auto [fd, r] = talk("GET / HTTP/1.1\r\nHost: x\r\n\r\n", 1 << 30); close(fd); return r; };
+            core.cfg["web"]["html"] = hp;
+            { std::ofstream(hp) << "one @ISEKUR_VERSION@"; }
+            assert(get().find("one " ISEKUR_VERSION) != std::string::npos);
+            { std::ofstream(hp) << "two"; }
+            assert(get().find("\r\n\r\ntwo") != std::string::npos);
+            unlink(hp.c_str());
+            assert(get().find("<html") != std::string::npos);
+            core.cfg["web"].erase("html");
+        }
         auto [lfd2, login] = talk("POST /login HTTP/1.1\r\nHost: x\r\nContent-Length: 24\r\n\r\n{\"user\":\"u\",\"pass\":\"pw\"}", 1);
         close(lfd2);
         size_t ck = login.find("isekur_sid=");

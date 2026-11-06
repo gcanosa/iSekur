@@ -226,14 +226,17 @@ int Core::typing_quiet(bool on) {
 
 // Written to the file at once, like e2e_keys: a restart connects with the nick you last chose
 // there. A server not saved yet (/server without /save) keeps it with its other unsaved keys.
-void Core::remember_nick(Server* s, const std::string& nick) {
+static void remember(Core& c, Server* s, const std::string& key, const std::string& v) {
     std::string sec = "server." + s->cfg.name;
-    s->last_nick = nick;
-    if (ini_get(cfg, sec, "last_nick") == nick) return;
-    cfg[sec]["last_nick"] = nick;
-    bool saved = !cfg_path.empty() && !(unsaved.count(sec) && unsaved[sec].count("host"));
+    if (ini_get(c.cfg, sec, key) == v) return;
+    c.cfg[sec][key] = v;
+    bool saved = !c.cfg_path.empty() && !(c.unsaved.count(sec) && c.unsaved[sec].count("host"));
     std::string err;
-    if (!saved || !ini_save(cfg_path, Ini{{sec, {{"last_nick", nick}}}}, err)) unsaved[sec]["last_nick"] = nick;
+    if (!saved || !ini_save(c.cfg_path, Ini{{sec, {{key, v}}}}, err)) c.unsaved[sec][key] = v;
+}
+void Core::remember_nick(Server* s, const std::string& nick) {
+    s->last_nick = nick;
+    remember(*this, s, "last_nick", nick);
 }
 
 void Core::about(Buffer* from) {
@@ -396,7 +399,7 @@ const KeyInfo* key_info(const std::string& key) {
     return it == by.end() ? nullptr : it->second;
 }
 // state iSekur keeps in the config itself: never listed
-static bool state_key(const std::string& sec, const std::string& k) { return (sec == "general" && k == "server_order") || k == "last_nick"; }
+static bool state_key(const std::string& sec, const std::string& k) { return (sec == "general" && k == "server_order") || k == "last_nick" || k == "open_queries"; }
 
 // the template's keys, commented or not ("; key =", "#key ="; "# prose = ..." isn't one), by section
 std::vector<std::pair<std::string, std::string>> conf_keys() {
@@ -601,6 +604,8 @@ Server* Core::add_server(const ServerCfg& sc) {
     if (sp->twitch())  // a new tab, not each reconnect
         for (auto& l : twitch_banner()) add(sp->status, Line{time(nullptr), LK::INFO, "", l, false, false, true});
     load_flood(sp);
+    for (auto& q : split(ini_get(cfg, "server." + sc.name, "open_queries"), ' '))  // open when iSekur stopped
+        if (!q.empty()) open(sp, BT::QUERY, q);
     for (auto& e : split(ini_get(cfg, "server." + sc.name, "e2e_keys"), ','))  // "#chan:b64key", see e2e_keep
         if (size_t c = e.rfind(':'); c != std::string::npos && unb64(e.substr(c + 1)).size() == 32)
             sp->chan_e2e[irc_lower(e.substr(0, c))] = unb64(e.substr(c + 1));
@@ -663,6 +668,12 @@ void Core::hist_read() {
 void Core::save_history() {
     if (cfg_path.empty()) return;
     hist_saved = now_ms();
+    for (auto& sv : servers) {  // the open queries, reopened at the next start ([server.x] open_queries, state)
+        std::string q;
+        for (auto& b : bufs)
+            if (b->srv == sv.get() && b->type == BT::QUERY && b->name[0] != '*') q += (q.empty() ? "" : " ") + b->name;
+        remember(*this, sv.get(), "open_queries", q);
+    }
     hist_read();  // first: the tabs not open now keep their lines
     auto rows = hist_cache;
     for (auto& b : bufs) {
