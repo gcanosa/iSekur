@@ -293,7 +293,7 @@ Type `/` and the matching commands show up above the input line; Tab completes t
 With `log = on` (`/set log on`, then `/save`) every channel and query is written to
 `<log_dir>/<network>/<name>.log`, a file a day (`log_rotate`, on by default: older days become
 `<name>.YYYY-MM-DD.log`). `/logs` opens a window to read them, in the terminal and in the webchat
-(in the webchat also the page icon under the tab list):
+(in the webchat also the page icon under the tab list, shown while logging is on):
 
 - **The tree** on the left: each network, its channels and queries, and each one's days, newest
   first, with their size. A day opens on the right, with the same colors as the chat.

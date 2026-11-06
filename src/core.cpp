@@ -1487,6 +1487,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (sec == "keys") cfg_changed = true;
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
         if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key == "web_tree_lines")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
+        if (key == "log") notify(Ev::THEME, nullptr);  // the webchat shows its Logs button only while logging
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         dirty = true;
         std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : val;  // "": back to the default
