@@ -377,13 +377,12 @@ int main() {
         assert(ts->umodes == "izTx");
         assert(ts->status->lines.back().text == "Your user mode is [+iwzT]");  // 221 at connect: status
     }
-    {  // 324/329: our join's MODE fills the title quietly, a typed /mode prints; +k/+l track live
+    {  // 324/329: our join's MODE fills the title and prints, like a typed /mode; +k/+l track live
         feed(":me!u@h JOIN #mt");
         Buffer* mb = core.find(ts, "#mt");
         assert(mb && sent().find("MODE #mt\r\n") != std::string::npos);
-        size_t n = mb->lines.size();
         feed(":srv 324 me #mt +ntk sec");
-        assert(mb->modes == "ntk" && mb->lines.size() == n);
+        assert(mb->modes == "ntk" && mb->lines.back().text == "Channel #mt modes: [+ntk sec]");
         feed(":srv 329 me #mt 1700000000");
         assert(mb->lines.back().text.rfind("Channel #mt created 2023-11-", 0) == 0);
         feed(":srv 324 me #mt +ntk sec");  // the same reply to a typed /mode is shown

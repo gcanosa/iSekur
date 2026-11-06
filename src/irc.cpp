@@ -293,7 +293,7 @@ void Core::connect(Server* s) {
     s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear(), s->list.clear(), s->listing = false;
     s->away = false;
     s->hist_batches.clear(), s->cap_vals.clear(), s->isupport.clear(), s->casemap = 0;
-    s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear(), s->mode_auto.clear();
+    s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear();
     s->online.clear(), s->ison_at = 0, s->ison_wait = 0, s->typing_sent.clear(), s->motd_done = false, s->markread_off = false;
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
@@ -789,12 +789,10 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "333") return;  // topic setter
-    // like irssi/WeeChat/HexChat: our join's MODE fills the title quietly, a typed /mode prints 324;
-    // the creation time is shown either way
+    // 324 prints on join too (like TheLounge), next to the creation time
     if (cmd == "324") {
         Buffer* b = find(s, m.p(1));
         if (b) b->modes = m.p(2).substr(m.p(2).rfind('+', 0) == 0), notify(Ev::BUFFER, b), dirty = true;
-        if (b && s->mode_auto.erase(s->lower(b->name))) return;
         std::string args;
         for (size_t i = 2; i < m.params.size(); i++) args += (i > 2 ? " " : "") + m.params[i];
         print(b ? b : reply_buf(), LK::INFO, "Channel " + m.p(1) + " modes: [" + args + "]");
@@ -834,7 +832,7 @@ void Core::handle(Server* s, const Msg& m) {
                         std::to_string(std::min(fetch, 500)));
             }
             line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
-            if (!s->twitch()) s->send("MODE " + ch), s->who_auto.insert(s->lower(ch)), s->mode_auto.insert(s->lower(ch));  // Twitch: 421 unknown command
+            if (!s->twitch()) s->send("MODE " + ch), s->who_auto.insert(s->lower(ch));  // Twitch: 421 unknown command
             if (fresh) select(b);  // the webchat follows too
             plugin_emit("join", s, ch, {{"nick", m.nick}, {"host", host_of(m)}, {"self", true}});
             return;
@@ -1034,7 +1032,6 @@ void Core::handle(Server* s, const Msg& m) {
             if (!w.empty() && s->lower(w[0]) == s->lower(old)) e = nn + (w.size() > 1 ? " " + w[1] : "");
         }
         if (auto w = s->who_auto.find(s->lower(old)); w != s->who_auto.end()) s->who_auto.erase(w), s->who_auto.insert(s->lower(nn));
-        if (auto w = s->mode_auto.find(s->lower(old)); w != s->mode_auto.end()) s->mode_auto.erase(w), s->mode_auto.insert(s->lower(nn));
         b->name = nn;
         line(b, LK::INFO, m.nick, "Channel " + old + " is now " + nn + (m.p(2).empty() ? "" : " (" + m.p(2) + ")") +
                                        (s->cfg.autojoin.empty() ? "" : ": /autojoin snap keeps the new name"));
