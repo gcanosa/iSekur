@@ -2093,14 +2093,17 @@ print("loaded")
         assert(irc_parse(":carol!u@h PRIVMSG me :psst", pm)), pc.handle(ps, pm);
         assert(irc_parse(":carol!u@h PRIVMSG me :\x01" "ACTION waves\x01", pm)), pc.handle(ps, pm);
         pc.plugin_emit("tick", nullptr, "");  // still away: nothing shown
-        size_t before_back = pchan->lines.size();
+        size_t before_back = ps->status->lines.size(), before_chan = pchan->lines.size();
         pc.set_attached(true);
         pc.plugin_emit("tick", nullptr, "");
-        {
+        {  // the summary in the network's console, one pointer to it in the tab you're on
+            auto& sl = ps->status->lines;
             std::vector<std::string> got;
-            for (size_t i = before_back; i < pchan->lines.size(); i++) got.push_back(pchan->lines[i].text);
-            assert(got.size() == 4 && pchan->lines[before_back].badge == "awaylog" && pchan->lines[before_back].badge_kind == 'i');
-            assert(pchan->lines[before_back + 1].badge == "awaylog" && pchan->lines[before_back + 1].badge_kind == 'p');
+            for (size_t i = before_back; i < sl.size(); i++) got.push_back(sl[i].text);
+            assert(got.size() == 4 && sl[before_back].badge == "awaylog" && sl[before_back].badge_kind == 'i');
+            assert(sl[before_back + 1].badge == "awaylog" && sl[before_back + 1].badge_kind == 'p');
+            assert(pchan->lines.size() == before_chan + 1 && pchan->lines.back().badge_kind == 'i');
+            assert(pchan->lines.back().text.rfind("3 messages for you while you were away, in the console of ", 0) == 0);
             assert(got[0].rfind("While you were away (", 0) == 0 && got[0].find("): 1 mention in #chan, 2 PMs from carol") != std::string::npos);
             assert(got[1].find("#chan <bob> me: are you there?") != std::string::npos && got[2].find("<carol> psst") != std::string::npos);
             assert(got[3].find("* carol waves") != std::string::npos);
