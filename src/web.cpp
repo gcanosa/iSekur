@@ -16,6 +16,8 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include "web_assets.h"
+#include <fstream>
+#include <iterator>
 
 static const int PBKDF2_ITER = 200000;
 static const time_t SESSION_TTL = 7 * 24 * 3600;
@@ -439,12 +441,17 @@ void Web::http(Client& cl) {
     std::string from = ip + (ip != cl.conn.host ? " (via proxy " + cl.conn.host + ")" : "") + (ua.empty() ? "" : ", " + ua);
 
     if (method == "GET" && (path == "/" || path == "/index.html")) {
-        static const std::string page = [] {
-            std::string p(index_html, sizeof index_html - 1), k = "@ISEKUR_VERSION@";
-            size_t i = p.find(k);
-            if (i != std::string::npos) p.replace(i, k.size(), ISEKUR_VERSION);
-            return p;
-        }();
+        // [web] html: serve that file instead, re-read on every load (edit it, reload the browser, no rebuild)
+        std::string page(index_html, sizeof index_html - 1), f = ini_get(c.cfg, "web", "html");
+        if (f.rfind("~/", 0) == 0) if (const char* hm = getenv("HOME")) f = hm + f.substr(1);
+        if (!f.empty()) {
+            std::ifstream in(f, std::ios::binary);
+            std::string disk((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+            if (in && !disk.empty()) page = std::move(disk);  // unreadable: the built-in page
+        }
+        std::string k = "@ISEKUR_VERSION@";
+        size_t i = page.find(k);
+        if (i != std::string::npos) page.replace(i, k.size(), ISEKUR_VERSION);
         respond(cl.conn, 200, "OK", "text/html; charset=utf-8", page);
     } else if (method == "GET" && path == "/manifest.json") {  // PWA: install to the home screen or dock
         respond(cl.conn, 200, "OK", "application/manifest+json",

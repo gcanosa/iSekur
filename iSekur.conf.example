@@ -176,6 +176,8 @@ user          = me
 password_hash =              ; run: isekur --hash-password
 cert          =              ; e.g. /path/fullchain.pem (empty: self-signed)
 key           =              ; e.g. /path/privkey.pem
+html          =              ; serve this file as the webchat page, re-read on every load,
+                             ; e.g. ~/src/iSekur/web/index.html (empty: the built-in one)
 
 # Key bindings: <action> = <key> [key...]
 # Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
