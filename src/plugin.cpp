@@ -294,6 +294,17 @@ static int l_channels(lua_State* L) {  // the joined channels on srv
         if (s && b->srv == s && b->type == BT::CHANNEL && b->joined) lua_pushstring(L, b->name.c_str()), lua_rawseti(L, -2, i++);
     return 1;
 }
+// proxy(srv, url): in a "connect" handler, the connection being made goes through url (nil or "": direct)
+static int l_proxy(lua_State* L) {
+    Server* s = srv_arg(L, 1);
+    std::string url = opt_str(L, 2), err;
+    if (!s) luaL_error(L, "proxy: no such network");
+    if (url.empty()) { s->conn.px = {}; return 0; }
+    Proxy px;
+    if (!parse_proxy(url, px, err)) luaL_error(L, "%s", err.c_str());
+    s->conn.px = px;
+    return 0;
+}
 static int l_away(lua_State* L) { Server* s = srv_arg(L, 1); lua_pushboolean(L, s && s->away); return 1; }
 static int l_attached(lua_State* L) { lua_pushboolean(L, self(L)->c->attached); return 1; }
 static int l_idle(lua_State* L) { lua_pushinteger(L, time(nullptr) - self(L)->c->last_input); return 1; }
@@ -434,7 +445,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"active", l_active}, {"date", l_date}, {"is_chan", l_is_chan},
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"rank", l_rank},
-        {"http", l_http}, {"embed", l_embed},
+        {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
     lua_pushstring(L, name.c_str()), lua_setfield(L, -2, "name");

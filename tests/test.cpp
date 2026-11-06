@@ -1702,6 +1702,17 @@ int main() {
     assert(sv.drain(1000) == 1001 && sv.sendq.size() == 1);
     assert(sv.drain(2000) == -1 && sv.conn.out == "L0\r\nL1\r\nL2\r\nL3\r\n");
 
+    {  // proxy URLs: kinds, default ports, user:pass, [v6], and nothing ssh could take for an option
+        Proxy px;
+        std::string e;
+        assert(parse_proxy("socks5://127.0.0.1:9050", px, e) && px.kind == Proxy::SOCKS5 && px.host == "127.0.0.1" && px.port == 9050);
+        assert(parse_proxy("SOCKS4a://p.lan", px, e) && px.kind == Proxy::SOCKS4 && px.port == 1080);
+        assert(parse_proxy("http://me:se:cret@[::1]:3128/", px, e) && px.kind == Proxy::HTTP && px.user == "me" && px.pass == "se:cret" && px.host == "::1" && px.port == 3128);
+        assert(parse_proxy("ssh://me@jump.example.org", px, e) && px.kind == Proxy::SSH && px.port == 22 && proxy_desc(px) == "ssh me@jump.example.org:22");
+        for (auto bad : {"ftp://x", "socks5://", "socks5://h:0", "socks5://h:99999", "ssh://-oProxyCommand=x", "ssh://-l@h",
+                         "ssh://me:pw@h", "socks5://h x", "http://@h"})
+            assert(!parse_proxy(bad, px, e) && !e.empty());
+    }
     {  // Lua plugins: the sandbox, the step and memory caps, scoped options, the store, enable/disable, events
         char d[] = "/tmp/isekur-plugins-XXXXXX";
         assert(mkdtemp(d));

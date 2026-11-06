@@ -309,8 +309,11 @@ void Core::connect(Server* s) {
         if (s->sts_port) tls = 1, port = s->sts_port, why = ", STS";
         else if (pol != sts.end()) tls = 1, port = pol->second.first, why = ", STS policy";
     }
+    s->conn.px = {};
+    plugin_emit("connect", s, "");  // a proxy plugin calls isekur.proxy(srv, url) here
     print(s->status, LK::INFO,
-          "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (tls ? " (TLS" + why + ")" : ""));
+          "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (tls ? " (TLS" + why + ")" : "") +
+              (s->conn.px.kind ? " via " + proxy_desc(s->conn.px) : ""));
     if (!s->conn.connect(s->cfg.host, port, tls, s->cfg.cert, s->cfg.key)) {
         s->state = SS::CONNECTING;  // so disconnect() schedules a retry
         disconnect(s, s->conn.err);

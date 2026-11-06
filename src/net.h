@@ -16,8 +16,19 @@ struct Resolve {
     std::atomic<bool> done{false};
 };
 
+// connect through: socks4(a), socks5 (the proxy resolves names), http CONNECT, or ssh -W on a jump host
+struct Proxy {
+    enum Kind { NONE, SOCKS4, SOCKS5, HTTP, SSH } kind = NONE;
+    std::string host, user, pass;
+    int port = 0;
+};
+// socks5://[user:pass@]host[:1080], socks4://, http://[user:pass@]host[:8080], ssh://[user@]host[:22]; false: why in err
+bool parse_proxy(const std::string& url, Proxy& px, std::string& err);
+std::string proxy_desc(const Proxy& px);  // "socks5 host:1080", for "Connecting to..."
+
 struct Conn {
-    enum St { NONE, RESOLVING, CONNECTING, HANDSHAKE, OPEN } st = NONE;
+    enum St { NONE, RESOLVING, CONNECTING, PROXY, HANDSHAKE, OPEN } st = NONE;
+    Proxy px;  // set before connect(); close() keeps it
     int fd = -1;
     SSL* ssl = nullptr;
     SSL_CTX* ctx = nullptr;  // owned for client conns
@@ -45,6 +56,13 @@ struct Conn {
     size_t in_cap = 0;     // > 0: stop reading at this many bytes, the rest waits for the next poll (/dcc)
 
 private:
+    std::string thost, pin;  // the target behind the proxy, the proxy's answer so far
+    int tport = 0, pstep = 0;
+    int ssh_pid = -1, ssh_err = -1;  // ssh -W: its pid, its stderr
+    std::string ssh_said();
+    bool proxy_send();
+    bool proxy_read(std::string& in);
+    bool spawn_ssh();
     bool next_addr();
     bool start_tls();
 };

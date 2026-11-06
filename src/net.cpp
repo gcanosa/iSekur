@@ -11,7 +11,10 @@
 #include <sys/time.h>
 #include <thread>
 #include <unistd.h>
+#include <csignal>
+#include <sys/wait.h>
 #include <openssl/err.h>
+#include <openssl/evp.h>
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
 
@@ -34,6 +37,10 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
     close();
     host = h, tls = t, cert = c, key = k, err.clear(), out.clear();
     addrs.clear(), ai = 0;
+    thost = h, tport = port, pin.clear(), pstep = 0;
+    if (px.kind == Proxy::SSH) return spawn_ssh();
+    if (px.kind) port = px.port;  // resolve and connect to the proxy, it reaches h for us
+    const std::string& rh = px.kind ? px.host : h;
     int p[2];
     if (pipe(p)) { err = strerror(errno); return false; }
     nonblock(p[0]);
@@ -42,7 +49,7 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
     std::string port_s = std::to_string(port);
     // Detached: if we give up first (close()), the thread just finishes into
     // its own copy of `r` and a pipe nobody reads.
-    std::thread([r, h, port_s, wfd = p[1]] {
+    std::thread([r, h = rh, port_s, wfd = p[1]] {
         addrinfo hints{}, *ai = nullptr;
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_family = AF_UNSPEC;
@@ -349,6 +356,7 @@ short Conn::events() const {
     switch (st) {
     case RESOLVING: return POLLIN;
     case CONNECTING: return POLLOUT;
+    case PROXY: return POLLIN;
     case HANDSHAKE: return want_write ? POLLOUT : POLLIN;
     case OPEN: return POLLIN | ((!out.empty() && !write_wants_read) || want_write || read_wants_write ? POLLOUT : 0);
     default: return 0;
@@ -373,9 +381,14 @@ bool Conn::pump(short rev, std::string& in) {
             return next_addr();
         }
         int one = 1;
-        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);
+        setsockopt(fd, IPPROTO_TCP, TCP_NODELAY, &one, sizeof one);  // fails on ssh's socketpair, harmless
+        if (px.kind && px.kind != Proxy::SSH) { st = PROXY; return proxy_send(); }
         if (tls) { if (!start_tls()) return false; }
         else st = OPEN;
+    }
+    if (st == PROXY) {
+        if (!proxy_read(in)) return false;
+        if (st == PROXY) return true;
     }
     if (st == HANDSHAKE) {
         int r = server_side ? SSL_accept(ssl) : SSL_connect(ssl);
@@ -385,7 +398,7 @@ bool Conn::pump(short rev, std::string& in) {
             if (e == SSL_ERROR_WANT_READ || e == SSL_ERROR_WANT_WRITE) return true;
             long v = server_side ? X509_V_OK : SSL_get_verify_result(ssl);
             err = v != X509_V_OK ? std::string("certificate: ") + X509_verify_cert_error_string(v)
-                                 : "TLS: " + ssl_errstr();
+                                 : ssh_pid > 0 ? ssh_said() : "TLS: " + ssl_errstr();
             return false;
         }
         want_write = false;
@@ -403,13 +416,13 @@ bool Conn::pump(short rev, std::string& in) {
                     int e = SSL_get_error(ssl, (int)n);
                     if (e == SSL_ERROR_WANT_READ) break;
                     if (e == SSL_ERROR_WANT_WRITE) { read_wants_write = true; break; }
-                    err = e == SSL_ERROR_ZERO_RETURN ? "connection closed" : ssl_errstr();
+                    err = ssh_pid > 0 ? ssh_said() : e == SSL_ERROR_ZERO_RETURN ? "connection closed" : ssl_errstr();
                     return false;
                 }
             } else {
                 n = read(fd, buf, sizeof buf);
                 if (n < 0 && (errno == EAGAIN || errno == EINTR)) break;
-                if (n <= 0) { err = n ? strerror(errno) : "connection closed"; return false; }
+                if (n <= 0) { err = n ? strerror(errno) : ssh_pid > 0 ? ssh_said() : "connection closed"; return false; }
             }
             in.append(buf, (size_t)n);
             if (in_cap && in.size() >= in_cap) break;
@@ -442,6 +455,8 @@ void Conn::close() {
     if (ssl) SSL_free(ssl), ssl = nullptr;
     if (ctx && !server_side) SSL_CTX_free(ctx), ctx = nullptr;
     if (fd >= 0) ::close(fd), fd = -1;
+    if (ssh_err >= 0) ::close(ssh_err), ssh_err = -1;
+    if (ssh_pid > 0) kill(ssh_pid, SIGKILL), waitpid(ssh_pid, nullptr, 0), ssh_pid = -1;  // ponytail: a tunnel has nothing to flush
     res.reset();
     st = NONE;
     want_write = closing = read_wants_write = write_wants_read = false;
@@ -469,4 +484,186 @@ int listen_tcp(const std::string& bind, int port, std::string& err) {
     freeaddrinfo(res);
     nonblock(fd);
     return fd;
+}
+
+// ---- proxies ------------------------------------------------------------------------------
+static bool host_ok(const std::string& h) {  // a name or an address, never an option for ssh
+    if (h.empty() || h[0] == '-' || h.size() > 255) return false;
+    for (char ch : h)
+        if (!isalnum((unsigned char)ch) && !strchr(".-_:", ch)) return false;
+    return true;
+}
+
+bool parse_proxy(const std::string& url, Proxy& px, std::string& err) {
+    px = {};
+    size_t sep = url.find("://");
+    std::string sch = sep == std::string::npos ? "" : url.substr(0, sep), rest = sep == std::string::npos ? "" : url.substr(sep + 3);
+    for (auto& ch : sch) ch = (char)tolower((unsigned char)ch);
+    if (sch == "socks5" || sch == "socks5h") px.kind = Proxy::SOCKS5, px.port = 1080;
+    else if (sch == "socks4" || sch == "socks4a") px.kind = Proxy::SOCKS4, px.port = 1080;
+    else if (sch == "http") px.kind = Proxy::HTTP, px.port = 8080;
+    else if (sch == "ssh") px.kind = Proxy::SSH, px.port = 22;
+    else { err = "a proxy is socks5://, socks4://, http:// or ssh://, then [user[:password]@]host[:port]"; return false; }
+    while (!rest.empty() && rest.back() == '/') rest.pop_back();
+    size_t at = rest.rfind('@');  // ponytail: no %-escapes, a password can't hold an '@'
+    if (at != std::string::npos) {
+        std::string up = rest.substr(0, at);
+        rest.erase(0, at + 1);
+        size_t c = up.find(':');
+        px.user = up.substr(0, c);
+        if (c != std::string::npos) px.pass = up.substr(c + 1);
+        if (px.user.empty() || px.user.size() > 255 || px.pass.size() > 255) { err = "proxy: a user (and password) of 1-255 characters"; return false; }
+    }
+    std::string port;
+    if (!rest.empty() && rest[0] == '[') {  // [::1]:1080
+        size_t c = rest.find(']');
+        px.host = rest.substr(1, c == std::string::npos ? std::string::npos : c - 1);
+        if (c != std::string::npos && c + 1 < rest.size()) port = rest[c + 1] == ':' ? rest.substr(c + 2) : "x";
+    } else {
+        size_t c = rest.find(':');
+        px.host = rest.substr(0, c);
+        if (c != std::string::npos) port = rest.substr(c + 1);
+    }
+    if (!port.empty()) {
+        px.port = port.size() <= 5 && port.find_first_not_of("0123456789") == std::string::npos ? atoi(port.c_str()) : 0;
+        if (px.port < 1 || px.port > 65535) { err = "proxy: the port is 1-65535"; return false; }
+    }
+    if (!host_ok(px.host)) { err = "proxy: no host, or a host with odd characters"; return false; }
+    if (px.kind == Proxy::SSH) {
+        if (!px.pass.empty()) { err = "ssh:// logs in with keys or an agent, no password in the URL"; return false; }
+        if (!px.user.empty() && (px.user[0] == '-' || px.user.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") != std::string::npos)) {
+            err = "ssh://: a user of letters, digits, . _ -";
+            return false;
+        }
+    }
+    return true;
+}
+
+std::string proxy_desc(const Proxy& px) {
+    static const char* k[] = {"", "socks4", "socks5", "http proxy", "ssh"};
+    std::string h = px.host.find(':') != std::string::npos ? "[" + px.host + "]" : px.host;
+    return std::string(k[px.kind]) + " " + (px.user.empty() || px.kind != Proxy::SSH ? "" : px.user + "@") + h + ":" + std::to_string(px.port);
+}
+
+// the request for this step; ponytail: a few hundred bytes to a socket just connected, one write() takes it all
+bool Conn::proxy_send() {
+    std::string m, p{(char)(tport >> 8), (char)(tport & 255)};
+    unsigned char a[16];
+    bool v4 = inet_pton(AF_INET, thost.c_str(), a) == 1, v6 = !v4 && inet_pton(AF_INET6, thost.c_str(), a) == 1;
+    if (px.kind == Proxy::SOCKS4) {
+        if (v6) { err = "socks4 can't reach an IPv6 address"; return false; }
+        // 4a: 0.0.0.1 and the name after the user, the proxy looks it up (no DNS leak here)
+        m = "\x04\x01" + p + (v4 ? std::string((char*)a, 4) : std::string("\0\0\0\x01", 4)) + px.user + '\0' + (v4 ? "" : thost + '\0');
+    } else if (px.kind == Proxy::HTTP) {
+        std::string t = (v6 ? "[" + thost + "]" : thost) + ":" + std::to_string(tport);
+        m = "CONNECT " + t + " HTTP/1.1\r\nHost: " + t + "\r\n";
+        if (!px.user.empty()) {
+            std::string up = px.user + ":" + px.pass, b(4 * ((up.size() + 2) / 3) + 1, '\0');
+            b.resize((size_t)EVP_EncodeBlock((unsigned char*)&b[0], (const unsigned char*)up.data(), (int)up.size()));
+            m += "Proxy-Authorization: Basic " + b + "\r\n";
+        }
+        m += "\r\n";
+    } else if (pstep == 0) {  // socks5: the methods we have
+        m = px.user.empty() ? std::string("\x05\x01\x00", 3) : std::string("\x05\x02\x00\x02", 4);
+    } else if (pstep == 1) {  // user and password (RFC 1929)
+        m = "\x01" + std::string(1, (char)px.user.size()) + px.user + std::string(1, (char)px.pass.size()) + px.pass;
+    } else {  // connect: the name goes to the proxy, it resolves it
+        if (thost.size() > 255) { err = "socks5: host name too long"; return false; }
+        m = std::string("\x05\x01\x00", 3) + (v4 ? "\x01" + std::string((char*)a, 4) : v6 ? "\x04" + std::string((char*)a, 16)
+                                               : "\x03" + std::string(1, (char)thost.size()) + thost) + p;
+    }
+    if (::write(fd, m.data(), m.size()) != (ssize_t)m.size()) { err = proxy_desc(px) + ": " + strerror(errno); return false; }
+    return true;
+}
+
+bool Conn::proxy_read(std::string& in) {
+    char buf[4096];
+    ssize_t n = read(fd, buf, sizeof buf);
+    if (n < 0 && (errno == EAGAIN || errno == EINTR)) return true;
+    std::string who = proxy_desc(px) + ": ";
+    if (n <= 0) { err = who + (n ? strerror(errno) : "closed the connection"); return false; }
+    pin.append(buf, (size_t)n);
+    if (pin.size() > 16384) { err = who + "answer too long"; return false; }
+    size_t used = 0;  // the bytes of a full answer
+    const unsigned char* u = (const unsigned char*)pin.data();
+    if (px.kind == Proxy::SOCKS4) {
+        if (pin.size() < 8) return true;
+        if (u[1] != 0x5a) { err = who + "refused (code " + std::to_string(u[1]) + ")"; return false; }
+        used = 8;
+    } else if (px.kind == Proxy::HTTP) {
+        size_t e = pin.find("\r\n\r\n");
+        if (e == std::string::npos) return true;
+        std::string first = pin.substr(0, pin.find("\r\n"));
+        int code = 0;
+        if (sscanf(first.c_str(), "HTTP/%*s %d", &code) != 1 || code != 200) {
+            err = who + first;
+            return false;
+        }
+        used = e + 4;
+    } else if (pstep < 2) {
+        if (pin.size() < 2) return true;
+        if (pstep == 0 && (u[0] != 5 || (u[1] != 0 && !(u[1] == 2 && !px.user.empty())))) {
+            err = who + (u[0] != 5 ? "not a socks5 proxy" : px.user.empty() ? "wants a user and password" : "takes none of our logins");
+            return false;
+        }
+        if (pstep == 1 && u[1] != 0) { err = who + "wrong user or password"; return false; }
+        pstep = pstep == 0 && u[1] == 2 ? 1 : 2;
+        pin.clear();
+        return proxy_send();
+    } else {
+        if (pin.size() < 5) return true;
+        static const char* why[] = {"", "general failure", "not allowed by its rules", "network unreachable", "host unreachable",
+                                    "connection refused", "TTL expired", "command not supported", "address type not supported"};
+        if (u[0] != 5 || u[1] != 0) { err = who + (u[1] < 9 ? why[u[1]] : "refused"); return false; }
+        used = u[3] == 1 ? 10 : u[3] == 4 ? 22 : 7 + (size_t)u[4];
+        if (pin.size() < used) return true;
+    }
+    in.append(pin, used, std::string::npos);  // a plain server can speak first: its bytes may have come along
+    pin.clear();
+    if (tls) return start_tls();
+    st = OPEN;
+    return true;
+}
+
+// ssh -W: ssh logs in on the jump host and carries the bytes to host:port over its stdin/stdout, our socketpair
+bool Conn::spawn_ssh() {
+    int sv[2], ep[2];
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv)) { err = strerror(errno); return false; }
+    if (pipe(ep)) { err = strerror(errno); ::close(sv[0]), ::close(sv[1]); return false; }
+    nonblock(sv[0]), nonblock(ep[0]);
+    std::string w = (thost.find(':') != std::string::npos ? "[" + thost + "]" : thost) + ":" + std::to_string(tport),
+                dest = (px.user.empty() ? "" : px.user + "@") + px.host, port = std::to_string(px.port);
+    const char* argv[] = {"ssh", "-W", w.c_str(), "-p", port.c_str(), "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+                          "-o", "LogLevel=ERROR", "-o", "ServerAliveInterval=60", "--", dest.c_str(), nullptr};
+    pid_t pid = fork();
+    if (pid < 0) { err = std::string("fork: ") + strerror(errno); ::close(sv[0]), ::close(sv[1]), ::close(ep[0]), ::close(ep[1]); return false; }
+    if (pid == 0) {
+        setsid();  // no terminal: ssh never asks anything over the TUI (BatchMode: keys or an agent)
+        for (int sig : {SIGPIPE, SIGHUP, SIGINT, SIGTERM, SIGQUIT, SIGCHLD}) signal(sig, SIG_DFL);
+        dup2(sv[1], 0), dup2(sv[1], 1), dup2(ep[1], 2);
+        if (sv[1] > 2) ::close(sv[1]);
+        if (ep[1] > 2) ::close(ep[1]);
+        execvp("ssh", (char* const*)argv);
+        dprintf(2, "can't run ssh: %s\n", strerror(errno));
+        _exit(127);
+    }
+    ::close(sv[1]), ::close(ep[1]);
+    fd = sv[0], ssh_err = ep[0], ssh_pid = pid;
+    st = CONNECTING;  // a socketpair is connected already: the first pump goes on to TLS or OPEN
+    return true;
+}
+
+std::string Conn::ssh_said() {  // why ssh ended: its first line on stderr, it has exited by now
+    char buf[512];
+    for (int i = 0; i < 20; i++) {  // ponytail: up to 200ms for the exiting ssh to say it
+        ssize_t n = read(ssh_err, buf, sizeof buf - 1);
+        if (n > 0) {
+            std::string l(buf, (size_t)n);
+            l = l.substr(0, l.find_first_of("\r\n"));
+            return proxy_desc(px) + ": " + l;
+        }
+        if (n == 0) break;
+        usleep(10000);
+    }
+    return proxy_desc(px) + ": closed (it logs in with keys or an agent only; try ssh " + px.host + " by hand)";
 }

@@ -76,11 +76,10 @@ void Core::load_config() {
     auto rank = [&](const std::string& n) { return std::find(order.begin(), order.end(), n) - order.begin(); };
     std::stable_sort(names.begin(), names.end(), [&](auto& x, auto& y) { return rank(x) < rank(y); });
     sts_load();
-    for (auto& n : names) {
-        Server* s = add_server(server_cfg(n));
-        if (s->cfg.autoconnect) connect(s);
-    }
-    plugins_sync();
+    for (auto& n : names) add_server(server_cfg(n));
+    plugins_sync();  // before connecting: a proxy plugin must see the first connection too
+    for (auto& s : servers)
+        if (s->cfg.autoconnect) connect(s.get());
     if (old_away_keys(*this) && access((plugin_dir() + "/autoaway.lua").c_str(), F_OK) != 0)
         info_note(home, "Auto-away is a plugin now, and your config still has its settings: /plugin install autoaway "
                               "moves them into it (until then nobody sets you away)");
@@ -880,6 +879,7 @@ void Core::reload(Buffer* b) {
     if (!load_theme(ini_get(cfg, "general", "theme", "default"), theme, err)) print(b, LK::ERROR, err);
     notify(Ev::THEME, nullptr);
     for (auto& sv : servers) sv->cfg = server_cfg(sv->cfg.name), load_flood(sv.get());
+    std::vector<Server*> added;
     for (auto& [sec, kv] : cfg) {
         if (sec.rfind("server.", 0) != 0) continue;
         std::string name = sec.substr(7);
@@ -888,10 +888,11 @@ void Core::reload(Buffer* b) {
         if (known) continue;
         Server* s = add_server(server_cfg(name));
         print(b, LK::INFO, "New server " + name + (s->cfg.autoconnect ? ": connecting" : " (autoconnect off: /connect " + name + ")"));
-        if (s->cfg.autoconnect) connect(s);
+        if (s->cfg.autoconnect) added.push_back(s);
     }
     cfg_changed = dirty = true;
-    plugins_sync();  // enabled or disabled in the file
+    plugins_sync();  // enabled or disabled in the file; before the new servers connect (a proxy plugin)
+    for (auto* s : added) connect(s);
     size_t n = 0;
     for (auto& [sec, kv] : unsaved) n += kv.size();
     print(b, LK::INFO, "Reloaded " + cfg_path + (n ? " (" + std::to_string(n) + " unsaved /set changes kept on top)" : "") +
