@@ -149,7 +149,8 @@ Not available on Cygwin.
 |---|---|
 | F1, Alt+K | the key list (`/keys`) |
 | Alt+1..9, Alt+0 | go to tab N |
-| Alt+←/→, Ctrl+P/N | previous / next tab |
+| Alt+↑/↓, Ctrl+P/N | previous / next tab |
+| Alt+←/→ | previous / next server tab, or a tab of no network (cmd, shells) |
 | Ctrl+A, Alt+A | next tab with activity |
 | Alt+S (Option+S on a Mac) | lock the terminal and the webchat now (`/lock`; with no lock password yet it says how to set one) |
 | Alt+D (Option+D on a Mac), Ctrl+Z | detach: iSekur keeps running in the background |
@@ -220,7 +221,7 @@ fetch files for you. Passive DCC is not there yet.
 `/shell` opens a real terminal in a tab (its own color, `tab_shell` in the theme) after asking
 for this machine's login and password, checked by the system through PAM (`pam_service`,
 default `login`; three wrong ones lock it for a minute). It runs your `$SHELL` as a login shell
-on a pty, so vim, top, ssh, Ctrl+C and tab completion work. Every key goes to it but Alt+←/→
+on a pty, so vim, top, ssh, Ctrl+C and tab completion work. Every key goes to it but Alt+arrows
 and Alt+1-9, which move between tabs; the mouse wheel scrolls back through what went off the
 top. `exit` ends it, Ctrl+W then closes the tab (closing a tab with a running shell hangs it up).
 It is never reachable from the webchat or from IRC: only from the terminal iSekur runs in.
@@ -231,7 +232,7 @@ It is never reachable from the webchat or from IRC: only from the terminal iSeku
 shell, so a Homebrew `isekur` is found): the iSekur on that machine shows up live in a tab of this
 one. `host` is a name, `user@host` or a `Host` from `~/.ssh/config` (put ports and keys there);
 ssh asks for its own password or uses your keys, so no system login is asked first. Keys go to
-the remote one except Alt+←/→ and Alt+1-9, so Alt+D or `/detach` typed in the tab detaches it
+the remote one except Alt+arrows and Alt+1-9, so Alt+D or `/detach` typed in the tab detaches it
 and leaves it running; `/attach host` again reconnects. If none runs there, a new one starts. The
 mouse isn't passed on. `/attach host config` picks one of several iSekurs there (`isekur -c config
 --attach`). From a plain terminal, `ssh -t host isekur --attach` is the same thing.

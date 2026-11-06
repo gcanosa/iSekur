@@ -1897,7 +1897,7 @@ dtheme.onclose = () => {  // Keep: /set theme (so /save writes it); Esc or Cance
 };
 // /keys: the bindings as keycaps by group, from the live keymap (the [keys] section included), then the typing keys
 const KEY_GROUPS = [
-  ["Tabs", [["next_tab", "next tab"], ["prev_tab", "previous tab"], ["next_active", "the busiest tab"], ["next_server", "next server tab"],
+  ["Tabs", [["next_tab", "next tab"], ["prev_tab", "previous tab"], ["next_active", "the busiest tab"], ["next_server", "next server or console tab"], ["prev_server", "previous server or console tab"],
             ["find_tab", "find a tab by name"], ["other_pane", "the other /split pane"], ["close_tab", "close the tab"]]],
   ["View", [["scroll_up", "scroll up half a page"], ["scroll_down", "scroll down half a page"], ["toggle_nicklist", "show or hide the nick list"],
             ["toggle_topic", "show or hide the topic bar"], ["keys", "this list"]]],
@@ -2737,7 +2737,7 @@ $("#input").onsubmit = async e => {
 };
 // keys: the terminal's defaults a browser lets through (it keeps Ctrl+W, Ctrl+N, Ctrl+T...; Alt+W and
 // Alt+X stand in for Ctrl+W and Ctrl+X), plus the [keys] section, in the terminal's spelling ("M-Right")
-const KEYS_DEF = {"M-Right": "next_tab", "M-Left": "prev_tab", "M-a": "next_active", "M-x": "next_server", "M-w": "close_tab",
+const KEYS_DEF = {"M-Down": "next_tab", "M-Up": "prev_tab", "M-Right": "next_server", "M-Left": "prev_server", "M-a": "next_active", "M-x": "next_server", "M-w": "close_tab",
   "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down", "F6": "other_pane", "M-o": "other_pane",
   "C-g": "find_tab", "M-j": "find_tab", "M-q": "quit", "M-s": "lock", "F1": "keys", "M-k": "keys"};
 for (let i = 1; i <= 10; i++) KEYS_DEF["M-" + i % 10] = "tab_" + i;
@@ -2770,8 +2770,9 @@ function action(a) {
     let best = null;
     for (let i = 1; i < sz; i++) { const b = bufs.get(at(n + i)); if (b && b.act > (best ? bufs.get(best).act : 0)) best = at(n + i); }
     if (best !== null) select(best);
-  } else if (a === "next_server") {
-    for (let i = 1; i < sz; i++) { const b = bufs.get(at(n + i)); if (b && b.type === "status") { select(at(n + i)); break; } }
+  } else if (a === "next_server" || a === "prev_server") {  // the top level: server tabs and the ones of no network (cmd, shells)
+    const d = a === "next_server" ? 1 : -1;
+    for (let i = 1; i < sz; i++) { const b = bufs.get(at(n + d * i)); if (b && (b.type === "status" || !b.net)) { select(at(n + d * i)); break; } }
   } else if (a === "close_tab") send({t: "input", buf: active, text: "/close"});
   else if (a === "scroll_up" || a === "scroll_down") { const m = $("#msgs"); m.scrollBy(0, (a === "scroll_up" ? -1 : 1) * m.clientHeight / 2); }
   else if (a === "toggle_nicklist") $("#nickbtn").click();

@@ -181,7 +181,7 @@ html          =              ; serve this file as the webchat page, re-read on e
 
 # Key bindings: <action> = <key> [key...]
 # Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
-# Actions: next_tab prev_tab next_active next_server close_tab scroll_up
+# Actions: next_tab prev_tab next_active next_server prev_server close_tab scroll_up
 #          scroll_down toggle_nicklist toggle_topic detach toggle_mouse other_pane find_tab
 #          quit (asks first) keys (the key list, F1 M-k)
 #          tab_1 .. tab_10

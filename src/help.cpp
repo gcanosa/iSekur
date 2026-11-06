@@ -362,7 +362,7 @@ static const std::vector<CmdInfo> CMDS = {
      "Asks for this machine's login and password first (the user iSekur runs as, checked by "
      "the system through PAM; pam_service sets the service, default login; three wrong ones "
      "lock it for a minute), then runs $SHELL as a login shell on a pty: vim, top, ssh, "
-     "Ctrl+C all work. Every key goes to it except Alt+Left/Right and Alt+1-9 (other tabs); "
+     "Ctrl+C all work. Every key goes to it except Alt+arrows and Alt+1-9 (other tabs); "
      "the mouse wheel scrolls back. exit ends it, Ctrl+W then closes the tab. Terminal only: "
      "never from the webchat.",
      {"/shell"}},
@@ -371,7 +371,7 @@ static const std::vector<CmdInfo> CMDS = {
      "the usual one) in a tab like /shell's: the remote iSekur, live, inside this one. host is a "
      "name, user@host or a Host from ~/.ssh/config (keys go there); -p port is ssh's own -p, for a port other than 22. ssh asks for its own "
      "password or uses your keys; no system login is asked first. Every key goes to the remote "
-     "except Alt+Left/Right and Alt+1-9, so Alt+D or /detach typed there detaches it and leaves it "
+     "except Alt+arrows and Alt+1-9, so Alt+D or /detach typed there detaches it and leaves it "
      "running; the tab then says so, and /attach host again reconnects. If nothing runs there, a "
      "new iSekur starts. Several iSekurs on one machine each run with their own config (isekur -c "
      "work.conf); config picks one (isekur -c config --attach there) and names the tab host:work; "

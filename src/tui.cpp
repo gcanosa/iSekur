@@ -1520,7 +1520,7 @@ struct KeyRow { std::string head, specs, desc; };
 static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& keymap) {
     static const std::vector<std::pair<const char*, std::vector<std::pair<const char*, const char*>>>> GROUPS = {
         {"Tabs", {{"next_tab", "next tab"}, {"prev_tab", "previous tab"}, {"next_active", "the busiest tab"},
-                  {"next_server", "next server tab"}, {"find_tab", "find a tab by name"},
+                  {"next_server", "next server or console tab"}, {"prev_server", "previous server or console tab"}, {"find_tab", "find a tab by name"},
                   {"other_pane", "the other /split pane"}, {"close_tab", "close the tab"}}},
         {"View", {{"scroll_up", "scroll up half a page"}, {"scroll_down", "scroll down half a page"}, {"toggle_nicklist", "show or hide the nick list"},
                   {"toggle_topic", "show or hide the topic bar"}, {"toggle_mouse", "mouse on / off"}, {"keys", "this list"}}},
@@ -2174,7 +2174,7 @@ void Tui::shell_key(int mod, int k, uint32_t ch) {
         auto it = keymap.find(keyspec(mod, k, ch));
         if (it != keymap.end()) {
             const std::string& a = it->second;
-            if (a == "next_tab" || a == "prev_tab" || a == "next_active" || a == "next_server" || a.rfind("tab_", 0) == 0) { action(a); return; }
+            if (a == "next_tab" || a == "prev_tab" || a == "next_active" || a == "next_server" || a == "prev_server" || a.rfind("tab_", 0) == 0) { action(a); return; }
         }
     }
     VTerm* vt = b->term->vt;
@@ -2252,8 +2252,10 @@ void Tui::apply_cfg() {
 void Tui::load_keys() {
     keymap.clear();
     for (int i = 1; i <= 10; i++) keymap["M-" + std::to_string(i % 10)] = "tab_" + std::to_string(i);
-    keymap["M-Right"] = keymap["C-n"] = "next_tab";
-    keymap["M-Left"] = keymap["C-p"] = "prev_tab";
+    keymap["M-Down"] = keymap["C-n"] = "next_tab";
+    keymap["M-Up"] = keymap["C-p"] = "prev_tab";
+    keymap["M-Right"] = "next_server";
+    keymap["M-Left"] = "prev_server";
     keymap["C-a"] = keymap["M-a"] = "next_active";
     keymap["C-x"] = "next_server";
     keymap["C-w"] = "close_tab";
@@ -2336,9 +2338,10 @@ bool Tui::action(const std::string& a) {
         for (int i = 1; i < sz; i++)
             if (at(n + i)->activity > (best ? best->activity : 0)) best = at(n + i);
         if (best) c.select(best);
-    } else if (a == "next_server") {
+    } else if (a == "next_server" || a == "prev_server") {  // the top level: server tabs and the ones of no network (cmd, shells)
+        int d = a == "next_server" ? 1 : -1;
         for (int i = 1; i < sz; i++)
-            if (at(n + i)->type == BT::STATUS) { c.select(at(n + i)); break; }
+            if (at(n + d * i)->type == BT::STATUS || !at(n + d * i)->srv) { c.select(at(n + d * i)); break; }
     } else if (a == "close_tab") c.close(c.active);
     else if (a == "scroll_up") c.active->scroll += chat_height() / 2;
     else if (a == "scroll_down") c.active->scroll = std::max(0, c.active->scroll - chat_height() / 2);
