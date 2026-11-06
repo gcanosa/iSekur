@@ -55,3 +55,9 @@ std::string https_head(const std::string& host, const std::string& path);  // bl
 // blocking, for a thread: GET https://host/path, verified TLS, 20s timeouts, at most cap bytes of body.
 // true with a 200 and the body in out; false with why in out
 bool https_get(const std::string& host, const std::string& path, size_t cap, std::string& out);
+// blocking, for a thread: GET an https:// URL for a plugin (isekur.http). Redirects followed (https only), the body cut
+// at cap, 10s connect and 15s read timeouts. Hosts that resolve to loopback, private or link-local addresses are
+// refused: links people post mustn't reach your LAN. false with why in err; true with the status (any), the final url
+std::string https_fetch_err(const std::string& url);  // "" when the URL itself is fine (https, a host)
+bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err);
+bool public_addr(const struct sockaddr* sa);

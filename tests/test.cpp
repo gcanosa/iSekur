@@ -11,9 +11,11 @@
 #include <functional>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
 #include "core.h"
 #include "session.h"
 #include "web.h"
+#include "net.h"
 
 static std::string client_frame(const std::string& p) {  // masked, like a browser
     std::string f = ws_frame(p);
@@ -1700,7 +1702,18 @@ isekur.command("ptest", "", function(args, srv, target)
   if args == "usage" then return "Usage: /ptest thing" end
   print("ran " .. args .. " in " .. target)
 end)
-isekur.on("message", function(e) return e.text == "hideme" end)
+isekur.on("message", function(e)
+  if e.text:match("^embed") then  -- now (the line isn't added yet) and once a fetch answers
+    assert(isekur.embed(e.srv, e.target, e.id, {type = "audio", url = "https://x.test/a.mp3", n = 3, skip = {}}))
+    assert(not isekur.embed(e.srv, e.target, "999999", {type = "x"}))
+    local ok, why = isekur.http("http://x.test/", function() end)
+    assert(not ok and why:find("https://", 1, true))
+    assert(isekur.http(e.text:match("^embed (.*)"), function(r)
+      isekur.embed(e.srv, e.target, e.id, {type = "link", url = r.url, title = r.error or "?"})
+    end))
+  end
+  return e.text == "hideme"
+end)
 print("loaded")
 )LUA");
         put("bad.lua", "this is not lua");
@@ -1756,6 +1769,24 @@ print("loaded")
         assert(pchan->lines.size() == n0);
         assert(irc_parse(":bob!u@h PRIVMSG #chan :showme", pm)), pc.handle(ps, pm);
         assert(pchan->lines.size() == n0 + 1);
+        // isekur.embed: on the line its message event is for, then (isekur.http answered) one more. http refuses the LAN
+        for (std::string url : {"https://127.0.0.1/", "https://[::1]:8443/x", "https://10.1.2.3/", "https://localhost/"}) {
+            assert(irc_parse(":bob!u@h PRIVMSG #chan :embed " + url, pm)), pc.handle(ps, pm);
+            Line& el = pchan->lines.back();
+            assert(el.id && el.embeds == R"({"n":3,"type":"audio","url":"https://x.test/a.mp3"})");
+            for (int i = 0; i < 500 && el.embeds.find("link") == std::string::npos; i++) usleep(10000), pc.plugins_poll();
+            assert(el.embeds.find("private network") != std::string::npos);
+        }
+        auto pub = [](const char* ip) {
+            sockaddr_storage ss{};
+            if (inet_pton(AF_INET, ip, &((sockaddr_in*)&ss)->sin_addr) == 1) ss.ss_family = AF_INET;
+            else assert(inet_pton(AF_INET6, ip, &((sockaddr_in6*)&ss)->sin6_addr) == 1), ss.ss_family = AF_INET6;
+            return public_addr((sockaddr*)&ss);
+        };
+        assert(pub("8.8.8.8") && pub("172.32.0.1") && pub("100.128.0.1") && pub("2606:4700::1111"));
+        for (auto ip : {"0.0.0.0", "127.0.0.1", "10.0.0.1", "172.16.0.1", "172.31.255.255", "192.168.1.1", "169.254.169.254",
+                        "100.64.0.1", "224.0.0.1", "::", "::1", "fd00::1", "fe80::1", "::ffff:192.168.0.1", "ff02::1"})
+            assert(!pub(ip));
         // on only in sn/#chan: its events, not #other's
         pc.exec(ph, "/plugin disable t");
         assert(pc.plugins.empty() && last(ph) == "t disabled");
@@ -2053,6 +2084,20 @@ print("loaded")
         }
         pc.exec(ph, "/plugin remove awaylog");
         pc.exec(ph, "/plugin remove seen");
+        // preview: audio, video and image links get their player or picture at once (no fetch); max, media off
+        pc.exec(ph, "/plugin install preview");
+        wait_catalog();
+        assert(said("preview " + ver["preview"] + " installed and on"));
+        assert(irc_parse(":bob!u@h PRIVMSG #chan :listen \x02https://x.test/song.mp3?dl=1\x02 and https://x.test/Pic.PNG, "
+                         "also (https://x.test/v.webm). https://x.test/four.ogg", pm)), pc.handle(ps, pm);
+        assert(pchan->lines.back().embeds == R"({"size":"small","type":"audio","url":"https://x.test/song.mp3?dl=1"},)"
+                                             R"({"size":"small","type":"image","url":"https://x.test/Pic.PNG"},{"size":"small","type":"video","url":"https://x.test/v.webm"})");
+        pc.exec(ph, "/plugin set preview@sn/#chan media off");
+        pc.exec(ph, "/plugin set preview ignore pics.test");
+        pc.exec(ph, "/plugin set preview size Large");
+        assert(irc_parse(":bob!u@h PRIVMSG #chan :https://x.test/a.mp3 https://cdn.pics.test/a.gif https://x.test/b.gif", pm)), pc.handle(ps, pm);
+        assert(pchan->lines.back().embeds == R"({"size":"large","type":"image","url":"https://x.test/b.gif"})");
+        pc.exec(ph, "/plugin remove preview");
         }  // the catalog's plugins
         unsetenv("ISEKUR_PLUGIN_URL");
         unlink((cat + "/index.json").c_str()), unlink((cat + "/t2/t2.lua").c_str()), rmdir((cat + "/t2").c_str()), rmdir(cat.c_str());

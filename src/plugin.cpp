@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <algorithm>
+#include <cmath>
 #include <cstring>
 #include <set>
 #include <fstream>
@@ -12,6 +13,9 @@
 #include <openssl/evp.h>
 #include "core.h"
 #include "lua/lua.hpp"
+#include "net.h"
+
+std::string json_str(const std::string& s);  // web.cpp
 
 static const size_t MEM_CAP = 32 << 20;  // bytes per plugin
 static const int HOOK_EVERY = 10000, STEP_CAP = 1000;  // ~10M instructions per call, then it's stopped
@@ -33,6 +37,7 @@ struct Plugin {
     std::map<std::string, std::string> store;
     bool store_read = false, store_dirty = false;  // dirty: written by store_flush within STORE_EVERY seconds
     time_t store_at = 0;                           // when it was last written
+    std::weak_ptr<Plugin> me;  // isekur.http: its answer comes back only to a plugin still loaded
     ~Plugin();
 };
 
@@ -313,9 +318,104 @@ static int l_rank(lua_State* L) {  // rank(srv, chan, nick): its prefix ("@", "+
     return 1;
 }
 
+// isekur.http(url, fn): a GET on a thread; fn({status, type, body, url, error}) on a tick once it's done.
+// ponytail: one job list per process (one Core); 4 at once per plugin, the rest refused
+struct HttpJob {
+    std::weak_ptr<Plugin> p;
+    int fn = LUA_NOREF, status = 0;
+    std::string url, ctype, body, err;
+    std::atomic<bool> done{false};
+};
+static std::vector<std::shared_ptr<HttpJob>> http_jobs;
+static const size_t HTTP_CAP = 512 << 10;
+static const int HTTP_AT_ONCE = 4;
+static int l_http(lua_State* L) {
+    Plugin* p = self(L);
+    std::string url = str_arg(L, 1);
+    luaL_checktype(L, 2, LUA_TFUNCTION);
+    std::string bad = https_fetch_err(url);
+    if (!bad.empty()) return lua_pushboolean(L, 0), lua_pushstring(L, bad.c_str()), 2;
+    int mine = 0;
+    for (auto& j : http_jobs) mine += j->p.lock().get() == p;
+    if (mine >= HTTP_AT_ONCE) return lua_pushboolean(L, 0), lua_pushstring(L, "busy: 4 fetches already running"), 2;
+    auto j = std::make_shared<HttpJob>();
+    j->p = p->me, j->url = url;
+    lua_pushvalue(L, 2), j->fn = luaL_ref(L, LUA_REGISTRYINDEX);
+    http_jobs.push_back(j);
+    std::thread([j] {
+        if (!https_fetch(j->url, HTTP_CAP, j->status, j->ctype, j->body, j->err)) j->status = 0;
+        j->done.store(true, std::memory_order_release);
+    }).detach();
+    lua_pushboolean(L, 1);
+    return 1;
+}
+static void http_poll() {
+    auto jobs = http_jobs;
+    for (auto& j : jobs) {
+        if (!j->done.load(std::memory_order_acquire)) continue;
+        http_jobs.erase(std::find(http_jobs.begin(), http_jobs.end(), j));
+        auto p = j->p.lock();
+        if (!p || p->dead) continue;  // unloaded: its Lua state (and the ref) went with it
+        lua_State* L = p->L;
+        lua_rawgeti(L, LUA_REGISTRYINDEX, j->fn);
+        luaL_unref(L, LUA_REGISTRYINDEX, j->fn);
+        lua_createtable(L, 0, 5);
+        lua_pushinteger(L, j->status), lua_setfield(L, -2, "status");
+        std::string t = j->ctype.substr(0, j->ctype.find(';'));
+        while (!t.empty() && t.back() == ' ') t.pop_back();
+        for (auto& ch : t) ch = (char)tolower((unsigned char)ch);
+        lua_pushstring(L, t.c_str()), lua_setfield(L, -2, "type");
+        lua_pushlstring(L, j->body.data(), j->body.size()), lua_setfield(L, -2, "body");
+        lua_pushstring(L, j->url.c_str()), lua_setfield(L, -2, "url");
+        if (!j->err.empty()) lua_pushstring(L, j->err.c_str()), lua_setfield(L, -2, "error");
+        call(p.get(), 1, 0);
+    }
+}
+
+// isekur.embed(srv, target, id, {k = v, ...}): attaches a flat table (strings, numbers, booleans) to the message with
+// that id (its event's e.id) for the webchat to show under it. Untrusted data: the page shows it as text only
+static int l_embed(lua_State* L) {
+    Core& c = *self(L)->c;
+    Server* s = srv_arg(L, 1);
+    Buffer* b = s ? c.find(s, str_arg(L, 2)) : nullptr;
+    unsigned long long id = strtoull(luaL_checkstring(L, 3), nullptr, 10);
+    luaL_checktype(L, 4, LUA_TTABLE);
+    std::map<std::string, std::string> kv;  // keys sorted: the same table, the same JSON
+    lua_pushnil(L);
+    while (lua_next(L, 4)) {
+        if (lua_type(L, -2) == LUA_TSTRING) {
+            int t = lua_type(L, -1);
+            std::string v = t == LUA_TBOOLEAN ? (lua_toboolean(L, -1) ? "true" : "false")
+                          : t == LUA_TNUMBER && lua_isinteger(L, -1) ? std::to_string(lua_tointeger(L, -1))
+                          : t == LUA_TNUMBER && std::isfinite(lua_tonumber(L, -1)) ? std::to_string(lua_tonumber(L, -1))
+                          : t == LUA_TSTRING ? json_str(lua_tostring(L, -1)) : "";
+            if (!v.empty()) kv[lua_tostring(L, -2)] = v;
+        }
+        lua_pop(L, 1);
+    }
+    std::string o = "{";
+    for (auto& [k, v] : kv) o += (o.size() > 1 ? "," : "") + json_str(k) + ":" + v;
+    o += "}";
+    Line* l = nullptr;
+    if (b && id)
+        for (auto it = b->lines.rbegin(); it != b->lines.rend() && !l; ++it) if (it->id == id) l = &*it;
+    if (!l && b && id && id == c.line_seq && o.size() <= 4096) {  // from its message event: the line isn't added yet
+        auto& [pid, pend] = c.embed_pend;
+        if (pid != id) pid = id, pend.clear();
+        if (pend.size() + o.size() > 16384) return lua_pushboolean(L, 0), 1;
+        pend += (pend.empty() ? "" : ",") + o;
+        return lua_pushboolean(L, 1), 1;
+    }
+    if (!l || o.size() > 4096 || l->embeds.size() + o.size() > 16384) return lua_pushboolean(L, 0), 1;  // gone, or too much
+    l->embeds += (l->embeds.empty() ? "" : ",") + o;
+    c.notify(Ev::EMBED, b, l);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::string& err) {
     auto p = std::make_shared<Plugin>();
-    p->c = &c, p->name = name;
+    p->c = &c, p->name = name, p->me = p;
     lua_State* L = p->L = lua_newstate(palloc, p.get());
     if (!L) { err = "out of memory"; return nullptr; }
     *(Plugin**)lua_getextraspace(L) = p.get();
@@ -333,6 +433,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"active", l_active}, {"date", l_date}, {"is_chan", l_is_chan},
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"rank", l_rank},
+        {"http", l_http}, {"embed", l_embed},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
     lua_pushstring(L, name.c_str()), lua_setfield(L, -2, "name");
@@ -692,6 +793,7 @@ static void list_available(Core& c, Buffer* b) {
 }
 
 void Core::plugins_poll() {
+    http_poll();
     time_t now = time(nullptr);
     for (auto& p : plugins)
         if (p->store_dirty && now - p->store_at >= STORE_EVERY) store_flush(p.get());

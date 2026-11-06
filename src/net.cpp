@@ -5,6 +5,8 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <arpa/inet.h>
+#include <strings.h>
 #include <poll.h>
 #include <sys/time.h>
 #include <thread>
@@ -144,6 +146,150 @@ bool https_get(const std::string& host, const std::string& path, size_t cap, std
     if (got.size() - hdr - 4 > cap) { out = "too big (over " + std::to_string(cap / 1024) + " KB)"; return false; }
     out = got.substr(hdr + 4);
     return true;
+}
+
+// not loopback, private, CGNAT, link-local, multicast or unspecified: somewhere on the internet
+bool public_addr(const sockaddr* sa) {
+    if (sa->sa_family == AF_INET) {
+        uint32_t a = ntohl(((const sockaddr_in*)sa)->sin_addr.s_addr);
+        return !((a >> 24) == 0 || (a >> 24) == 10 || (a >> 24) == 127 || (a >> 16) == 0xa9fe || (a >> 20) == 0xac1 ||
+                 (a >> 16) == 0xc0a8 || (a >> 22) == (100u << 2 | 1) || a >= 0xe0000000u);
+    }
+    if (sa->sa_family != AF_INET6) return false;
+    const unsigned char* b = ((const sockaddr_in6*)sa)->sin6_addr.s6_addr;
+    static const unsigned char mapped[12] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0xff, 0xff};
+    if (!memcmp(b, mapped, 12)) {  // ::ffff:a.b.c.d: the IPv4 one's rules
+        sockaddr_in v4{};
+        v4.sin_family = AF_INET, memcpy(&v4.sin_addr, b + 12, 4);
+        return public_addr((sockaddr*)&v4);
+    }
+    bool zero = true;
+    for (int i = 0; i < 15; i++) zero &= !b[i];
+    return !(zero || (b[0] & 0xfe) == 0xfc || (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) || b[0] == 0xff);  // ::, ::1, fc00::/7, fe80::/10, ff00::/8
+}
+
+// https://host[:port]/path -> host, port, path; false: not that
+static bool split_https(const std::string& url, std::string& host, std::string& port, std::string& path) {
+    if (url.size() < 9 || strncasecmp(url.c_str(), "https://", 8)) return false;
+    size_t e = url.find_first_of("/?#", 8);
+    std::string hp = url.substr(8, e == std::string::npos ? std::string::npos : e - 8);
+    path = e == std::string::npos ? "/" : url.substr(e);
+    path = path.substr(0, path.find('#'));
+    if (path.empty() || path[0] != '/') path = "/" + path;
+    if (hp.find('@') != std::string::npos) return false;  // user:pass@: not for links people post
+    port = "443";
+    if (!hp.empty() && hp[0] == '[') {  // [::1]:443
+        size_t c = hp.find(']');
+        if (c == std::string::npos) return false;
+        host = hp.substr(1, c - 1);
+        if (c + 1 < hp.size()) { if (hp[c + 1] != ':') return false; port = hp.substr(c + 2); }
+    } else {
+        size_t c = hp.rfind(':');
+        host = hp.substr(0, c);
+        if (c != std::string::npos) port = hp.substr(c + 1);
+    }
+    if (port.empty() || port.find_first_not_of("0123456789") != std::string::npos) return false;
+    for (char ch : path) if ((unsigned char)ch <= ' ') return false;  // no request smuggling through the path
+    return !host.empty() && host.find_first_of(" \r\n/\\") == std::string::npos;
+}
+
+std::string https_fetch_err(const std::string& url) {
+    std::string h, p, path;
+    return split_https(url, h, p, path) ? "" : "not an https:// URL: " + url.substr(0, 200);
+}
+
+// one GET: false with err on a failure; true with the status line's code, headers and up to cap bytes of body
+static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err) {
+    static SSL_CTX* ctx = new_client_ctx();
+    std::string host, port, path;
+    if (!split_https(url, host, port, path)) { err = https_fetch_err(url); return false; }
+    addrinfo hints{}, *ai = nullptr;
+    hints.ai_socktype = SOCK_STREAM;
+    if (int e = getaddrinfo(host.c_str(), port.c_str(), &hints, &ai)) { err = host + ": " + gai_strerror(e); return false; }
+    int fd = -1;
+    for (addrinfo* a = ai; a; a = a->ai_next)  // every address must be public: a name that's half LAN is refused
+        if (!public_addr(a->ai_addr)) { freeaddrinfo(ai); err = host + " is on a private network: not fetched"; return false; }
+    for (addrinfo* a = ai; a && fd < 0; a = a->ai_next) {  // connect to the address checked, not a second lookup
+        fd = socket(a->ai_family, SOCK_STREAM, 0);
+        if (fd < 0) continue;
+        nonblock(fd);
+        pollfd pf{fd, POLLOUT, 0};
+        int so = 0;
+        socklen_t sl = sizeof so;
+        if ((::connect(fd, a->ai_addr, a->ai_addrlen) == 0 || errno == EINPROGRESS) && poll(&pf, 1, 10000) == 1 &&
+            getsockopt(fd, SOL_SOCKET, SO_ERROR, &so, &sl) == 0 && so == 0) break;
+        ::close(fd), fd = -1;
+    }
+    freeaddrinfo(ai);
+    if (fd < 0) { err = "can't connect to " + host; return false; }
+    fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+    timeval tv{15, 0};
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv), setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
+    SSL* ssl = SSL_new(ctx);
+    SSL_set_fd(ssl, fd);
+    in6_addr ip;
+    bool literal = inet_pton(AF_INET, host.c_str(), &ip) == 1 || inet_pton(AF_INET6, host.c_str(), &ip) == 1;
+    if (!literal) SSL_set_tlsext_host_name(ssl, host.c_str()), SSL_set1_host(ssl, host.c_str());
+    else X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), host.c_str());
+    SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
+    std::string got, req = "GET " + path + " HTTP/1.0\r\nHost: " + host + (port == "443" ? "" : ":" + port) +
+                             "\r\nUser-Agent: Mozilla/5.0 (compatible; iSekur link preview)\r\nAccept: text/html,*/*;q=0.8\r\n\r\n";
+    bool ok = SSL_connect(ssl) == 1 && SSL_write(ssl, req.data(), (int)req.size()) == (int)req.size();
+    if (!ok) err = "TLS with " + host + ": " + ssl_errstr();
+    char buf[16384];
+    int n;
+    size_t hdr = std::string::npos;
+    while (ok && (n = SSL_read(ssl, buf, sizeof buf)) > 0) {
+        got.append(buf, (size_t)n);
+        if (hdr == std::string::npos) hdr = got.find("\r\n\r\n");
+        if (hdr == std::string::npos ? got.size() > 65536 : got.size() - hdr - 4 >= cap) break;  // enough: the rest isn't read
+    }
+    SSL_free(ssl), ::close(fd);
+    if (!ok) return false;
+    if (hdr == std::string::npos || got.compare(0, 5, "HTTP/")) { err = "no answer from " + host; return false; }
+    status = atoi(got.c_str() + got.find(' ') + 1);
+    hdrs = got.substr(0, hdr + 2);
+    body = got.substr(hdr + 4, cap);
+    return true;
+}
+
+static std::string header(const std::string& hdrs, const char* name) {  // name lowercase, with its ':'
+    size_t at = 0, len = strlen(name);
+    while ((at = hdrs.find("\r\n", at)) != std::string::npos) {
+        at += 2;
+        if (!strncasecmp(hdrs.c_str() + at, name, len)) {
+            size_t e = hdrs.find("\r\n", at);
+            std::string v = hdrs.substr(at + len, e - at - len);
+            v.erase(0, v.find_first_not_of(" \t"));
+            return v;
+        }
+    }
+    return "";
+}
+
+bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err) {
+    for (int hop = 0; hop < 5; hop++) {
+        std::string hdrs;
+        if (!fetch_once(url, cap, status, hdrs, body, err)) return false;
+        std::string loc = header(hdrs, "location:");
+        if (status / 100 != 3 || loc.empty()) {
+            ctype = header(hdrs, "content-type:");
+            return true;
+        }
+        if (loc.rfind("//", 0) == 0) loc = "https:" + loc;  // relative ones: from this URL's host or folder
+        else if (loc.find("://") == std::string::npos) {
+            size_t root = url.find('/', 8);
+            std::string base = root == std::string::npos ? url : url.substr(0, root);
+            if (loc[0] == '/') loc = base + loc;
+            else {
+                std::string dir = root == std::string::npos ? "/" : url.substr(root, url.find_first_of("?#", root) - root);
+                loc = base + dir.substr(0, dir.rfind('/') + 1) + loc;
+            }
+        }
+        url = loc;
+    }
+    err = "too many redirects";
+    return false;
 }
 
 bool Conn::start_tls() {

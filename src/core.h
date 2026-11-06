@@ -100,6 +100,8 @@ struct Line {
     // prints and "plugin" on /plugin's messages (kind 'p'); "" = none
     std::string badge = {};
     char badge_kind = 0;
+    unsigned long long id = 0;  // messages: what a plugin's isekur.embed points at (e.id of its message event); 0 = none
+    std::string embeds = {};    // isekur.embed's JSON objects, comma separated: the webchat's previews under the line
 };
 // /typing: how many of a line's len visible characters show at now; ~30 a second, never over 2s a line
 inline size_t typed_chars(const Line& l, size_t len, long long now) {
@@ -233,7 +235,7 @@ struct PluginInfo {
 struct CatalogRow { std::string name, version, local, desc; bool installed, update, edited, too_new; };  // local: the installed version
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 1  // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 2  // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings and booleans
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool>>>;
@@ -327,7 +329,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -362,6 +364,8 @@ struct Core {
     int split_pm = 500;  // the first pane's share, per mille (the divider drag); a browser that connects starts like the terminal
     void split_cmd(Buffer* b, const std::string& args);
     int next_id = 1;
+    unsigned long long line_seq = 0;  // Line::id
+    std::pair<unsigned long long, std::string> embed_pend;  // isekur.embed in the message event itself: for the line about to be added
     size_t max_lines = 2000;  // [general] scrollback: lines kept per tab
     bool quit = false, dirty = true, cfg_changed = false;  // cfg_changed: the TUI re-reads keys, mouse, colors
     // auto-away: nobody attached (daemon, no web client) or no input for a while

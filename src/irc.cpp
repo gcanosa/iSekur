@@ -1273,8 +1273,10 @@ void Core::handle(Server* s, const Msg& m) {
         }
         b->typing.erase(s->lower(who));  // a message ends their typing
         // a handler that returns true hides the line (ponytail: own lines only reach plugins with echo-message)
+        unsigned long long lid = replay ? 0 : ++line_seq;  // e.id: what isekur.embed points at
         if (!replay && plugin_emit("message", s, b->name, {{"nick", who}, {"text", text}, {"self", self}, {"hilight", hl},
-                                                           {"notice", notice}, {"action", kind == LK::ACTION}}))
+                                                           {"notice", notice}, {"action", kind == LK::ACTION},
+                                                           {"id", std::to_string(lid)}}))
             return;
         std::string rid = tagv("reply");
         if (!rid.empty()) {  // +draft/reply: "↪ alice: “what they said”" before the text
@@ -1284,6 +1286,8 @@ void Core::handle(Server* s, const Msg& m) {
         }
         Line l{ts, kind, who, locked ? "\xf0\x9f\x94\x92 " + text : text, self, hl};
         if (auto id = m.tags.find("msgid"); id != m.tags.end()) l.msgid = id->second;
+        l.id = lid;
+        if (lid && embed_pend.first == lid) l.embeds = std::move(embed_pend.second), embed_pend = {};
         if (s->twitch() && !self && !server_msg && twitch_user(b, m, l)) notify(Ev::BUFFER, b);
         add(b, l);
         if (hl) ring(s);

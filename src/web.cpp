@@ -390,7 +390,7 @@ static void respond(Conn& conn, int code, const std::string& status, const std::
                 "\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
                 "Referrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\n"
                 "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; "
-                "style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'\r\n" +
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src https:; frame-ancestors 'none'\r\n" +  // https: plugins' previews (isekur.embed)
                 extra + "Connection: close\r\n\r\n" + body;
     conn.closing = true;
 }
@@ -761,7 +761,8 @@ static std::string line_json(const Line& l, const std::string& fmt) {
     return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"tf\":" + json_str(fmt_time(l.ts, fmt)) + ",\"k\":\"" + KIND[(int)l.kind] +
            "\",\"n\":" + json_str(l.nick) + ",\"x\":" + json_str(l.text) +
            ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.badge.empty() ? "" : ",\"bd\":" + json_str(l.badge) + ",\"bk\":\"" + std::string(1, l.badge_kind) + "\"") +
-           (l.color >= 0 ? ",\"c\":\"" + rgb_hex(l.color) + "\"" : "") + "}";
+           (l.color >= 0 ? ",\"c\":\"" + rgb_hex(l.color) + "\"" : "") + (l.id ? ",\"id\":" + std::to_string(l.id) : "") +
+           (l.embeds.empty() ? "" : ",\"em\":[" + l.embeds + "]") + "}";
 }
 
 std::string Web::buf_json(Buffer* b, bool full) {
@@ -986,6 +987,10 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
     case Ev::LOCK: break;  // above
     case Ev::UPDATE: broadcast(update_json()); break;
+    case Ev::EMBED:  // a plugin's preview under a line already sent: the line's whole list again
+        if (known.count(b->id)) broadcast("{\"t\":\"embed\",\"buf\":" + std::to_string(b->id) + ",\"id\":" + std::to_string(l->id) +
+                                          ",\"em\":[" + l->embeds + "]}");
+        break;
     case Ev::NOTE:
         broadcast("{\"t\":\"note\",\"buf\":" + std::to_string(b->id) + ",\"err\":" + (l->kind == LK::ERROR ? "true" : "false") +
                   ",\"title\":" + json_str(l->nick) + ",\"x\":" + json_str(l->text) + "}");

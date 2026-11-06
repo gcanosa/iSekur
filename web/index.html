@@ -390,6 +390,32 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .inline.tsright .l .ts::after { content: none; }
 .inline .l.hl .nk { border-radius: 0; }
 .l.hdr .tx { cursor: pointer; }
+/* previews a plugin put under a line (isekur.embed, the preview plugin): a link card, a picture, a player. Quiet, in the
+   theme's own colors; native players follow its light or dark color-scheme */
+.l .em { grid-column: 3; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin: 3px 0 5px; white-space: normal; min-width: 0; }
+.tsright .l .em { grid-column: 2; }
+.em a { color: inherit; text-decoration: none; }
+.em-card { display: flex; gap: 10px; max-width: min(520px, 100%); min-width: 0; padding: 7px 10px; border-left: 2px solid var(--accent2);
+  border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--fg) 5%, transparent); font-size: 12.5px; line-height: 1.35; }
+.em-card:hover { background: color-mix(in srgb, var(--fg) 9%, transparent); }
+.em-card img { width: 48px; height: 48px; object-fit: cover; border-radius: 4px; flex: none; }
+.em-card .b { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
+.em-card .s { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.em-card .t { color: var(--accent2); font-weight: 600; }
+.em-card .d { opacity: .78; }
+.em-card :is(.t, .d) { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.em-pic img { display: block; max-width: min(200px, 100%); max-height: 120px; border-radius: 6px; border: 1px solid var(--line); }
+.em audio { width: min(340px, 100%); height: 34px; }
+.em video { display: block; width: min(240px, 100%); max-height: 200px; aspect-ratio: 16 / 9; border-radius: 6px; background: color-mix(in srgb, var(--fg) 8%, transparent); }
+.em video[data-played] { aspect-ratio: auto; background: #000; }
+.em .x { align-self: center; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; font: inherit; opacity: 0; }
+.l:hover .em .x, .em .x:focus-visible { opacity: 1; }
+.win-95 :is(.em-card, .em-pic img, .em video) { border-radius: 0; }
+/* the plugin's size setting: small (above), medium, large */
+.em-card.md img { width: 64px; height: 64px; } .em-card.lg img { width: 88px; height: 88px; }
+.em-pic.md img { max-width: min(320px, 100%); max-height: 200px; } .em-pic.lg img { max-width: min(480px, 100%); max-height: 320px; }
+video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(480px, 100%); max-height: 360px; }
+.em-card.lg { max-width: min(600px, 100%); }
 .l.chrow:hover { background: rgba(127, 127, 127, .12); cursor: pointer; }
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
 .l.hl { background: var(--hilight_line-bg, #ff00aa10); }
@@ -740,6 +766,39 @@ function mirc(parent, s) {
   flush();
 }
 
+// a plugin's previews under a line (l.em, from isekur.embed): untrusted pages' data, so text through textContent and
+// only http(s) URLs. Pictures and players load from their own site, in the browser; players only once played
+const okUrl = u => typeof u === "string" && /^https?:\/\/[^\s]+$/i.test(u);
+function stick(node) {  // a picture that loads under the newest line keeps the chat at the bottom
+  const box = node.closest("#msgs, #msgs2");
+  if (box && box.scrollHeight - box.scrollTop - box.clientHeight < node.offsetHeight + 60) box.scrollTop = box.scrollHeight;
+}
+function embedsEl(list) {
+  const box = el("div", "em"), a = (url, cls) => { const x = el("a", cls); x.href = url; x.target = "_blank"; x.rel = "noopener noreferrer"; return x; };
+  const pic = (url, alt) => { const i = new Image(); i.loading = "lazy"; i.decoding = "async"; i.referrerPolicy = "no-referrer"; i.alt = alt || "";
+    i.onload = () => stick(i); i.onerror = () => i.remove(); i.src = url; return i; };
+  for (const e of list || []) {
+    if (!e || !okUrl(e.url)) continue;
+    const sz = {medium: "md", large: "lg"}[e.size] || "";
+    if (e.type === "image") { const x = a(e.url, "em-pic " + sz); x.title = e.url; x.append(pic(e.url)); box.append(x); }
+    else if (e.type === "audio" || e.type === "video") {
+      const m = document.createElement(e.type); m.controls = true; m.preload = "none"; if (sz) m.className = sz; m.src = e.url; m.title = e.url;
+      if (e.type === "video") m.onloadedmetadata = () => { m.dataset.played = 1; stick(m); };
+      box.append(m);
+    } else if (e.type === "link" && e.title) {
+      const x = a(e.url, "em-card " + sz), b = el("span", "b"); x.title = e.url;
+      if (okUrl(e.image)) x.append(pic(e.image));
+      b.append(el("span", "s", e.site || new URL(e.url).hostname), el("span", "t", e.title));
+      if (e.desc) b.append(el("span", "d", e.desc));
+      x.append(b); box.append(x);
+    }
+  }
+  if (!box.childElementCount) return null;
+  const x = el("button", "x", "×"); x.title = "Hide the preview"; x.onclick = () => box.remove();
+  box.append(x);
+  return box;
+}
+
 const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
 function lineEl(b, l) {
   const d = document.createElement("div");
@@ -768,6 +827,8 @@ function lineEl(b, l) {
   d.oncontextmenu = e => { const w = e.target.closest(".who"); if (w) askMenu(e, w.dataset.nick, b.id); };  // b.id: a /split pane's own tab
   if (l.bd) tx.prepend(el("span", "badge " + (l.bk || "p"), l.bd), " ");  // iSekur's notices (INFO), a plugin's lines (its name)
   d.append(ts, nk, tx);
+  if (l.id) d.dataset.lid = l.id;
+  const em = l.em && embedsEl(l.em); if (em) d.append(em);
   return d;
 }
 
@@ -1307,6 +1368,15 @@ function onMsg(ev) {
       const box = $("#msgs2"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       box.append(lineEl(b, m.line));
       while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
+      if (atBottom) box.scrollTop = box.scrollHeight;
+    }
+  } else if (m.t === "embed") {  // a plugin's preview for a line already shown
+    const b = bufs.get(m.buf), l = b && b.lines.find(x => x.id === m.id); if (!l) return;
+    l.em = m.em;
+    for (const box of [$("#msgs"), $("#msgs2")]) {
+      const d = box && box.querySelector(`.l[data-lid="${m.id}"]`); if (!d) continue;
+      const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40, em = embedsEl(l.em);
+      d.querySelector(".em")?.remove(); if (em) d.append(em);
       if (atBottom) box.scrollTop = box.scrollHeight;
     }
   } else if (m.t === "close") {
