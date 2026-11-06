@@ -2092,6 +2092,9 @@ print("loaded")
                          "also (https://x.test/v.webm). https://x.test/four.ogg", pm)), pc.handle(ps, pm);
         assert(pchan->lines.back().embeds == R"({"size":"small","type":"audio","url":"https://x.test/song.mp3?dl=1"},)"
                                              R"({"size":"small","type":"image","url":"https://x.test/Pic.PNG"},{"size":"small","type":"video","url":"https://x.test/v.webm"})");
+        assert(irc_parse(":bob!u@h PRIVMSG #chan :www.x.test/a.mp3 and (http://x.test/b.OGG) www.x", pm)), pc.handle(ps, pm);  // as https
+        assert(pchan->lines.back().embeds == R"({"size":"small","type":"audio","url":"https://www.x.test/a.mp3"},)"
+                                             R"({"size":"small","type":"audio","url":"https://x.test/b.OGG"})");
         pc.exec(ph, "/plugin set preview@sn/#chan media off");
         pc.exec(ph, "/plugin set preview ignore pics.test");
         pc.exec(ph, "/plugin set preview size Large");
