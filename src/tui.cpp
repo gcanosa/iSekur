@@ -2885,7 +2885,7 @@ static int month_days(int y, int m) {
     return m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) ? 29 : d[m - 1];
 }
 static std::string ymd(int y, int m, int d) {
-    char b[16];
+    char b[40];  // room for any int: gcc's -Wformat-truncation can't tell they're a date
     snprintf(b, sizeof b, "%04d-%02d-%02d", y, m, d);
     return b;
 }
@@ -3223,7 +3223,7 @@ void Tui::draw_logs(int W, int H) {
             Style st = at ? sel : has ? ok : dim;
             if (has) st.attr |= A_BOLD;
             if (ymd(lw.cy, lw.cm, d) == today) st.attr |= A_UNDER;
-            char b[8];
+            char b[16];
             snprintf(b, sizeof b, "%2d", d);
             if (at) cell(x - 1, y, ' ', st), cell(x + 2, y, ' ', st);
             text(x, y, x + 2, b, st, false);
