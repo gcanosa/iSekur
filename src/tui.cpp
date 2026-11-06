@@ -413,10 +413,11 @@ static void clip(Row& r, int w, Style st) {
     r.push_back({U'…', st, 1});
 }
 
-static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false) {
+// tsf: a time stamp format of its own (the log browser's has the seconds)
+static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false, const char* tsf = nullptr) {
     const Theme& T = c.theme;
     int nw = atoi(ini_get(c.cfg, "general", "nick_width", T.lay("nick_width", "12")).c_str());  // /set nick_width beats the theme's
-    std::string tsfmt = ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
+    std::string tsfmt = tsf ? tsf : ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
     // timestamp_align = right: the time at the right edge of the first row, the text wraps short of it
     bool ts_right = ini_get(c.cfg, "general", "timestamp_align") == "right";
     Row pre, tsr;
@@ -615,6 +616,7 @@ void Tui::draw() {
     }
     if (c.keys_win) c.keys_win = false, kw = KeysWin{}, kw.open = true;
     if (c.plugin_win) c.plugin_win = false, pw = PlugWin{}, pw.open = true;
+    if (c.logs_win) c.logs_win = false, logs_init();
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
@@ -975,6 +977,11 @@ void Tui::draw() {
     }
     if (kw.open) {  // /keys, F1: the key list
         draw_keys(W, H);
+        present();
+        return;
+    }
+    if (lw.open) {  // /logs: the log browser
+        draw_logs(W, H);
         present();
         return;
     }
@@ -2296,7 +2303,7 @@ void Tui::on_readable() {
         sync_input();  // a key may have switched tabs: the next one types into that tab's line
         keyed |= ev.type == TB_EVENT_KEY;
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || lw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -2313,7 +2320,7 @@ void Tui::on_readable() {
     bool moved = id != typed_id;
     typed_id = id;
     // only after keys here (or a tab change): a mouse move or a resize must not say "done" while you type in the webchat
-    if (c.active && (keyed || moved)) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open ? "" : to_utf8(input));
+    if (c.active && (keyed || moved)) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open || lw.open ? "" : to_utf8(input));
 }
 
 bool Tui::action(const std::string& a) {
@@ -2369,6 +2376,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
     if (kw.open) { keys_key(k, ch); return; }
     if (pw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) plugin_key(k, ch); return; }
+    if (lw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) logs_key(k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -2544,6 +2552,8 @@ void Tui::close_box() {
     case 'f': fw.open = false; break;
     case 'k': kw.open = false; break;
     case 'g': pw.open = false; break;
+    case 'l': lw.open = false; break;
+    case 'C': lw.focus = lw.back; break;
     case 'P': pw.ask.clear(); break;
     case 'A': pw.about.clear(); break;
     case 'a': input.clear(), cur = 0, c.exec(c.active, ""); break;  // a question: cancelled
@@ -2561,6 +2571,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
     if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
     if (pw.open) { if (!(mod & TB_MOD_MOTION)) plugin_mouse(k, x, y); return; }
+    if (lw.open) { if (!(mod & TB_MOD_MOTION)) logs_mouse(k, x, y); return; }
     if (kw.open) {  // the wheel scrolls, a click outside closes
         if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) keys_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
         else if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1)) kw.open = false;
@@ -2853,4 +2864,533 @@ void Tui::complete() {
     std::u32string w = from_utf8(comp[comp_i]);
     input.replace(comp_start, cur - comp_start, w);
     cur = comp_start + w.size();
+}
+
+// ---- /logs: the log browser ------------------------------------------------------------------
+static const char* MONTHS[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
+static std::string kb(long long n) {
+    char b[32];
+    if (n < 1024) snprintf(b, sizeof b, "%lldB", n);
+    else if (n < 1024 * 1024) snprintf(b, sizeof b, "%lldK", (n + 512) / 1024);
+    else snprintf(b, sizeof b, "%.1fM", n / 1048576.0);
+    return b;
+}
+static std::string thousands(size_t n) {
+    std::string s = std::to_string(n);
+    for (int i = (int)s.size() - 3; i > 0; i -= 3) s.insert((size_t)i, ",");
+    return s;
+}
+static int month_days(int y, int m) {
+    static const int d[] = {31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31};
+    return m == 2 && ((y % 4 == 0 && y % 100 != 0) || y % 400 == 0) ? 29 : d[m - 1];
+}
+static std::string ymd(int y, int m, int d) {
+    char b[16];
+    snprintf(b, sizeof b, "%04d-%02d-%02d", y, m, d);
+    return b;
+}
+// "Thu 2026-11-05"
+static std::string day_label(const std::string& day) {
+    tm t{};
+    if (!strptime(day.c_str(), "%Y-%m-%d", &t)) return day;
+    t.tm_hour = 12, t.tm_isdst = -1;
+    return fmt_time(mktime(&t), "%a ") + day;
+}
+// the find line's words in a row (any case, within the row): reversed, like a terminal's search
+static void mark_words(Row& r, const std::vector<std::u32string>& words) {
+    auto low = [](char32_t c) { return c < 128 ? (char32_t)tolower((int)c) : c; };
+    for (auto& w : words) {
+        if (w.empty()) continue;
+        for (size_t i = 0; i + w.size() <= r.size(); i++) {
+            size_t j = 0;
+            while (j < w.size() && low(r[i + j].cp) == low(w[j])) j++;
+            if (j < w.size()) continue;
+            for (j = 0; j < w.size(); j++) r[i + j].st.attr |= A_REV;
+            i += w.size() - 1;
+        }
+    }
+}
+// the log rows' buffer: no server, so no nick prefixes; a channel, so events keep their marker
+static const Buffer* log_buf() {
+    static Buffer b{};
+    b.type = BT::CHANNEL, b.srv = nullptr;
+    return &b;
+}
+
+std::vector<Tui::LogNode> Tui::log_tree() const {
+    std::vector<LogNode> out;
+    auto& f = lw.files;
+    for (size_t i = 0; i < f.size();) {
+        size_t j = i;
+        std::set<std::string> names;
+        while (j < f.size() && f[j].net == f[i].net) names.insert(f[j++].name);
+        out.push_back({0, f[i].net, "", -1, (int)names.size()});
+        if (lw.unfolded.count(f[i].net))
+            for (size_t a = i; a < j;) {
+                size_t z = a;
+                while (z < j && f[z].name == f[a].name) z++;
+                out.push_back({1, f[a].net, f[a].name, -1, (int)(z - a)});
+                if (lw.unfolded.count(f[a].net + "\t" + f[a].name))
+                    for (size_t k = a; k < z; k++) out.push_back({2, f[k].net, f[k].name, (int)k, 0});
+                a = z;
+            }
+        i = j;
+    }
+    return out;
+}
+
+void Tui::logs_select(int file) {
+    if (file < 0 || file >= (int)lw.files.size()) return;
+    auto& f = lw.files[(size_t)file];
+    lw.unfolded.insert(f.net), lw.unfolded.insert(f.net + "\t" + f.name);
+    auto t = log_tree();
+    for (size_t i = 0; i < t.size(); i++)
+        if (t[i].file == file) lw.sel = (int)i;
+}
+
+void Tui::logs_view() {
+    lw.view.clear();
+    if (lw.searched) {
+        for (size_t i = 0; i < lw.hits.size(); i++) {
+            if (!i || lw.hits[i].file != lw.hits[i - 1].file) lw.view.push_back({(int)lw.hits[i].file, std::string::npos, nullptr});
+            lw.view.push_back({(int)lw.hits[i].file, lw.hits[i].line, &lw.hits[i].l});
+        }
+    } else if (lw.file >= 0) {
+        LogQuery q = log_query(to_utf8(lw.q), lw.events);
+        for (size_t i = 0; i < lw.lines.size(); i++)
+            if (log_match(lw.lines[i], q)) lw.view.push_back({lw.file, i, &lw.lines[i]});
+    }
+    lw.cur = std::max(0, std::min(lw.cur, (int)lw.view.size() - 1));
+}
+
+void Tui::logs_open(int file, long line) {
+    if (file < 0 || file >= (int)lw.files.size()) return;
+    if (file != lw.file || lw.lines.empty()) lw.lines = log_read(lw.files[(size_t)file].path, &lw.cut), lw.file = file;
+    lw.searched = false, lw.hits.clear();
+    if (line >= 0) lw.q.clear();  // a line found: shown among the rest of its day
+    logs_view();
+    lw.cur = 0, lw.ltop = 0;
+    if (line == -2) lw.cur = (int)lw.view.size() - 1, lw.ltop = std::max(0, lw.cur - 400);
+    if (line >= 0) {
+        for (size_t i = 0; i < lw.view.size(); i++)
+            if (lw.view[i].line >= (size_t)line) { lw.cur = (int)i; break; }
+        lw.ltop = std::max(0, lw.cur - lw.rows / 3);
+    }
+    logs_select(file);
+}
+
+// the tree's network or channel: every day of it; a day: its filter only
+void Tui::logs_search() {
+    auto t = log_tree();
+    if (t.empty() || lw.q.empty()) { lw.searched = false, logs_view(); return; }
+    const LogNode& n = t[(size_t)std::max(0, std::min(lw.sel, (int)t.size() - 1))];
+    if (n.lvl == 2) { logs_open(n.file, -1); return; }
+    std::vector<size_t> which;
+    std::set<std::string> days;
+    for (size_t i = 0; i < lw.files.size(); i++)
+        if (lw.files[i].net == n.net && (n.lvl == 0 || lw.files[i].name == n.name)) which.push_back(i), days.insert(lw.files[i].day);
+    lw.hits = log_search(lw.files, which, log_query(to_utf8(lw.q), lw.events), 2000, &lw.more);
+    lw.searched = true, lw.found_in = n.lvl == 0 ? n.net : n.name, lw.found_days = days.size();
+    logs_view();
+    lw.cur = 0, lw.ltop = 0;
+}
+
+void Tui::logs_init() {
+    lw = LogWin{};
+    lw.open = true;
+    lw.files = c.log_files();
+    lw.q = from_utf8(c.logs_q);
+    std::string at = c.logs_at, net = at.substr(0, at.find('\t')), name = at.find('\t') == std::string::npos ? "" : at.substr(at.find('\t') + 1);
+    c.logs_at.clear(), c.logs_q.clear();
+    int newest = -1;
+    for (size_t i = 0; i < lw.files.size(); i++)
+        if (irc_lower(lw.files[i].net) == irc_lower(net) && (name.empty() || lw.files[i].name == name)) { newest = (int)i; break; }
+    if (newest < 0 && !lw.files.empty()) lw.unfolded.insert(lw.files[0].net);
+    if (newest < 0) return;
+    auto& f = lw.files[(size_t)newest];
+    lw.unfolded.insert(f.net);
+    if (name.empty() || !lw.q.empty()) {  // a network, or a search: the tree's network or channel row
+        if (!name.empty()) lw.unfolded.insert(f.net + "\t" + f.name);
+        auto t = log_tree();
+        for (size_t i = 0; i < t.size(); i++)
+            if (t[i].net == f.net && t[i].lvl == (name.empty() ? 0 : 1) && (name.empty() || t[i].name == f.name)) lw.sel = (int)i;
+        if (!lw.q.empty()) logs_search(), lw.focus = 1;
+        return;
+    }
+    lw.rows = std::max(1, tb_height() - 7);
+    logs_open(newest, -2);
+    lw.focus = 1;
+}
+
+// the calendar of the channel picked in the tree (or shown), at its day shown or its newest
+void Tui::logs_cal() {
+    auto t = log_tree();
+    std::string net, name, day;
+    if (lw.focus == 1 && lw.file >= 0 && !lw.searched) {
+        auto& f = lw.files[(size_t)lw.file];
+        net = f.net, name = f.name, day = f.day;
+    } else if (!t.empty()) {
+        const LogNode& n = t[(size_t)std::max(0, std::min(lw.sel, (int)t.size() - 1))];
+        net = n.net, name = n.name;
+        if (n.file >= 0) day = lw.files[(size_t)n.file].day;
+    }
+    if (name.empty()) { lw.msg = "Pick a channel or query first: the calendar shows its days"; return; }
+    if (day.empty())
+        for (auto& f : lw.files)
+            if (f.net == net && f.name == name) { day = f.day; break; }  // newest first
+    lw.cnet = net, lw.cname = name;
+    lw.cy = atoi(day.substr(0, 4).c_str()), lw.cm = atoi(day.substr(5, 2).c_str()), lw.cd = atoi(day.substr(8, 2).c_str());
+    lw.back = lw.focus == 3 ? lw.back : lw.focus, lw.focus = 3;
+}
+
+void Tui::draw_logs(int W, int H) {
+    const Theme& T = c.theme;
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), es = T.get("error"), keyst = sty(T, "set_key", "info"),
+          ok = T.get("join"), def = T.get("default"), mark = sty(T, "marker", "separator");
+    for (Style* st : {&ls, &dim, &es, &keyst, &ok}) st->bg = bs.bg, st->attr = 0;
+    for (Style* st : {&dim, &es, &keyst, &ok}) st->fg = readable(st->fg, bs.bg);
+    hs.attr |= A_BOLD, keyst.attr |= A_BOLD;
+    if (W < 50 || H < 14) { text(0, 0, W, "terminal too small for /logs", def, false); return; }
+    lw.w = std::min(W - 2, 170), lw.x0 = (W - lw.w) / 2, lw.y0 = 0;
+    int h = H, x1 = lw.x0 + lw.w, y0 = lw.y0, tw = std::min(30, lw.w / 3);
+    lw.body_y = y0 + 3, lw.rows = h - 6, lw.xd = lw.x0 + 1 + tw;
+    int sep2 = y0 + h - 3, hint_y = y0 + h - 2;
+    for (int yy = y0; yy < y0 + h; yy++) fill(yy, lw.x0, x1, bs);
+    for (int xx = lw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + h - 1, U'─', ls), cell(xx, y0 + 2, U'─', ls), cell(xx, sep2, U'─', ls);
+    for (int yy = y0; yy < y0 + h; yy++) cell(lw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
+    for (int yy = y0 + 3; yy < sep2; yy++) cell(lw.xd, yy, U'│', ls);
+    cell(lw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(lw.x0, y0 + h - 1, U'└', ls), cell(x1 - 1, y0 + h - 1, U'┘', ls);
+    cell(lw.x0, y0 + 2, U'├', ls), cell(x1 - 1, y0 + 2, U'┤', ls), cell(lw.x0, sep2, U'├', ls), cell(x1 - 1, sep2, U'┤', ls);
+    cell(lw.xd, y0 + 2, U'┬', ls), cell(lw.xd, sep2, U'┴', ls);
+    if (auto cb = box_title(T, lw.x0, x1 - 1, y0, "Logs", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'l'};
+
+    // the find line, and the switches
+    int fx = text(lw.x0 + 2, y0 + 1, x1 - 2, "Find ", hs, false), fw_ = std::min(44, lw.w - 50);
+    lw.find_x = fx;
+    fill(y0 + 1, fx, fx + fw_, fs);
+    std::string qs = to_utf8(lw.q);
+    if (qs.empty() && lw.focus != 2) text(fx + 1, y0 + 1, fx + fw_, "/ to type: words, \"a phrase\", nick:alice", sty(T, "timestamp", "input"), false);
+    else text(fx + 1, y0 + 1, fx + fw_ - 1, qs, fs, false);
+    if (lw.focus == 2) tb_set_cursor(std::min(fx + 1 + (int)lw.q.size(), fx + fw_ - 1), y0 + 1);
+    int sx = text(fx + fw_ + 2, y0 + 1, x1 - 2, "e", keyst, false);
+    sx = text(sx, y0 + 1, x1 - 2, lw.events ? " events shown  " : " events hidden  ", dim, false);
+    sx = text(sx, y0 + 1, x1 - 2, "c", keyst, false);
+    lw.cal_x = text(sx, y0 + 1, x1 - 2, " calendar", dim, false);
+
+    // the tree
+    auto t = log_tree();
+    lw.sel = std::max(0, std::min(lw.sel, (int)t.size() - 1));
+    if (lw.sel < lw.ttop) lw.ttop = lw.sel;
+    if (lw.sel >= lw.ttop + lw.rows) lw.ttop = lw.sel - lw.rows + 1;
+    if (t.empty()) {
+        bool on = false;
+        for (auto& s : c.servers) on |= c.opt_on(s.get(), "log", false);
+        text(lw.x0 + 2, lw.body_y, lw.xd, "No logs yet", hs, false);
+        if (!on) text(lw.x0 + 2, lw.body_y + 2, lw.xd, "Logging is off:", dim, false), text(lw.x0 + 2, lw.body_y + 3, lw.xd, "/set log on, /save", keyst, false);
+    }
+    for (int i = 0; i < lw.rows && lw.ttop + i < (int)t.size(); i++) {
+        const LogNode& n = t[(size_t)(lw.ttop + i)];
+        int y = lw.body_y + i;
+        bool on = lw.ttop + i == lw.sel, focus = on && lw.focus == 0;
+        Style st = focus ? sel : bs, d = dim;
+        if (focus) d.fg = sel.fg, d.bg = sel.bg;
+        else if (on) st.attr |= A_BOLD | A_UNDER;
+        fill(y, lw.x0 + 1, lw.xd, st);
+        std::string label, right;
+        if (n.lvl == 0) label = std::string(lw.unfolded.count(n.net) ? "▾ " : "▸ ") + n.net, right = std::to_string(n.n);
+        else if (n.lvl == 1) label = std::string(lw.unfolded.count(n.net + "\t" + n.name) ? "  ▾ " : "  ▸ ") + n.name, right = std::to_string(n.n) + (n.n == 1 ? " day" : " days");
+        else {
+            auto& f = lw.files[(size_t)n.file];
+            label = std::string(n.file == lw.file && !lw.searched ? "    ● " : "      ") + f.day, right = kb(f.size);
+        }
+        int rx = lw.xd - 1 - (int)right.size();
+        text(lw.x0 + 2, y, rx - 1, label, n.lvl == 1 && !focus ? (on ? st : hs) : st, false);
+        text(rx, y, lw.xd - 1, right, d, false);
+    }
+
+    // the log: a heading row, then the lines
+    int lx = lw.xd + 2, lxe = x1 - 2, lwid = lxe - lx;
+    for (int yy = lw.body_y; yy < sep2; yy++) fill(yy, lw.xd + 1, x1 - 1, def);
+    Style head = def;
+    head.attr |= A_BOLD;
+    Style hd = sty(T, "timestamp", "default");
+    hd.bg = def.bg;
+    int hx = lx;
+    if (lw.searched) {
+        hx = text(hx, lw.body_y, lxe, "\"" + to_utf8(lw.q) + "\" in " + lw.found_in, head, false);
+        size_t n = lw.hits.size();
+        text(hx, lw.body_y, lxe, ": " + (n ? thousands(n) + (lw.more ? "+" : "") + (n == 1 ? " line" : " lines") : std::string("nothing")) +
+                                      " in " + std::to_string(lw.found_days) + (lw.found_days == 1 ? " day" : " days") + (lw.more ? " (the first 2,000)" : ""), hd, false);
+    } else if (lw.file >= 0) {
+        auto& f = lw.files[(size_t)lw.file];
+        hx = text(hx, lw.body_y, lxe, f.name + " · " + f.net + " · " + day_label(f.day) + (f.current ? " (today's file)" : ""), head, false);
+        std::string cnt = thousands(lw.lines.size()) + " lines";
+        if (lw.view.size() != lw.lines.size()) cnt = thousands(lw.view.size()) + " of " + cnt;
+        if (lw.cut) cnt += " (its last 32 MB)";
+        text(hx + 2, lw.body_y, lxe, cnt, hd, false);
+    } else if (!t.empty()) {
+        const LogNode& n = t[(size_t)lw.sel];
+        std::vector<std::string> info;
+        if (n.lvl == 0) info = {n.net + ": " + std::to_string(n.n) + (n.n == 1 ? " channel or query" : " channels and queries") + " with logs", "", "/ then Enter searches all of them", "→ or Enter lists them"};
+        else if (n.lvl == 1) {
+            std::string a, z;
+            for (auto& f : lw.files) if (f.net == n.net && f.name == n.name) { if (z.empty()) z = f.day; a = f.day; }
+            info = {n.name + " · " + n.net + ": " + std::to_string(n.n) + (n.n == 1 ? " day" : " days") + " of logs, " + a + " to " + z, "",
+                    "→ or Enter lists the days", "c picks one on a calendar", "/ then Enter searches all of them"};
+        }
+        for (size_t i = 0; i < info.size(); i++) text(lx, lw.body_y + (int)i, lxe, info[i], i ? hd : head, false);
+    }
+    // keep the cursor's line on screen
+    int lrows = lw.rows - 1, ly = lw.body_y + 1;
+    bool rot = c.opt_on(nullptr, "log_rotate", true);
+    std::vector<std::u32string> words;  // what the find line looks for: shown reversed in the lines
+    for (auto& w : log_query(to_utf8(lw.q)).words) words.push_back(from_utf8(w));
+    auto rows_of = [&](int i) {
+        const LogItem& it = lw.view[(size_t)i];
+        if (!it.l) {
+            Row r;
+            auto& f = lw.files[(size_t)it.file];
+            cells(r, "── " + day_label(f.day) + (lw.found_in == f.net ? " · " + f.name : "") + " ", mark, false);
+            while (width(r) < lwid) r.push_back({U'─', mark, 1});
+            return std::vector<Row>{r};
+        }
+        bool long_ts = lw.files[(size_t)it.file].current && !rot;  // one file for every day
+        auto rows = wrap(c, *it.l, log_buf(), lwid, true, long_ts ? "%Y-%m-%d %H:%M:%S" : "%H:%M:%S");
+        for (auto& row : rows) mark_words(row, words);
+        return rows;
+    };
+    int nv = (int)lw.view.size();
+    lw.cur = std::max(0, std::min(lw.cur, nv - 1));
+    lw.ltop = std::max(0, std::min(lw.ltop, std::max(0, nv - 1)));
+    if (lw.cur < lw.ltop) lw.ltop = lw.cur;
+    for (;;) {
+        int used = 0;
+        for (int i = lw.ltop; i <= lw.cur && i < nv && used <= lrows; i++) used += (int)rows_of(i).size();
+        if (used <= lrows || lw.ltop >= lw.cur) break;
+        lw.ltop++;
+    }
+    lw.row_item.assign((size_t)std::max(0, lrows), -1);
+    if (nv == 0 && (lw.searched || lw.file >= 0))
+        text(lx, ly + 1, lxe, lw.searched ? "Nothing found. Search a whole network: pick it in the tree" : "No line here matches the filter", hd, false);
+    int r = 0;
+    for (int i = lw.ltop; i < nv && r < lrows; i++)
+        for (auto& row : rows_of(i)) {
+            if (r >= lrows) break;
+            lw.row_item[(size_t)r] = i;
+            if (i == lw.cur && lw.focus == 1) cell(lw.xd + 1, ly + r, U'▌', sel);  // the cursor's line
+            draw_row(lx, ly + r, lxe, row);
+            r++;
+        }
+    if (nv > lrows) {  // where in the day: a scroll mark on the right edge
+        int y = ly + (int)((long long)lw.cur * (lrows - 1) / std::max(1, nv - 1));
+        cell(x1 - 2, y, U'┃', dim);
+    }
+
+    // the hint, or what just went wrong
+    std::string hint = lw.focus == 0 ? "↑↓ move · → ← unfold, fold · Enter opens · / find · c calendar · e events · Tab the log · Esc closes"
+                     : lw.focus == 1 ? "↑↓ PgUp PgDn Home End · [ ] older, newer day · Enter: a found line in its day · / find · c calendar · Tab the tree"
+                     : lw.focus == 2 ? "Enter searches the tree's network or channel (a day: filters it) · nick:alice · \"a phrase\" · Ctrl+U clears · Esc leaves"
+                                     : "←→↑↓ a day · PgUp PgDn a month · [ ] the last, next day with a log · Enter opens it · Esc back";
+    if (!lw.msg.empty()) text(lw.x0 + 2, hint_y, x1 - 2, lw.msg, es, false);
+    else text(lw.x0 + 2, hint_y, x1 - 2, hint, dim, false);
+
+    // the calendar, over the log
+    if (lw.focus == 3) {
+        std::set<int> have;  // the month's days with a log
+        for (auto& f : lw.files)
+            if (f.net == lw.cnet && f.name == lw.cname && atoi(f.day.substr(0, 4).c_str()) == lw.cy && atoi(f.day.substr(5, 2).c_str()) == lw.cm) have.insert(atoi(f.day.substr(8, 2).c_str()));
+        int cw = 30, ch = 13, cx = lw.xd + 1 + std::max(0, (x1 - 1 - lw.xd - cw) / 2), cy = lw.body_y + std::max(0, (lw.rows - ch) / 2);
+        lw.cal_x = cx, lw.cal_y = cy;
+        for (int yy = cy; yy < cy + ch; yy++) fill(yy, cx, cx + cw, bs);
+        for (int xx = cx; xx < cx + cw; xx++) cell(xx, cy, U'─', ls), cell(xx, cy + ch - 1, U'─', ls);
+        for (int yy = cy; yy < cy + ch; yy++) cell(cx, yy, U'│', ls), cell(cx + cw - 1, yy, U'│', ls);
+        cell(cx, cy, U'┌', ls), cell(cx + cw - 1, cy, U'┐', ls), cell(cx, cy + ch - 1, U'└', ls), cell(cx + cw - 1, cy + ch - 1, U'┘', ls);
+        if (auto cb = box_title(T, cx, cx + cw - 1, cy, "Calendar · " + lw.cname, hs); cb.first >= 0) xbtn = {cy, cb.first, cb.second, 'C'};
+        std::string mt = std::string(MONTHS[lw.cm - 1]) + " " + std::to_string(lw.cy);
+        text(cx + 2, cy + 2, cx + cw, "◂", keyst, false), text(cx + cw - 3, cy + 2, cx + cw, "▸", keyst, false);
+        text(cx + (cw - (int)mt.size()) / 2, cy + 2, cx + cw - 3, mt, hs, false);
+        const char* wd[] = {"Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"};
+        for (int i = 0; i < 7; i++) text(cx + 4 + i * 3, cy + 3, cx + cw, wd[i], dim, false);
+        tm t1{};
+        t1.tm_year = lw.cy - 1900, t1.tm_mon = lw.cm - 1, t1.tm_mday = 1, t1.tm_hour = 12, t1.tm_isdst = -1;
+        mktime(&t1);
+        int off = (t1.tm_wday + 6) % 7, nd = month_days(lw.cy, lw.cm);
+        std::string today = fmt_time(time(nullptr), "%Y-%m-%d");
+        for (int d = 1; d <= nd; d++) {
+            int k = off + d - 1, x = cx + 4 + (k % 7) * 3, y = cy + 4 + k / 7;
+            bool has = have.count(d), at = d == lw.cd;
+            Style st = at ? sel : has ? ok : dim;
+            if (has) st.attr |= A_BOLD;
+            if (ymd(lw.cy, lw.cm, d) == today) st.attr |= A_UNDER;
+            char b[8];
+            snprintf(b, sizeof b, "%2d", d);
+            if (at) cell(x - 1, y, ' ', st), cell(x + 2, y, ' ', st);
+            text(x, y, x + 2, b, st, false);
+        }
+        std::string n = std::to_string(have.size()) + (have.size() == 1 ? " day" : " days") + " with a log";
+        text(cx + 2, cy + ch - 2, cx + cw - 1, n, have.empty() ? dim : ok, false);
+    }
+}
+
+void Tui::logs_key(int k, uint32_t ch) {
+    if (ch == ' ') k = TB_KEY_SPACE, ch = 0;
+    lw.msg.clear();
+    bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
+    auto t = log_tree();
+    int nt = (int)t.size(), nv = (int)lw.view.size(), page = std::max(1, lw.rows - 2);
+    if (lw.focus == 2) {  // the find line
+        if (k == TB_KEY_ESC || k == TB_KEY_TAB) { lw.focus = lw.back; return; }
+        if (k == TB_KEY_ENTER) {
+            lw.focus = 1;
+            if (nt && t[(size_t)lw.sel].lvl == 2 && lw.file == t[(size_t)lw.sel].file && !lw.searched) logs_view();
+            else logs_search();
+            return;
+        }
+        if (bs) { if (!lw.q.empty()) lw.q.pop_back(); }
+        else if (k == TB_KEY_CTRL_U) lw.q.clear();
+        else if (ch || k == TB_KEY_SPACE) lw.q += ch ? (char32_t)ch : U' ';
+        else return;
+        if (!lw.searched && lw.file >= 0) logs_view(), lw.cur = 0, lw.ltop = 0;  // a day: filtered as you type
+        if (lw.searched && lw.q.empty()) lw.searched = false, logs_view();
+        return;
+    }
+    if (lw.focus == 3) {  // the calendar
+        auto to = [&](int y, int m, int d) {
+            while (m < 1) m += 12, y--;
+            while (m > 12) m -= 12, y++;
+            lw.cy = y, lw.cm = m, lw.cd = std::max(1, std::min(d, month_days(y, m)));
+        };
+        auto step = [&](int days) {
+            tm x{};
+            x.tm_year = lw.cy - 1900, x.tm_mon = lw.cm - 1, x.tm_mday = lw.cd + days, x.tm_hour = 12, x.tm_isdst = -1;
+            mktime(&x);
+            to(x.tm_year + 1900, x.tm_mon + 1, x.tm_mday);
+        };
+        std::vector<std::pair<std::string, int>> days;  // newest first
+        for (size_t i = 0; i < lw.files.size(); i++)
+            if (lw.files[i].net == lw.cnet && lw.files[i].name == lw.cname) days.push_back({lw.files[i].day, (int)i});
+        std::string at = ymd(lw.cy, lw.cm, lw.cd);
+        auto go = [&](const std::string& d) { to(atoi(d.substr(0, 4).c_str()), atoi(d.substr(5, 2).c_str()), atoi(d.substr(8, 2).c_str())); };
+        if (k == TB_KEY_ESC || ch == 'c' || ch == 'q') lw.focus = lw.back;
+        else if (k == TB_KEY_ARROW_LEFT) step(-1);
+        else if (k == TB_KEY_ARROW_RIGHT) step(1);
+        else if (k == TB_KEY_ARROW_UP) step(-7);
+        else if (k == TB_KEY_ARROW_DOWN) step(7);
+        else if (k == TB_KEY_PGUP || ch == '<') to(lw.cy, lw.cm - 1, lw.cd);
+        else if (k == TB_KEY_PGDN || ch == '>') to(lw.cy, lw.cm + 1, lw.cd);
+        else if (ch == '[') { for (auto& d : days) if (d.first < at) { go(d.first); break; } }
+        else if (ch == ']') { for (auto it = days.rbegin(); it != days.rend(); ++it) if (it->first > at) { go(it->first); break; } }
+        else if (k == TB_KEY_HOME && !days.empty()) go(days.back().first);
+        else if (k == TB_KEY_END && !days.empty()) go(days.front().first);
+        else if (k == TB_KEY_ENTER || k == TB_KEY_SPACE) {
+            for (auto& d : days)
+                if (d.first == at) { logs_open(d.second, -1), lw.focus = 1; return; }
+            lw.msg = "No log on " + day_label(at) + ": the days with one are in color, [ and ] go to them";
+        }
+        return;
+    }
+    if (k == TB_KEY_ESC || ch == 'q') { lw.open = false; return; }
+    if (k == TB_KEY_TAB) { lw.focus = lw.focus == 0 && (nv || lw.file >= 0 || lw.searched) ? 1 : 0; return; }
+    if (ch == '/' || k == TB_KEY_CTRL_F) { lw.back = lw.focus, lw.focus = 2; return; }
+    if (ch == 'c') { logs_cal(); return; }
+    if (ch == 'e') {
+        lw.events = !lw.events;
+        if (lw.searched) logs_search();
+        else logs_view();
+        return;
+    }
+    if ((ch == '[' || ch == ']') && lw.file >= 0) {  // the day before or after, of the same channel
+        int f = lw.file + (ch == '[' ? 1 : -1);
+        if (f >= 0 && f < (int)lw.files.size() && lw.files[(size_t)f].net == lw.files[(size_t)lw.file].net && lw.files[(size_t)f].name == lw.files[(size_t)lw.file].name)
+            logs_open(f, ch == '[' ? -2 : -1);
+        else lw.msg = ch == '[' ? "That's its oldest log" : "That's its newest log";
+        return;
+    }
+    if (lw.focus == 0) {
+        if (!nt) return;
+        const LogNode n = t[(size_t)lw.sel];
+        std::string key = n.lvl == 0 ? n.net : n.net + "\t" + n.name;
+        if (k == TB_KEY_ARROW_UP) lw.sel = std::max(0, lw.sel - 1);
+        else if (k == TB_KEY_ARROW_DOWN) lw.sel = std::min(nt - 1, lw.sel + 1);
+        else if (k == TB_KEY_PGUP) lw.sel = std::max(0, lw.sel - page);
+        else if (k == TB_KEY_PGDN) lw.sel = std::min(nt - 1, lw.sel + page);
+        else if (k == TB_KEY_HOME) lw.sel = 0;
+        else if (k == TB_KEY_END) lw.sel = nt - 1;
+        else if (k == TB_KEY_ARROW_RIGHT && n.lvl < 2) {
+            if (!lw.unfolded.count(key)) lw.unfolded.insert(key);
+            else lw.sel = std::min(nt - 1, lw.sel + 1);
+        } else if (k == TB_KEY_ARROW_LEFT) {
+            if (n.lvl < 2 && lw.unfolded.count(key)) lw.unfolded.erase(key);
+            else if (n.lvl > 0)
+                for (int i = lw.sel; i >= 0; i--)
+                    if (t[(size_t)i].lvl == n.lvl - 1) { lw.sel = i; break; }
+        } else if (k == TB_KEY_ENTER || k == TB_KEY_SPACE) {
+            if (n.lvl == 2) logs_open(n.file, -1), lw.focus = 1;
+            else if (lw.unfolded.count(key)) lw.unfolded.erase(key);
+            else lw.unfolded.insert(key);
+        }
+        return;
+    }
+    // the log
+    if (k == TB_KEY_ARROW_UP) lw.cur = std::max(0, lw.cur - 1);
+    else if (k == TB_KEY_ARROW_DOWN) lw.cur = std::min(nv - 1, lw.cur + 1);
+    else if (k == TB_KEY_PGUP) lw.cur = std::max(0, lw.cur - page), lw.ltop = std::max(0, lw.ltop - page);
+    else if (k == TB_KEY_PGDN) lw.cur = std::min(nv - 1, lw.cur + page), lw.ltop = std::min(std::max(0, nv - 1), lw.ltop + page);
+    else if (k == TB_KEY_HOME) lw.cur = 0, lw.ltop = 0;
+    else if (k == TB_KEY_END) lw.cur = nv - 1;
+    else if (k == TB_KEY_ENTER && lw.cur < nv) {  // a found or filtered line: shown in the whole day
+        const LogItem& it = lw.view[(size_t)lw.cur];
+        bool filtered = lw.searched || !lw.q.empty();
+        if (!it.l) logs_open(it.file, -1);
+        else if (filtered) logs_open(it.file, (long)it.line);
+    }
+}
+
+void Tui::logs_mouse(int k, int x, int y) {
+    bool wheel = k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN;
+    int up = k == TB_KEY_MOUSE_WHEEL_UP;
+    if (lw.focus == 3) {  // the calendar: a day opens it, the arrows turn the month, the wheel too
+        int cx = lw.cal_x, cy = lw.cal_y;
+        if (wheel) { logs_key(up ? TB_KEY_PGUP : TB_KEY_PGDN, 0); return; }
+        if (k != TB_KEY_MOUSE_LEFT) return;
+        if (y == cy + 2 && x <= cx + 3) { logs_key(TB_KEY_PGUP, 0); return; }
+        if (y == cy + 2 && x >= cx + 26) { logs_key(TB_KEY_PGDN, 0); return; }
+        if (y >= cy + 4 && y < cy + 10 && x >= cx + 3 && x < cx + 24) {
+            tm t1{};
+            t1.tm_year = lw.cy - 1900, t1.tm_mon = lw.cm - 1, t1.tm_mday = 1, t1.tm_hour = 12, t1.tm_isdst = -1;
+            mktime(&t1);
+            int d = (y - cy - 4) * 7 + (x - cx - 3) / 3 - (t1.tm_wday + 6) % 7 + 1;
+            if (d >= 1 && d <= month_days(lw.cy, lw.cm)) lw.cd = d, logs_key(TB_KEY_ENTER, 0);
+            return;
+        }
+        if (x < cx || x >= cx + 30 || y < cy || y >= cy + 13) lw.focus = lw.back;  // a click outside closes it
+        return;
+    }
+    if (y == lw.y0 + 1 && k == TB_KEY_MOUSE_LEFT) {  // the find line, e, c
+        int fe = lw.find_x + std::min(44, lw.w - 50);
+        if (x >= lw.cal_x - 10 && x < lw.cal_x) logs_cal();
+        else if (x >= lw.find_x && x < fe) lw.back = lw.focus == 2 ? lw.back : lw.focus, lw.focus = 2;
+        else if (x > fe && x < lw.cal_x - 10) logs_key(0, 'e');
+        return;
+    }
+    int i = y - lw.body_y;
+    if (i < 0 || i >= lw.rows) return;
+    if (x < lw.xd) {  // the tree
+        if (wheel) { lw.sel = std::max(0, lw.sel + (up ? -3 : 3)); return; }
+        if (k != TB_KEY_MOUSE_LEFT) return;
+        auto t = log_tree();
+        int j = lw.ttop + i;
+        if (j >= (int)t.size()) return;
+        lw.sel = j, lw.focus = 0;
+        logs_key(TB_KEY_ENTER, 0);
+        return;
+    }
+    if (wheel) { lw.cur = std::max(0, std::min((int)lw.view.size() - 1, lw.cur + (up ? -3 : 3))); lw.focus = 1; return; }
+    if (k != TB_KEY_MOUSE_LEFT || i < 1 || i - 1 >= (int)lw.row_item.size() || lw.row_item[(size_t)(i - 1)] < 0) return;
+    long long now = now_ms();
+    int it = lw.row_item[(size_t)(i - 1)];
+    bool again = lw.cur == it && now - lw.click_ms < 500;
+    lw.click_ms = now, lw.cur = it, lw.focus = 1;
+    if (again) logs_key(TB_KEY_ENTER, 0);  // a double click: the line in its day
 }

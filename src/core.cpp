@@ -1367,6 +1367,12 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (!find_command(cmd) && plugin_run(b, cmd, args)) return;  // a plugin's command; iSekur's own always win
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "about") { about(b); return; }
+    if (cmd == "logs") {  // the log browser, at this tab's logs; text: searched there right away (the webchat opens its own)
+        if (!tty || from_web) { print(b, LK::INFO, "The log browser is a window: /logs in the terminal or the webchat"); return; }
+        logs_win = dirty = true, logs_q = args;
+        logs_at = b->srv && b->type != BT::SHELL ? b->srv->cfg.name + (b->type == BT::STATUS ? "" : "\t" + safe_name(b->name)) : "";
+        return;
+    }
     if (cmd == "keys") {  // the terminal's window (the webchat opens its own dialog)
         if (tty && !from_web) keys_win = dirty = true;
         else print(b, LK::INFO, "The key list is a window: F1 or Alt+K in the terminal or the webchat");

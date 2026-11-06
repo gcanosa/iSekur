@@ -113,6 +113,10 @@ inline bool noise(const Line& l) {
     return !l.self && (l.kind == LK::JOIN || l.kind == LK::PART || l.kind == LK::QUIT || l.kind == LK::NICK);
 }
 
+// /logs: one log file; day YYYY-MM-DD (the current <name>.log: the day it was last written)
+struct LogFile { std::string net, name, day, path; long long size = 0; bool current = false; };
+struct LogQuery { std::vector<std::string> words; std::string nick; bool events = true; };  // events: joins, parts, quits, nicks
+struct LogHit { size_t file, line; Line l; };
 enum class BT { STATUS, CHANNEL, QUERY, SHELL };  // SHELL: /shell, no server
 struct Server;
 struct Core;
@@ -352,6 +356,9 @@ struct Core {
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     bool settings_servers = false;  // /servers: that window, at the first server
     bool keys_win = false;      // /keys in the terminal: the TUI opens its key list
+    bool logs_win = false;      // /logs in the terminal: the TUI opens its log browser
+    std::string logs_at, logs_q;  // ...at this tab's logs ("net" or "net\tname" as on disk), searching logs_q
+    std::vector<LogFile> log_files() const;  // every log on disk (logs.cpp), by network, name, newest day first
     bool theme_win = false;     // /theme alone in the terminal: the TUI opens its theme picker
     bool use_theme(const std::string& name, std::string& err);  // switch the theme, terminal and webchat, silently
     std::string cfg_path;
@@ -592,5 +599,11 @@ std::vector<std::pair<std::string, std::string>> conf_keys();   // iSekur.conf.e
 bool server_name_ok(const std::string& n);  // letters, digits, . _ -
 std::string safe_name(const std::string& n);  // network name -> safe log file name
 bool parse_log_line(const std::string& s, Line& l);
+// /logs (logs.cpp): a file back into Lines (joins, parts... their own kinds again); cut: only its last 32 MB
+std::vector<Line> log_read(const std::string& path, bool* cut = nullptr);
+LogQuery log_query(const std::string& q, bool events = true);  // words, "a phrase", nick:alice
+bool log_match(const Line& l, const LogQuery& q);
+std::vector<LogHit> log_search(const std::vector<LogFile>& files, const std::vector<size_t>& which, const LogQuery& q,
+                               size_t max, bool* more = nullptr);
 std::string log_fmt(const Line& l);  // a Line as one log row
 std::string raw_redact(const std::string& line);  // /rawlog: a line with its password or SASL payload blanked

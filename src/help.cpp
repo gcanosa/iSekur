@@ -277,6 +277,17 @@ static const std::vector<CmdInfo> CMDS = {
      "Shows the lines of the current tab that contain text (nick or message, case insensitive), "
      "the last 50 at most. -all searches every tab.",
      {"/grep http", "/grep -all alice"}},
+    {"logs", "Windows", "[text]", "Browse and search the chat logs",
+     "Opens the log browser (terminal and webchat) at this tab's logs: a tree of networks, their channels and queries "
+     "and each one's days (newest first), the picked day's lines on the right. Typing in the find line filters the day "
+     "as you type; Enter searches every day of the channel or network picked in the tree. The find line takes words "
+     "(all of them, any case), \"a phrase\" and nick:alice (only her lines, joins and quits too). Enter (or a double "
+     "click) on a found line opens its day there. c opens a calendar of the channel's month with its logged days in "
+     "color; pick one to read it. [ and ] go to the day before or after, e shows or hides joins, parts, quits and nick "
+     "changes, Tab moves between the tree and the log, / goes to the find line, Esc closes. With text, it opens "
+     "searching every day of this tab for it. Needs log = on (/set log on, /save); logs of networks no longer in the "
+     "config are listed too.",
+     {"/logs", "/logs release", "/logs nick:alice green"}},
     {"keys", "Windows", "", "Show every keyboard shortcut",
      "Opens a window with every key binding drawn as keycaps, by group (tabs, view, session, typing), in the terminal "
      "and the webchat; F1 or Alt+K open it too. Your own [keys] bindings show as well. Up/Down scrolls, Esc closes. "
@@ -709,6 +720,7 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("Logs"),
         "  After a restart every channel and query shows its last lines again (" BOLD "keep_history" RESET ").",
         "  " G_CMD("/set log on") " + " G_CMD("/save") " also writes them all to disk. " G_CMD("/grep ") G_VAL("text") " searches this tab.",
+        "  " G_CMD("/logs") " browses them by network, channel and day, with a calendar and a search over every day.",
         "",
         G_HEAD("Stay online when you leave"),
         "  " G_KEY("Ctrl+Z") ", " G_KEY("Alt+D") " or " G_CMD("/detach") " gives the terminal back and " BOLD "keeps iSekur connected" RESET ".",

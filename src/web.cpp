@@ -640,6 +640,8 @@ static Buffer* by_id(Core& c, int id) {
     return nullptr;
 }
 
+static std::string line_json(const Line& l, const std::string& fmt);
+
 void Web::ws_frames(Client& cl) {
     for (;;) {
         int op;
@@ -742,6 +744,48 @@ void Web::ws_frames(Client& cl) {
                      ",\"author\":" + json_str(r.author) + ",\"contact\":" + json_str(r.contact) + ",\"official\":" + (r.official ? "1" : "0") + "}",
                 first = false;
             cl.conn.out += ws_frame(o + "]}");
+        } else if (m["t"] == "logs" || m["t"] == "logread" || m["t"] == "logfind") {  // /logs: the log browser
+            // only what log_files() lists is read: the browser names a file by network, name and day, never by a path
+            auto files = c.log_files();
+            auto arr = [&](const std::vector<Line>& v, size_t from) {
+                std::string o = "[";
+                for (size_t i = from; i < v.size(); i++) o += (i > from ? "," : "") + line_json(v[i], "%H:%M:%S");
+                return o + "]";
+            };
+            if (m["t"] == "logs") {
+                bool on = false;
+                for (auto& s : c.servers) on |= c.opt_on(s.get(), "log", false);
+                // at: the tab it was opened from, as the files name it ("net" or "net\tname")
+                std::string at = b->srv && b->type != BT::SHELL ? b->srv->cfg.name + (b->type == BT::STATUS ? "" : "\t" + safe_name(b->name)) : "";
+                std::string o = "{\"t\":\"logs\",\"on\":" + std::string(on ? "1" : "0") + ",\"at\":" + json_str(at) + ",\"files\":[";
+                for (size_t i = 0; i < files.size(); i++)
+                    o += (i ? ",[" : "[") + json_str(files[i].net) + "," + json_str(files[i].name) + "," + json_str(files[i].day) + "," +
+                         std::to_string(files[i].size) + "," + (files[i].current ? "1" : "0") + "]";
+                cl.conn.out += ws_frame(o + "]}");
+            } else if (m["t"] == "logread") {
+                for (auto& f : files) {
+                    if (f.net != m["net"] || f.name != m["name"] || f.day != m["day"] || f.current != (m["cur"] == "1")) continue;
+                    bool cut = false;
+                    auto v = log_read(f.path, &cut);
+                    const size_t MAX = 20000;  // ponytail: a year-long unrotated log in one message is too much; page it if wanted
+                    size_t from = v.size() > MAX ? v.size() - MAX : 0;
+                    cl.conn.out += ws_frame("{\"t\":\"logread\",\"net\":" + json_str(f.net) + ",\"name\":" + json_str(f.name) + ",\"day\":" + json_str(f.day) +
+                                            ",\"cur\":" + (f.current ? "1" : "0") + ",\"cut\":" + (cut || from ? "1" : "0") + ",\"base\":" + std::to_string(from) + ",\"lines\":" + arr(v, from) + "}");
+                    break;
+                }
+            } else {  // a network's or a channel's every day
+                std::vector<size_t> which;
+                for (size_t i = 0; i < files.size(); i++)
+                    if (files[i].net == m["net"] && (m["name"].empty() || files[i].name == m["name"])) which.push_back(i);
+                bool more = false;
+                auto hits = log_search(files, which, log_query(m["q"], m["ev"] != "0"), 2000, &more);
+                std::string o = "{\"t\":\"logfind\",\"q\":" + json_str(m["q"]) + ",\"more\":" + (more ? "1" : "0") + ",\"hits\":[";
+                for (size_t i = 0; i < hits.size(); i++) {
+                    auto& f = files[hits[i].file];
+                    o += (i ? ",[" : "[") + json_str(f.name) + "," + json_str(f.day) + "," + (f.current ? "1" : "0") + "," + std::to_string(hits[i].line) + "," + line_json(hits[i].l, "%H:%M:%S") + "]";
+                }
+                cl.conn.out += ws_frame(o + "]}");
+            }
         } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only
             bool tab = m["nick"].empty();
             std::string o = "{\"t\":\"menu\",\"nick\":" + json_str(!tab ? m["nick"] : b->type == BT::STATUS && b->srv ? b->srv->cfg.name : b->name) + ",\"items\":[";

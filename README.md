@@ -54,7 +54,7 @@ that mirrors your live session in a browser, bouncer style.
 - Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about
 - `/list` opens a sortable channel table in its own tab (click Channel or Users); double click a #channel anywhere to join it
 - The status bar can show CPU, memory, load and a battery next to the uptime (`/statusbar`), colored by thresholds you can change (`cpu_levels`, `mem_levels`) and by the theme
-- Optional chat logs (`log = on`, rotated daily); without them, tabs still show their last lines after a restart (`keep_history`). CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
+- Optional chat logs (`log = on`, rotated daily) and `/logs`, a browser for them: network, channel and day in a tree, a calendar, and a search over every day; without them, tabs still show their last lines after a restart (`keep_history`). CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
 Six of the 37 themes, same chat (mIRC, Rosé Pine, Ayu, Neon, Catppuccin Latte, Dracula):
 
@@ -181,7 +181,7 @@ dropped instead of showing up as garbage.
 
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
-`/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/web [start|stop|status]`,
+`/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/logs [text]` (the log browser, below), `/web [start|stop|status]`,
 `/clear`, `/back` (clears away), `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected, and for the lock password when one is set). Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 
@@ -287,6 +287,30 @@ picks up an edited file. Writing one: [WRITING.md](https://github.com/gcanosa/is
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
 `/about` shows the version and where to find iSekur.
+
+## Reading old logs
+
+With `log = on` (`/set log on`, then `/save`) every channel and query is written to
+`<log_dir>/<network>/<name>.log`, a file a day (`log_rotate`, on by default: older days become
+`<name>.YYYY-MM-DD.log`). `/logs` opens a window to read them, in the terminal and in the webchat
+(in the webchat also the page icon under the tab list):
+
+- **The tree** on the left: each network, its channels and queries, and each one's days, newest
+  first, with their size. A day opens on the right, with the same colors as the chat.
+- **Find**: typing filters the day you're reading as you type. Enter searches every day of the
+  channel (or of the whole network) picked in the tree; the results come grouped by day, and a
+  found line opens in its day, highlighted, so you see what was said around it.
+  Words must all be there (any case), `"a phrase"` must be as written, and `nick:alice` keeps
+  only alice's lines, her joins and quits included: `nick:alice release`.
+- **The calendar** (`c`, or the Calendar button): the channel's month with its logged days in
+  color. Pick one to read it; the arrows turn the months.
+- `[` and `]` go to the day before or after, `e` (or the checkbox) hides or shows joins, parts,
+  quits and nick changes, `Tab` moves between the tree and the log, `/` goes to the find line,
+  `Esc` closes. The mouse works too: a click opens, a double click on a found line jumps to it.
+- `/logs text` opens it already searching every day of the current tab for `text`.
+
+Logs of networks you've since removed from the config are still listed. Only the files under the
+log folders are read, and the webchat asks for them by network, name and day, never by path.
 
 ## Support
 

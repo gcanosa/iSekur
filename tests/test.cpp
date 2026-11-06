@@ -157,6 +157,35 @@ int main() {
     assert(parse_log_line("2026-10-27 19:09:42 -serv- note", ll) && ll.kind == LK::NOTICE && ll.nick == "serv");
     assert(parse_log_line("2026-10-27 19:09:42 -!- x joined", ll) && ll.kind == LK::INFO && ll.text == "x joined");
     assert(!parse_log_line("--- Log opened 2026-10-27 19:09:12", ll));
+    {  // /logs: what's on disk, read back with events as their kinds, the find line's syntax and a search over days
+        char d[] = "/tmp/isekur-logs-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d, net = dir + "/logs/gone";
+        mkdir_p(net);
+        auto put = [&](const std::string& f, const char* body) { FILE* o = fopen((net + "/" + f).c_str(), "w"); fputs(body, o), fclose(o); };
+        put("#c.2026-11-01.log", "--- Log opened 2026-11-01 09:00:00\n2026-11-01 09:00:01 -!- alice (u@h) has joined #c\n"
+                                 "2026-11-01 09:00:02 <alice> Green light\n2026-11-01 09:00:03 -!- mode/#c [+o bob] by alice\n");
+        put("#c.2026-11-03.log", "2026-11-03 10:00:00 <bob> no green here? \"green light\"\n2026-11-03 10:00:01 -!- bob (u@h) has quit (bye)\n");
+        put("#c.log", "2026-11-06 08:00:00 <carol> today\n");
+        put("notes.txt", "not a log\n");
+        Core lc;
+        lc.cfg_path = dir + "/isekur.conf";
+        auto files = lc.log_files();  // a network no longer configured: still under log_dir
+        assert(files.size() == 3 && files[0].net == "gone" && files[0].name == "#c" && files[0].current && files[1].day == "2026-11-03" && files[2].day == "2026-11-01");
+        auto v = log_read(files[2].path);
+        assert(v.size() == 3 && v[0].kind == LK::JOIN && v[0].nick == "alice" && v[2].kind == LK::MODE && v[2].nick == "alice");
+        assert(log_read(files[1].path)[1].kind == LK::QUIT);
+        auto q = log_query("Green nick:Alice \"a phrase\"");
+        assert(q.nick == "alice" && q.words.size() == 2 && q.words[1] == "a phrase");
+        assert(log_match(v[1], log_query("green NICK:alice")) && !log_match(v[1], log_query("green nick:bob")) && log_match(v[0], log_query("nick:alice")));
+        assert(!log_match(v[0], log_query("", false)) && log_match(v[1], log_query("", false)));  // events hidden: joins out, messages in
+        bool more = true;
+        auto hits = log_search(files, {0, 1, 2}, log_query("green"), 10, &more);
+        assert(hits.size() == 2 && !more && hits[0].file == 1 && hits[1].file == 2 && hits[1].line == 1);
+        assert(log_search(files, {1, 2}, log_query("\"green light\""), 1, &more).size() == 1 && more);
+        for (auto& f : files) unlink(f.path.c_str());
+        unlink((net + "/notes.txt").c_str()), rmdir(net.c_str()), rmdir((dir + "/logs").c_str()), rmdir(d);
+    }
 
     Ini ch;
     ch["general"]["theme"] = "neon";

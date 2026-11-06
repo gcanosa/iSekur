@@ -2,8 +2,10 @@
 #pragma once
 #include <cstdint>
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
+#include "core.h"
 
 struct Core;
 struct Buffer;
@@ -158,6 +160,46 @@ private:
     void plugin_key(int k, uint32_t ch);
     void plugin_mouse(int k, int x, int y);
     void plug_run(const std::string& cmd);
+    // /logs: the log browser. Left the tree (network > channel or query > days), right the day's lines or what a
+    // search found; a find line on top, a calendar of the days a channel has logs (c)
+    struct LogNode { int lvl; std::string net, name; int file, n; };  // lvl 0 network, 1 channel/query, 2 a day (file)
+    struct LogItem { int file; size_t line; const Line* l; };       // l null: a day's heading (search results)
+    struct LogWin {
+        bool open = false;
+        int focus = 0, back = 0;  // 0 the tree, 1 the log, 2 the find line, 3 the calendar; back: where Esc leaves the find line for
+        std::vector<LogFile> files;
+        std::set<std::string> unfolded;  // "net", "net\tname"
+        int sel = 0, ttop = 0;           // the tree
+        int file = -1;                   // the day shown
+        std::vector<Line> lines;
+        bool cut = false;                // only its last 32 MB
+        std::u32string q;
+        bool events = true;              // joins, parts, quits, nick changes shown
+        bool searched = false, more = false;  // the right side lists a search's hits (more: there were more than shown)
+        std::string found_in;            // what was searched: "#c" or "network"
+        size_t found_days = 0;
+        std::vector<LogHit> hits;
+        std::vector<LogItem> view;
+        int cur = 0, ltop = 0;           // the log's cursor and its first item on screen
+        std::string msg;                 // the last thing that went wrong, on the hint row until the next key
+        int cy = 0, cm = 0, cd = 0;      // the calendar's year, month (1-12) and day
+        std::string cnet, cname;         // ...of this channel
+        // where it was drawn, for the mouse
+        int x0 = 0, y0 = 0, w = 0, body_y = 0, rows = 0, xd = 0, find_x = 0, cal_x = 0, cal_y = 0;
+        std::vector<int> row_item;       // the log rows: which item each shows (-1 none)
+        long long click_ms = 0;
+    };
+    LogWin lw;
+    std::vector<LogNode> log_tree() const;
+    void logs_init();
+    void logs_open(int file, long line);  // line: its index, -1 the top, -2 the end
+    void logs_view();                     // view from lines (filtered) or hits
+    void logs_search();
+    void logs_select(int file);           // the tree shows and selects that day
+    void logs_cal();                      // the calendar, at the tree's channel
+    void draw_logs(int W, int H);
+    void logs_key(int k, uint32_t ch);
+    void logs_mouse(int k, int x, int y);
     void draw_keys(int W, int H);
     void keys_key(int k, uint32_t ch);
     bool action(const std::string& a);

@@ -284,6 +284,59 @@ dialog .btns .left { margin-right: auto; }
 .win-95 #pluglist .r .b button.del:hover { color: #000; }
 /* /keys, F1, Alt+K: every key binding as keycaps, by group (the terminal's window is the same list) */
 #dkeys { width: min(620px, calc(100vw - 32px)); }
+/* /logs: the log browser. The tree (network > channel > days) left, the day's lines (or what a search found) right */
+#dlogs { width: min(1200px, calc(100vw - 32px)); }
+#dlogs form { grid-template-rows: auto auto minmax(0, 1fr) auto auto; height: min(82vh, 860px); }
+#logbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+#logbar #logq { flex: 1; min-width: 180px; }
+#logbar button, #loghead button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
+#logbar button:disabled, #loghead button:disabled { opacity: .45; cursor: default; }
+#logbody { display: grid; grid-template-columns: minmax(170px, 250px) 1fr; gap: 10px; min-height: 0; }
+#logtree { overflow-y: auto; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+#logtree .t { display: flex; gap: 6px; align-items: baseline; padding: 3px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
+#logtree .t:hover { background: #ffffff0a; }
+#logtree .t.on { background: var(--menu_sel-bg); color: var(--menu_sel-fg); }
+#logtree .t .n { flex: 1; overflow: hidden; text-overflow: ellipsis; }
+#logtree .t small { color: var(--muted); font-size: 11.5px; }
+#logtree .t.l0 .n { font-weight: 700; } #logtree .t.l1 { padding-left: 18px; } #logtree .t.l2 { padding-left: 38px; font-variant-numeric: tabular-nums; }
+#logtree .t.open .n::before { content: "● "; color: var(--accent); }
+#logtree .none { color: var(--muted); padding: 8px; line-height: 1.5; }
+#logpane { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--line); border-radius: 8px; min-height: 0; overflow: hidden;
+  background: var(--bg); color: var(--fg); }
+#loghead { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
+#loghead b { font-weight: 700; } #loghead small { color: var(--muted); flex: 1; }
+#loghead button { padding: 3px 9px; font-size: 12px; }
+#loglines { overflow-y: auto; padding: 4px 0; overflow-wrap: anywhere; font-family: var(--mono, monospace); font-size: var(--fs, 14px); }
+#loglines .l { cursor: default; } #loglines.pick .l { cursor: pointer; }
+#loglines .l.at { background: var(--hilight_line-bg, #ff00aa18); box-shadow: inset 3px 0 var(--accent); }
+#loglines .day { display: flex; align-items: center; gap: 8px; margin: 8px 10px 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+  color: var(--marker-fg, var(--accent)); cursor: pointer; }
+#loglines .day::after { content: ""; flex: 1; border-top: 1px solid currentColor; opacity: .5; }
+#loglines .info { color: var(--muted); padding: 14px; line-height: 1.6; font-family: system-ui, sans-serif; font-size: 13px; }
+#loglines mark { background: var(--accent); color: var(--on-accent, #111); border-radius: 2px; }
+/* the calendar: a month, the days with a log in color; one opens it */
+#logcal { position: absolute; top: 44px; right: 12px; z-index: 2; background: var(--dlg-bg, var(--menu-bg, var(--panel))); border: 1px solid var(--line); border-radius: 10px;
+  padding: 10px; box-shadow: 0 8px 28px #0008; font-family: system-ui, sans-serif; width: 252px; }
+#logcal .mh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 700; font-size: 13px; }
+#logcal .mh button { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); cursor: pointer; width: 28px; height: 24px; }
+#logcal .g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; font-size: 12px; }
+#logcal .g .wd { color: var(--muted); font-size: 11px; padding-bottom: 2px; }
+#logcal .g button { background: none; border: 1px solid transparent; border-radius: 6px; padding: 5px 0; color: var(--muted); opacity: .55; cursor: default; font: inherit; }
+#logcal .g button.has { opacity: 1; color: var(--join-fg, var(--join, #57ab5a)); font-weight: 700; border-color: var(--line); cursor: pointer; }
+#logcal .g button.has:hover { background: #ffffff10; }
+#logcal .g button.at { outline: 2px solid var(--accent); outline-offset: -1px; }
+#logcal .g button.today { text-decoration: underline; }
+#logcal .ft { margin-top: 8px; font-size: 12px; color: var(--muted); }
+#dlogs [hidden] { display: none !important; }
+@media (max-width: 700px) { #logbody { grid-template-columns: 1fr; grid-template-rows: 30% 1fr; } }
+.win-95 :is(#logbar button, #loghead button, #logcal .mh button) { background: #c0c0c0; color: #000; border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff;
+  box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; font: 400 12px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+.win-95 :is(#logtree, #logpane) { border-radius: 0; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; }
+.win-95 #logtree { background: #fff; color: #000; } .win-95 #logtree .t { border-radius: 0; } .win-95 #logtree .t.on { background: #000080; color: #fff; }
+.win-95 #logtree .t small { color: #404040; } .win-95 #logtree .t.on small { color: #fff; }
+.win-95 #logcal { background: #c0c0c0; color: #000; border-radius: 0; border: 1px solid; border-color: #dfdfdf #000 #000 #dfdfdf; box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 2px 2px 0 #0006; }
+.win-95 #logcal .g button { border-radius: 0; color: #404040; } .win-95 #logcal .g button.has { color: #006400; background: #fff; border-color: #808080 #fff #fff #808080; }
+.win-95 #logcal .g button.at { outline-color: #000080; } .win-95 #logcal .g .wd, .win-95 #logcal .ft { color: #000; }
 #klist { max-height: min(62vh, 560px); overflow-y: auto; display: grid; grid-template-columns: auto 1fr; gap: 5px 18px; align-items: center; padding-right: 4px; }
 #klist h3 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dlg-title, var(--accent));
   display: flex; align-items: center; gap: 8px; }
@@ -624,7 +677,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 </div>
 <div id="app">
   <nav id="side"></nav>
-  <div id="foot"><button id="addsrv" title="Servers" aria-label="Servers"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3.5" width="18" height="7" rx="2"/><rect x="3" y="13.5" width="18" height="7" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbfbfb"/><stop offset="1" stop-color="#a9a9b4"/></linearGradient><radialGradient id="w2l" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#b8ffb0"/><stop offset="1" stop-color="#118a10"/></radialGradient></defs><rect x="1.5" y="1.5" width="13" height="5" rx="1" fill="url(#w2s)" stroke="#404040"/><path d="M3 2.5h10" stroke="#fff" stroke-opacity=".8"/><circle cx="4.5" cy="4" r="1.2" fill="url(#w2l)"/><path d="M7.5 4h5" stroke="#505050" stroke-width="1.2"/><rect x="1.5" y="9.5" width="13" height="5" rx="1" fill="url(#w2s)" stroke="#404040"/><path d="M3 10.5h10" stroke="#fff" stroke-opacity=".8"/><circle cx="4.5" cy="12" r="1.2" fill="url(#w2l)"/><path d="M7.5 12h5" stroke="#505050" stroke-width="1.2"/></svg></button><button id="setbtn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6f6f6"/><stop offset="1" stop-color="#7d7f8c"/></linearGradient></defs><path d="M12.94 6.36L15.25 6.53L15.25 9.47L12.94 9.64L12.65 10.33L14.17 12.09L12.09 14.17L10.33 12.65L9.64 12.94L9.47 15.25L6.53 15.25L6.36 12.94L5.67 12.65L3.91 14.17L1.83 12.09L3.35 10.33L3.06 9.64L0.75 9.47L0.75 6.53L3.06 6.36L3.35 5.67L1.83 3.91L3.91 1.83L5.67 3.35L6.36 3.06L6.53 0.75L9.47 0.75L9.64 3.06L10.33 3.35L12.09 1.83L14.17 3.91L12.65 5.67Z M10.4 8a2.4 2.4 0 1 0-4.8 0a2.4 2.4 0 1 0 4.8 0Z" fill="url(#w2g)" fill-rule="evenodd" stroke="#3c3c46" stroke-width=".9" stroke-linejoin="round"/></svg></button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20V4M4 8l4-4 4 4M16 4v16M12 16l4 4 4-4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2fb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0c850"/><stop offset="1" stop-color="#c08a18"/></linearGradient><linearGradient id="w2ff" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4b0"/><stop offset="1" stop-color="#e8b030"/></linearGradient></defs><path d="M1.5 3.5h5l1.5 1.5h6.5v8.5h-13z" fill="url(#w2fb)" stroke="#8a6410" stroke-linejoin="round"/><path d="M1.5 13.5l1.6-6.5h12.4l-1.6 6.5z" fill="url(#w2ff)" stroke="#8a6410" stroke-linejoin="round"/></svg></button><button id="plugbtn" title="Plugins" aria-label="Plugins"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5a2.5 2.5 0 0 1 5 0V6H18a1 1 0 0 1 1 1v3.5h-1.5a2.5 2.5 0 0 0 0 5H19V19a1 1 0 0 1-1 1h-3.5v-1.5a2.5 2.5 0 0 0-5 0V20H6a1 1 0 0 1-1-1v-3.5h1.5a2.5 2.5 0 0 0 0-5H5V7a1 1 0 0 1 1-1h3.5z"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2pz" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9be08a"/><stop offset="1" stop-color="#1f8a2a"/></linearGradient></defs><path d="M6 2.5a2 2 0 0 1 4 0V4h3.5v3.5H12a1.5 1.5 0 0 0 0 3h1.5V14H10v-1.5a2 2 0 0 0-4 0V14H2.5v-3.5H4a1.5 1.5 0 0 0 0-3H2.5V4H6z" fill="url(#w2pz)" stroke="#0e4a14" stroke-linejoin="round"/></svg></button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 16.5v-5M12 7.5h.01"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><radialGradient id="w2i" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#9fd0ff"/><stop offset="1" stop-color="#0a3cb4"/></radialGradient></defs><circle cx="8" cy="8" r="7" fill="url(#w2i)" stroke="#06266e"/><circle cx="8" cy="4.6" r="1.25" fill="#fff"/><path d="M6.4 7h2.6v5h1.2v1.3H6.2V12h1.2V8.3h-1z" fill="#fff"/></svg></button></div>
+  <div id="foot"><button id="addsrv" title="Servers" aria-label="Servers"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3.5" width="18" height="7" rx="2"/><rect x="3" y="13.5" width="18" height="7" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbfbfb"/><stop offset="1" stop-color="#a9a9b4"/></linearGradient><radialGradient id="w2l" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#b8ffb0"/><stop offset="1" stop-color="#118a10"/></radialGradient></defs><rect x="1.5" y="1.5" width="13" height="5" rx="1" fill="url(#w2s)" stroke="#404040"/><path d="M3 2.5h10" stroke="#fff" stroke-opacity=".8"/><circle cx="4.5" cy="4" r="1.2" fill="url(#w2l)"/><path d="M7.5 4h5" stroke="#505050" stroke-width="1.2"/><rect x="1.5" y="9.5" width="13" height="5" rx="1" fill="url(#w2s)" stroke="#404040"/><path d="M3 10.5h10" stroke="#fff" stroke-opacity=".8"/><circle cx="4.5" cy="12" r="1.2" fill="url(#w2l)"/><path d="M7.5 12h5" stroke="#505050" stroke-width="1.2"/></svg></button><button id="setbtn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6f6f6"/><stop offset="1" stop-color="#7d7f8c"/></linearGradient></defs><path d="M12.94 6.36L15.25 6.53L15.25 9.47L12.94 9.64L12.65 10.33L14.17 12.09L12.09 14.17L10.33 12.65L9.64 12.94L9.47 15.25L6.53 15.25L6.36 12.94L5.67 12.65L3.91 14.17L1.83 12.09L3.35 10.33L3.06 9.64L0.75 9.47L0.75 6.53L3.06 6.36L3.35 5.67L1.83 3.91L3.91 1.83L5.67 3.35L6.36 3.06L6.53 0.75L9.47 0.75L9.64 3.06L10.33 3.35L12.09 1.83L14.17 3.91L12.65 5.67Z M10.4 8a2.4 2.4 0 1 0-4.8 0a2.4 2.4 0 1 0 4.8 0Z" fill="url(#w2g)" fill-rule="evenodd" stroke="#3c3c46" stroke-width=".9" stroke-linejoin="round"/></svg></button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20V4M4 8l4-4 4 4M16 4v16M12 16l4 4 4-4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2fb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0c850"/><stop offset="1" stop-color="#c08a18"/></linearGradient><linearGradient id="w2ff" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4b0"/><stop offset="1" stop-color="#e8b030"/></linearGradient></defs><path d="M1.5 3.5h5l1.5 1.5h6.5v8.5h-13z" fill="url(#w2fb)" stroke="#8a6410" stroke-linejoin="round"/><path d="M1.5 13.5l1.6-6.5h12.4l-1.6 6.5z" fill="url(#w2ff)" stroke="#8a6410" stroke-linejoin="round"/></svg></button><button id="logsbtn" title="Logs" aria-label="Logs"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c8ccd8"/></linearGradient></defs><path d="M3 1.5h7l3 3v10H3z" fill="url(#w2lg)" stroke="#404040" stroke-linejoin="round"/><path d="M10 1.5v3h3" fill="#e8e8e8" stroke="#404040" stroke-linejoin="round"/><path d="M5 7h6M5 9h6M5 11h4" stroke="#000080"/></svg></button><button id="plugbtn" title="Plugins" aria-label="Plugins"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5a2.5 2.5 0 0 1 5 0V6H18a1 1 0 0 1 1 1v3.5h-1.5a2.5 2.5 0 0 0 0 5H19V19a1 1 0 0 1-1 1h-3.5v-1.5a2.5 2.5 0 0 0-5 0V20H6a1 1 0 0 1-1-1v-3.5h1.5a2.5 2.5 0 0 0 0-5H5V7a1 1 0 0 1 1-1h3.5z"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2pz" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9be08a"/><stop offset="1" stop-color="#1f8a2a"/></linearGradient></defs><path d="M6 2.5a2 2 0 0 1 4 0V4h3.5v3.5H12a1.5 1.5 0 0 0 0 3h1.5V14H10v-1.5a2 2 0 0 0-4 0V14H2.5v-3.5H4a1.5 1.5 0 0 0 0-3H2.5V4H6z" fill="url(#w2pz)" stroke="#0e4a14" stroke-linejoin="round"/></svg></button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 16.5v-5M12 7.5h.01"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><radialGradient id="w2i" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#9fd0ff"/><stop offset="1" stop-color="#0a3cb4"/></radialGradient></defs><circle cx="8" cy="8" r="7" fill="url(#w2i)" stroke="#06266e"/><circle cx="8" cy="4.6" r="1.25" fill="#fff"/><path d="M6.4 7h2.6v5h1.2v1.3H6.2V12h1.2V8.3h-1z" fill="#fff"/></svg></button></div>
   <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><radialGradient id="w2h" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#ffe8cc"/><stop offset="1" stop-color="#c98a58"/></radialGradient><linearGradient id="w2ut" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fe0d8"/><stop offset="1" stop-color="#0c7a78"/></linearGradient><linearGradient id="w2ub" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8cb4ff"/><stop offset="1" stop-color="#1c3ca8"/></linearGradient></defs><path d="M6.45 8.9c0-3 2-4.5 4.05 -4.5s4.05 1.5 4.05 4.5z" fill="url(#w2ut)" stroke="#1e2a50" stroke-width=".9" stroke-linejoin="round"/><circle cx="10.5" cy="2.7800000000000002" r="2.16" fill="url(#w2h)" stroke="#6a4020" stroke-width=".8"/><path d="M1.5 14.5c0-3 2-4.5 4.5 -4.5s4.5 1.5 4.5 4.5z" fill="url(#w2ub)" stroke="#1e2a50" stroke-width=".9" stroke-linejoin="round"/><circle cx="6" cy="7.7" r="2.4" fill="url(#w2h)" stroke="#6a4020" stroke-width=".8"/></svg></button><button id="bell" aria-label="Notifications"></button><button id="logout" aria-label="Logout"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4M3 12h11M10 8l4 4-4 4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2d" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d9965a"/><stop offset="1" stop-color="#7a4012"/></linearGradient><linearGradient id="w2a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8f090"/><stop offset="1" stop-color="#1d8a1a"/></linearGradient></defs><rect x="1.5" y="1.5" width="8" height="13" fill="url(#w2d)" stroke="#4a2408"/><circle cx="7.6" cy="8.6" r=".8" fill="#ffd84a"/><path d="M7.5 6.5h3.5V4l4.4 4-4.4 4V9.5H7.5z" fill="url(#w2a)" stroke="#105c10" stroke-width=".9" stroke-linejoin="round"/></svg></button></div>
   <main id="msgs" aria-live="polite"></main>
   <main id="msgs2" title="Click: type here"></main>
@@ -682,6 +735,15 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <input id="kq" placeholder="Filter, e.g. tab, nick, bold..." autocomplete="off" aria-label="Filter keys">
   <div id="klist"></div>
   <div class="hint">Change one with /set keys.&lt;action&gt; "&lt;key&gt; ..." · /help keys</div>
+  <div class="btns"><button class="go" value="ok">Close</button></div>
+</form></dialog>
+<dialog id="dlogs"><form method="dialog">
+  <h2>Logs</h2>
+  <div id="logbar"><input id="logq" placeholder='Find: words, "a phrase", nick:alice. Enter searches every day of the channel or network' autocomplete="off" aria-label="Find in the logs">
+    <label class="ck"><input type="checkbox" id="logev" checked> Joins, parts, quits</label><button type="button" id="logcalb" title="Pick a day on a calendar ( c )">📅 Calendar</button></div>
+  <div id="logbody"><div id="logtree" role="tree" aria-label="Logs by network and channel"></div>
+    <div id="logpane"><div id="loghead"></div><div id="loglines"></div><div id="logcal" hidden></div></div></div>
+  <div class="hint" id="loghint"></div>
   <div class="btns"><button class="go" value="ok">Close</button></div>
 </form></dialog>
 <dialog id="dplug"><form method="dialog">
@@ -1459,6 +1521,8 @@ function onMsg(ev) {
     if (dset.open) renderSettings(m.list);
     if (dsrv.open) { srvs = srvRows(m.list); if (srvSel && !srvs.some(x => x.name === srvSel)) srvSel = null; renderSrv(); }
     renderSugg();
+  } else if (m.t === "logs" || m.t === "logread" || m.t === "logfind") {
+    logMsg(m);
   } else if (m.t === "plugins") {
     plug = m; if (dplug.open) renderPlugins();
   } else if (m.t === "note") {
@@ -1855,6 +1919,258 @@ function renderKeys() {
 const dkeys = $("#dkeys");
 function openKeys() { $("#side").classList.remove("open"); $("#kq").value = ""; renderKeys(); dkeys.showModal(); $("#kq").focus(); }
 $("#kq").oninput = renderKeys;
+// 📜 /logs: the log browser. The tree is network > channel or query > its days, newest first. A day comes whole
+// (logread); the find box filters it as you type, and Enter searches every day of the channel or network picked in
+// the tree (logfind). A found line opens in its day. The calendar shows a channel's month, its logged days in color
+const dlogs = $("#dlogs");
+let lgs = null, lgOpen = new Set(), lgSel = null, lgDay = null, lgHits = null, lgWant = null, lgCal = null, lgQ0 = "", lgTimer = 0;
+const lgKey = (net, name) => name ? net + "\t" + name : net;
+const noMirc = s => (s || "").replace(/\x03(\d{1,2}(,\d{1,2})?)?|[\x02\x0f\x16\x1d\x1e\x1f]/g, "");
+const lgDayLabel = d => new Date(d + "T12:00:00").toLocaleDateString(undefined, {weekday: "short"}) + " " + d;
+const lgSize = n => n < 1024 ? n + " B" : n < 1048576 ? Math.round(n / 1024) + " K" : (n / 1048576).toFixed(1) + " M";
+const lgSame = (a, b) => a && b && a.net === b.net && a.name === b.name && a.day === b.day && a.cur === b.cur;
+function openLogs(q) {
+  $("#side").classList.remove("open");
+  lgs = null; lgOpen = new Set(); lgSel = null; lgDay = null; lgHits = null; lgCal = null; lgQ0 = q;
+  $("#logq").value = q; $("#logev").checked = true;
+  send({t: "logs", buf: active}); dlogs.showModal(); renderLogs(); $("#logq").focus();
+}
+// the find box's words, "a phrase" and nick:alice (or from:), as the terminal's
+function logQuery(q) {
+  const r = {words: [], nick: ""};
+  for (const m of (q || "").matchAll(/"([^"]*)"?|(\S+)/g)) {
+    const w = ircLower(m[1] !== undefined ? m[1] : m[2]);
+    if (/^(nick|from):/.test(w)) r.nick = w.slice(5); else if (w) r.words.push(w);
+  }
+  return r;
+}
+const logMatch = (l, Q, ev) => (ev || l.s || !/^(join|part|quit|nick)$/.test(l.k)) && (!Q.nick || ircLower(l.n || "") === Q.nick) &&
+  Q.words.every(w => ircLower((l.n || "") + " " + noMirc(l.x)).includes(w));
+function logRead(f, at) { lgWant = at; send({t: "logread", buf: active, net: f.net, name: f.name, day: f.day, cur: f.cur ? "1" : "0"}); }
+function logFind() {
+  const q = $("#logq").value.trim();
+  if (!q) { lgHits = null; renderLogLines(); return; }
+  if (!lgSel || lgSel.lvl === 2) { renderLogLines(); return; }  // a day: the filter is the search
+  lgHits = {loading: true, q, scope: lgSel};
+  send({t: "logfind", buf: active, net: lgSel.net, name: lgSel.lvl === 1 ? lgSel.name : "", q, ev: $("#logev").checked ? "1" : "0"});
+  renderLogLines();
+}
+function logMsg(m) {
+  if (!dlogs.open) return;
+  if (m.t === "logs") {
+    lgs = {on: m.on, files: m.files.map(([net, name, day, size, cur]) => ({net, name, day, size, cur: !!cur}))};
+    const [net, name] = (m.at || "").split("\t");
+    const f = lgs.files.find(f => f.net.toLowerCase() === (net || "").toLowerCase() && (!name || f.name === name));
+    if (f) { lgOpen.add(f.net); if (name) lgOpen.add(lgKey(f.net, f.name)); }
+    else if (lgs.files.length) lgOpen.add(lgs.files[0].net);
+    if (f && name && !lgQ0) lgSel = {lvl: 2, ...f}, logRead(f, "end");  // the tab's newest day, at its end
+    else if (f) { lgSel = name ? {lvl: 1, net: f.net, name: f.name} : {lvl: 0, net: f.net}; if (lgQ0) logFind(); }
+    renderLogs();
+  } else if (m.t === "logread") {
+    const f = lgs && lgs.files.find(x => lgSame(x, {net: m.net, name: m.name, day: m.day, cur: !!m.cur}));
+    if (!f) return;
+    lgDay = {f, lines: m.lines, base: m.base, cut: m.cut}; lgHits = null;
+    lgSel = {lvl: 2, ...f}; lgOpen.add(f.net); lgOpen.add(lgKey(f.net, f.name));  // the tree follows: a jump, a day from the calendar
+    renderLogs();
+  } else if (lgHits && lgHits.loading && lgHits.q === m.q) {
+    lgHits = {q: m.q, more: m.more, scope: lgHits.scope, hits: m.hits.map(([name, day, cur, i, l]) => ({name, day, cur: !!cur, i, l}))};
+    renderLogLines();
+  }
+}
+// the tree as rows: a network, its channels and queries, an unfolded one's days
+function logRows() {
+  const out = [], F = lgs ? lgs.files : [];
+  for (let i = 0; i < F.length;) {
+    let j = i; const names = new Set();
+    while (j < F.length && F[j].net === F[i].net) names.add(F[j++].name);
+    out.push({lvl: 0, net: F[i].net, n: names.size});
+    if (lgOpen.has(F[i].net))
+      for (let a = i; a < j;) {
+        let z = a; while (z < j && F[z].name === F[a].name) z++;
+        out.push({lvl: 1, net: F[a].net, name: F[a].name, n: z - a});
+        if (lgOpen.has(lgKey(F[a].net, F[a].name))) for (let k = a; k < z; k++) out.push({lvl: 2, ...F[k]});
+        a = z;
+      }
+    i = j;
+  }
+  return out;
+}
+const lgIs = (r, s) => s && r.lvl === s.lvl && r.net === s.net && (r.lvl === 0 || r.name === s.name) && (r.lvl < 2 || (r.day === s.day && r.cur === s.cur));
+function renderLogs() {
+  const T = $("#logtree");
+  T.textContent = "";
+  $("#loghint").textContent = "A day opens it · type to filter it · Enter searches every day of the channel or network picked · a found line opens in its day · [ ] older, newer day · c calendar";
+  if (!lgs) { T.append(el("div", "none", "Loading…")); renderLogLines(); return; }
+  if (!lgs.files.length) {
+    const n = el("div", "none", "No logs yet.");
+    if (!lgs.on) n.append(document.createElement("br"), "Logging is off: type /set log on, then /save, and channels and queries are kept from then on.");
+    T.append(n);
+  }
+  for (const r of logRows()) {
+    const d = el("div", "t l" + r.lvl + (lgIs(r, lgSel) ? " on" : "") + (r.lvl === 2 && lgDay && lgSame(r, lgDay.f) && !lgHits ? " open" : ""));
+    d.setAttribute("role", "treeitem");
+    const k = r.lvl === 0 ? r.net : lgKey(r.net, r.name);
+    if (r.lvl < 2) d.setAttribute("aria-expanded", lgOpen.has(k));
+    d.append(el("span", "", r.lvl < 2 ? (lgOpen.has(k) ? "▾" : "▸") : ""), el("span", "n", r.lvl === 0 ? r.net : r.lvl === 1 ? r.name : r.day),
+             el("small", "", r.lvl === 0 ? r.n : r.lvl === 1 ? r.n + (r.n === 1 ? " day" : " days") : lgSize(r.size)));
+    d.onclick = () => {
+      lgSel = r;
+      if (r.lvl === 2) { lgCal = null; logRead(r, "top"); }
+      else { lgOpen.has(k) ? lgOpen.delete(k) : lgOpen.add(k); if (!$("#logq").value.trim()) lgDay = null, lgHits = null; }
+      renderLogs();
+    };
+    T.append(d);
+  }
+  T.querySelector(".t.on")?.scrollIntoView({block: "nearest"});
+  renderLogLines();
+}
+// marks the find box's words in a line's text
+function markWords(tx, words) {
+  if (!words.length) return;
+  const re = new RegExp(words.map(w => w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|"), "gi");
+  const tw = document.createTreeWalker(tx, NodeFilter.SHOW_TEXT), nodes = [];
+  while (tw.nextNode()) nodes.push(tw.currentNode);
+  for (const n of nodes) {
+    const t = n.textContent; let last = 0; const f = document.createDocumentFragment();
+    for (const m of t.matchAll(re)) { f.append(t.slice(last, m.index), el("mark", "", m[0])); last = m.index + m[0].length; }
+    if (last) f.append(t.slice(last)), n.replaceWith(f);
+  }
+}
+// the files of a channel, newest first, and where f is among them
+const lgDays = (net, name) => lgs ? lgs.files.filter(f => f.net === net && f.name === name) : [];
+function renderLogLines() {
+  const H = $("#loghead"), L = $("#loglines"), q = $("#logq").value, Q = logQuery(q), ev = $("#logev").checked;
+  H.textContent = ""; L.textContent = "";
+  for (const k of ["inline", "tsright"]) L.classList.toggle(k, $("#msgs").classList.contains(k));
+  L.style.setProperty("--nw", $("#msgs").style.getPropertyValue("--nw"));
+  renderLogCal();
+  const line = (name, l, i, day) => {
+    const d = lineEl({type: "channel", name, nickmap: null}, l);
+    markWords(d.querySelector(".tx"), Q.words);
+    d.dataset.i = i; if (day) d.onclick = () => { $("#logq").value = ""; logRead(day, i); };
+    return d;
+  };
+  if (lgHits) {
+    const s = lgHits.scope, where = s.lvl === 0 ? s.net : s.name;
+    H.append(el("b", "", "\"" + lgHits.q + "\" in " + where));
+    if (lgHits.loading) { H.append(el("small", "", "searching…")); return; }
+    const days = new Set(lgHits.hits.map(h => h.name + h.day));
+    H.append(el("small", "", lgHits.hits.length ? lgHits.hits.length + (lgHits.more ? "+" : "") + (lgHits.hits.length === 1 ? " line" : " lines") + " in " + days.size + (days.size === 1 ? " day" : " days") + (lgHits.more ? " (the first 2,000)" : "") : "nothing found"));
+    L.classList.add("pick");
+    let prev = "";
+    for (const h of lgHits.hits) {
+      const f = lgs.files.find(x => lgSame(x, {net: s.net, name: h.name, day: h.day, cur: h.cur}));
+      if (!f) continue;
+      if (prev !== h.name + h.day) {
+        const dd = el("div", "day", lgDayLabel(h.day) + (s.lvl === 0 ? " · " + h.name : ""));
+        dd.onclick = () => { $("#logq").value = ""; logRead(f, "top"); };
+        L.append(dd); prev = h.name + h.day;
+      }
+      L.append(line(h.name, h.l, h.i, f));
+    }
+    if (!lgHits.hits.length) L.append(el("div", "info", s.lvl === 1 ? "Nothing in any day of " + s.name + ". Pick its network in the tree to search all its channels." : "Nothing found."));
+    return;
+  }
+  L.classList.remove("pick");
+  if (lgDay) {
+    const f = lgDay.f, days = lgDays(f.net, f.name), at = days.findIndex(x => lgSame(x, f));
+    H.append(el("b", "", f.name), " · " + f.net + " · " + lgDayLabel(f.day) + (f.cur ? " (today's file)" : ""));
+    const shown = lgDay.lines.filter(l => logMatch(l, Q, ev)).length;
+    H.append(el("small", "", (shown !== lgDay.lines.length ? shown + " of " : "") + lgDay.lines.length + " lines" + (lgDay.cut ? " (its newest only)" : "")));
+    const older = el("button", "", "◂ Older"), newer = el("button", "", "Newer ▸");
+    older.type = newer.type = "button"; older.title = "The day before ( [ )"; newer.title = "The day after ( ] )";
+    older.disabled = at < 0 || at >= days.length - 1; newer.disabled = at <= 0;
+    older.onclick = () => logStep(1); newer.onclick = () => logStep(-1);
+    H.append(older, newer);
+    const filtered = !!q.trim() || !ev;
+    L.classList.toggle("pick", filtered);
+    const fr = document.createDocumentFragment();
+    lgDay.lines.forEach((l, k) => { if (logMatch(l, Q, ev)) fr.append(line(f.name, l, lgDay.base + k, filtered ? f : null)); });
+    L.append(fr);
+    if (!shown) L.append(el("div", "info", "No line of this day matches. Enter searches every day of the channel or network picked in the tree."));
+    const w = lgWant; lgWant = null;
+    if (w === "end") L.scrollTop = L.scrollHeight;
+    else if (typeof w === "number") {
+      const d = L.querySelector('[data-i="' + w + '"]');
+      if (d) d.classList.add("at"), d.scrollIntoView({block: "center"});
+    }
+    return;
+  }
+  if (lgSel && lgs) {
+    if (lgSel.lvl === 0) H.append(el("b", "", lgSel.net)), L.append(el("div", "info", "Its channels and queries are under it in the tree. Type in the find box and press Enter to search all of their days."));
+    else {
+      const days = lgDays(lgSel.net, lgSel.name);
+      H.append(el("b", "", lgSel.name), " · " + lgSel.net);
+      L.append(el("div", "info", days.length + (days.length === 1 ? " day" : " days") + " of logs, " + days[days.length - 1].day + " to " + days[0].day +
+                  ". Pick one in the tree or on the calendar, or type in the find box and press Enter to search all of them."));
+    }
+  }
+}
+function logStep(d) {  // 1: the day before, -1: after
+  if (!lgDay) return;
+  const days = lgDays(lgDay.f.net, lgDay.f.name), at = days.findIndex(x => lgSame(x, lgDay.f)), f = days[at + d];
+  if (!f) return;
+  lgSel = {lvl: 2, ...f}; lgOpen.add(f.net); lgOpen.add(lgKey(f.net, f.name));
+  logRead(f, d > 0 ? "end" : "top");
+}
+// the calendar: of the day shown's channel, else the tree's
+function openLogCal() {
+  if (lgCal) { lgCal = null; renderLogCal(); return; }
+  const t = lgDay && !lgHits ? lgDay.f : lgSel && lgSel.lvl > 0 ? lgSel : null;
+  if (!t) { $("#loghint").textContent = "Pick a channel or query in the tree first: the calendar shows its days."; return; }
+  const days = lgDays(t.net, t.name), d = t.day || (days[0] || {}).day || new Date().toISOString().slice(0, 10);
+  lgCal = {net: t.net, name: t.name, y: +d.slice(0, 4), m: +d.slice(5, 7), at: t.day || ""};
+  renderLogCal();
+}
+function renderLogCal() {
+  const C = $("#logcal");
+  C.hidden = !lgCal; $("#logcalb").classList.toggle("on", !!lgCal);
+  if (!lgCal) return;
+  C.textContent = "";
+  const c = lgCal, days = new Map(lgDays(c.net, c.name).map(f => [f.day, f])), pad = n => String(n).padStart(2, "0");
+  const mh = el("div", "mh"), prev = el("button", "", "◂"), next = el("button", "", "▸");
+  prev.type = next.type = "button"; prev.title = "Month before"; next.title = "Month after";
+  const turn = d => { c.m += d; if (c.m < 1) c.m = 12, c.y--; if (c.m > 12) c.m = 1, c.y++; renderLogCal(); };
+  prev.onclick = () => turn(-1); next.onclick = () => turn(1);
+  mh.append(prev, el("span", "", new Date(c.y, c.m - 1, 1).toLocaleDateString(undefined, {month: "long", year: "numeric"}) + " · " + c.name), next);
+  const g = el("div", "g");
+  for (let i = 0; i < 7; i++) g.append(el("span", "wd", new Date(2024, 0, 1 + i).toLocaleDateString(undefined, {weekday: "narrow"})));  // 2024-01-01: a Monday
+  const off = (new Date(c.y, c.m - 1, 1).getDay() + 6) % 7, nd = new Date(c.y, c.m, 0).getDate(), today = new Date().toLocaleDateString("sv");
+  for (let i = 0; i < off; i++) g.append(el("span"));
+  let n = 0;
+  for (let d = 1; d <= nd; d++) {
+    const key = c.y + "-" + pad(c.m) + "-" + pad(d), f = days.get(key), b = el("button", (f ? "has" : "") + (key === c.at ? " at" : "") + (key === today ? " today" : ""), d);
+    b.type = "button"; n += !!f;
+    if (f) { b.title = lgDayLabel(key) + " · " + lgSize(f.size); b.onclick = () => { lgCal = null; lgSel = {lvl: 2, ...f}; lgOpen.add(f.net); lgOpen.add(lgKey(f.net, f.name)); logRead(f, "top"); }; }
+    else b.disabled = true, b.title = "No log that day";
+    g.append(b);
+  }
+  // the months with a log, so turning the pages isn't a hunt
+  const months = [...new Set([...days.keys()].map(k => k.slice(0, 7)))].sort(), ym = c.y + "-" + pad(c.m);
+  const before = months.filter(x => x < ym).pop(), after = months.find(x => x > ym);
+  const ft = el("div", "ft", n + (n === 1 ? " day" : " days") + " with a log this month");
+  for (const [m, t] of [[before, "◂ "], [after, ""]]) if (m) {
+    const a = el("a", "", t ? t + m : m + " ▸"); a.href = "#"; a.style.marginLeft = "8px";
+    a.onclick = e => { e.preventDefault(); c.y = +m.slice(0, 4); c.m = +m.slice(5, 7); renderLogCal(); };
+    ft.append(a);
+  }
+  C.append(mh, g, ft);
+}
+$("#logcalb").onclick = openLogCal;
+$("#logev").onchange = () => lgHits ? logFind() : renderLogLines();
+$("#logq").oninput = () => { if (lgHits && !lgHits.loading && !$("#logq").value.trim()) lgHits = null; clearTimeout(lgTimer); lgTimer = setTimeout(() => lgDay && !lgHits && renderLogLines(), 150); };
+document.addEventListener("keydown", e => {  // the document's: a clicked calendar day is gone, and the focus with it
+  if (!dlogs.open) return;
+  const inBox = e.target === $("#logq");
+  if (inBox && e.key === "Enter") { e.preventDefault(); logFind(); return; }  // not the form's submit: that closes it
+  if (inBox || e.target.tagName === "INPUT" || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key === "[" || e.key === "]") logStep(e.key === "[" ? 1 : -1);
+  else if (e.key === "c") openLogCal();
+  else if (e.key === "/") $("#logq").focus();
+  else if (e.key === "e") $("#logev").click();
+  else return;
+  e.preventDefault();
+});
 // 🧩 /plugin: the installed plugins and the catalog's (a tab each); Configure sets a plugin's options at one scope.
 // Everything goes out as /plugin lines; the window asks again every second while it's open (a catalog fetch, an install)
 const dplug = $("#dplug"); let plug = null, plugTab = "inst", plugCfg = "", plugScope = "", plugMark = -1, plugTimer = 0;
@@ -1866,6 +2182,7 @@ function openPlugins() {
 }
 dplug.onclose = () => clearInterval(plugTimer);
 $("#plugbtn").onclick = openPlugins;
+$("#logsbtn").onclick = () => openLogs("");
 $("#plugref").onclick = () => plugRun("/plugin refresh");  // at most once a minute; it says so
 $("#plugback").onclick = () => { plugCfg = ""; renderPlugCfg.sig = ""; renderPlugins(); };
 for (const b of $("#plugtabs").children) b.onclick = () => {
@@ -2392,7 +2709,9 @@ $("#input").onsubmit = async e => {
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
   if (/^\/about\s*$/i.test(v)) { openAbout(); return; }
   if (/^\/keys\s*$/i.test(v)) { openKeys(); return; }
-  if (/^\/plugins?\s*$/i.test(v)) { openPlugins(); return; }  // like the terminal: the plugin window  // like the terminal: the key list  // a dialog here, not a tab
+  if (/^\/plugins?\s*$/i.test(v)) { openPlugins(); return; }
+  const lg = /^\/logs(?:\s+(.*))?$/i.exec(v.trim());
+  if (lg) { openLogs(lg[1] || ""); return; }  // like the terminal: the log browser  // like the terminal: the plugin window  // like the terminal: the key list  // a dialog here, not a tab
   if (/^\/theme\s*$/i.test(v)) { openThemes(); return; }  // like the terminal: the theme picker
   if (/^\/set\s*$/i.test(v)) { $("#setbtn").click(); return; }  // like the terminal: the settings window
   if (/^\/servers\s*$/i.test(v)) { $("#addsrv").click(); return; }  // the Servers window
