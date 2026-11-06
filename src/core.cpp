@@ -843,7 +843,7 @@ void Core::fold(Buffer* st) {
 
 // what you leave with: the config's quit_message / part_message, else what iSekur is
 std::string Core::bye(const Server* s, const std::string& key) const {
-    return opt(s, key, "iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur");
+    return opt(s, key, "iSekur IRC " ISEKUR_VERSION);
 }
 
 bool Core::muted(const Buffer* b) const {

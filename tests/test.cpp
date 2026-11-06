@@ -883,7 +883,8 @@ int main() {
     core.exec(chb, "/mute off");
     assert(!core.muted(chb) && core.cfg["server.t"]["mute"].empty() && hl("hey ME!"));
     core.exec(chb, "/part");  // closes the tab: open it again for what follows
-    assert(sent() == "PART #c :iSekur " ISEKUR_VERSION " :: colorful terminal IRC client :: https://github.com/gcanosa/iSekur\r\n");
+    assert(sent() == "PART #c :iSekur IRC " ISEKUR_VERSION "\r\n");
+    assert(core.bye(ts, "quit_message") == "iSekur IRC " ISEKUR_VERSION);
     chb = core.open(ts, BT::CHANNEL, "#c"), chb->joined = true;
     core.cfg["server.t"]["part_message"] = "bye";
     core.exec(chb, "/part");
