@@ -22,26 +22,26 @@
 ::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted) 75%, transparent); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
 ::-webkit-scrollbar-thumb:hover { background-color: var(--muted); }
 html, body { height: 100%; margin: 0; }
-body { background: var(--bg); color: var(--fg); font: var(--fsize, 14px)/1.45 var(--mono); }
+body { background: var(--bg); color: var(--fg); font: calc(var(--fsize, 14px) * var(--z, 1))/1.45 var(--mono); }
 button, input { font: inherit; color: inherit; }
 #login { display: none; height: 100%; align-items: center; justify-content: center; padding: 16px; }
 #login form { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 12px; padding: 28px; display: grid; gap: 12px; position: relative;
   box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent); }
-#login h1 { margin: 0 0 8px; font-size: 22px; letter-spacing: .5px;
+#login h1 { margin: 0 0 8px; font-size: calc(22px * var(--z, 1)); letter-spacing: .5px;
   background: linear-gradient(90deg, var(--accent), var(--accent2), var(--join));
   -webkit-background-clip: text; background-clip: text; color: transparent; }
 #login input { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
 #login input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
 #login button { background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111);
   border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
-#ver { position: absolute; right: 12px; bottom: 8px; font-size: 11px; color: var(--muted); opacity: .6; }
-#loginerr { color: var(--err); min-height: 1.4em; font-size: 13px; }
+#ver { position: absolute; right: 12px; bottom: 8px; font-size: calc(11px * var(--z, 1)); color: var(--muted); opacity: .6; }
+#loginerr { color: var(--err); min-height: 1.4em; font-size: calc(13px * var(--z, 1)); }
 
 #app { display: none; height: var(--vvh, 100dvh); grid-template-columns: var(--treew, 220px) 1fr auto;
   grid-template-rows: auto 1fr auto auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "foot input input"; }
 #side { grid-area: side; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); overflow-y: auto; padding: 8px 0; }
-#side .srv { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
+#side .srv { color: var(--muted); font-size: calc(11px * var(--z, 1)); text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
 #side .tab { display: flex; gap: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
 #side .tab .n { color: var(--muted); min-width: 1.6em; text-align: right; }
 #side .tab:not(.active):hover { background: #ffffff08; }
@@ -89,11 +89,11 @@ button, input { font: inherit; color: inherit; }
 #foot button[hidden] { display: none; }  /* Logs: only while logging is on */
 /* a newer release: ⓘ in the accent color with a small ↑ in its corner, until you update */
 #foot #aboutbtn.upd { color: var(--accent); border-color: var(--accent); position: relative; }
-#foot #aboutbtn.upd::after { content: "↑"; position: absolute; top: 1px; right: 4px; font-size: 11px; font-weight: bold; line-height: 1; }
+#foot #aboutbtn.upd::after { content: "↑"; position: absolute; top: 1px; right: 4px; font-size: calc(11px * var(--z, 1)); font-weight: bold; line-height: 1; }
 /* ‹ at the top of the tab list folds it to a thin strip (remembered); › opens it again */
 /* the tab filter shares the top row with ‹: quiet until focused, Ctrl+G or Alt+J jump to it */
 #sidetop { display: flex; align-items: center; gap: 2px; padding: 0 6px 4px 10px; position: relative; }
-#tabq { flex: 1; min-width: 0; background: transparent; color: var(--fg); font: inherit; font-size: 12px; border: 1px solid transparent; border-radius: 6px; padding: 3px 7px 3px 24px; outline: none; }
+#tabq { flex: 1; min-width: 0; background: transparent; color: var(--fg); font: inherit; font-size: calc(12px * var(--z, 1)); border: 1px solid transparent; border-radius: 6px; padding: 3px 7px 3px 24px; outline: none; }
 /* a magnifying glass in the theme's muted color (a mask, so any theme paints it) */
 #sidetop::before { content: ""; position: absolute; left: 18px; top: calc(50% - 2px - 6px); width: 12px; height: 12px; pointer-events: none;
   background: var(--muted); opacity: .75; transition: opacity .15s;
@@ -104,7 +104,7 @@ button, input { font: inherit; color: inherit; }
 #tabq:hover { border-color: var(--line); }
 #tabq:focus { border-color: var(--menu_border-fg, var(--line)); background: var(--input-bg, var(--bg)); }
 #side .tab.pick { background: color-mix(in srgb, var(--fg) 9%, transparent); }
-#sidebtn { display: block; margin: -4px 0 0 auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px; }
+#sidebtn { display: block; margin: -4px 0 0 auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: calc(18px * var(--z, 1)); line-height: 1; padding: 2px 6px; }
 #sidebtn:hover { color: var(--fg); }
 @media (min-width: 761px) {
   #app.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "side input input"; }
@@ -124,7 +124,7 @@ dialog { background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--f
   --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
 dialog::backdrop { background: #0009; }
 dialog form { display: grid; gap: 10px; padding: 18px 20px; }
-dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--dlg-title, var(--accent)); }
+dialog h2 { margin: 0 0 4px; font-size: calc(15px * var(--z, 1)); color: var(--dlg-title, var(--accent)); }
 /* a theme's [layout] window = mac | win95: window buttons in the dialog's top corner; only the close one does something */
 .wbtns { display: none; position: absolute; top: 10px; gap: 8px; }
 .win-mac :is(dialog form, #lock .card), #login form { padding-top: 34px; }
@@ -144,15 +144,15 @@ dialog h2 { margin: 0 0 4px; font-size: 15px; color: var(--dlg-title, var(--acce
 .win-95 .wbtns:not(#login .wbtns):not(.deco) .c:active { border-color: #404040 #fff #fff #404040; box-shadow: inset 1px 1px #808080; }
 .win-95 .wbtns:not(#login .wbtns) .m::after { content: "_"; } .win-95 .wbtns:not(#login .wbtns) .c::after { content: "\00d7"; }
 .win-95 .wbtns:not(#login .wbtns) .z { display: none; }  /* no maximize: it did nothing (the terminal's has none either) */
-dialog label { display: grid; gap: 4px; font-size: 12px; color: var(--muted); }
-dialog label.ck { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: 13px; }
+dialog label { display: grid; gap: 4px; font-size: calc(12px * var(--z, 1)); color: var(--muted); }
+dialog label.ck { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: calc(13px * var(--z, 1)); }
 dialog input:not([type=checkbox]) { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--fg); min-width: 0; }
 dialog input:focus { outline: none; border-color: var(--accent); }
 dialog .row2 { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
 dialog .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 dialog .btns button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
 dialog .btns button.go { background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111); border: 0; font-weight: 700; }
-dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
+dialog .hint { color: var(--muted); font-size: calc(12px * var(--z, 1)); min-height: 1em; }
 #dabout { width: min(720px, calc(100vw - 32px)); }
 /* + : the servers, a list to pick one from (or New) and its form */
 #dsrv { width: min(720px, calc(100vw - 32px)); }
@@ -160,32 +160,32 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 #srvside { display: flex; flex-direction: column; gap: 6px; border-right: 1px solid var(--line); padding-right: 12px; min-width: 0; }
 #srvlist { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; max-height: 320px; flex: 1; }
 #srvlist button { display: flex; gap: 8px; align-items: center; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px;
-  cursor: pointer; color: var(--fg); font-size: 13px; min-width: 0; }
+  cursor: pointer; color: var(--fg); font-size: calc(13px * var(--z, 1)); min-width: 0; }
 #srvlist button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #srvlist button:hover { background: #ffffff0a; }
 #srvlist button.on { background: var(--tab_active-bg, #ffffff14); color: var(--tab_active-fg, var(--fg)); }
 #srvlist .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--muted); flex: none; }
 #srvlist .dot.up { background: #3fb950; }
 #srvlist .dot.wait { background: #d29922; }
-#srvnew { background: none; border: 1px dashed var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font: inherit; font-size: 13px; }
+#srvnew { background: none; border: 1px dashed var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font: inherit; font-size: calc(13px * var(--z, 1)); }
 #srvform { display: grid; gap: 10px; align-content: start; min-width: 0; }
 dialog .btns .left { margin-right: auto; }
 #dsrv [hidden], #dask [hidden] { display: none !important; }
 #dask { width: min(440px, calc(100vw - 32px)); }
-#dask .dask-t { font-size: 13px; white-space: pre-line; }
+#dask .dask-t { font-size: calc(13px * var(--z, 1)); white-space: pre-line; }
 /* a plugin's About: who made it and how to reach them */
 #dpab { width: min(440px, calc(100vw - 32px)); }
 #dpab .top { display: flex; align-items: center; gap: 10px; }
-#dpab .top b { font-size: 15px; }
-#dpab .from { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+#dpab .top b { font-size: calc(15px * var(--z, 1)); }
+#dpab .from { display: inline-flex; align-items: center; gap: 5px; font-size: calc(12px * var(--z, 1)); color: var(--muted); }
 #dpab .from.off { color: var(--join, #57ab5a); }
-#dpab dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 0; font-size: 13px; }
+#dpab dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 0; font-size: calc(13px * var(--z, 1)); }
 #dpab dt { color: var(--muted); }
 #dpab dd { margin: 0; overflow-wrap: anywhere; }
 #dpab dd a { color: var(--accent2); }
-#dpab p { font-size: 13px; line-height: 1.45; margin: 12px 0 0; opacity: .85; }  /* label.ck's display: flex would show a hidden one */
+#dpab p { font-size: calc(13px * var(--z, 1)); line-height: 1.45; margin: 12px 0 0; opacity: .85; }  /* label.ck's display: flex would show a hidden one */
 @media (max-width: 760px) { #srvbody { grid-template-columns: 1fr; } #srvside { border-right: 0; padding-right: 0; } #srvlist { max-height: 140px; } }
-#abox { font-size: 13px; line-height: 1.4; position: relative; }
+#abox { font-size: calc(13px * var(--z, 1)); line-height: 1.4; position: relative; }
 /* a newer release: a badge in the About box's top right corner, to the downloads */
 #aupd { position: absolute; top: 0; right: 0; display: flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--accent);
   border-radius: 999px; color: var(--accent) !important; font-weight: bold; text-decoration: none; white-space: nowrap; }
@@ -211,13 +211,13 @@ dialog .btns .left { margin-right: auto; }
 #lock .card { display: grid; gap: 12px; justify-items: center; width: min(340px, 100%); padding: 24px 28px 28px;
   background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 12px; box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent);
   animation: lockdrop .65s cubic-bezier(.34, 1.56, .64, 1) both; }
-#lock h1 { margin: 0; font-size: 18px; }
+#lock h1 { margin: 0; font-size: calc(18px * var(--z, 1)); }
 #lock svg { color: var(--menu_border-fg, var(--accent)); overflow: visible; transition: color .2s; }
 #lock .shackle { transform-origin: 14px 26px; transform: translateY(-9px); animation: shut .18s .5s ease-in forwards; }
 #lock input { width: 100%; background: var(--input-bg, var(--bg)); color: var(--input-fg, var(--fg)); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 10px 12px; }
 #lock input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
 #lock button { width: 100%; background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111); border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
-#lockerr { color: var(--error-fg, var(--err)); min-height: 1.4em; font-size: 13px; }
+#lockerr { color: var(--error-fg, var(--err)); min-height: 1.4em; font-size: calc(13px * var(--z, 1)); }
 #lock.fail .card { animation: shake .45s ease both; }
 #lock.fail svg { color: var(--error-fg, var(--err)); }
 #lock.open svg { color: var(--join-fg, var(--join)); }
@@ -239,16 +239,16 @@ dialog .btns .left { margin-right: auto; }
 /* /plugin: the installed plugins and the catalog's, a tab each; Configure: its options at one scope */
 #dplug { width: min(720px, calc(100vw - 32px)); }
 #plugtabs { display: flex; gap: 4px; }
-#plugtabs button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; color: var(--muted); font-size: 13px; }
+#plugtabs button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; color: var(--muted); font-size: calc(13px * var(--z, 1)); }
 #plugtabs button.on { color: var(--fg); border-color: var(--accent); background: var(--accent-veil, #ffffff0d); }
 #pluglist { max-height: min(48vh, 420px); }
 #plugcfg { display: grid; gap: 8px; }
-#plugcfg .top { display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); }
-#plugcfg .rows { display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 6px 14px; align-items: center; max-height: min(44vh, 400px); overflow-y: auto; font-size: 13px; }
+#plugcfg .top { display: flex; align-items: center; gap: 10px; font-size: calc(13px * var(--z, 1)); color: var(--muted); }
+#plugcfg .rows { display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 6px 14px; align-items: center; max-height: min(44vh, 400px); overflow-y: auto; font-size: calc(13px * var(--z, 1)); }
 #plugcfg .rows > span { font-family: var(--mono, monospace); color: var(--fg); }
 #plugcfg .rows :is(input, select) { width: 100%; box-sizing: border-box; }
 #plugcfg .rows .ctl { display: grid; gap: 2px; }
-#plugcfg .rows .ctl small { color: var(--muted); font-size: 11.5px; }
+#plugcfg .rows .ctl small { color: var(--muted); font-size: calc(11.5px * var(--z, 1)); }
 #plugcfg select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--fg); }  /* like the settings window's */
 #plugcfg .top select { min-width: 160px; }
 #plugmsg.err { color: var(--err, #e5534b); }
@@ -261,9 +261,9 @@ dialog .btns .left { margin-right: auto; }
 #pluglist .r .ic.bad { color: var(--err, #e5534b); }
 #pluglist .r .ic.up { color: var(--accent); }
 #pluglist .r .n { white-space: normal; overflow: visible; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; }
-#pluglist .r .n b { font-weight: 600; font-size: 14px; }
-#pluglist .r .n small { flex-basis: 100%; margin: 0; font-size: 12.5px; line-height: 1.4; color: var(--fg); opacity: .78; }
-#pluglist .r .tag { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; line-height: 1; padding: 3px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+#pluglist .r .n b { font-weight: 600; font-size: calc(14px * var(--z, 1)); }
+#pluglist .r .n small { flex-basis: 100%; margin: 0; font-size: calc(12.5px * var(--z, 1)); line-height: 1.4; color: var(--fg); opacity: .78; }
+#pluglist .r .tag { display: inline-flex; align-items: center; gap: 3px; font-size: calc(11px * var(--z, 1)); line-height: 1; padding: 3px 7px; border-radius: 99px; border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
 #pluglist .r .tag.on { color: var(--join, #57ab5a); border-color: currentColor; }
 #pluglist .r .tag.bad { color: var(--err, #e5534b); border-color: currentColor; }
 #pluglist .r .tag.up { color: var(--accent); border-color: currentColor; }
@@ -293,45 +293,45 @@ dialog .btns .left { margin-right: auto; }
 #logbar button, #loghead button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 #logbar button:disabled, #loghead button:disabled { opacity: .45; cursor: default; }
 #logbody { display: grid; grid-template-columns: minmax(170px, 250px) 1fr; gap: 10px; min-height: 0; }
-#logtree { overflow-y: auto; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
+#logtree { overflow-y: auto; font-size: calc(13px * var(--z, 1)); border: 1px solid var(--line); border-radius: 8px; padding: 4px; }
 #logtree .t { display: flex; gap: 6px; align-items: baseline; padding: 3px 6px; border-radius: 6px; cursor: pointer; white-space: nowrap; }
 #logtree .t:hover { background: #ffffff0a; }
 #logtree .t.on { background: var(--menu_sel-bg); color: var(--menu_sel-fg); }
 #logtree .t .n { flex: 1; overflow: hidden; text-overflow: ellipsis; }
-#logtree .t small { color: var(--muted); font-size: 11.5px; }
+#logtree .t small { color: var(--muted); font-size: calc(11.5px * var(--z, 1)); }
 #logtree .t.l0 .n { font-weight: 700; } #logtree .t.l1 { padding-left: 18px; } #logtree .t.l2 { padding-left: 38px; font-variant-numeric: tabular-nums; }
 #logtree .t.open .n::before { content: "● "; color: var(--accent); }
 #logtree .none { color: var(--muted); padding: 8px; line-height: 1.5; }
 #logpane { position: relative; display: grid; grid-template-rows: auto minmax(0, 1fr); border: 1px solid var(--line); border-radius: 8px; min-height: 0; overflow: hidden;
   background: var(--bg); color: var(--fg); }
-#loghead { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: 13px; flex-wrap: wrap; }
+#loghead { display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-bottom: 1px solid var(--line); font-size: calc(13px * var(--z, 1)); flex-wrap: wrap; }
 #loghead b { font-weight: 700; } #loghead small { color: var(--muted); flex: 1; }
-#loghead button { padding: 3px 9px; font-size: 12px; }
-#loglines { overflow-y: auto; padding: 4px 0; overflow-wrap: anywhere; font-family: var(--mono, monospace); font-size: var(--fs, 14px); }
+#loghead button { padding: 3px 9px; font-size: calc(12px * var(--z, 1)); }
+#loglines { overflow-y: auto; padding: 4px 0; overflow-wrap: anywhere; font-family: var(--mono, monospace); font-size: calc(var(--fs, 14px) * var(--z, 1)); }
 #loglines .l { cursor: default; } #loglines.pick .l { cursor: pointer; }
 #loglines .l.at { background: var(--hilight_line-bg, #ff00aa18); box-shadow: inset 3px 0 var(--accent); }
-#loglines .day { display: flex; align-items: center; gap: 8px; margin: 8px 10px 2px; font-size: 11px; letter-spacing: .08em; text-transform: uppercase;
+#loglines .day { display: flex; align-items: center; gap: 8px; margin: 8px 10px 2px; font-size: calc(11px * var(--z, 1)); letter-spacing: .08em; text-transform: uppercase;
   color: var(--marker-fg, var(--accent)); cursor: pointer; }
 #loglines .day::after { content: ""; flex: 1; border-top: 1px solid currentColor; opacity: .5; }
-#loglines .info { color: var(--muted); padding: 14px; line-height: 1.6; font-family: system-ui, sans-serif; font-size: 13px; }
+#loglines .info { color: var(--muted); padding: 14px; line-height: 1.6; font-family: system-ui, sans-serif; font-size: calc(13px * var(--z, 1)); }
 #loglines mark { background: var(--accent); color: var(--on-accent, #111); border-radius: 2px; }
 /* the calendar: a month, the days with a log in color; one opens it */
 #logcal { position: absolute; top: 44px; right: 12px; z-index: 2; background: var(--dlg-bg, var(--menu-bg, var(--panel))); border: 1px solid var(--line); border-radius: 10px;
   padding: 10px; box-shadow: 0 8px 28px #0008; font-family: system-ui, sans-serif; width: 252px; }
-#logcal .mh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 700; font-size: 13px; }
+#logcal .mh { display: flex; align-items: center; justify-content: space-between; margin-bottom: 6px; font-weight: 700; font-size: calc(13px * var(--z, 1)); }
 #logcal .mh button { background: none; border: 1px solid var(--line); border-radius: 6px; color: var(--fg); cursor: pointer; width: 28px; height: 24px; }
-#logcal .g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; font-size: 12px; }
-#logcal .g .wd { color: var(--muted); font-size: 11px; padding-bottom: 2px; }
+#logcal .g { display: grid; grid-template-columns: repeat(7, 1fr); gap: 3px; text-align: center; font-size: calc(12px * var(--z, 1)); }
+#logcal .g .wd { color: var(--muted); font-size: calc(11px * var(--z, 1)); padding-bottom: 2px; }
 #logcal .g button { background: none; border: 1px solid transparent; border-radius: 6px; padding: 5px 0; color: var(--muted); opacity: .55; cursor: default; font: inherit; }
 #logcal .g button.has { opacity: 1; color: var(--join-fg, var(--join, #57ab5a)); font-weight: 700; border-color: var(--line); cursor: pointer; }
 #logcal .g button.has:hover { background: #ffffff10; }
 #logcal .g button.at { outline: 2px solid var(--accent); outline-offset: -1px; }
 #logcal .g button.today { text-decoration: underline; }
-#logcal .ft { margin-top: 8px; font-size: 12px; color: var(--muted); }
+#logcal .ft { margin-top: 8px; font-size: calc(12px * var(--z, 1)); color: var(--muted); }
 #dlogs [hidden] { display: none !important; }
 @media (max-width: 700px) { #logbody { grid-template-columns: 1fr; grid-template-rows: 30% 1fr; } }
 .win-95 :is(#logbar button, #loghead button, #logcal .mh button) { background: #c0c0c0; color: #000; border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff;
-  box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; font: 400 12px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+  box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; font: 400 calc(12px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
 .win-95 :is(#logtree, #logpane) { border-radius: 0; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; }
 .win-95 #logtree { background: #fff; color: #000; } .win-95 #logtree .t { border-radius: 0; } .win-95 #logtree .t.on { background: #000080; color: #fff; }
 .win-95 #logtree .t small { color: #404040; } .win-95 #logtree .t.on small { color: #fff; }
@@ -339,20 +339,20 @@ dialog .btns .left { margin-right: auto; }
 .win-95 #logcal .g button { border-radius: 0; color: #404040; } .win-95 #logcal .g button.has { color: #006400; background: #fff; border-color: #808080 #fff #fff #808080; }
 .win-95 #logcal .g button.at { outline-color: #000080; } .win-95 #logcal .g .wd, .win-95 #logcal .ft { color: #000; }
 #klist { max-height: min(62vh, 560px); overflow-y: auto; display: grid; grid-template-columns: auto 1fr; gap: 5px 18px; align-items: center; padding-right: 4px; }
-#klist h3 { grid-column: 1 / -1; margin: 8px 0 0; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: var(--dlg-title, var(--accent));
+#klist h3 { grid-column: 1 / -1; margin: 8px 0 0; font-size: calc(11px * var(--z, 1)); letter-spacing: .08em; text-transform: uppercase; color: var(--dlg-title, var(--accent));
   display: flex; align-items: center; gap: 8px; }
 #klist h3::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
 #klist h3:first-child { margin-top: 0; }
-#klist .ks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); font-size: 11px; }
-#klist .d { font-size: 13px; color: var(--fg); }
+#klist .ks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); font-size: calc(11px * var(--z, 1)); }
+#klist .d { font-size: calc(13px * var(--z, 1)); color: var(--fg); }
 #klist .none { grid-column: 1 / -1; color: var(--muted); }
-kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: border-box; text-align: center; font: 600 11.5px/1.5 ui-monospace, Menlo, Consolas, monospace;
+kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: border-box; text-align: center; font: 600 calc(11.5px * var(--z, 1))/1.5 ui-monospace, Menlo, Consolas, monospace;
   color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; }
 #dset { width: min(900px, calc(100vw - 32px)); overflow: hidden; }
 /* /theme alone: the installed themes, a filter on top; moving previews them (the terminal too) */
 #dtheme { width: min(380px, calc(100vw - 32px)); }
 #thlist { max-height: min(50vh, 420px); overflow-y: auto; display: flex; flex-direction: column; gap: 2px; }
-#thlist button { text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font-size: 13px; }
+#thlist button { text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font-size: calc(13px * var(--z, 1)); }
 #thlist button:hover { background: #ffffff0a; }
 #thlist button.on { background: var(--menu_sel-bg, var(--tab_active-bg, #ffffff14)); color: var(--menu_sel-fg, var(--fg)); }
 #thlist button small, #thlist .none { color: var(--muted); }
@@ -361,17 +361,17 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 /* categories on the left (All, general, keys, web, server.*), their keys on the right */
 #setbody { display: grid; grid-template-columns: 170px 1fr; gap: 14px; height: min(60vh, 560px); }
 #setnav { overflow-y: auto; display: flex; flex-direction: column; gap: 2px; border-right: 1px solid var(--line); padding-right: 10px; }
-#setnav button { display: flex; justify-content: space-between; gap: 6px; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font-size: 13px; }
+#setnav button { display: flex; justify-content: space-between; gap: 6px; text-align: left; background: none; border: 0; border-radius: 6px; padding: 6px 8px; cursor: pointer; color: var(--fg); font-size: calc(13px * var(--z, 1)); }
 #setnav button:hover { background: #ffffff0a; }
 #setnav button.on { background: var(--tab_active-bg, #ffffff14); color: var(--tab_active-fg, var(--fg)); }
-#setnav button .c { color: var(--muted); font-size: 11px; }
+#setnav button .c { color: var(--muted); font-size: calc(11px * var(--z, 1)); }
 #setnav button.uns .c::before { content: "● "; color: var(--accent); }
 #setnav button[disabled] { opacity: .35; cursor: default; }
 #setnav button.top { font-weight: 600; }
 #setnav button.sub span:first-child { margin-left: 12px; }  /* a topic under Global or a network */
-#setlist .k small { display: block; color: var(--muted); font-size: 11px; }
+#setlist .k small { display: block; color: var(--muted); font-size: calc(11px * var(--z, 1)); }
 #setlist { overflow-y: auto; display: grid; grid-template-columns: minmax(130px, auto) 1fr; gap: 4px 10px; align-content: start; align-items: center; padding-right: 4px; }
-#setlist .sec { grid-column: 1 / -1; color: var(--accent2); font-size: 11px; text-transform: uppercase; letter-spacing: 1px; padding: 10px 0 2px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+#setlist .sec { grid-column: 1 / -1; color: var(--accent2); font-size: calc(11px * var(--z, 1)); text-transform: uppercase; letter-spacing: 1px; padding: 10px 0 2px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 #setlist .sec:first-child { padding-top: 0; }
 #setlist .none { grid-column: 1 / -1; color: var(--muted); padding: 12px 0; }
 @media (max-width: 760px) {
@@ -379,12 +379,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
   #setnav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 6px; }
   #setnav button { flex: none; }
 }
-#setlist .k { font-size: 13px; overflow-wrap: anywhere; }
+#setlist .k { font-size: calc(13px * var(--z, 1)); overflow-wrap: anywhere; }
 #setlist .k.uns::after { content: " ●"; color: var(--accent); }
 #setlist input.chg { border-color: var(--accent2); }
 #setlist select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; color: var(--fg); justify-self: start; min-width: 160px; }
 /* on/off: a switch */
-#setlist .sw { position: relative; display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--fg); font-size: 13px; padding: 4px 0; }  /* relative: the hidden checkbox stays in it, or focusing it scrolls the whole dialog */
+#setlist .sw { position: relative; display: flex; align-items: center; gap: 10px; cursor: pointer; color: var(--fg); font-size: calc(13px * var(--z, 1)); padding: 4px 0; }  /* relative: the hidden checkbox stays in it, or focusing it scrolls the whole dialog */
 #setlist .sw input { position: absolute; opacity: 0; pointer-events: none; }
 #setlist .sw i { width: 34px; height: 18px; border-radius: 9px; background: var(--line); position: relative; transition: background .15s; flex: none; }
 #setlist .sw i::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--muted); transition: transform .15s, background .15s; }
@@ -399,7 +399,13 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 /* logout: an icon, its name on hover (right away, not the browser's late tooltip), under it and inside the page */
 #logout { position: relative; color: var(--fg); display: inline-flex; align-items: center; align-self: stretch; }
 #logout:hover::after, #logout:focus-visible::after { content: "Logout"; position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; white-space: nowrap;
-  background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: 12px; }
+  background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: calc(12px * var(--z, 1)); }
+/* text size, touch screens only (desktop has ctrl +/-): per device, over the theme's/web_font_size */
+#zoom { display: none; position: fixed; top: calc(var(--toph, 44px) + 6px); right: 14px; z-index: 4; flex-direction: column; gap: 4px; }  /* under logout; the open side/users panels (5) cover it */
+#zoom .zm { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; width: 38px; padding: 4px 0;
+  font: 600 12px/1.2 var(--mono); cursor: pointer; box-shadow: 0 2px 8px #0004; }  /* over the chat: its own text colors, readable in every theme */
+#zoom .zm:active { background: var(--accent); color: var(--on-accent, #111); }
+@media (pointer: coarse) { #zoom { display: flex; } }
 #topic #menu { display: none; }  /* #topic button is more specific than #menu */
 #ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
@@ -436,7 +442,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
   #app.split.near * { cursor: inherit; user-select: none; }
   #app.split #msgs::before { background: var(--tab_active-bg, var(--accent)); color: var(--tab_active-fg, #fff); }
 }
-.newmark { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: 11px; text-transform: uppercase;
+.newmark { display: flex; align-items: center; gap: 8px; margin: 4px 10px; font-size: calc(11px * var(--z, 1)); text-transform: uppercase;
   letter-spacing: .1em; color: var(--marker-fg, #c2185b); }
 .newmark::before, .newmark::after { content: ""; flex: 1; border-top: 1px solid currentColor; }
 .l { display: grid; grid-template-columns: auto var(--nw, 13ch) 1fr; gap: 0 10px; padding: 1px 14px; }
@@ -463,12 +469,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .tsright .l .em { grid-column: 2; }
 .em a { color: inherit; text-decoration: none; }
 .em-card { display: flex; gap: 10px; max-width: min(640px, 100%); min-width: 0; padding: 7px 10px; border-left: 2px solid var(--accent2);
-  border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--fg) 5%, transparent); font-size: 12.5px; line-height: 1.35; }
+  border-radius: 0 6px 6px 0; background: color-mix(in srgb, var(--fg) 5%, transparent); font-size: calc(12.5px * var(--z, 1)); line-height: 1.35; }
 .em-card:hover { background: color-mix(in srgb, var(--fg) 9%, transparent); }
 /* the picture whole, at its own shape: a wide logo stays wide (up to twice its height), never cropped or stretched */
 .em-card img { height: 48px; width: auto; max-width: 96px; object-fit: contain; align-self: center; border-radius: 4px; flex: none; }
 .em-card .b { min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.em-card .s { color: var(--muted); font-size: 11.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.em-card .s { color: var(--muted); font-size: calc(11.5px * var(--z, 1)); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .em-card .t { color: var(--accent2); font-weight: 600; }
 .em-card .d { opacity: .78; }
 .em-card .b { flex: 1; }
@@ -476,7 +482,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .em-card.open :is(.t, .d) { white-space: normal; }
 .em-card .top { display: flex; gap: 10px; align-items: baseline; min-width: 0; }
 .em-card .top .s { flex: 1; }
-.em-card .more { flex: none; color: var(--accent2); font-size: 11.5px; cursor: pointer; user-select: none; }
+.em-card .more { flex: none; color: var(--accent2); font-size: calc(11.5px * var(--z, 1)); cursor: pointer; user-select: none; }
 .em-card .more:hover { text-decoration: underline; }
 .em-pic img { display: block; max-width: min(200px, 100%); max-height: 120px; border-radius: 6px; border: 1px solid var(--line); }
 .em audio { width: min(340px, 100%); height: 34px; }
@@ -494,7 +500,7 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 .l.hl .nk { background: var(--hilight-bg, var(--hl-bg)); color: var(--hilight-fg, #fff); border-radius: 4px 0 0 4px; }
 .l.hl { background: var(--hilight_line-bg, #ff00aa10); }
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
-#msgs .older { color: var(--muted); text-align: center; font-size: 12px; padding: 4px; }
+#msgs .older { color: var(--muted); text-align: center; font-size: calc(12px * var(--z, 1)); padding: 4px; }
 .quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
 .k-part, .k-part .nk { color: var(--part-fg, var(--part)); }
@@ -511,7 +517,7 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 a.chan { cursor: context-menu; text-decoration: underline; }
 .who { cursor: context-menu; } .who:hover { text-decoration: underline; }
 #nicks, #nicks2 { grid-area: nicks; width: 190px; background: var(--nicklist-bg, var(--panel)); border-left: 1px solid var(--line); overflow-y: auto; padding: 6px 0; }
-:is(#nicks, #nicks2) .hd { color: var(--muted); padding: 2px 12px 6px; font-size: 12px; }
+:is(#nicks, #nicks2) .hd { color: var(--muted); padding: 2px 12px 6px; font-size: calc(12px * var(--z, 1)); }
 :is(#nicks, #nicks2) div.u { user-select: none; padding: 1px 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 :is(#nicks, #nicks2) .op { color: var(--nicklist_op-fg, #ff9e64); }
 :is(#nicks, #nicks2) .voice { color: var(--nicklist_voice-fg, #9ece6a); }
@@ -520,7 +526,7 @@ a.chan { cursor: context-menu; text-decoration: underline; }
 :is(#nicks, #nicks2) div.u.sel { background: var(--dlg-sel-bg, var(--menu_sel-bg, var(--tab_active-bg, var(--accent)))); color: var(--dlg-sel-fg, var(--menu_sel-fg, var(--tab_active-fg, #111))); opacity: 1; }  /* the theme's readable menu pick, like the right-click menu's */
 @media (min-width: 761px) { #nicks.off, #nicks2.off { display: none !important; } }
 #nicks2 { grid-area: nicks2; display: none; }
-#status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: 12px; border-top: 1px solid var(--line); }
+#status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: calc(12px * var(--z, 1)); border-top: 1px solid var(--line); }
 #status { display: flex; gap: 12px; align-items: center; }
 #status b { color: var(--sth-fg, var(--status_hi-fg, var(--fg))); font-weight: 400; }
 #stl { min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
@@ -543,22 +549,22 @@ progress::-webkit-progress-value { background: linear-gradient(90deg, var(--acce
 progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
 /* popups: DCC incoming, complete, failed, stopped */
 #toasts { position: fixed; right: 16px; bottom: 90px; z-index: 20; display: grid; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
-.toast { background: var(--menu-bg, var(--panel)); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 9px 12px; font-size: 13px; box-shadow: 0 6px 24px #0007; cursor: pointer; animation: rise .25s ease-out both; }
+.toast { background: var(--menu-bg, var(--panel)); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 9px 12px; font-size: calc(13px * var(--z, 1)); box-shadow: 0 6px 24px #0007; cursor: pointer; animation: rise .25s ease-out both; }
 .toast.err { border-left-color: var(--error-fg, #ff5f5f); }
 .toast b { display: block; color: var(--accent); font-weight: 700; margin-bottom: 2px; }
 .toast.err b { color: var(--error-fg, #ff5f5f); }
 .toast span { color: var(--fg); overflow-wrap: anywhere; }
 #dfiles { width: min(760px, calc(100vw - 32px)); }
-#dfiles h3 { margin: 6px 0 0; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--accent2); font-weight: 400; }
+#dfiles h3 { margin: 6px 0 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; letter-spacing: 1px; color: var(--accent2); font-weight: 400; }
 #dfiles h3 small { text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
-.flist { display: grid; gap: 2px; max-height: 32vh; overflow-y: auto; font-size: 13px; }
+.flist { display: grid; gap: 2px; max-height: 32vh; overflow-y: auto; font-size: calc(13px * var(--z, 1)); }
 .flist .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 5px 6px; border-radius: 6px; }
 .flist .r:hover { background: #ffffff0a; }
 .flist .r .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .flist .r .n small { color: var(--muted); margin-left: 6px; }
-.flist .r .m { color: var(--muted); font-size: 12px; white-space: nowrap; }
+.flist .r .m { color: var(--muted); font-size: calc(12px * var(--z, 1)); white-space: nowrap; }
 .flist .r .b { display: flex; gap: 6px; }
-.flist .r .b button, .flist .r .b a { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; color: var(--fg); font-size: 12px; text-decoration: none; }
+.flist .r .b button, .flist .r .b a { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; color: var(--fg); font-size: calc(12px * var(--z, 1)); text-decoration: none; }
 .flist .r .b button:hover, .flist .r .b a:hover { border-color: var(--accent); }
 .flist .r progress { width: 100%; grid-column: 1 / -1; }
 .flist .none { color: var(--muted); padding: 6px; }
@@ -609,23 +615,23 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   --menu-bg: #c0c0c0; --tab_active-bg: #000080; --tab_active-fg: #fff; --menu_sel-bg: #000080; --menu_sel-fg: #fff; --input-bg: #fff; --input-fg: #000;
   --menu_border-fg: #808080;
   background: #c0c0c0; color: #000; border-radius: 0; padding: 3px; border: 1px solid; border-color: #dfdfdf #000 #000 #dfdfdf;
-  box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 4px 4px 0 #0006; font: 12px/1.35 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+  box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 4px 4px 0 #0006; font: calc(12px * var(--z, 1))/1.35 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
 .win-95 :is(dialog, #lock .card), .win-95 :is(dialog, #lock .card) * { scrollbar-color: #c0c0c0 #e0e0e0; }  /* the page's rule is on every element */
 .win-95 dialog form { padding: 0 9px 10px; gap: 8px; }
 .win-95 #lock .card { padding: 3px 10px 14px; gap: 10px; width: min(320px, 100%); }
 .win-95 dialog h2, .win-95 #dabout form::before, .win-95 #lock .card::before { margin: 0 -9px 2px; padding: 3px 60px 3px 6px; color: #fff; letter-spacing: 0;
-  background: linear-gradient(90deg, #000080, #0f78c0); font: 700 12px/16px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+  background: linear-gradient(90deg, #000080, #0f78c0); font: 700 calc(12px * var(--z, 1))/16px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
 .win-95 #dabout form::before { content: "About iSekur"; }  /* no title of its own */
 .win-95 #lock .card::before { content: "iSekur"; justify-self: stretch; margin: 0 -10px 4px; }
-.win-95 #lock h1 { font: 700 14px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; color: #000; }
+.win-95 #lock h1 { font: 700 calc(14px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; color: #000; }
 .win-95 .wbtns:not(#login .wbtns) { top: 6px; right: 6px; }  /* on the title bar */
-.win-95 :is(dialog label, dialog .hint, dialog label.ck, #dfiles h3) { color: #000; font-size: 12px; letter-spacing: 0; text-transform: none; }
+.win-95 :is(dialog label, dialog .hint, dialog label.ck, #dfiles h3) { color: #000; font-size: calc(12px * var(--z, 1)); letter-spacing: 0; text-transform: none; }
 .win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
   border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 3px 5px; font: inherit; outline: none; }
 .win-95 :is(dialog, #lock) select:not([multiple]) { appearance: none; padding-right: 22px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v14H0z' fill='%23fff'/%3E%3Cpath d='M15 0h1v16H0v-1h15z' fill='%23000'/%3E%3Cpath d='M14 1h1v14H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center / 16px 16px, #fff; }
 .win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, #srvnew, #plugtabs button) { background: #c0c0c0; color: #000;
   border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
-  font: 400 12px Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
+  font: 400 calc(12px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
 .win-95 :is(dialog .btns button, #lock button) { min-width: 75px; }
 .win-95 :is(dialog .btns button.go, #lock button) { box-shadow: 0 0 0 1px #000, inset -1px -1px #808080, inset 1px 1px #dfdfdf; }  /* the default button */
 .win-95 #plugtabs button.on { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; background: #dfdfdf; font-weight: bold; }
@@ -636,7 +642,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #setlist .sw i::after { display: none; }
 .win-95 dialog input[type=checkbox]:checked, .win-95 #setlist .sw input:checked + i { background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 9 9'%3E%3Cpath d='M1 4.5l2.5 2.5L8 1.5' fill='none' stroke='%23000' stroke-width='1.8'/%3E%3C/svg%3E") center / 9px no-repeat; }
 .win-95 #setlist .sw input:focus-visible + i { outline: 1px dotted #000; outline-offset: 2px; }
-.win-95 kbd { border-radius: 0; background: #c0c0c0; color: #000; border: 1px solid; border-color: #fff #404040 #404040 #fff; box-shadow: inset -1px -1px #808080; font: 400 11px/1.5 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+.win-95 kbd { border-radius: 0; background: #c0c0c0; color: #000; border: 1px solid; border-color: #fff #404040 #404040 #fff; box-shadow: inset -1px -1px #808080; font: 400 calc(11px * var(--z, 1))/1.5 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
 .win-95 #klist h3 { color: #000080; }
 .win-95 :is(#setnav, #thlist, .flist, #srvlist) { background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 2px; gap: 0; }
 .win-95 #setnav { margin-right: 0; }
@@ -650,7 +656,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #abox [style*="rgb(127, 127, 127)"] { color: #404040 !important; }  /* mIRC gray 14, set inline: faint on the gray face */
 /* the nick and tab menus, as Windows menus: gray, raised, a navy highlight, etched separators */
 .win-95 #ctx { background: #c0c0c0; color: #000; border-radius: 0; padding: 2px; min-width: 150px; border: 1px solid; border-color: #dfdfdf #000 #000 #dfdfdf;
-  box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 2px 2px 0 #0006; font: 12px/1.35 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+  box-shadow: inset 1px 1px #fff, inset -1px -1px #808080, 2px 2px 0 #0006; font: calc(12px * var(--z, 1))/1.35 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
 .win-95 #ctx :is(.hd, .it) { padding: 3px 20px 3px 8px; }
 .win-95 #ctx .hd { padding-left: 31px; }
 .win-95 #ctx .it:hover { background: #000080; color: #fff; }
@@ -658,10 +664,10 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .px { display: none; }
 .win-95 :is(#foot, #topic) button svg:not(.px) { display: none; }
 .win-95 :is(#foot, #topic) button .px { display: block; }
-.win-95 :is(#foot, #topic) button, .win-95 #foot button:hover { background: #c0c0c0; color: #000; border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff;
+.win-95 :is(#foot, #topic, #zoom) button, .win-95 #foot button:hover { background: #c0c0c0; color: #000; border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff;
   box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; }
-.win-95 :is(#foot, #topic) button:active { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; }
-.win-95 :is(#foot, #topic) button:active .px { transform: translate(1px, 1px); }
+.win-95 :is(#foot, #topic, #zoom) button:active { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; }
+.win-95 :is(#foot, #topic, #zoom) button:active .px { transform: translate(1px, 1px); }
 .win-95 #ctx hr { border: 0; border-top: 1px solid #808080; border-bottom: 1px solid #fff; margin: 3px 1px; }
 </style>
 </head>
@@ -680,6 +686,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <nav id="side"></nav>
   <div id="foot"><button id="addsrv" title="Servers" aria-label="Servers"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3.5" width="18" height="7" rx="2"/><rect x="3" y="13.5" width="18" height="7" rx="2"/><path d="M7 7h.01M7 17h.01M11 7h6M11 17h6"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2s" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fbfbfb"/><stop offset="1" stop-color="#a9a9b4"/></linearGradient><radialGradient id="w2l" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#b8ffb0"/><stop offset="1" stop-color="#118a10"/></radialGradient></defs><rect x="1.5" y="1.5" width="13" height="5" rx="1" fill="url(#w2s)" stroke="#404040"/><path d="M3 2.5h10" stroke="#fff" stroke-opacity=".8"/><circle cx="4.5" cy="4" r="1.2" fill="url(#w2l)"/><path d="M7.5 4h5" stroke="#505050" stroke-width="1.2"/><rect x="1.5" y="9.5" width="13" height="5" rx="1" fill="url(#w2s)" stroke="#404040"/><path d="M3 10.5h10" stroke="#fff" stroke-opacity=".8"/><circle cx="4.5" cy="12" r="1.2" fill="url(#w2l)"/><path d="M7.5 12h5" stroke="#505050" stroke-width="1.2"/></svg></button><button id="setbtn" title="Settings" aria-label="Settings"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6f6f6"/><stop offset="1" stop-color="#7d7f8c"/></linearGradient></defs><path d="M12.94 6.36L15.25 6.53L15.25 9.47L12.94 9.64L12.65 10.33L14.17 12.09L12.09 14.17L10.33 12.65L9.64 12.94L9.47 15.25L6.53 15.25L6.36 12.94L5.67 12.65L3.91 14.17L1.83 12.09L3.35 10.33L3.06 9.64L0.75 9.47L0.75 6.53L3.06 6.36L3.35 5.67L1.83 3.91L3.91 1.83L5.67 3.35L6.36 3.06L6.53 0.75L9.47 0.75L9.64 3.06L10.33 3.35L12.09 1.83L14.17 3.91L12.65 5.67Z M10.4 8a2.4 2.4 0 1 0-4.8 0a2.4 2.4 0 1 0 4.8 0Z" fill="url(#w2g)" fill-rule="evenodd" stroke="#3c3c46" stroke-width=".9" stroke-linejoin="round"/></svg></button><button id="filesbtn" title="Files and transfers" aria-label="Files and transfers"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 20V4M4 8l4-4 4 4M16 4v16M12 16l4 4 4-4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2fb" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f0c850"/><stop offset="1" stop-color="#c08a18"/></linearGradient><linearGradient id="w2ff" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fff4b0"/><stop offset="1" stop-color="#e8b030"/></linearGradient></defs><path d="M1.5 3.5h5l1.5 1.5h6.5v8.5h-13z" fill="url(#w2fb)" stroke="#8a6410" stroke-linejoin="round"/><path d="M1.5 13.5l1.6-6.5h12.4l-1.6 6.5z" fill="url(#w2ff)" stroke="#8a6410" stroke-linejoin="round"/></svg></button><button id="logsbtn" hidden title="Logs" aria-label="Logs"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9 13h6M9 17h4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2lg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c8ccd8"/></linearGradient></defs><path d="M3 1.5h7l3 3v10H3z" fill="url(#w2lg)" stroke="#404040" stroke-linejoin="round"/><path d="M10 1.5v3h3" fill="#e8e8e8" stroke="#404040" stroke-linejoin="round"/><path d="M5 7h6M5 9h6M5 11h4" stroke="#000080"/></svg></button><button id="plugbtn" title="Plugins" aria-label="Plugins"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 4.5a2.5 2.5 0 0 1 5 0V6H18a1 1 0 0 1 1 1v3.5h-1.5a2.5 2.5 0 0 0 0 5H19V19a1 1 0 0 1-1 1h-3.5v-1.5a2.5 2.5 0 0 0-5 0V20H6a1 1 0 0 1-1-1v-3.5h1.5a2.5 2.5 0 0 0 0-5H5V7a1 1 0 0 1 1-1h3.5z"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2pz" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9be08a"/><stop offset="1" stop-color="#1f8a2a"/></linearGradient></defs><path d="M6 2.5a2 2 0 0 1 4 0V4h3.5v3.5H12a1.5 1.5 0 0 0 0 3h1.5V14H10v-1.5a2 2 0 0 0-4 0V14H2.5v-3.5H4a1.5 1.5 0 0 0 0-3H2.5V4H6z" fill="url(#w2pz)" stroke="#0e4a14" stroke-linejoin="round"/></svg></button><button id="aboutbtn" title="About iSekur" aria-label="About iSekur"><svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9.5"/><path d="M12 16.5v-5M12 7.5h.01"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><radialGradient id="w2i" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#9fd0ff"/><stop offset="1" stop-color="#0a3cb4"/></radialGradient></defs><circle cx="8" cy="8" r="7" fill="url(#w2i)" stroke="#06266e"/><circle cx="8" cy="4.6" r="1.25" fill="#fff"/><path d="M6.4 7h2.6v5h1.2v1.3H6.2V12h1.2V8.3h-1z" fill="#fff"/></svg></button></div>
   <div id="topic"><button id="menu" aria-label="Windows">☰</button><span class="t"></span><button id="nickbtn" aria-label="Users"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/><circle cx="9" cy="7" r="4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><radialGradient id="w2h" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#ffe8cc"/><stop offset="1" stop-color="#c98a58"/></radialGradient><linearGradient id="w2ut" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7fe0d8"/><stop offset="1" stop-color="#0c7a78"/></linearGradient><linearGradient id="w2ub" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#8cb4ff"/><stop offset="1" stop-color="#1c3ca8"/></linearGradient></defs><path d="M6.45 8.9c0-3 2-4.5 4.05 -4.5s4.05 1.5 4.05 4.5z" fill="url(#w2ut)" stroke="#1e2a50" stroke-width=".9" stroke-linejoin="round"/><circle cx="10.5" cy="2.7800000000000002" r="2.16" fill="url(#w2h)" stroke="#6a4020" stroke-width=".8"/><path d="M1.5 14.5c0-3 2-4.5 4.5 -4.5s4.5 1.5 4.5 4.5z" fill="url(#w2ub)" stroke="#1e2a50" stroke-width=".9" stroke-linejoin="round"/><circle cx="6" cy="7.7" r="2.4" fill="url(#w2h)" stroke="#6a4020" stroke-width=".8"/></svg></button><button id="bell" aria-label="Notifications"></button><button id="logout" aria-label="Logout"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M13 4h4a3 3 0 0 1 3 3v10a3 3 0 0 1-3 3h-4M3 12h11M10 8l4 4-4 4"/></svg><svg class="px" viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><defs><linearGradient id="w2d" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#d9965a"/><stop offset="1" stop-color="#7a4012"/></linearGradient><linearGradient id="w2a" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#a8f090"/><stop offset="1" stop-color="#1d8a1a"/></linearGradient></defs><rect x="1.5" y="1.5" width="8" height="13" fill="url(#w2d)" stroke="#4a2408"/><circle cx="7.6" cy="8.6" r=".8" fill="#ffd84a"/><path d="M7.5 6.5h3.5V4l4.4 4-4.4 4V9.5H7.5z" fill="url(#w2a)" stroke="#105c10" stroke-width=".9" stroke-linejoin="round"/></svg></button></div>
+  <div id="zoom"><button class="zm" data-z="1" aria-label="Larger text">A+</button><button class="zm" data-z="-1" aria-label="Smaller text">A−</button></div>
   <main id="msgs" aria-live="polite"></main>
   <main id="msgs2" title="Click: type here"></main>
   <aside id="nicks2"></aside>
@@ -1585,6 +1592,10 @@ $("#lf").onsubmit = async e => {
   const j = await r.json().catch(() => ({}));
   $("#loginerr").textContent = r.status === 429 ? "Too many attempts. Try again in " + j.wait + "s." : "Wrong user or password.";
 };
+// A−/A+: --z scales every font size (chat, dialogs, menus); layout and positions stay put. 0.7-2, kept per browser
+function zoomSet(z) { z = Math.round(z * 10) / 10; document.documentElement.style.setProperty("--z", z); try { z !== 1 ? localStorage.setItem("fz", z) : localStorage.removeItem("fz"); } catch (e) {} }
+for (const b of document.querySelectorAll("#zoom .zm")) b.onclick = () => zoomSet(Math.min(2, Math.max(.7, (+document.documentElement.style.getPropertyValue("--z") || 1) + b.dataset.z / 10)));
+try { const z = +localStorage.getItem("fz"); if (z >= .7 && z <= 2) zoomSet(z); } catch (e) {}
 $("#logout").onclick = async () => { await fetch("/logout", {method: "POST", credentials: "same-origin"}); if (ws) { ws.onclose = null; ws.close(); } boot(); };
 $("#menu").onclick = () => $("#side").classList.toggle("open");
 const sidebtn = document.createElement("button"); sidebtn.id = "sidebtn";
