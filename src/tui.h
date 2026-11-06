@@ -148,6 +148,7 @@ private:
         bool editing = false;
         std::u32string ed;
         std::string ask;                   // remove this one? (y/n)
+        std::string about;                 // the About box of this one (a)
         long long mark = -1;               // mb->added when an action ran: mb's newest line since then is the message
         Buffer* mb = nullptr;
         long long click_ms = 0;

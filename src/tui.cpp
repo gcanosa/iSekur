@@ -1933,13 +1933,14 @@ void Tui::draw_plugins(int W, int H) {
     } else if (pw.avail) {
         if (n && !cat[(size_t)pw.sel].too_new && (cat[(size_t)pw.sel].update || !cat[(size_t)pw.sel].installed))
             keys.push_back({"Enter", cat[(size_t)pw.sel].update ? "update" : "install"});
+        if (n) keys.push_back({"a", "about"});
         keys.insert(keys.end(), {{"r", "refresh"}, {"Tab", "installed"}, {"Esc", "close"}});
     } else {
         if (n) {
             const PluginInfo& pi = info[(size_t)pw.sel];
             keys = {{"Space", pi.state == "off" ? "turn on" : "turn off"}, {"c", "configure"}};
             if (pi.update || pi.edited) keys.push_back({"u", pi.update ? "update" : "restore"});
-            keys.insert(keys.end(), {{"r", "reload"}, {"d", "remove"}});
+            keys.insert(keys.end(), {{"r", "reload"}, {"d", "remove"}, {"a", "about"}});
         }
         keys.insert(keys.end(), {{"Tab", "catalog"}, {"Esc", "close"}});
     }
@@ -1948,6 +1949,25 @@ void Tui::draw_plugins(int W, int H) {
         hx = text(hx, hint_y, xm, kk, keyst, false);
         hx = text(hx + 1, hint_y, xm, what, dim, false) + 2;
     }
+    if (!pw.about.empty()) {  // a: who made it and how to reach them, from the catalog or the file's own header
+        std::string name = pw.about, ver, desc, author, contact, from;
+        for (auto& pi : info)
+            if (pi.name == name)
+                ver = pi.local.empty() ? pi.version : pi.local, desc = pi.desc, author = pi.author, contact = pi.contact,
+                from = pi.official ? "Official iSekur plugin, from the catalog" : pi.in_catalog ? "From the catalog" : "Not from the catalog: a file you added";
+        for (auto& r : cat)
+            if (r.name == name && from.empty())
+                ver = r.version, desc = r.desc, author = r.author, contact = r.contact,
+                from = r.official ? "Official iSekur plugin, from the catalog" : "From the catalog";
+        std::vector<std::string> l = {name + (ver.empty() ? "" : " " + ver), from, ""};
+        l.push_back("Author:  " + (author.empty() ? std::string("unknown") : author));
+        l.push_back("Contact: " + (contact.empty() ? std::string("none given") : contact));
+        if (!desc.empty()) {
+            l.push_back("");
+            for (auto& w : wrap_words(desc, 44)) l.push_back(w);
+        }
+        draw_dialog(W, H, "About " + name, l, "", false, U"", 0, "Esc or Enter: close", 0, 0, 'A');
+    }
     if (!pw.ask.empty())
         draw_dialog(W, H, "Remove plugin", wrap_words("Remove " + pw.ask + " with its settings and saved data?", 44), "", false, U"", 0,
                     "y: yes · n or Esc: no", 0, 0, 'P');
@@ -1955,6 +1975,7 @@ void Tui::draw_plugins(int W, int H) {
 
 void Tui::plugin_key(int k, uint32_t ch) {
     if (ch == ' ') k = TB_KEY_SPACE, ch = 0;  // termbox gives Space as a character
+    if (!pw.about.empty()) { if (k == TB_KEY_ESC || k == TB_KEY_ENTER || ch == 'a' || ch == 'q') pw.about.clear(); return; }
     if (!pw.ask.empty()) {  // remove it? (y/n)
         std::string n = pw.ask;
         pw.ask.clear();
@@ -2013,6 +2034,7 @@ void Tui::plugin_key(int k, uint32_t ch) {
     else if (pw.avail) {
         auto cat = c.catalog_rows();
         if (ch == 'r') plug_run("/plugin refresh");
+        else if (ch == 'a' && pw.sel < n) pw.about = cat[(size_t)pw.sel].name;
         else if ((k == TB_KEY_ENTER || ch == 'i') && pw.sel < n) plug_run((cat[(size_t)pw.sel].update ? "/plugin update " : "/plugin install ") + cat[(size_t)pw.sel].name);
     } else if (pw.sel < n) {
         const PluginInfo& pi = info[(size_t)pw.sel];
@@ -2021,13 +2043,14 @@ void Tui::plugin_key(int k, uint32_t ch) {
         else if (ch == 'u') plug_run("/plugin update " + pi.name);
         else if (ch == 'r') plug_run("/plugin reload " + pi.name);
         else if (ch == 'd' || k == TB_KEY_DELETE) pw.ask = pi.name;
+        else if (ch == 'a') pw.about = pi.name;
     }
     pw.sel = std::max(0, std::min(pw.sel, n - 1));
 }
 
 // a click picks a tab or a row (again, or a double click: Enter); the wheel moves
 void Tui::plugin_mouse(int k, int x, int y) {
-    if (!pw.ask.empty()) return;
+    if (!pw.ask.empty() || !pw.about.empty()) return;
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { plugin_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
     if (k != TB_KEY_MOUSE_LEFT || x <= pw.x0 || x >= pw.x0 + pw.w - 1) return;
     if (y == pw.tab_y) {
@@ -2522,6 +2545,7 @@ void Tui::close_box() {
     case 'k': kw.open = false; break;
     case 'g': pw.open = false; break;
     case 'P': pw.ask.clear(); break;
+    case 'A': pw.about.clear(); break;
     case 'a': input.clear(), cur = 0, c.exec(c.active, ""); break;  // a question: cancelled
     case 'c': confirm.clear(); break;
     case 'p': input = from_utf8(paste), cur = input.size(), paste.clear(); break;  // back to edit it

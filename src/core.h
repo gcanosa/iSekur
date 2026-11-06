@@ -228,12 +228,15 @@ bool old_away_keys(const Core& c);
 struct PluginSet { std::string key, def; char scope; bool flag; std::string help = {}; };  // a declared setting; flag: on/off; help: its unit, what it does
 struct PluginInfo {
     std::string name, state, local, version, desc;  // state: on, off, failed; local: its "-- version:" line; version, desc: the catalog's
+    std::string author, contact;             // the catalog's, else the file's "-- author:" / "-- contact:" lines
+    bool official = false, in_catalog = false;  // official: made for iSekur by its author (the catalog says so)
     bool update = false, edited = false;     // the catalog has a newer version; the same version, other contents (edited here)
     std::vector<std::string> on_in, cmds;    // the scopes where enabled = on ("" everywhere, "net", "net/#chan"); its /commands
     std::vector<PluginSet> sets;             // what it declared (while loaded), in order
 };
-struct CatalogRow { std::string name, version, local, desc; bool installed, update, edited, too_new; };  // local: the installed version
+struct CatalogRow { std::string name, version, local, desc; bool installed, update, edited, too_new; std::string author = {}, contact = {}; bool official = false; };  // local: the installed version
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
+std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
 #define PLUGIN_API 2  // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -

@@ -690,22 +690,24 @@ static bool write_plugin(Core& c, const std::string& name, const std::string& bo
 static const time_t CATALOG_TTL = 12 * 3600, CATALOG_RETRY = 600, CATALOG_FORCE = 60;
 static std::string catalog_file(const Core& c) { return c.plugin_dir() + "/.catalog.json"; }
 
-// "-- version: 1.2" in the first 20 lines: what the windows compare with the catalog's
-std::string plugin_version(const std::string& lua) {
+// "-- version: 1.2", "-- author: ...", "-- contact: ..." in the first 20 lines
+std::string plugin_header(const std::string& lua, const std::string& key) {
     size_t at = 0;
+    std::string tag = "-- " + key + ":";
     for (int i = 0; i < 20 && at < lua.size(); i++) {
         size_t nl = lua.find('\n', at);
         std::string l = lua.substr(at, nl == std::string::npos ? std::string::npos : nl - at);
         at = nl == std::string::npos ? lua.size() : nl + 1;
-        size_t k = l.find("-- version:");
-        if (k != 0) continue;
-        std::string v = l.substr(11);
+        if (l.rfind(tag, 0) != 0) continue;
+        std::string v = l.substr(tag.size());
         v.erase(0, v.find_first_not_of(" \t"));
         v.erase(v.find_last_not_of(" \t\r") + 1);
         return v;
     }
     return "";
 }
+// what the windows compare with the catalog's
+std::string plugin_version(const std::string& lua) { return plugin_header(lua, "version"); }
 
 // the installed file's sha256 and version, read again only when its size or time changed
 // its header comment's first sentence ("-- name: what it does. More..."): the description until the catalog's comes
@@ -725,14 +727,17 @@ static std::string plugin_blurb(const std::string& lua, const std::string& name)
     return out;
 }
 
-struct FileInfo { std::string sha, version, blurb; };
+struct FileInfo { std::string sha, version, blurb, author, contact; };
 static FileInfo file_info(const std::string& path, const std::string& name) {  // name: for the blurb (cached by path)
     static std::map<std::string, std::pair<std::string, FileInfo>> cache;
     struct stat st;
     if (stat(path.c_str(), &st) != 0) return {};
     std::string key = std::to_string(st.st_size) + ":" + std::to_string((long long)st.st_mtime);
     auto& e = cache[path];
-    if (e.first != key) { std::string t = read_all(path); e = {key, {sha256_of(t), plugin_version(t), plugin_blurb(t, name)}}; }
+    if (e.first != key) {
+        std::string t = read_all(path);
+        e = {key, {sha256_of(t), plugin_version(t), plugin_blurb(t, name), plugin_header(t, "author"), plugin_header(t, "contact")}};
+    }
     return e.second;
 }
 // newer: the catalog's version is above the installed one (or the file says none and isn't the catalog's)
@@ -955,11 +960,13 @@ std::vector<PluginInfo> Core::plugin_info() const {
         auto fi = file_info(plugin_dir() + "/" + n + ".lua", n);
         const std::string& sha = fi.sha;
         std::string local = fi.version;
-        pi.local = local, pi.desc = fi.blurb;
+        pi.local = local, pi.desc = fi.blurb, pi.author = fi.author, pi.contact = fi.contact;
         if (auto e = cat.find(n); e != cat.end()) {
             auto get = [&](const char* k) { auto it = e->second->find(k); return it == e->second->end() ? std::string() : it->second; };
-            pi.version = get("version");
+            pi.version = get("version"), pi.in_catalog = true, pi.official = get("official") == "true";
             if (!get("description").empty()) pi.desc = get("description");
+            if (!get("author").empty()) pi.author = get("author");
+            if (!get("contact").empty()) pi.contact = get("contact");
             bool same = sha == get("sha256");
             pi.update = newer_in_catalog(pi.version, local, same);
             pi.edited = !same && !pi.update;
@@ -980,7 +987,8 @@ std::vector<CatalogRow> Core::catalog_rows() const {
         FileInfo fi = inst ? file_info(plugin_dir() + "/" + n + ".lua", n) : FileInfo{};
         const std::string &sha = fi.sha, &local = fi.version;
         bool same = sha == get("sha256"), up = inst && newer_in_catalog(get("version"), local, same);
-        out.push_back({n, get("version"), local, get("description"), inst, up, inst && !same && !up, atoi(get("api").c_str()) > PLUGIN_API});
+        out.push_back({n, get("version"), local, get("description"), inst, up, inst && !same && !up, atoi(get("api").c_str()) > PLUGIN_API,
+                       get("author"), get("contact"), get("official") == "true"});
     }
     std::sort(out.begin(), out.end(), [](auto& a, auto& b) { return a.name < b.name; });
     return out;

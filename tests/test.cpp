@@ -1813,6 +1813,8 @@ print("loaded")
         auto ix = plugin_index(R"([{"name": "a\"b", "api": 1, "x": true}, {}])", &jok);
         assert(jok && ix.size() == 2 && ix[0]["name"] == "a\"b" && ix[0]["api"] == "1" && ix[0]["x"] == "true");
         assert(plugin_index("[{\"name\": }]", &jok).empty() && !jok);
+        assert(plugin_header("-- version: 1.2\n-- author:  Ann B \r\n-- contact: a@b.c\nx = 1\n", "author") == "Ann B" &&
+               plugin_header("-- version: 1.2\n-- contact: a@b.c\n", "contact") == "a@b.c" && plugin_header("x = 1\n-- author: late\n", "contact").empty());
         assert(sha256_of("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
         // old keys (and the comments over them) out of a config's text
         assert(ini_drop_keys("[general]\n# about it\n# more\nauto_away = on\nnick = x\n[server.a]\n; auto_away = off ; c\nhost = h\n", {"auto_away"}) ==
@@ -2088,6 +2090,9 @@ print("loaded")
         pc.exec(ph, "/plugin install preview");
         wait_catalog();
         assert(said("preview " + ver["preview"] + " installed and on"));
+        for (auto& pi : pc.plugin_info())  // the About: author and contact, from the catalog (official) and the file alike
+            if (pi.name == "preview") assert(pi.author == "Gerardo Canosa" && pi.contact == "gera.canosa@gmail.com" && pi.official && pi.in_catalog);
+        for (auto& r : pc.catalog_rows()) assert(r.author == "Gerardo Canosa" && !r.contact.empty() && r.official);
         assert(irc_parse(":bob!u@h PRIVMSG #chan :listen \x02https://x.test/song.mp3?dl=1\x02 and https://x.test/Pic.PNG, "
                          "also (https://x.test/v.webm). https://x.test/four.ogg", pm)), pc.handle(ps, pm);
         assert(pchan->lines.back().embeds == R"({"size":"small","type":"audio","url":"https://x.test/song.mp3?dl=1"},)"

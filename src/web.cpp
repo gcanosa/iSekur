@@ -715,7 +715,8 @@ void Web::ws_frames(Client& cl) {
             bool first = true;
             for (auto& pi : c.plugin_info()) {
                 o += std::string(first ? "" : ",") + "{\"name\":" + json_str(pi.name) + ",\"state\":" + json_str(pi.state) + ",\"version\":" + json_str(pi.version) +
-                     ",\"local\":" + json_str(pi.local) + ",\"desc\":" + json_str(pi.desc) + ",\"update\":" + (pi.update ? "1" : "0") + ",\"edited\":" + (pi.edited ? "1" : "0") + ",\"on\":" + arr(pi.on_in) + ",\"cmds\":" + arr(pi.cmds) + ",\"sets\":[";
+                     ",\"local\":" + json_str(pi.local) + ",\"desc\":" + json_str(pi.desc) + ",\"author\":" + json_str(pi.author) + ",\"contact\":" + json_str(pi.contact) +
+                     ",\"official\":" + (pi.official ? "1" : "0") + ",\"cat\":" + (pi.in_catalog ? "1" : "0") + ",\"update\":" + (pi.update ? "1" : "0") + ",\"edited\":" + (pi.edited ? "1" : "0") + ",\"on\":" + arr(pi.on_in) + ",\"cmds\":" + arr(pi.cmds) + ",\"sets\":[";
                 first = false;
                 for (size_t i = 0; i < pi.sets.size(); i++)
                     o += std::string(i ? "," : "") + "{\"key\":" + json_str(pi.sets[i].key) + ",\"def\":" + json_str(pi.sets[i].def) +
@@ -737,7 +738,8 @@ void Web::ws_frames(Client& cl) {
             first = true;
             for (auto& r : c.catalog_rows())
                 o += std::string(first ? "" : ",") + "{\"name\":" + json_str(r.name) + ",\"version\":" + json_str(r.version) + ",\"desc\":" + json_str(r.desc) +
-                     ",\"local\":" + json_str(r.local) + ",\"installed\":" + (r.installed ? "1" : "0") + ",\"update\":" + (r.update ? "1" : "0") + ",\"edited\":" + (r.edited ? "1" : "0") + ",\"new\":" + (r.too_new ? "1" : "0") + "}",
+                     ",\"local\":" + json_str(r.local) + ",\"installed\":" + (r.installed ? "1" : "0") + ",\"update\":" + (r.update ? "1" : "0") + ",\"edited\":" + (r.edited ? "1" : "0") + ",\"new\":" + (r.too_new ? "1" : "0") +
+                     ",\"author\":" + json_str(r.author) + ",\"contact\":" + json_str(r.contact) + ",\"official\":" + (r.official ? "1" : "0") + "}",
                 first = false;
             cl.conn.out += ws_frame(o + "]}");
         } else if (m["t"] == "menu") {  // the right-click nick (or, without one, channel tab) menu, for this browser only

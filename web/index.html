@@ -171,7 +171,18 @@ dialog .hint { color: var(--muted); font-size: 12px; min-height: 1em; }
 dialog .btns .left { margin-right: auto; }
 #dsrv [hidden], #dask [hidden] { display: none !important; }
 #dask { width: min(440px, calc(100vw - 32px)); }
-#dask .dask-t { font-size: 13px; white-space: pre-line; }  /* label.ck's display: flex would show a hidden one */
+#dask .dask-t { font-size: 13px; white-space: pre-line; }
+/* a plugin's About: who made it and how to reach them */
+#dpab { width: min(440px, calc(100vw - 32px)); }
+#dpab .top { display: flex; align-items: center; gap: 10px; }
+#dpab .top b { font-size: 15px; }
+#dpab .from { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--muted); }
+#dpab .from.off { color: var(--join, #57ab5a); }
+#dpab dl { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 14px 0 0; font-size: 13px; }
+#dpab dt { color: var(--muted); }
+#dpab dd { margin: 0; overflow-wrap: anywhere; }
+#dpab dd a { color: var(--accent2); }
+#dpab p { font-size: 13px; line-height: 1.45; margin: 12px 0 0; opacity: .85; }  /* label.ck's display: flex would show a hidden one */
 @media (max-width: 760px) { #srvbody { grid-template-columns: 1fr; } #srvside { border-right: 0; padding-right: 0; } #srvlist { max-height: 140px; } }
 #abox { font-size: 13px; line-height: 1.4; position: relative; }
 /* a newer release: a badge in the About box's top right corner, to the downloads */
@@ -261,8 +272,10 @@ dialog .btns .left { margin-right: auto; }
 #pluglist .r .b button svg { flex: none; }
 #pluglist .r .b button.up { border-color: var(--accent); color: var(--accent); }
 #pluglist .r .b button.del:hover { border-color: var(--err, #e5534b); color: var(--err, #e5534b); }
-.win-95 #dplug svg.px { display: block; }
+.win-95 :is(#dplug, #dpab) svg.px { display: block; }
+.win-95 #dpab .from { color: #000; } .win-95 #dpab .from.off { color: #006400; } .win-95 #dpab dt { color: #404040; } .win-95 #dpab dd a { color: #000080; }
 .win-95 #dplug :is(.b, .ic, .tag) svg:not(.px) { display: none; }
+.win-95 #dpab .from svg:not(.px) { display: none; }
 .win-95 #pluglist .r + .r { border-top: 1px dotted #808080; }
 .win-95 #pluglist .r .n small { color: #000; opacity: 1; }
 .win-95 #pluglist .r .tag { border-radius: 0; color: #000; border-color: #808080; background: #fff; }
@@ -689,6 +702,13 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div class="hint" id="fhint"></div>
   <div class="btns"><button type="button" id="frefresh">Refresh</button><button class="go" value="ok">Close</button></div>
 </form></dialog>
+<dialog id="dpab"><form method="dialog">
+  <h2 id="dpab-h">About</h2>
+  <div class="top"><b id="dpab-n"></b><span id="dpab-f" class="from"></span></div>
+  <dl><dt>Version</dt><dd id="dpab-v"></dd><dt>Author</dt><dd id="dpab-a"></dd><dt>Contact</dt><dd id="dpab-c"></dd></dl>
+  <p id="dpab-d"></p>
+  <div class="btns"><button class="go" value="ok" autofocus>Close</button></div>
+</form></dialog>
 <dialog id="dask"><form method="dialog">
   <h2 id="dask-h">iSekur</h2>
   <div id="dask-t" class="dask-t"></div>
@@ -812,6 +832,13 @@ function embedsEl(list) {
   return box;
 }
 
+// nick_width = 0 (mirc): no text column, so the previews start where this line's text does, as in the terminal
+function alignEm(d) {
+  const em = d.querySelector(".em"), r = d.querySelector(".tx")?.getClientRects()[0];
+  if (!em || !r || !d.closest(".inline")) return;
+  em.style.marginLeft = Math.max(0, r.left - d.getBoundingClientRect().left - parseFloat(getComputedStyle(d).paddingLeft)) + "px";
+}
+
 const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
 function lineEl(b, l) {
   const d = document.createElement("div");
@@ -841,7 +868,7 @@ function lineEl(b, l) {
   if (l.bd) tx.prepend(el("span", "badge " + (l.bk || "p"), l.bd), " ");  // iSekur's notices (INFO), a plugin's lines (its name)
   d.append(ts, nk, tx);
   if (l.id) d.dataset.lid = l.id;
-  const em = l.em && embedsEl(l.em); if (em) d.append(em);
+  const em = l.em && embedsEl(l.em); if (em) d.append(em), requestAnimationFrame(() => alignEm(d));
   return d;
 }
 
@@ -1389,7 +1416,7 @@ function onMsg(ev) {
     for (const box of [$("#msgs"), $("#msgs2")]) {
       const d = box && box.querySelector(`.l[data-lid="${m.id}"]`); if (!d) continue;
       const atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40, em = embedsEl(l.em);
-      d.querySelector(".em")?.remove(); if (em) d.append(em);
+      d.querySelector(".em")?.remove(); if (em) d.append(em), alignEm(d);
       if (atBottom) box.scrollTop = box.scrollHeight;
     }
   } else if (m.t === "close") {
@@ -1895,6 +1922,7 @@ function renderPlugins() {
       b.append(plugBtn(off ? "on" : "off", off ? "Turn on" : "Turn off", () => plugRun("/plugin " + (off ? "enable " : "disable ") + p.name)),
                plugBtn("cfg", "Configure", () => { plugCfg = p.name; plugScope = ""; plugMark = -1; renderPlugins(); }),
                plugBtn("reload", "Reload", () => plugRun("/plugin reload " + p.name)),
+               plugBtn("info", "About", () => plugAbout(p)),
                plugBtn("trash", "Remove", async () => { if (await askBox({title: "Remove plugin", text: "Remove " + p.name + " with its settings and saved data?", ok: "Remove"}) !== null) plugRun("/plugin remove " + p.name); }, "del"));
       r.append(b); L.append(r);
     }
@@ -1909,6 +1937,7 @@ function renderPlugins() {
       if (c.new) ;  // the badge says why there's no button
       else if (c.update) b.append(plugBtn("update", "Update", () => plugRun("/plugin update " + c.name), "up"));
       else if (!c.installed) b.append(plugBtn("install", "Install", () => plugRun("/plugin install " + c.name)));
+      b.append(plugBtn("info", "About", () => plugAbout(c)));
       r.append(b); L.append(r);
     }
   }
@@ -1925,10 +1954,27 @@ const PLUG_ICONS = {
   cfg: ['<path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/>', '<defs><linearGradient id="plcf" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#f6f6f6"/><stop offset="1" stop-color="#7d7f8c"/></linearGradient></defs><path d="M12.94 6.36L15.25 6.53L15.25 9.47L12.94 9.64L12.65 10.33L14.17 12.09L12.09 14.17L10.33 12.65L9.64 12.94L9.47 15.25L6.53 15.25L6.36 12.94L5.67 12.65L3.91 14.17L1.83 12.09L3.35 10.33L3.06 9.64L0.75 9.47L0.75 6.53L3.06 6.36L3.35 5.67L1.83 3.91L3.91 1.83L5.67 3.35L6.36 3.06L6.53 0.75L9.47 0.75L9.64 3.06L10.33 3.35L12.09 1.83L14.17 3.91L12.65 5.67Z M10.4 8a2.4 2.4 0 1 0-4.8 0a2.4 2.4 0 1 0 4.8 0Z" fill="url(#plcf)" fill-rule="evenodd" stroke="#3c3c46" stroke-width=".9" stroke-linejoin="round"/>'],
   reload: ['<path d="M23 4v6h-6M1 20v-6h6M3.5 9a9 9 0 0 1 14.9-3.4L23 10M1 14l4.6 4.4A9 9 0 0 0 20.5 15"/>', '<path d="M13 8a5 5 0 1 1-1.5-3.6" fill="none" stroke="#0e4a14" stroke-width="3.2"/><path d="M13 8a5 5 0 1 1-1.5-3.6" fill="none" stroke="#3cb43c" stroke-width="1.6"/><path d="M15 1.5V7H9.5z" fill="#3cb43c" stroke="#0e4a14" stroke-linejoin="round"/>'],
   trash: ['<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6M10 11v6M14 11v6"/>', '<defs><linearGradient id="pldl" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ff8a80"/><stop offset="1" stop-color="#b41010"/></linearGradient></defs><path d="M2 4.5L4.5 2 8 5.5 11.5 2 14 4.5 10.5 8 14 11.5 11.5 14 8 10.5 4.5 14 2 11.5 5.5 8z" fill="url(#pldl)" stroke="#6a0606" stroke-linejoin="round"/>'],
+  info: ['<circle cx="12" cy="12" r="10"/><path d="M12 16v-5M12 8h.01"/>', '<defs><radialGradient id="plab" cx=".35" cy=".3" r=".75"><stop offset="0" stop-color="#9fd0ff"/><stop offset="1" stop-color="#0a3cb4"/></radialGradient></defs><circle cx="8" cy="8" r="7" fill="url(#plab)" stroke="#06266e"/><path d="M7 7h2v5H7zM7 3.6h2v2H7z" fill="#fff"/>'],
   install: ['<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"/>', '<defs><linearGradient id="plin" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#9be08a"/><stop offset="1" stop-color="#1f8a2a"/></linearGradient></defs><path d="M1.5 10.5v4h13v-4" fill="#c0c0c0" stroke="#404040" stroke-linejoin="round"/><path d="M6.5 1.5h3v5h2.5L8 11 4 6.5h2.5z" fill="url(#plin)" stroke="#0e4a14" stroke-linejoin="round"/>'],
 };
 const plugIcon = (k, s) => '<svg viewBox="0 0 24 24" width="' + s + '" height="' + s + '" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + PLUG_ICONS[k][0]
   + '</svg><svg class="px" viewBox="0 0 16 16" width="' + Math.max(s, 12) + '" height="' + Math.max(s, 12) + '" aria-hidden="true">' + PLUG_ICONS[k][1] + "</svg>";
+// a plugin's About: from the catalog's entry, else the file's own -- author: / -- contact: lines. Text only; the
+// contact is a link when it's an email address or an https:// page
+function plugAbout(p) {
+  $("#dpab-h").textContent = "About " + p.name; $("#dpab-n").textContent = p.name;
+  const f = $("#dpab-f"), off = !!p.official;
+  f.className = "from" + (off ? " off" : ""); f.innerHTML = off ? plugIcon("check", 12) : "";
+  f.append(off ? "Official iSekur plugin" : p.cat === 0 ? "Not from the catalog: a file you added" : "From the catalog");
+  $("#dpab-v").textContent = p.local || p.version || "?";
+  $("#dpab-a").textContent = p.author || "unknown";
+  const c = $("#dpab-c"); c.textContent = "";
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(p.contact || "")) { const a = el("a", "", p.contact); a.href = "mailto:" + p.contact; c.append(a); }
+  else if (/^https:\/\/\S+$/.test(p.contact || "")) { const a = el("a", "", p.contact); a.href = p.contact; a.target = "_blank"; a.rel = "noopener noreferrer"; c.append(a); }
+  else c.textContent = p.contact || "none given";
+  $("#dpab-d").textContent = p.desc || ""; $("#dpab-d").hidden = !p.desc;
+  $("#dpab").showModal();
+}
 function plugBtn(ic, text, f, cls) { const b = btn(text, f); b.insertAdjacentHTML("afterbegin", plugIcon(ic, 14)); if (cls) b.className = cls; return b; }
 function renderPlugCfg() {
   const C = $("#plugcfg"), p = plug.installed.find(x => x.name === plugCfg);
