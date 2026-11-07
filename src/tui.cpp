@@ -941,6 +941,7 @@ void Tui::draw() {
         }
         seg("-- MORE --", ms);
     }
+    if (!c.flash.empty()) seg(c.flash, sh);
     {  // status_info (uptime, cpu, ...), under the nick list (right edge without one); the last ones drop when it won't fit
         Style is = sty(T, "status_info", "status_hi");
         auto parts = status_info(c, is);
@@ -2419,7 +2420,6 @@ void Tui::key(int mod, int k, uint32_t ch) {
         else if (!cmd.empty()) c.exec(c.active, cmd);
         return;
     }
-    sel_x0 = -1;  // typing drops the highlight of a copied selection
     if (!confirm.empty()) {  // a menu's question: y runs it, anything else drops it
         std::string q;
         q.swap(confirm);
@@ -2551,6 +2551,8 @@ void Tui::copy_sel() {
     if (out.empty()) return;
     std::string osc = "\x1b]52;c;" + b64(out) + "\x07";
     tb_send(osc.data(), osc.size());
+    size_t n = std::count_if(out.begin(), out.end(), [](char b) { return (b & 0xc0) != 0x80; });  // characters, not UTF-8 bytes
+    c.flash = "Copied " + std::to_string(n) + (n == 1 ? " character" : " characters"), c.flash_until = now_ms() + 1000;
 }
 
 // the word drawn under x,y in the chat, without the punctuation around it
@@ -2622,8 +2624,8 @@ void Tui::mouse(int mod, int k, int x, int y) {
         sel_y1 = std::max(top, std::min(y, top + ch - 1));
         if (k == TB_KEY_MOUSE_RELEASE) {
             selecting = false;
-            if (sel_x1 == sel_x0 && sel_y1 == sel_y0) sel_x0 = -1;  // a plain click
-            else copy_sel();
+            if (sel_x1 != sel_x0 || sel_y1 != sel_y0) copy_sel();
+            sel_x0 = -1;  // copied, the highlight goes (as in tmux): it's screen cells, new lines would slide under it
         }
         c.dirty = true;
         return;
@@ -2712,7 +2714,6 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (k != TB_KEY_MOUSE_LEFT) return;
-    if (sel_x0 >= 0) sel_x0 = -1, c.dirty = true;
     if (over_topic) {
         Buffer* b = c.active;
         long long now = now_ms();

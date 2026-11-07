@@ -503,6 +503,8 @@ struct Core {
     void remember_nick(Server* s, const std::string& nick);  // last_nick, kept in the config for the next start
     int typing_quiet(bool on);  // /typing on|off: quiet mode with it in the channel tabs; returns how many changed  // /about: the *about tab; main.cpp sweeps its banner while it's shown
     long long about_t0 = 0;
+    std::string flash;  // a word on the status bar for a moment ("Copied 42 characters"), gone at flash_until
+    long long flash_until = 0;
     long long typing_until = 0;  // /typing: the last line still typing ends then (main.cpp redraws until)
     std::vector<std::string> about_full;  // its lines in full; about_typed get typed out in turn
     std::vector<int> about_typed;

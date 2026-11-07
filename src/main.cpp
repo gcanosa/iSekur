@@ -265,12 +265,14 @@ int main(int argc, char** argv) {
         bool typing = c.tty && now_ms() < c.typing_until;  // a line is typing itself out: redraw ~30 times a second
         int wait = c.drain();
         if (anim0 || typing || (c.tty && c.lock_anim)) wait = std::min(wait, 33);
+        if (c.flash_until) wait = std::min(wait, (int)std::max(0LL, c.flash_until - now_ms()));
         if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep
             long long ph = (now_ms() - c.about_t0) % 3500;
             wait = std::min(wait, ph < 1200 || !c.about_typed.empty() ? 33 : (int)(3500 - ph));
         }
         if (wait_fds(fds, wait) < 0 && errno != EINTR) break;
         if (typing) c.dirty = true;
+        if (c.flash_until && now_ms() >= c.flash_until) c.flash.clear(), c.flash_until = 0, c.dirty = true;
         c.terms_poll(fds, term0);  // first: nothing has closed a tab yet, so the order still holds
         c.dccs_poll(fds, dcc0);
         // servers first: their handlers never delete servers, so `polled` stays valid
