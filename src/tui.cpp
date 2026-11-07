@@ -1919,7 +1919,7 @@ void Tui::draw_plugins(int W, int H) {
         if (!s.choices.empty()) {
             std::string all;
             for (auto& v : s.choices) all += (all.empty() ? "" : ", ") + v;
-            add_wrapped("One of: " + all + " · Space or Enter: the next one", dim);
+            add_wrapped("One of: " + all + " · ←→, Space or Enter: change it", dim);
         }
         add_wrapped(std::string("Applies ") + (s.scope == 'g' ? "everywhere only" : s.scope == 'n' ? "everywhere or per network" : "everywhere, per network or per channel")
                     + (at.empty() ? "" : " · Del clears it here"), dim);
@@ -1969,7 +1969,8 @@ void Tui::draw_plugins(int W, int H) {
         bool flag = n && cfg[(size_t)pw.sel].flag, pick = n && !cfg[(size_t)pw.sel].choices.empty();
         keys = {{"Enter", flag ? "switch" : pick ? "next value" : "edit"}};
         if (flag) keys.push_back({"Space", "on/off"});
-        keys.insert(keys.end(), {{"Del", "clear here"}, {"←→", "scope"}, {"Esc", "back"}});
+        if (pick) keys.push_back({"←→", "value"});
+        keys.insert(keys.end(), {{"Del", "clear here"}, {pick ? "Tab" : "←→", "scope"}, {"Esc", "back"}});
     } else if (pw.avail) {
         if (n && !cat[(size_t)pw.sel].too_new && (cat[(size_t)pw.sel].update || !cat[(size_t)pw.sel].installed))
             keys.push_back({"Enter", cat[(size_t)pw.sel].update ? "update" : "install"});
@@ -2050,7 +2051,10 @@ void Tui::plugin_key(int k, uint32_t ch) {
         if (k == TB_KEY_ESC || ch == 'q') pw.cfg.clear(), pw.sel = 0;
         else if (k == TB_KEY_ARROW_DOWN) pw.sel = std::min(n - 1, pw.sel + 1);
         else if (k == TB_KEY_ARROW_UP) pw.sel = std::max(0, pw.sel - 1);
-        else if (k == TB_KEY_ARROW_RIGHT || k == TB_KEY_TAB) pw.scope = (pw.scope + 1) % (int)scopes.size();
+        else if ((k == TB_KEY_ARROW_RIGHT || k == TB_KEY_ARROW_LEFT) && !st.choices.empty()) {  // its values, round; Tab: the scope
+            int m = (int)st.choices.size(), i = (int)(std::find(st.choices.begin(), st.choices.end(), eff) - st.choices.begin());
+            set(st.choices[(size_t)(i >= m ? 0 : (i + (k == TB_KEY_ARROW_RIGHT ? 1 : m - 1)) % m)]);
+        } else if (k == TB_KEY_ARROW_RIGHT || k == TB_KEY_TAB) pw.scope = (pw.scope + 1) % (int)scopes.size();
         else if (k == TB_KEY_ARROW_LEFT) pw.scope = (pw.scope + (int)scopes.size() - 1) % (int)scopes.size();
         else if (k == TB_KEY_SPACE && st.flag) set(truthy_str(eff) ? "off" : "on");
         else if (k == TB_KEY_DELETE || bs) set("");
