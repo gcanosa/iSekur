@@ -210,16 +210,16 @@ int main(int argc, char** argv) {
         if (!web.start(err)) {
             c.print(home, LK::ERROR, "Webchat not started: " + err);
             if (c.daemon && !bnc_mode) { fprintf(stderr, "daemon mode needs the webchat: %s\n", err.c_str()); return 1; }
-        } else c.print(home, LK::INFO, "Webchat on " + web.url);
-    }
+        } else c.info_note(home, "Webchat on " + web.url);
+    } else if (!bnc_mode) c.info_note(home, "Webchat off: /web start, or /set web.autostart on");
     c.web_url = web.url;
     Bnc bnc(c);
     if (bnc_mode || Bnc::autostart(c.cfg)) {
         if (!bnc.start(err)) {
             c.print(home, LK::ERROR, "BNC not started: " + err);
             if (bnc_mode) { fprintf(stderr, "--bnc: %s\n", err.c_str()); return 1; }
-        } else c.print(home, LK::INFO, "BNC on " + bnc.url);
-    }
+        } else c.info_note(home, "BNC on " + bnc.url);
+    } else c.info_note(home, "BNC off: /bnc start, or /set bnc.autostart on");
     c.listener = [&](Ev e, Buffer* b, const Line* l) { web.on_event(e, b, l); };
 
     Tui tui(c);
@@ -317,15 +317,15 @@ int main(int argc, char** argv) {
             if (c.web_req == Core::WebReq::RESTART && web.running()) web.stop(), c.web_req = Core::WebReq::START;
             if (c.web_req == Core::WebReq::STOP && web.running()) {
                 web.stop();
-                c.print(to, LK::INFO, "Webchat stopped");
+                c.info_note(to, "Webchat stopped");
             } else if (c.web_req == Core::WebReq::STOP) {
-                c.print(to, LK::INFO, "Webchat is not running");
+                c.info_note(to, "Webchat is not running");
             } else if (web.running()) {
-                c.print(to, LK::INFO, "Webchat already on " + web.url);
+                c.info_note(to, "Webchat already on " + web.url);
             } else if (!web.start(err)) {
                 c.print(to, LK::ERROR, "Webchat not started: " + err);
             } else {
-                c.print(to, LK::INFO, "Webchat on " + web.url);
+                c.info_note(to, "Webchat on " + web.url);
             }
             c.web_req = Core::WebReq::NONE, c.web_url = web.url;
         }
@@ -335,11 +335,11 @@ int main(int argc, char** argv) {
             c.bnc_req = Core::BncReq::NONE;
             if (rq == Core::BncReq::RESTART && bnc.running()) bnc.stop(), rq = Core::BncReq::START;
             if (rq == Core::BncReq::STATUS)
-                for (auto& l : bnc.status()) c.print(to, LK::INFO, l);
-            else if (rq == Core::BncReq::STOP) c.print(to, LK::INFO, bnc.running() ? (bnc.stop(), "BNC stopped") : "BNC is not running");
-            else if (bnc.running()) c.print(to, LK::INFO, "BNC already on " + bnc.url);
+                for (auto& l : bnc.status()) c.info_note(to, l);
+            else if (rq == Core::BncReq::STOP) c.info_note(to, bnc.running() ? (bnc.stop(), "BNC stopped") : "BNC is not running");
+            else if (bnc.running()) c.info_note(to, "BNC already on " + bnc.url);
             else if (!bnc.start(err)) c.print(to, LK::ERROR, "BNC not started: " + err);
-            else c.print(to, LK::INFO, "BNC on " + bnc.url);
+            else c.info_note(to, "BNC on " + bnc.url);
         }
         c.drain();
 

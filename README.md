@@ -173,7 +173,7 @@ iSekur, so your terminal, the webchat and the other clients see it too. One user
 3. Start it:
 
        /bnc start               # now; /bnc stop, /bnc restart after changing settings
-       /set bnc.autostart on    # every time iSekur starts
+       /set bnc.autostart on    # starts it now and every time iSekur starts
        isekur --bnc             # or from the shell: in the background, the bouncer only
                                 # (no terminal, no webchat; --web adds it, --attach still works)
 

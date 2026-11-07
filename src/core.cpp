@@ -1504,11 +1504,20 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0)) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (key == "log") notify(Ev::THEME, nullptr);  // the webchat shows its Logs button only while logging
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
+        // autostart on/off starts / stops the service now too (main loop answers); a daemon keeps its webchat, the only way back in
+        bool svc_now = key == "autostart" && (sec == "bnc" || (sec == "web" && (Web::autostart(cfg) || !daemon)));
+        if (svc_now) {
+            std::string v = ini_get(cfg, sec, "autostart", "off");
+            bool on = sec == "web" ? Web::autostart(cfg) : v == "on" || v == "true" || v == "yes" || v == "1";
+            if (sec == "web") web_req_buf = b, web_req = on ? WebReq::START : WebReq::STOP;
+            else bnc_req_buf = b, bnc_req = on ? BncReq::START : BncReq::STOP;
+        }
         dirty = true;
         std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : val;  // "": back to the default
         if (saved_now) { print(b, LK::INFO, argv[0] + " = " + shown + "  (saved)"); return; }
         print(b, LK::INFO, argv[0] + " = " + shown +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
+                                : svc_now                   ? ""
                                 : sec == "web"              ? "  (applies after /web restart)"
                                 : sec == "bnc"              ? "  (applies after /bnc restart)"
                                                             : "") +

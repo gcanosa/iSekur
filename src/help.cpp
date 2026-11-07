@@ -421,7 +421,7 @@ static const std::vector<CmdInfo> CMDS = {
      "backlog and load their own), message-tags, echo-message, labeled-response, server-time, away, account and host "
      "changes, extended-join, multi-prefix; another iSekur is a full client of this one (/server host 6698 -tls -noverify, "
      "then its password). /bnc alone shows where it listens and who is on; /bnc restart picks up changed "
-     "[bnc] settings; [bnc] autostart = on starts it with iSekur, and isekur --bnc runs only the BNC in the background.",
+     "[bnc] settings; /set bnc.autostart on starts it now and with iSekur (off stops it), and isekur --bnc runs only the BNC in the background.",
      {"/bnc", "/bnc password", "/bnc start", "/bnc restart", "/connect -tls 127.0.0.1 6698 me/sekurnet:secret  (in irssi, to reach it)"}},
     {"detach", "Session", "", "Leave iSekur running in the background",
      "Gives the terminal back; iSekur stays connected, in the channels, logging. isekur --attach "
@@ -754,7 +754,7 @@ static const std::vector<GuidePage> GUIDE = {
         "",
         G_HEAD("From another machine"),
         "  " G_CMD("/set web.bind 0.0.0.0") ": then it's " BOLD "HTTPS only" RESET " (a self-signed certificate is made,",
-        "  or give " BOLD "web.cert" RESET " and " BOLD "web.key" RESET "). " G_CMD("/set web.autostart on") " starts it with iSekur.",
+        "  or give " BOLD "web.cert" RESET " and " BOLD "web.key" RESET "). " G_CMD("/set web.autostart on") " starts it now and with iSekur.",
         "",
         G_HEAD("Tabs in the browser"),
         "  " BOLD "‹" RESET " at the top of the tab list folds it to a strip, " BOLD "›" RESET " opens it. " BOLD "👥" RESET " hides the users.",
