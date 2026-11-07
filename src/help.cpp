@@ -411,6 +411,18 @@ static const std::vector<CmdInfo> CMDS = {
      "The webchat mirrors this session in a browser. It needs [web] user and password_hash "
      "(isekur --hash-password prints one). /web restart picks up changed [web] settings.",
      {"/web", "/web start", "/web stop", "/web restart"}},
+    {"bnc", "Session", "[start|stop|restart|status|password]", "Control the built-in BNC (bouncer)",
+     "The BNC lets your other IRC clients (irssi, weechat, hexchat, mIRC, a phone app) connect to this iSekur and "
+     "share its session: the same networks and channels, the last lines of each tab ([bnc] backlog), and from then on "
+     "everything live; what they send shows here too. Set it up in /set under BNC: user, port, tls (on, or off for "
+     "plain IRC on 127.0.0.1), then /bnc password. In the other client, add a server at the BNC's address and port "
+     "with the server password user/network:password (e.g. me/sekurnet:secret; one network: me:secret). Each "
+     "connection is one network. IRCv3 clients get what they ask for: chathistory (from iSekur's tabs, so they get no "
+     "backlog and load their own), message-tags, echo-message, labeled-response, server-time, away, account and host "
+     "changes, extended-join, multi-prefix; another iSekur is a full client of this one (/server host 6698 -tls -noverify, "
+     "then its password). /bnc alone shows where it listens and who is on; /bnc restart picks up changed "
+     "[bnc] settings; [bnc] autostart = on starts it with iSekur, and isekur --bnc runs only the BNC in the background.",
+     {"/bnc", "/bnc password", "/bnc start", "/bnc restart", "/connect -tls 127.0.0.1 6698 me/sekurnet:secret  (in irssi, to reach it)"}},
     {"detach", "Session", "", "Leave iSekur running in the background",
      "Gives the terminal back; iSekur stays connected, in the channels, logging. isekur --attach "
      "(or just isekur) brings it back, from any terminal or SSH session. Alt+D (Option+D on a Mac) "

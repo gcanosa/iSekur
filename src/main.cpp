@@ -19,6 +19,7 @@
 #include "session.h"
 #include "tui.h"
 #include "web.h"
+#include "bnc.h"
 
 static volatile sig_atomic_t g_term = 0;
 
@@ -60,14 +61,16 @@ static void crash_dumps(const std::string& path) {
 }
 
 static int usage() {
-    puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [-l|--list] [--web|--no-web] [--hash-password] [-v|--version]\n"
+    puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [-l|--list] [--web|--no-web] [--bnc] [--hash-password] [-v|--version]\n"
          "  -c FILE          config file (default ~/.config/isekur/isekur.conf)\n"
          "  -d, --daemon     run headless in the background; attach with --attach or the webchat\n"
          "  -a, --attach     bring a detached iSekur (Alt+D, /detach, --daemon) back to this terminal;\n"
          "                   with none running, start a new one\n"
          "  -l, --list       the iSekurs running (one per config) and how to attach each\n"
          "  --web, --no-web  start the webchat or not, whatever [web] autostart says\n"
-         "  --hash-password  read a password and print a [web] password_hash value");
+         "  --bnc            run headless in the background as a bouncer only (no terminal, no webchat;\n"
+         "                   --web adds it): other IRC clients connect to [bnc]\n"
+         "  --hash-password  read a password and print a password_hash value ([web] or [bnc])");
     return 1;
 }
 
@@ -133,7 +136,7 @@ static int wait_fds(std::vector<pollfd>& fds, int timeout_ms) {
 int main(int argc, char** argv) {
     setlocale(LC_ALL, "");
     signal(SIGPIPE, SIG_IGN);
-    bool daemon = false, attach = false, list = false;
+    bool daemon = false, attach = false, list = false, bnc_mode = false;
     int web_flag = -1;  // --web / --no-web; -1 = [web] autostart decides
     Core c;
     for (int i = 1; i < argc; i++) {
@@ -142,6 +145,7 @@ int main(int argc, char** argv) {
         else if (a == "-d" || a == "--daemon") daemon = true;
         else if (a == "-a" || a == "--attach") attach = true;
         else if (a == "-l" || a == "--list") list = true;
+        else if (a == "--bnc") bnc_mode = daemon = true;
         else if (a == "--web") web_flag = 1;
         else if (a == "--no-web") web_flag = 0;
         else if (a == "--hash-password") return hash_pw_cmd();
@@ -168,6 +172,15 @@ int main(int argc, char** argv) {
         return 1;
     }
     if (ls < 0) return attach_main(sock, how);
+    if (bnc_mode) {  // say what's missing here, not in the log once in the background
+        Ini pre;
+        ini_load(c.cfg_path, pre);
+        if (ini_get(pre, "bnc", "user").empty() || ini_get(pre, "bnc", "password_hash").rfind("pbkdf2$", 0) != 0) {
+            fprintf(stderr, "--bnc needs [bnc] user and password_hash in %s (isekur --hash-password makes one,\n"
+                            "or /set bnc.user and /bnc password in iSekur)\n", c.cfg_path.c_str());
+            return 1;
+        }
+    }
     // Like tmux: the IRC side runs in the background from the start and this
     // process lends it the terminal, so detaching (Alt+D, a closed window, a
     // dropped SSH) only ends this side. Without the socket (`local`), the
@@ -192,13 +205,21 @@ int main(int argc, char** argv) {
         c.print(home, LK::INFO, "\x03" "01,08" "\x02" " NEW SESSION " "\x0f" " Nothing was running to attach to: this is a fresh start, not a recovered session");
     Web web(c);
     // --daemon always starts the webchat; it can also be attached from a terminal
-    if (daemon || (web_flag < 0 ? Web::autostart(c.cfg) : web_flag == 1)) {
+    bool web_on = bnc_mode ? web_flag == 1 : daemon || (web_flag < 0 ? Web::autostart(c.cfg) : web_flag == 1);
+    if (web_on) {
         if (!web.start(err)) {
             c.print(home, LK::ERROR, "Webchat not started: " + err);
-            if (c.daemon) { fprintf(stderr, "daemon mode needs the webchat: %s\n", err.c_str()); return 1; }
+            if (c.daemon && !bnc_mode) { fprintf(stderr, "daemon mode needs the webchat: %s\n", err.c_str()); return 1; }
         } else c.print(home, LK::INFO, "Webchat on " + web.url);
     }
     c.web_url = web.url;
+    Bnc bnc(c);
+    if (bnc_mode || Bnc::autostart(c.cfg)) {
+        if (!bnc.start(err)) {
+            c.print(home, LK::ERROR, "BNC not started: " + err);
+            if (bnc_mode) { fprintf(stderr, "--bnc: %s\n", err.c_str()); return 1; }
+        } else c.print(home, LK::INFO, "BNC on " + bnc.url);
+    }
     c.listener = [&](Ev e, Buffer* b, const Line* l) { web.on_event(e, b, l); };
 
     Tui tui(c);
@@ -227,6 +248,7 @@ int main(int argc, char** argv) {
         for (auto& s : c.servers)
             if (s->conn.fd >= 0) fds.push_back({s->conn.fd, s->conn.events(), 0}), polled.push_back(s.get());
         web.add_fds(fds);
+        bnc.add_fds(fds);
         ses.add_fds(fds);
         size_t job0 = fds.size();
         for (auto& j : c.jobs)
@@ -258,6 +280,7 @@ int main(int argc, char** argv) {
         bool hung = !local && (ses.lost || (c.tty && (fds[0].revents & (POLLHUP | POLLERR))));
         if (c.tty && !hung && (fds[0].revents || fds[1].revents)) tui.on_readable();
         web.process(fds);
+        bnc.process(fds);
         c.jobs_poll(fds, job0);
         int t = ses.process(fds, c.tty);
         // the audit lines: who attached from where, for how long, and who was turned away
@@ -306,10 +329,22 @@ int main(int argc, char** argv) {
             }
             c.web_req = Core::WebReq::NONE, c.web_url = web.url;
         }
+        if (c.bnc_req != Core::BncReq::NONE) {
+            Buffer* to = c.index_of(c.bnc_req_buf) >= 0 ? c.bnc_req_buf : c.bufs.front().get();
+            auto rq = c.bnc_req;
+            c.bnc_req = Core::BncReq::NONE;
+            if (rq == Core::BncReq::RESTART && bnc.running()) bnc.stop(), rq = Core::BncReq::START;
+            if (rq == Core::BncReq::STATUS)
+                for (auto& l : bnc.status()) c.print(to, LK::INFO, l);
+            else if (rq == Core::BncReq::STOP) c.print(to, LK::INFO, bnc.running() ? (bnc.stop(), "BNC stopped") : "BNC is not running");
+            else if (bnc.running()) c.print(to, LK::INFO, "BNC already on " + bnc.url);
+            else if (!bnc.start(err)) c.print(to, LK::ERROR, "BNC not started: " + err);
+            else c.print(to, LK::INFO, "BNC on " + bnc.url);
+        }
         c.drain();
 
         time_t now = time(nullptr);
-        c.set_attached(c.tty || web.attached());
+        c.set_attached(c.tty || web.attached() || bnc.attached());
         if (now != last_sec) last_sec = now, c.dirty = true, c.tick(now);  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
         if (anim_due && c.tty && !c.locked) anim_due = false, anim0 = home->lines.size() >= 6 ? now_ms() : 0;
         if (c.lock_anim) {  // the lock screen's animations: 900ms at most (tui.cpp draw_lock)

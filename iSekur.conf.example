@@ -179,6 +179,23 @@ key           =              ; e.g. /path/privkey.pem
 html          =              ; serve this file as the webchat page, re-read on every load,
                              ; e.g. ~/src/iSekur/web/index.html (empty: the built-in one)
 
+# Built-in BNC (bouncer): your other IRC clients (irssi, weechat, hexchat, mIRC...)
+# connect here and share this session: the same networks, channels and recent lines.
+# Log in with the server password user/network:password, e.g. me/sekurnet:secret
+# (with one network, me:secret is enough). Set the password with /bnc password.
+# autostart = on starts it with iSekur; else /bnc start, or run isekur --bnc
+# (in the background, no terminal or webchat). /bnc status shows who is on.
+[bnc]
+autostart     = off
+bind          = 127.0.0.1    ; 0.0.0.0 or :: for every address
+port          = 6698         ; empty or 0: 6698
+tls           = on           ; off: plain IRC (keep that to 127.0.0.1)
+user          = me
+password_hash =              ; /bnc password sets it (or isekur --hash-password)
+cert          =              ; e.g. /path/fullchain.pem (empty: self-signed bnc.crt)
+key           =              ; e.g. /path/privkey.pem
+backlog       = 50           ; lines of each tab a client gets when it connects (0: none)
+
 # Key bindings: <action> = <key> [key...]
 # Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
 # Actions: next_tab prev_tab next_active next_server prev_server close_tab scroll_up

@@ -9,6 +9,7 @@ isekur \- colorful terminal IRC client with a built-in webchat
 .RB [ \-a | \-\-attach ]
 .RB [ \-l | \-\-list ]
 .RB [ \-\-web | \-\-no\-web ]
+.RB [ \-\-bnc ]
 .RB [ \-\-hash\-password ]
 .RB [ \-v | \-\-version ]
 .SH DESCRIPTION
@@ -59,10 +60,31 @@ and
 .B /web stop
 do the same.
 .TP
+.B \-\-bnc
+Run in the background as a bouncer only: no terminal and no webchat
+.RB ( \-\-web
+adds it). Your other IRC clients connect to the
+.B [bnc]
+address and port with the server password
+.IR user / network : password
+and share this session. It needs
+.B [bnc] user
+and
+.BR password_hash ;
+.B /bnc password
+sets the hash from inside iSekur.
+.B \-\-attach
+still works. While running,
+.B /bnc start
+and
+.B /bnc stop
+turn the BNC on and off.
+.TP
 .B \-\-hash\-password
 Read a password and print a
-.B [web] password_hash
-line for the config.
+.B password_hash
+line for the config
+.RB ( [web] " or " [bnc] ).
 .TP
 .BR \-v ", " \-\-version
 Print the version.

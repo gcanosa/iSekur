@@ -319,6 +319,9 @@ struct Server {
     // Twitch chat is IRC with its own CAPs, tags and commands: irc.chat.twitch.tv
     bool twitch() const { return twitch_host(cfg.host); }
     int prefix_rank(const std::string& pfx) const;  // lower = higher rank
+    // the BNC's view of every connection (bnc.cpp): a line from the server before it's handled (out false),
+    // and one to it as it's sent or queued (out true); empty while the BNC is stopped
+    static inline std::function<void(Server*, bool out, const std::string&)> tap;
 };
 
 // ---- command help (/help, Tab completion, webchat completion) ---------------
@@ -392,6 +395,9 @@ struct Core {
     enum class WebReq { NONE, START, STOP, RESTART } web_req = WebReq::NONE;
     Buffer* web_req_buf = nullptr;  // where /web was typed: gets the answer
     std::string web_url;  // "" = webchat stopped
+    // /bnc start|stop|restart|status: done by main(), which owns the BNC, like /web
+    enum class BncReq { NONE, START, STOP, RESTART, STATUS } bnc_req = BncReq::NONE;
+    Buffer* bnc_req_buf = nullptr;
     bool daemon = false;      // the webchat is the only way in: /web stop is refused
     bool tty = false;         // a terminal is attached (the TUI is drawing)
     bool detach_req = false;  // /detach or Alt+D: main() lets go of the terminal

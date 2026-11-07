@@ -127,6 +127,7 @@ static std::string wire(const std::string& line, bool utf8only) {
 
 void Server::send_now(const std::string& line) {
     if (raw_hook) raw_hook("\xe2\x86\x92", line);  // →
+    if (tap) tap(this, true, line);
     conn.out += wire(line, isupport.count("UTF8ONLY"));
 }
 
@@ -141,6 +142,7 @@ void Server::send(const std::string& line) {
     }
     if (state != SS::CONNECTED || flood_ms <= 0) { send_now(l); return; }
     if (raw_hook) raw_hook("\xe2\x86\x92", l);  // ponytail: logged when queued, not when the flood limit lets it out
+    if (tap) tap(this, true, l);
     sendq.push_back(wire(l, isupport.count("UTF8ONLY")));
     drain(now_ms());
 }
@@ -366,6 +368,7 @@ void Core::on_readable(Server* s, short rev) {
         Msg m;
         s->last_rx = time(nullptr);
         if (s->raw_hook) s->raw_hook("\xe2\x86\x90", line);  // ←
+        if (Server::tap) Server::tap(s, false, line);
         if (irc_parse(line, m)) handle(s, m);
         if (s->state == SS::DISCONNECTED) return;  // handler closed it (connect() cleared inbuf)
     }

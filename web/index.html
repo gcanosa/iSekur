@@ -2455,7 +2455,7 @@ const inCat = (cat, s) => !s || cat === s || cat.startsWith(s + "/");
 function catLabel(s) {
   if (!s) return "All";
   if (s.includes("/")) return s.slice(s.indexOf("/") + 1);
-  return s === "general" ? "Global" : s.startsWith("server.") ? "⇢ " + s.slice(7) : s === "web" ? "Web" : s === "keys" ? "Keys" : s;
+  return s === "general" ? "Global" : s.startsWith("server.") ? "⇢ " + s.slice(7) : s === "web" ? "Web" : s === "bnc" ? "BNC" : s === "keys" ? "Keys" : s;
 }
 // the categories with how many keys match, and the keys of the chosen one (or all, under section headers)
 function filterSettings() {

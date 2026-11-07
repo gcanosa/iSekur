@@ -42,7 +42,7 @@ void Core::load_config() {
     defaults = ini_parse(conf_template);
     for (auto it = defaults.begin(); it != defaults.end();)
         it = it->first.rfind("server.", 0) == 0 ? defaults.erase(it) : std::next(it);
-    defaults["general"]["nick"] = defaults["general"]["altnick"] = defaults["web"]["user"] = "";  // placeholders
+    defaults["general"]["nick"] = defaults["general"]["altnick"] = defaults["web"]["user"] = defaults["bnc"]["user"] = "";  // placeholders
     std::string err;
     theme_dir = ini_get(cfg, "general", "theme_dir", "themes");
     bool no_themes = false;
@@ -263,7 +263,7 @@ std::string fresh_config() {
         while (!t.empty() && t.back() == ' ') t.pop_back();
         if (!line.empty() && line[0] == '[') sec = line.substr(1, line.find(']') - 1);
         if (sec.rfind("server.", 0) == 0 && !line.empty() && line[0] != '#' && line[0] != ';') line = "; " + line;
-        else if ((sec == "general" && (t == "nick" || t == "altnick")) || (sec == "web" && t == "user"))
+        else if ((sec == "general" && (t == "nick" || t == "altnick")) || ((sec == "web" || sec == "bnc") && t == "user"))
             line = line.substr(0, line.find('=') + 1);
         out += line + "\n";
     }
@@ -1457,6 +1457,9 @@ void Core::exec(Buffer* b, const std::string& input) {
             }, true, "Lock password", {"Changing " + key + ": the lock password first"});
             return;
         }
+        // a password typed into a *password_hash key is kept as its hash
+        if (key.size() >= 13 && key.compare(key.size() - 13, 13, "password_hash") == 0 && !val.empty() && val.rfind("pbkdf2$", 0) != 0)
+            val = hash_password(val);
         if (!unsaved[sec].count(key)) set_was[sec][key] = cfg[sec][key];
         // back to what it was (the webchat's Close undoing a switch): nothing to save. Keys made unsaved by
         // /ignore, /hilight... have no set_was: they stay unsaved
@@ -1507,6 +1510,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         print(b, LK::INFO, argv[0] + " = " + shown +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
                                 : sec == "web"              ? "  (applies after /web restart)"
+                                : sec == "bnc"              ? "  (applies after /bnc restart)"
                                                             : "") +
                                "  - /save writes it to the config");
         return;
@@ -1808,6 +1812,22 @@ void Core::exec(Buffer* b, const std::string& input) {
         else if (a == "restart") web_req = WebReq::RESTART;
         else if (a == "status") print(b, LK::INFO, web_url.empty() ? "Webchat is stopped (/web start)" : "Webchat on " + web_url);
         else print(b, LK::ERROR, "Usage: /web [start|stop|restart|status]");
+        return;
+    }
+    if (cmd == "bnc") {  // /bnc [start|stop|restart|status|password]
+        std::string a = argv.empty() ? "status" : argv[0];
+        bnc_req_buf = b;
+        if (a == "start") bnc_req = BncReq::START;
+        else if (a == "stop") bnc_req = BncReq::STOP;
+        else if (a == "restart") bnc_req = BncReq::RESTART;
+        else if (a == "status") bnc_req = BncReq::STATUS;
+        else if (a == "password")
+            ask_pass(b, "BNC password", [this, b](const std::string& p) {
+                if (p.empty()) { print(b, LK::ERROR, "No password: it stays as it was"); return; }
+                exec(b, "/set bnc.password_hash " + hash_password(p));
+                if (save_section(*this, "bnc", b)) print(b, LK::INFO, "BNC password saved; /bnc restart uses it");
+            }, true, "BNC password", {"The password your other IRC clients log in with"});
+        else print(b, LK::ERROR, "Usage: /bnc [start|stop|restart|status|password]");
         return;
     }
     if (cmd == "back") { exec(b, "/away"); return; }  // /away with no message

@@ -15,6 +15,7 @@
 #include "core.h"
 #include "session.h"
 #include "web.h"
+#include "bnc.h"
 #include "net.h"
 
 static std::string client_frame(const std::string& p) {  // masked, like a browser
@@ -1375,6 +1376,155 @@ int main() {
         });
         assert(o->st == Dcc::DONE && got == "world");
         close(rcv);
+    }
+
+    {  // the BNC: user/network:password, a welcome made from iSekur's state, lines both ways, plain IRC out
+        core.cfg["bnc"] = {{"bind", "127.0.0.1"}, {"port", "18797"}, {"tls", "off"}, {"user", "u"}, {"password_hash", hash_password("pw")}};
+        std::string nick0 = ts->nick, berr;
+        ts->nick = "me", chb->joined = true, chb->topic = "the topic";
+        chb->nicks["bob"] = NickEntry{"bob", "@+"};
+        core.add(chb, Line{time(nullptr), LK::MSG, "bob", "earlier"});
+        Bnc bnc(core);
+        assert(bnc.start(berr) && bnc.url == "irc://127.0.0.1:18797" && !bnc.attached());
+        auto dial = [] {
+            int fd = socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in a{};
+            a.sin_family = AF_INET, a.sin_port = htons(18797), a.sin_addr.s_addr = htonl(0x7f000001);
+            assert(connect(fd, (sockaddr*)&a, sizeof a) == 0);
+            return fd;
+        };
+        auto io = [&](int fd, const std::string& out, const std::string& until) {  // send, read until `until` shows up
+            if (!out.empty()) assert(write(fd, out.data(), out.size()) == (ssize_t)out.size());
+            std::string got;
+            for (int i = 0; i < 200 && got.find(until) == std::string::npos; i++) {
+                std::vector<pollfd> pf;
+                bnc.add_fds(pf);
+                poll(pf.data(), pf.size(), 5);
+                bnc.process(pf);
+                char rb[65536];
+                ssize_t n = recv(fd, rb, sizeof rb, MSG_DONTWAIT);
+                if (n > 0) got.append(rb, (size_t)n);
+            }
+            return got;
+        };
+        int bad = dial();
+        assert(io(bad, "PASS u/t:nope\r\nNICK x\r\nUSER u 0 * :r\r\n", "ERROR").find(" 464 x ") != std::string::npos);
+        close(bad);
+        int fd = dial();
+        std::string w = io(fd, "CAP LS 302\r\nPASS u/t:pw\r\nNICK x\r\nUSER u 0 * :r\r\nCAP REQ :server-time\r\nCAP END\r\n", "earlier");
+        assert(w.find(":isekur CAP * LS :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join "
+                      "invite-notify labeled-response message-tags multi-prefix server-time setname userhost-in-names") != std::string::npos && w.find("CAP x ACK :server-time") != std::string::npos);
+        assert(w.find(":isekur 001 me :") != std::string::npos && w.find(":me JOIN #c\r\n") != std::string::npos);
+        assert(w.find(" 332 me #c :the topic") != std::string::npos && w.find(" 353 me = #c :@bob") != std::string::npos);
+        assert(w.find(" :bob PRIVMSG #c :earlier") != std::string::npos && w.find("@time=") != std::string::npos && bnc.attached());
+        // the network's lines: tags gone but the time, echoes and iSekur's own background replies kept back
+        bnc.from_server(ts, "@account=c;time=2026-01-02T03:04:05.000Z :carol!c@h PRIVMSG #c :live");
+        bnc.from_server(ts, ":carol!c@h JOIN #c carol :Carol C");
+        std::string got = io(fd, "", "JOIN");
+        assert(got.find("account=") == std::string::npos);
+        assert(got.find("@time=2026-01-02T03:04:05.000Z :carol!c@h PRIVMSG #c :live") != std::string::npos);
+        assert(got.find(":carol!c@h JOIN #c\r\n") != std::string::npos);
+        // iSekur's own WHOX after a join is kept back, a client's /who of another channel isn't
+        ts->who_auto.insert("#c");
+        bnc.from_server(ts, ":srv 354 me 777 #c u h carol H 0 :Carol");
+        bnc.from_server(ts, ":srv 315 me #c :End of /WHO list.");
+        bnc.from_server(ts, ":srv 352 me #other u h srv dave H :0 Dave");
+        bnc.from_server(ts, ":srv 315 me #other :End of /WHO list.");
+        got = io(fd, "", "#other :End");
+        ts->who_auto.clear();
+        assert(got.find(" 777 ") == std::string::npos && got.find("315 me #c ") == std::string::npos && got.find(" 352 me #other ") != std::string::npos);
+        // the network drops: the client's channels close, and open again with iSekur's rejoin
+        ts->state = SS::REGISTERING;
+        got = io(fd, "", "PART");
+        assert(got.find("*** Disconnected from t") != std::string::npos && got.find(":me PART #c :Disconnected from t") != std::string::npos);
+        ts->state = SS::CONNECTED;
+        bnc.from_server(ts, ":me!m@h JOIN #c");
+        got = io(fd, "", "JOIN");
+        assert(got.find("*** Connected to t") != std::string::npos && got.find(":me!m@h JOIN #c") != std::string::npos);
+        // what it says goes through iSekur: upstream, and into the tab
+        ts->conn.out.clear();
+        io(fd, "PRIVMSG #c :hi there\r\nMODE #c\r\n", "\n");
+        std::string up = ts->conn.out;
+        for (auto& q : ts->sendq) up += q;
+        assert(up.find("PRIVMSG #c :hi there\r\n") != std::string::npos && up.find("MODE #c\r\n") != std::string::npos);
+        assert(chb->lines.back().text == "hi there" && chb->lines.back().self);
+        {  // a client with all of it: no backlog (it asks), CHATHISTORY from the tab, tags both ways, its own echoes
+            for (auto& l : chb->lines) if (l.text == "earlier") l.msgid = "m1";
+            int z = dial();
+            std::string zw = io(z, "CAP LS 302\r\nPASS u/t:pw\r\nNICK z\r\nUSER u 0 * :r\r\n"
+                                   "CAP REQ :server-time message-tags echo-message batch draft/chathistory\r\nCAP END\r\n", " 366 ");
+            assert(zw.find("CHATHISTORY=500") != std::string::npos && zw.find("earlier") == std::string::npos);
+            std::string h = io(z, "CHATHISTORY LATEST #c * 50\r\n", "BATCH -");
+            assert(h.find(" BATCH +h1 chathistory #c") != std::string::npos && h.find("@batch=h1;time=") != std::string::npos);
+            assert(h.find(";msgid=m1 :bob PRIVMSG #c :earlier") != std::string::npos);
+            h = io(z, "CHATHISTORY BEFORE #c msgid=m1 10\r\n", "BATCH -");
+            assert(h.find("earlier") == std::string::npos && h.find("BATCH -h2") != std::string::npos);
+            h = io(z, "CHATHISTORY TARGETS timestamp=2000-01-01T00:00:00.000Z timestamp=2100-01-01T00:00:00.000Z 10\r\n", "BATCH -");
+            assert(h.find("CHATHISTORY TARGETS #c ") != std::string::npos);
+            // upstream does echo-message and message-tags: client tags go up, the echo comes back to it with its msgid
+            ts->caps.insert("echo-message"), ts->caps.insert("message-tags"), ts->conn.out.clear(), ts->sendq.clear();
+            io(z, "@+draft/reply=m1 PRIVMSG #c :tagged\r\n", "\n");
+            std::string up2 = ts->conn.out;
+            for (auto& q : ts->sendq) up2 += q;
+            assert(up2.find("@+draft/reply=m1 PRIVMSG #c :tagged\r\n") != std::string::npos);
+            bnc.from_server(ts, "@msgid=m2;+draft/reply=m1;time=2026-01-02T03:04:06.000Z :me!m@h PRIVMSG #c :tagged");
+            bnc.from_server(ts, "@+typing=active :carol!c@h TAGMSG #c");
+            h = io(z, "", "TAGMSG");
+            assert(h.find("@time=2026-01-02T03:04:06.000Z;+draft/reply=m1;msgid=m2 :me!m@h PRIVMSG #c :tagged") != std::string::npos);
+            assert(h.find("@+typing=active :carol!c@h TAGMSG #c") != std::string::npos);
+            got = io(fd, "PING :x\r\n", "PONG");  // the other client: the line once, plain, and no TAGMSG
+            assert(got.find(":me!m@h PRIVMSG #c :tagged") != std::string::npos && got.find("TAGMSG") == std::string::npos && got.find("msgid") == std::string::npos);
+            // without echo-message upstream the BNC echoes it to the clients that asked, the sender too
+            ts->caps.erase("echo-message");
+            io(z, "PRIVMSG #c :plain one\r\n", "plain one");
+            ts->caps.erase("message-tags");
+            assert(io(fd, "", "plain one").find(":me PRIVMSG #c :plain one") != std::string::npos);
+            io(z, "QUIT\r\n", "ERROR");
+            close(z);
+        }
+        {  // the network's IRCv3 to the clients that ask; answers to a labeled command to that client alone
+            int y = dial();
+            std::string yw = io(y, "CAP LS 302\r\nPASS u/t:pw\r\nNICK y\r\nUSER u 0 * :r\r\n"
+                                   "CAP REQ :extended-join multi-prefix away-notify labeled-response batch message-tags\r\nCAP END\r\n", " 366 ");
+            assert(yw.find(" 353 me = #c :@+bob") != std::string::npos && yw.find(":me JOIN #c * :") != std::string::npos);
+            bnc.from_server(ts, ":carol!c@h JOIN #c acct :Carol C");
+            bnc.from_server(ts, ":carol!c@h AWAY :gone");
+            bnc.from_server(ts, ":srv 353 me = #c :@+bob!b@h carol!c@h");
+            std::string g = io(y, "", "carol!c@h\r\n");
+            assert(g.find(":carol!c@h JOIN #c acct :Carol C") != std::string::npos && g.find(":carol!c@h AWAY :gone") != std::string::npos);
+            assert(g.find(" 353 me = #c :@+bob carol") != std::string::npos);
+            got = io(fd, "PING :a\r\n", "PONG");
+            assert(got.find("AWAY") == std::string::npos && got.find(":carol!c@h JOIN #c\r\n") != std::string::npos && got.find(" 353 me = #c :@bob carol") != std::string::npos);
+            ts->caps.insert("labeled-response"), ts->conn.out.clear(), ts->sendq.clear();
+            io(y, "@label=L1 WHOIS bob\r\n@label=L2 MODE #c\r\n", "\n");
+            std::string up3 = ts->conn.out;
+            for (auto& q : ts->sendq) up3 += q;
+            assert(up3.find("@label=b1 WHOIS bob\r\n") != std::string::npos && up3.find("@label=b2 MODE #c\r\n") != std::string::npos);
+            bnc.from_server(ts, "@label=b1 :srv BATCH +X labeled-response");
+            bnc.from_server(ts, "@batch=X :srv 311 me bob b h * :Bob");
+            bnc.from_server(ts, ":srv BATCH -X");
+            bnc.from_server(ts, "@label=b2 :srv 324 me #c +nt");
+            g = io(y, "", " 324 ");
+            assert(g.find("@label=L1 :srv BATCH +X labeled-response") != std::string::npos && g.find("@batch=X :srv 311 me bob") != std::string::npos);
+            assert(g.find(":srv BATCH -X") != std::string::npos && g.find("@label=L2 :srv 324 me #c +nt") != std::string::npos);
+            got = io(fd, "PING :b\r\n", "PONG");
+            assert(got.find(" 311 ") == std::string::npos && got.find(" 324 ") == std::string::npos);
+            ts->caps.erase("labeled-response");
+            assert(io(y, "@label=L3 WHOIS bob\r\n", "ACK").find("@label=L3 :isekur ACK") != std::string::npos);  // can't tell: ACK now
+            io(y, "QUIT\r\n", "ERROR");
+            close(y);
+        }
+        // what the terminal says reaches the client as ours
+        core.say(chb, "from the terminal");
+        assert(io(fd, "", "terminal").find(":me PRIVMSG #c :from the terminal") != std::string::npos);
+        assert(io(fd, "QUIT\r\n", "ERROR").find("ERROR :Detached") != std::string::npos);
+        close(fd);
+        io(-1, "", "never");
+        assert(!bnc.attached());
+        bnc.stop();
+        assert(!Server::tap && !bnc.running());
+        ts->nick = nick0, chb->topic.clear(), chb->nicks.erase("bob"), ts->conn.out.clear(), ts->sendq.clear();
+        core.cfg.erase("bnc");
     }
 
     {  // the webchat end to end: login, WebSocket, nick lists only when they change, older lines on request

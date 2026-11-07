@@ -197,7 +197,7 @@ long ws_parse(const std::string& b, int& op, std::string& payload, bool* fin) {
 }
 
 // ---- self-signed certificate -----------------------------------------------
-static bool gen_selfsigned(const std::string& crt, const std::string& key, std::string& err) {
+bool gen_selfsigned(const std::string& crt, const std::string& key, std::string& err) {
     EVP_PKEY* pk = nullptr;
     EVP_PKEY_CTX* kc = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
     bool ok = kc && EVP_PKEY_keygen_init(kc) > 0 &&

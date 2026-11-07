@@ -1195,7 +1195,7 @@ static std::string cat_label(const std::string& c) {
     if (c == "general") return "Global";
     if (c.rfind("server.", 0) == 0 && cat_parent(c).empty()) return "⇢ " + c.substr(7);
     if (!cat_parent(c).empty()) return (cat_parent(c) == "general" ? "  " : "    ") + c.substr(c.find('/') + 1);
-    return c == "web" ? "Web" : c == "keys" ? "Keys" : c;
+    return c == "web" ? "Web" : c == "bnc" ? "BNC" : c == "keys" ? "Keys" : c;
 }
 
 // the server the selected key or category is about ("" for none): its keys, or a "server.x" category

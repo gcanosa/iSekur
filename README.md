@@ -35,6 +35,10 @@ that mirrors your live session in a browser, bouncer style.
   iPhone webchat). That needs a trusted certificate (`cert`/`key` in `[web]`, e.g. Let's Encrypt or
   `tailscale cert`) or localhost: with the self-signed one it stays a plain web page.
   Off unless you ask: `[web] autostart = on`, `isekur --web`, or `/web start` / `/web stop` while running
+- Built-in BNC (bouncer): irssi, weechat, hexchat, mIRC or a phone app connect to your iSekur and share
+  its session, the same networks and channels, the last lines of each tab, then everything live; what
+  they send shows in iSekur too. TLS or plain, one user. `/bnc start`, `[bnc] autostart = on`, or
+  `isekur --bnc` to run only the bouncer in the background; clients that do IRCv3 get chathistory, tags and echoes (below)
 - Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
 - `--daemon` starts it headless; attach from a terminal or the browser
@@ -110,7 +114,7 @@ default (the example servers commented out, an empty value means the default), s
 it by hand, or change settings from inside the client with `/set theme neon`, `/set server.sekurnet.autojoin #a,#b`
 and write them back with `/save` (comments in the file are kept). Changes apply
 right away; server settings are used on the next `/connect`, `[web]` after `/web stop` + `/web start`. Run
-`./isekur --hash-password` to get the `[web] password_hash` value.
+`./isekur --hash-password` to get the `[web] password_hash` value (or the `[bnc]` one).
 
 The first start also opens the **first steps guide** (`*guide` tab): your nick, a first server,
 channels, keys, settings, the webchat and safety, on pages you turn with ← → or Prev/Next.
@@ -140,6 +144,86 @@ Closing the terminal or losing the SSH connection detaches too. One terminal is 
 background goes to `isekur.log` (`work.log`) there. On Linux servers where systemd kills
 your processes at logout (`KillUserProcesses=yes`), run `loginctl enable-linger $USER` once.
 Not available on Cygwin.
+
+## BNC (bouncer)
+
+iSekur can be the bouncer for your other IRC clients: irssi, weechat, hexchat, mIRC, a phone app, or
+another iSekur. They connect to it instead of to the network and share its session: the same
+networks and channels, the recent lines, then everything live. What they send goes out through
+iSekur, so your terminal, the webchat and the other clients see it too. One user for now.
+
+### Host it: the iSekur that stays connected
+
+1. Pick a login name and a password (inside iSekur, or in `[bnc]` in the config):
+
+       /set bnc.user me
+       /bnc password            # asks in a box, saves the hash
+
+2. Choose where it listens. The defaults are `127.0.0.1`, port `6698`, TLS on:
+
+       /set bnc.bind 0.0.0.0    # every address, for other machines (keep TLS on then)
+       /set bnc.port 6698
+       /set bnc.tls on          # off: plain IRC, best kept to 127.0.0.1 or an SSH tunnel
+       /save
+
+   With TLS and no `cert`/`key`, iSekur makes a self-signed `bnc.crt` next to the config. Clients
+   then have to skip the certificate check; point `cert`/`key` at a real one (Let's Encrypt,
+   `tailscale cert`) to avoid that. The same settings are under **BNC** in the `/set` window.
+
+3. Start it:
+
+       /bnc start               # now; /bnc stop, /bnc restart after changing settings
+       /set bnc.autostart on    # every time iSekur starts
+       isekur --bnc             # or from the shell: in the background, the bouncer only
+                                # (no terminal, no webchat; --web adds it, --attach still works)
+
+`/bnc` shows where it listens and who is connected; the console tab logs every client that
+comes, goes or gets the password wrong (five wrong tries lock that address out for a while).
+
+### Connect to it: your other clients
+
+Each connection is one network. Its server password says which: `user/network:password`, e.g.
+`me/sekurnet:secret` for `[server.sekurnet]` (with only one network, `me:secret` is enough).
+The nick is whatever iSekur uses there.
+
+| Client  | How |
+|---------|-----|
+| irssi   | `/connect -tls home.example 6698 me/sekurnet:secret` |
+| weechat | `/server add home home.example/6698 -tls -tls_verify=off -password=me/sekurnet:secret` then `/connect home` |
+| hexchat | Network List, Add: server `home.example/6698`, *Use SSL*, *Accept invalid SSL certificates*, Login method *Server password*, Password `me/sekurnet:secret` |
+| mIRC    | `/server -m home.example +6698 me/sekurnet:secret` (`+` is TLS; accept the certificate when it asks) |
+| iSekur  | below |
+
+Drop the TLS options with `tls = off`, and the "skip the check" ones with a real certificate.
+
+The client gets the channels iSekur is in with their topics and nicks, then the last `backlog`
+lines of each tab (50; with the time in front, or as server-time), then everything live.
+`QUIT` (`/quit` in most clients) only disconnects that client: iSekur stays on the network.
+When the network drops, the client's channels close with a note and open again on the rejoin.
+
+### Another iSekur as the client
+
+A laptop's iSekur can use the one at home as its server, with no ssh. Add it to the laptop's config:
+
+    [server.home]
+    host       = home.example
+    port       = 6698
+    tls        = true
+    tls_verify = false              ; the self-signed bnc.crt (true with a real certificate)
+    password   = me/sekurnet:secret
+
+or from inside it: `/server home.example 6698 -tls -noverify -name home`, then
+`/set server.home.password me/sekurnet:secret`, `/save` and `/connect home`.
+
+It gets the full IRCv3 set the BNC offers: `draft/chathistory` (served from the home iSekur's tabs, so
+history loads on join and when scrolling up, even on networks without it), `message-tags` (replies,
+reactions, typing, msgids), `echo-message`, `labeled-response`, `server-time`, `batch`, `away-notify`,
+`account-notify`, `account-tag`, `chghost`, `setname`, `extended-join`, `multi-prefix`,
+`userhost-in-names` and `invite-notify`. Other IRCv3 clients (weechat, Goguma, gamja) ask for
+what they know the same way; a client that does chathistory gets no backlog on connect, it loads its own.
+
+Not to be confused with `/attach host`: that shows the remote iSekur itself in a tab, over ssh. The BNC
+lets any IRC client in, with its own look, but only for what IRC carries (no `/set`, plugins or logs).
 
 ## Keys
 
@@ -182,7 +266,7 @@ dropped instead of showing up as garbage.
 
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
-`/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/logs [text]` (the log browser, below), `/web [start|stop|status]`,
+`/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/logs [text]` (the log browser, below), `/web [start|stop|status]`, `/bnc [start|stop|restart|status|password]`,
 `/clear`, `/back` (clears away), `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected, and for the lock password when one is set). Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 
