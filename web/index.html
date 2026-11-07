@@ -1101,7 +1101,7 @@ function renderTopic() {
   $("#topic .tm").textContent = b && b.type === "channel" && b.modes ? "+" + b.modes : "";
   if (!b) return;
   if (b.type === "channel") mirc(t, b.topic || "");
-  else if (b.name === "*channels") t.textContent = "Channel list: type a word to filter by name or topic · /list again refreshes it · /join #channel";
+  else if (b.name === "*channels") t.textContent = "Channel list: type a word to filter by name or topic, Esc clears · /list again refreshes it · /join #channel";
   else if (b.name === "*guide") t.textContent = "First steps guide: ← → or Prev / Next turn the pages · /guide N jumps · q or Esc closes";
   else if (b.type === "query") t.textContent = "Query with " + b.name;
   else if (b.type === "shell") t.textContent = b.host ? "Remote iSekur: ssh " + b.host + " (in iSekur's terminal only)" : "Shell: it runs in iSekur's terminal only";
@@ -1198,7 +1198,7 @@ function renderMsgs() {
     if (i === mark) { const d = document.createElement("div"); d.className = "newmark"; d.textContent = "new"; frag.append(d); }
     frag.append(lineEl(b, l));
   });
-  m.append(frag); m.scrollTop = b.top != null ? b.top : m.scrollHeight;
+  m.append(frag); m.scrollTop = b.top != null ? b.top : b.name === "*channels" ? 0 : m.scrollHeight;  // the /list table opens at its top
   renderPane2();
 }
 
@@ -1484,7 +1484,7 @@ function onMsg(ev) {
       box.append(el);
       if (m.line.ty) typeOut(el.querySelector(".tx"));
       while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
-      if (atBottom) box.scrollTop = box.scrollHeight;
+      if (atBottom && b.name !== "*channels") box.scrollTop = box.scrollHeight;  // the /list table arriving row by row stays at its top
     } else if (m.buf === split) {
       const box = $("#msgs2"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       box.append(lineEl(b, m.line));
@@ -2674,6 +2674,7 @@ line.addEventListener("keydown", e => {
   if (gk && gb && gb.name === "*guide" && !inp.value && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault(); send({t: "input", buf: active, text: "/guide " + gk}); return;
   }
+  if (e.key === "Escape" && gb && gb.name === "*channels" && !inp.value) { e.preventDefault(); send({t: "input", buf: active, text: "/list filter"}); return; }  // clears its filter
   if (e.ctrlKey && !e.altKey && !e.metaKey && FMT[e.key.toLowerCase()] && !(e.key.toLowerCase() === "c" && inp.selectionStart !== inp.selectionEnd)) {
     e.preventDefault(); insert(enc(FMT[e.key.toLowerCase()])); return;
   }

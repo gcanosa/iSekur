@@ -656,7 +656,7 @@ void Tui::draw() {
         fill(0, 0, W, ts);
         std::string topic;
         if (b->type == BT::CHANNEL) topic = b->topic;
-        else if (b->name == "*channels") topic = "Channel list: type a word to filter by name or topic · /list again refreshes it · /join #channel";
+        else if (b->name == "*channels") topic = "Channel list: type a word to filter by name or topic, Esc clears · /list again refreshes it · /join #channel";
         else if (b->name == "*raw" && b->srv) topic = "Raw log: \xe2\x86\x90 from the server, \xe2\x86\x92 to it · /rawlog off or Ctrl+W stops it";
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
         else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · q, Esc or Ctrl+W closes";
@@ -2467,6 +2467,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     }
     if (mod & TB_MOD_ALT) return;  // unbound Alt combos do nothing
     if (input.empty() && guide_tab() && ((ch == 'q' || ch == 'Q') || (k == TB_KEY_ESC && !ch))) { c.guide(c.active, "close"); return; }  // q or Esc closes the guide
+    if (input.empty() && k == TB_KEY_ESC && !ch && c.active->srv && c.active->name == "*channels") { c.list_filter(c.active, ""); return; }  // Esc clears the /list filter
     if (ch || k == TB_KEY_SPACE) { input.insert(cur++, 1, ch ? (char32_t)ch : U' '); return; }
     switch (k) {
     case TB_KEY_ENTER: submit(); break;

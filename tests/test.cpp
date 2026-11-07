@@ -1222,6 +1222,13 @@ int main() {
     assert(lb->lines.size() == 2);
     core.exec(lb, "/list filter");  // all again
     assert(lb->lines.size() == 5);
+    core.exec(lb, "/list filter");  // nothing on (Esc again): no redraw, no error
+    assert(lb->lines.size() == 5 && lb->lines.back().kind != LK::ERROR);
+    {  // its tab menu: no nick behind it, so no CTCP or ignore
+        auto tm = core.tab_menu(lb);
+        assert(!tm.empty() && tm.front().second == "/list" && tm.back().second == "/close");
+        for (auto& it : tm) assert(it.first.find("CTCP") == std::string::npos && it.first != "Ignore");
+    }
     core.select(chb);
 
     {  // /sv: the CTCP VERSION text as an action

@@ -304,6 +304,15 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
         else m.push_back({"Close", "/close"});
         return m;
     }
+    if (b->type == BT::QUERY && s && (b->name == "*channels" || b->name == "*snotices" || b->name == "*raw")) {  // iSekur's own tabs: no nick behind them
+        if (b->name == "*channels") {
+            m.push_back({"Refresh list", "/list"});
+            if (!s->list_filter.empty()) m.push_back({"Clear filter", "/list filter"});
+        } else m.push_back({"Clear", "/clear"});
+        m.push_back({"", ""});
+        m.push_back({"Close", "/close"});
+        return m;
+    }
     if (b->type == BT::QUERY && s) {  // a private chat: the nick's menu (bar Query, Mention), then the tab's own
         for (auto& it : nick_menu(b, b->name))
             if (it.first != "Query" && it.first != "Mention" && !(m.empty() && it.first.empty())) m.push_back(it);
@@ -341,6 +350,7 @@ void Core::list_sort(Buffer* b, const std::string& by) {
 // /list filter text, or text typed in *channels: the rows whose channel or topic has it (any case); "" all of them
 void Core::list_filter(Buffer* b, const std::string& text) {
     Server* s = b->srv;
+    if (s && text == s->list_filter) return;  // Esc with no filter on: nothing to redraw
     if (!s || s->list.empty()) { print(b, LK::ERROR, "Nothing to filter: /list first"); return; }
     s->list_filter = text;
     list_table(s);
@@ -379,10 +389,10 @@ void Core::list_table(Server* s) {
     const size_t shown = std::min<size_t>(V.size(), 1900), rw = std::to_string(std::max<size_t>(shown, 1)).size() + 1;
     out("\x02" "Channels on " + (s->network.empty() ? s->cfg.name : s->network) + "\x02  \x03" "14" + std::to_string(V.size()) +
         (V.size() == 1 ? " channel, " : " channels, ") + std::to_string(total) + " users" +
-        (f.empty() ? std::string() : " matching \x0f\x02" + s->list_filter + "\x0f\x03" "14 (of " + std::to_string(L.size()) + ", /list filter shows all)"));
+        (f.empty() ? std::string() : " matching \x0f\x02" + s->list_filter + "\x0f\x03" "14 (of " + std::to_string(L.size()) + ", Esc shows all)"));
     if (V.empty()) {
         out("\x03" "14" + (f.empty() ? std::string("Nothing matched. /list alone lists them all, /list *word* filters")
-                                     : "No channel or topic has that. Type another word, or /list filter shows all"));
+                                     : "No channel or topic has that. Type another word, or Esc shows all"));
         dirty = true;
         return;
     }
@@ -403,6 +413,6 @@ void Core::list_table(Server* s) {
             lpad(std::to_string(e.users), 7) + "\x0f  " + topic);
     }
     out("\x03" "14" + (shown < V.size() ? "The " + std::to_string(shown) + " busiest of " + std::to_string(V.size()) + " · " : std::string()) +
-        "double click a channel to join · click Channel or Users to sort · type a word here to filter by name or topic");
+        "double click a channel to join · click Channel or Users to sort · type a word here to filter by name or topic, Esc clears it");
     dirty = true;
 }
