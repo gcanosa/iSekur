@@ -2308,6 +2308,7 @@ print("loaded")
         size_t n_after = pchan->lines.size();
         pc.exec(ps->status, "/awaylog");  // again, in full
         assert(ps->status->lines.back().text.find("* carol waves") != std::string::npos && pchan->lines.size() == n_after);
+        assert(ps->status->lines[ps->status->lines.size() - 4].text.find("2 PMs from carol on " + ps->status->name) != std::string::npos);  // /awaylog names the network
         pc.exec(ps->status, "/awaylog clear");
         pc.exec(ps->status, "/awaylog");
         assert(ps->status->lines.back().text == "awaylog: nothing came while you were away");
