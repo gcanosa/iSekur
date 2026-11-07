@@ -287,6 +287,7 @@ struct Server {
     bool listing = false;
     char list_sort = 'u';        // 'u' users, 'n' name
     bool list_rev = false;       // users ascending / names Z-A
+    std::string list_filter;     // text typed in *channels: rows whose name or topic has it
     std::string scram_bare, scram_sig;  // SCRAM client-first-bare, expected server sig
     int sasl_step = 0, nick_tries = 0, backoff = 0;
     bool cap_done = false, sasl_ok = false;
@@ -504,7 +505,8 @@ struct Core {
     std::vector<std::string> about_full;  // its lines in full; about_typed get typed out in turn
     std::vector<int> about_typed;
     void list_table(Server* s);  // chanops.cpp: the collected /list as a table in *channels
-    void list_sort(Buffer* b, const std::string& by);  // "name", "users" or "" (flip the current one)
+    void list_sort(Buffer* b, const std::string& by);
+    void list_filter(Buffer* b, const std::string& text);  // "" shows them all again  // "name", "users" or "" (flip the current one)
     void fold(Buffer* status);  // a server tab: hide or show its channels in the tab bar and the webchat list
 
     void handle(Server* s, const Msg& m);  // irc.cpp

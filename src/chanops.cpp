@@ -338,6 +338,14 @@ void Core::list_sort(Buffer* b, const std::string& by) {
     list_table(s);
 }
 
+// /list filter text, or text typed in *channels: the rows whose channel or topic has it (any case); "" all of them
+void Core::list_filter(Buffer* b, const std::string& text) {
+    Server* s = b->srv;
+    if (!s || s->list.empty()) { print(b, LK::ERROR, "Nothing to filter: /list first"); return; }
+    s->list_filter = text;
+    list_table(s);
+}
+
 // /list, busiest first (or by name, /list sort):
 //    #   Channel          Users  Topic
 //    1.  #linux            1834  [+nt] Welcome to ...
@@ -354,22 +362,36 @@ void Core::list_table(Server* s) {
         if (by_name) return rev ? an > zn : an < zn;
         return a.users != z.users ? (rev ? a.users < z.users : a.users > z.users) : an < zn;
     });
+    std::vector<const Server::ListEntry*> V;  // the rows shown: all, or those the filter matches
+    std::string f = s->list_filter;
+    for (auto& ch : f) ch = (char)tolower((unsigned char)ch);  // ponytail: ASCII case folding, UTF-8 matches as typed
+    for (auto& e : L) {
+        std::string hay = e.chan + " " + mirc_strip(e.topic);
+        for (auto& ch : hay) ch = (char)tolower((unsigned char)ch);
+        if (hay.find(f) != std::string::npos) V.push_back(&e);
+    }
     auto len = [](const std::string& t) { size_t n = 0; for (unsigned char ch : t) n += (ch & 0xc0) != 0x80; return n; };
     auto pad = [&](const std::string& t, size_t w) { return t + std::string(w > len(t) ? w - len(t) : 0, ' '); };
     auto lpad = [&](const std::string& t, size_t w) { return std::string(w > len(t) ? w - len(t) : 0, ' ') + t; };
     long total = 0;
     size_t nw = 7;  // "Channel"
-    for (auto& e : L) total += e.users, nw = std::max(nw, std::min<size_t>(len(e.chan), 30));
-    const size_t shown = std::min<size_t>(L.size(), 1900), rw = std::to_string(std::max<size_t>(shown, 1)).size() + 1;
-    out("\x02" "Channels on " + (s->network.empty() ? s->cfg.name : s->network) + "\x02  \x03" "14" + std::to_string(L.size()) +
-        (L.size() == 1 ? " channel, " : " channels, ") + std::to_string(total) + " users");
-    if (L.empty()) { out("\x03" "14Nothing matched. /list alone lists them all, /list *word* filters"); return; }
+    for (auto* e : V) total += e->users, nw = std::max(nw, std::min<size_t>(len(e->chan), 30));
+    const size_t shown = std::min<size_t>(V.size(), 1900), rw = std::to_string(std::max<size_t>(shown, 1)).size() + 1;
+    out("\x02" "Channels on " + (s->network.empty() ? s->cfg.name : s->network) + "\x02  \x03" "14" + std::to_string(V.size()) +
+        (V.size() == 1 ? " channel, " : " channels, ") + std::to_string(total) + " users" +
+        (f.empty() ? std::string() : " matching \x0f\x02" + s->list_filter + "\x0f\x03" "14 (of " + std::to_string(L.size()) + ", /list filter shows all)"));
+    if (V.empty()) {
+        out("\x03" "14" + (f.empty() ? std::string("Nothing matched. /list alone lists them all, /list *word* filters")
+                                     : "No channel or topic has that. Type another word, or /list filter shows all"));
+        dirty = true;
+        return;
+    }
     const char* arrow = rev ? " \u25B2" : " \u25BC";  // ▼ the usual order: users high to low, names A-Z; ▲ reversed
     std::string head = " " + lpad("#", rw) + "  " + pad(std::string("Channel") + (by_name ? arrow : ""), nw) + "  " +
                        lpad(std::string("Users") + (by_name ? "" : arrow), 7) + "  Topic";
     out("\x03" "00,02\x02" + pad(head, std::max<size_t>(len(head) + 30, 72)) + "\x0f");
     for (size_t i = 0; i < shown; i++) {
-        auto& e = L[i];
+        auto& e = *V[i];
         // busy channels stand out: 1000+ pink, 100+ yellow, 10+ green, the rest gray
         const char* uc = e.users >= 1000 ? "13" : e.users >= 100 ? "08" : e.users >= 10 ? "09" : "14";
         std::string topic = e.topic;
@@ -380,7 +402,7 @@ void Core::list_table(Server* s) {
         out(" \x03" "14" + lpad(std::to_string(i + 1) + ".", rw) + "\x0f  \x02\x03" "00" + pad(e.chan, nw) + "\x0f  \x03" + uc +
             lpad(std::to_string(e.users), 7) + "\x0f  " + topic);
     }
-    out("\x03" "14" + (shown < L.size() ? "The " + std::to_string(shown) + " busiest of " + std::to_string(L.size()) + " · " : std::string()) +
-        "double click a channel to join · click Channel or Users to sort · /list *word* filters");
+    out("\x03" "14" + (shown < V.size() ? "The " + std::to_string(shown) + " busiest of " + std::to_string(V.size()) + " · " : std::string()) +
+        "double click a channel to join · click Channel or Users to sort · type a word here to filter by name or topic");
     dirty = true;
 }

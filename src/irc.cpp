@@ -1319,7 +1319,7 @@ void Core::handle(Server* s, const Msg& m) {
 
     // /list: a table in the server's *channels tab, busiest first, drawn when the 323 ends it
     if (cmd == "321" || (cmd == "322" && !s->listing)) {
-        s->list.clear(), s->listing = true, s->list_sort = 'u', s->list_rev = false;
+        s->list.clear(), s->listing = true, s->list_sort = 'u', s->list_rev = false, s->list_filter.clear();
         Buffer* lb = open(s, BT::QUERY, "*channels");
         lb->lines.clear(), lb->scroll = lb->unread = 0;
         notify(Ev::CLEAR, lb);

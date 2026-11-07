@@ -1216,6 +1216,12 @@ int main() {
     assert(mirc_strip(lb->lines[2].text).rfind(" 1.  #small", 0) == 0 && mirc_strip(lb->lines[1].text).find("Channel \u25B2") != std::string::npos);
     core.exec(lb, "/list sort users");
     assert(mirc_strip(lb->lines[2].text).rfind(" 1.  #big", 0) == 0);
+    core.exec(lb, "HI");  // typed in *channels: filters by name or topic, any case
+    assert(lb->lines.size() == 4 && mirc_strip(lb->lines[2].text).rfind(" 1.  #small", 0) == 0 && mirc_strip(lb->lines[0].text).find("matching HI") != std::string::npos);
+    core.exec(lb, "nope");
+    assert(lb->lines.size() == 2);
+    core.exec(lb, "/list filter");  // all again
+    assert(lb->lines.size() == 5);
     core.select(chb);
 
     {  // /sv: the CTCP VERSION text as an action

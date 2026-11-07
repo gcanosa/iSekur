@@ -476,7 +476,9 @@ static const std::vector<CmdInfo> CMDS = {
      "(up to 1900 rows; a new /list replaces it). The pattern is sent as typed: *word* "
      "filters by name; many servers also take >N (more than N users). /list sort name|users "
      "(or a click on the Channel or Users header) sorts it again, a second time reverses it; "
-     "double click a channel to join it.", {"/list", "/list *linux*", "/list sort name"}},
+     "a word typed in the *channels tab (or /list filter word) keeps the rows whose name or topic has it, "
+     "/list filter alone shows them all again; double click a channel to join it.",
+     {"/list", "/list *linux*", "/list sort name", "/list filter linux"}},
 
     // ---- IRC operator (sent to the server; the reason/message needs no ':')
     {"oper", "IRC operator", "user [password]", "Log in as an IRC operator",

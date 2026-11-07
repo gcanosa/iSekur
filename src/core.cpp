@@ -1356,6 +1356,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (in[0] != '/' || in.rfind("//", 0) == 0) {
+        if (b->srv && b->name == "*channels") { list_filter(b, in); return; }  // typed in the /list table: it filters it
         say(b, in[0] == '/' ? in.substr(1) : in);
         return;
     }
@@ -2147,6 +2148,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "list" && !argv.empty() && argv[0] == "sort") { list_sort(b, argv.size() > 1 ? argv[1] : ""); return; }
+    if (cmd == "list" && !argv.empty() && argv[0] == "filter") { list_filter(b, rest(1)); return; }
     if (cmd == "oper" && argv.size() == 1) {  // no password typed: ask for it, hidden
         if (!need()) return;
         std::string user = argv[0];

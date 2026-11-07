@@ -102,10 +102,14 @@ static void linkify(Row& r) {
     }
 }
 
+static RGB readable(RGB c, RGB bg);
 static void cells(Row& out, const std::string& s, Style st, bool mirc = true) {
     auto put = [&](uint32_t cp, const Style& cs) {
         int w = cwidth(cp);
-        if (w) out.push_back({cp, cs, w});
+        if (!w) return;
+        out.push_back({cp, cs, w});
+        // a mIRC color on the theme's background (yellow on rose-pine-dawn): toward black or white until it reads
+        if (mirc && cs.fg != st.fg && cs.bg == st.bg) out.back().st.fg = readable(cs.fg, st.bg);
     };
     if (mirc) mirc_walk(s, st, put);
     else
@@ -421,7 +425,9 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     // timestamp_align = right: the time at the right edge of the first row, the text wraps short of it
     bool ts_right = ini_get(c.cfg, "general", "timestamp_align") == "right";
     Row pre, tsr;
-    cells(ts_right ? tsr : pre, fmt_time(l.ts, tsfmt) + (ts_right ? "" : " "), T.get("timestamp"), false);
+    bool table = b->name == "*channels";  // the /list table: no time, no "--" column, the whole width for its rows
+    if (!table)
+        cells(ts_right ? tsr : pre, fmt_time(l.ts, tsfmt) + (ts_right ? "" : " "), T.get("timestamp"), false);
 
     std::string marker;
     Style ms, body = T.get("default");
@@ -456,6 +462,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     if (auto em = T.lay("event_marker", ""); !em.empty() && l.kind != LK::MSG && l.kind != LK::NOTICE)  // mirc: "*"
         marker = l.kind == LK::INFO && !b->srv && b->type != BT::SHELL ? "" : em;  // home tab's banner and welcome: bare
     Row nick;
+    if (!table) {
     cells(nick, marker, ms, false);
     if (nw > 0 && width(nick) > nw) {  // nick_width 0: no column, the nick as long as it is
         while (!nick.empty() && width(nick) > nw - 1) nick.pop_back();
@@ -465,6 +472,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     pre.insert(pre.end(), nick.begin(), nick.end());
     std::string sep = T.lay("separator", "│");
     if (!marker.empty() || !sep.empty()) cells(pre, sep.empty() ? " " : " " + sep + " ", T.get("separator"), false);
+    }
 
     int tsw = tsr.empty() ? 0 : width(tsr) + 1, indent = width(pre), avail = std::max(10, width_ - indent - tsw);
     if (l.typed_at && !full) {  // /typing: the part typed so far, and the cursor
@@ -648,7 +656,7 @@ void Tui::draw() {
         fill(0, 0, W, ts);
         std::string topic;
         if (b->type == BT::CHANNEL) topic = b->topic;
-        else if (b->name == "*channels") topic = "Channel list: /list again refreshes it · /join #channel";
+        else if (b->name == "*channels") topic = "Channel list: type a word to filter by name or topic · /list again refreshes it · /join #channel";
         else if (b->name == "*raw" && b->srv) topic = "Raw log: \xe2\x86\x90 from the server, \xe2\x86\x92 to it · /rawlog off or Ctrl+W stops it";
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
         else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · q, Esc or Ctrl+W closes";
