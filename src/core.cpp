@@ -1312,8 +1312,14 @@ void Core::exec(Buffer* b, const std::string& input) {
             if (l[0] == '/' && l.rfind("//", 0) != 0) chat = false;
             ls.push_back(l[0] == '/' ? l.substr(1) : l), bytes += l.size() + 1;
         }
-        // a paste of plain lines: one draft/multiline message when the server takes it (and its limits allow)
         Server* s = b->srv;
+        // a paste of plain lines in a chat: a plugin's first (pasteguard: a pastebin link); true: it took it
+        if (chat && ls.size() > 1 && s && b != pass_buf && (b->type == BT::CHANNEL || b->type == BT::QUERY) && !plugin_depth) {
+            std::string all;
+            for (auto& l : ls) all += (all.empty() ? "" : "\n") + l;
+            if (plugin_emit("paste", s, b->name, {{"text", all}})) { last_input = time(nullptr); return; }
+        }
+        // a paste of plain lines: one draft/multiline message when the server takes it (and its limits allow)
         if (chat && ls.size() > 1 && s && s->state == SS::CONNECTED && s->caps.count("draft/multiline") && b != pass_buf &&
             (b->type == BT::CHANNEL || b->type == BT::QUERY) && b->name[0] != '*' && !e2e_on(b)) {
             size_t max_bytes = 0, max_lines = 0;

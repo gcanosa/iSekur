@@ -209,7 +209,8 @@ std::string https_fetch_err(const std::string& url) {
 }
 
 // one GET: false with err on a failure; true with the status line's code, headers and up to cap bytes of body
-static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err) {
+static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err,
+                       const std::string& post = "") {
     static SSL_CTX* ctx = new_client_ctx();
     std::string host, port, path;
     bool tls = true;
@@ -245,8 +246,10 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
         else X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), host.c_str());
         SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
     }
-    std::string got, req = "GET " + path + " HTTP/1.0\r\nHost: " + host + (port == (tls ? "443" : "80") ? "" : ":" + port) +
-                             "\r\nUser-Agent: Mozilla/5.0 (compatible; iSekur link preview)\r\nAccept: text/html,*/*;q=0.8\r\n\r\n";
+    std::string got, req = (post.empty() ? "GET " : "POST ") + path + " HTTP/1.0\r\nHost: " + host + (port == (tls ? "443" : "80") ? "" : ":" + port) +
+                             "\r\nUser-Agent: Mozilla/5.0 (compatible; iSekur link preview)\r\nAccept: text/html,*/*;q=0.8\r\n" +
+                             (post.empty() ? "" : "Content-Type: text/plain; charset=utf-8\r\nContent-Length: " + std::to_string(post.size()) + "\r\n") +
+                             "\r\n" + post;
     bool ok = ssl ? SSL_connect(ssl) == 1 && SSL_write(ssl, req.data(), (int)req.size()) == (int)req.size()
                   : ::send(fd, req.data(), req.size(), 0) == (ssize_t)req.size();
     if (!ok) err = ssl ? "TLS with " + host + ": " + ssl_errstr() : "can't send to " + host;
@@ -282,10 +285,10 @@ static std::string header(const std::string& hdrs, const char* name) {  // name 
     return "";
 }
 
-bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err) {
+bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err, const std::string& post) {
     for (int hop = 0; hop < 5; hop++) {
         std::string hdrs;
-        if (!fetch_once(url, cap, status, hdrs, body, err)) return false;
+        if (!fetch_once(url, cap, status, hdrs, body, err, hop ? "" : post)) return false;  // a redirect after a POST: a GET (303)
         std::string loc = header(hdrs, "location:");
         if (status / 100 != 3 || loc.empty()) {
             ctype = header(hdrs, "content-type:");

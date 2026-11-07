@@ -2782,7 +2782,7 @@ void Tui::submit() {
     size_t lines = 0;
     for (auto& l : split(line, '\n')) lines += !l.empty();
     int max = atoi(c.opt(c.active->srv, "paste_confirm", "5").c_str());
-    if (max > 0 && lines > (size_t)max) {
+    if (max > 0 && lines > (size_t)max && (line[0] == '/' || line.find("\n/") != std::string::npos || !c.plugin_hooks("paste", c.active->srv, c.active->name))) {  // chat lines a plugin takes (pasteguard): no question
         paste = line;
         return;
     }

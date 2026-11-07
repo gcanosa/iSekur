@@ -1948,6 +1948,8 @@ isekur.on("message", function(e)
   end
   return e.text == "hideme"
 end)
+isekur.on("raw", function(e) return e.cmd == "999" and e.args == "me a :b c" and isekur.nick(e.srv) == "pnick" end)
+isekur.on("paste", function(e) return e.text == "take\nthis" end)
 print("loaded")
 )LUA");
         put("bad.lua", "this is not lua");
@@ -2003,6 +2005,21 @@ print("loaded")
         assert(pchan->lines.size() == n0);
         assert(irc_parse(":bob!u@h PRIVMSG #chan :showme", pm)), pc.handle(ps, pm);
         assert(pchan->lines.size() == n0 + 1);
+        // API 4: a hidden private message leaves no new query tab; raw numerics (args as on the wire); pastes; isekur.nick
+        size_t nb = pc.bufs.size();
+        assert(irc_parse(":carol!u@h PRIVMSG " + ps->nick + " :hideme", pm)), pc.handle(ps, pm);
+        assert(pc.bufs.size() == nb && !pc.find(ps, "carol"));
+        ps->cfg.nick = "pnick";
+        size_t s0 = ps->status->lines.size();
+        assert(irc_parse(":srv 999 me a :b c", pm)), pc.handle(ps, pm);
+        assert(ps->status->lines.size() == s0);
+        SS was = ps->state;
+        ps->state = SS::CONNECTED;
+        assert(pc.plugin_hooks("paste", ps, "#chan"));
+        size_t c0 = pchan->lines.size();
+        pc.exec(pchan, "take\nthis");
+        assert(pchan->lines.size() == c0);
+        ps->state = was;
         // isekur.embed: on the line its message event is for, then (isekur.http answered) one more. http refuses the LAN
         for (std::string url : {"https://127.0.0.1/", "http://192.168.1.1:3366/r/x", "https://[::1]:8443/x", "https://10.1.2.3/", "https://localhost/"}) {
             assert(irc_parse(":bob!u@h PRIVMSG #chan :embed " + url, pm)), pc.handle(ps, pm);

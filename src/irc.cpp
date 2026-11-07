@@ -578,6 +578,13 @@ void Core::handle(Server* s, const Msg& m) {
     };
 
     if (cmd == "PING") { s->send_now("PONG :" + m.p(0)); return; }
+    // a numeric reply, for plugins: "args" as on the wire, the last one always after a ':' ("nick a b :the rest").
+    // true hides it (and what iSekur does with it)
+    if (cmd.size() == 3 && isdigit((unsigned char)cmd[0]) && !plugins.empty()) {
+        std::string a;
+        for (size_t i = 0; i < m.params.size(); i++) a += (i ? i + 1 == m.params.size() ? " :" : " " : "") + m.params[i];
+        if (plugin_emit("raw", s, "", {{"cmd", cmd}, {"args", a}})) return;
+    }
     if (cmd == "PONG") {
         if (m.p(1).rfind("LAG", 0) == 0) {
             s->lag = (now_ms() - atoll(m.p(1).c_str() + 3)) / 1000.0;
@@ -1253,6 +1260,7 @@ void Core::handle(Server* s, const Msg& m) {
             }
         }
         Buffer* b;
+        bool opened = false;  // a query tab this message opens: closed again if a plugin hides the message
         if (s->is_chan(tgt)) {
             b = find(s, tgt);
             if (!b) b = s->status;
@@ -1266,7 +1274,7 @@ void Core::handle(Server* s, const Msg& m) {
             bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && s->lower(peer) == "nickserv";
             // a notice without a query: the server tab (like WeeChat), or the tab of the /command it answers
             if (!b && notice && !ident) b = typed_buf();
-            if (!b) b = ident || notice ? s->status : open(s, BT::QUERY, peer);
+            if (!b) b = ident || notice ? s->status : (opened = true, open(s, BT::QUERY, peer));
         }
         bool hl = !self && !snote && !muted(b) && (b->type == BT::QUERY && !notice ? true : hilights(text, s->nick, ini_get(cfg, "server." + s->cfg.name, "hilight_words")));
         std::string who = m.nick.empty() ? s->cfg.host : m.nick;
@@ -1282,8 +1290,10 @@ void Core::handle(Server* s, const Msg& m) {
         unsigned long long lid = replay ? 0 : ++line_seq;  // e.id: what isekur.embed points at
         if (!replay && plugin_emit("message", s, b->name, {{"nick", who}, {"text", text}, {"self", self}, {"hilight", hl},
                                                            {"notice", notice}, {"action", kind == LK::ACTION},
-                                                           {"id", std::to_string(lid)}}))
+                                                           {"id", std::to_string(lid)}, {"opened", opened}})) {
+            if (opened) close(b);
             return;
+        }
         std::string rid = tagv("reply");
         if (!rid.empty()) {  // +draft/reply: "↪ alice: “what they said”" before the text
             Line* t = by_msgid(b, rid);

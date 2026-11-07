@@ -359,8 +359,10 @@ a plugin gets 32 MB at most). `/plugin available` lists the catalog ([isekur-plu
 in your plugins folder) and fetched again after 12 hours, or with `/plugin refresh`; an update is a
 newer version than the `-- version:` line of the file you have. In the catalog so far: autoaway, awaylog (your highlights and PMs while you were away, summed up when
 you're back), preview, proxy (the networks you pick through a SOCKS4/SOCKS5 or HTTP proxy, or an SSH jump host:
-`/plugin set proxy@sekurnet url socks5://127.0.0.1:9050`, the others stay direct) and seen (`/seen nick`, and `!seen` in
-channels you pick). Auto-away is a plugin now:
+`/plugin set proxy@sekurnet url socks5://127.0.0.1:9050`, the others stay direct), push, seen (`/seen nick`, and `!seen` in
+channels you pick), keepnick (your nick back once it's free), remind (`/remind 10m text`, `/remind 18:30 text`), pmguard
+(private messages from people you haven't let through are held: `/pmguard allow nick`) and pasteguard (a paste of
+several lines becomes a pastebin link). Auto-away is a plugin now:
 `/plugin install autoaway` moves your old `auto_away`, `auto_away_idle`, `away_message` and
 `away_announce` settings into it and out of the config (`away_announce` becomes `announce_away` and
 `announce_back`, each on or off on its own). `/plugin` alone opens the plugin window in the terminal

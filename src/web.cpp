@@ -850,7 +850,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
            ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : "0") + ",\"mute\":" + (c.muted(b) ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
            (b->term && !b->term->host.empty() ? ",\"host\":" + json_str(b->term->host) : "") +
-           ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(atoi(c.opt(s, "paste_confirm", "5").c_str())) +
+           ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(s && c.plugin_hooks("paste", s, b->name) ? 0 : atoi(c.opt(s, "paste_confirm", "5").c_str())) +
            (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +
                                                 ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +

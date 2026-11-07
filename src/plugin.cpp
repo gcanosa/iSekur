@@ -320,6 +320,12 @@ static int l_me(lua_State* L) {
     else lua_pushnil(L);
     return 1;
 }
+static int l_nick(lua_State* L) {  // nick(srv): the nick the config asks for there (me() is the one you have)
+    Server* s = srv_arg(L, 1);
+    if (s) lua_pushstring(L, s->cfg.nick.c_str());
+    else lua_pushnil(L);
+    return 1;
+}
 static int l_rank(lua_State* L) {  // rank(srv, chan, nick): its prefix ("@", "+", ""), nil when not in there
     Server* s = srv_arg(L, 1);
     Buffer* b = s ? self(L)->c->find(s, str_arg(L, 2)) : nullptr;
@@ -334,7 +340,7 @@ static int l_rank(lua_State* L) {  // rank(srv, chan, nick): its prefix ("@", "+
 struct HttpJob {
     std::weak_ptr<Plugin> p;
     int fn = LUA_NOREF, status = 0;
-    std::string url, ctype, body, err;
+    std::string url, ctype, body, err, post;
     std::atomic<bool> done{false};
 };
 static std::vector<std::shared_ptr<HttpJob>> http_jobs;
@@ -351,10 +357,11 @@ static int l_http(lua_State* L) {
     if (mine >= HTTP_AT_ONCE) return lua_pushboolean(L, 0), lua_pushstring(L, "busy: 4 fetches already running"), 2;
     auto j = std::make_shared<HttpJob>();
     j->p = p->me, j->url = url;
+    if (!lua_isnoneornil(L, 3)) j->post = str_arg(L, 3);  // isekur.http(url, fn, body): a POST
     lua_pushvalue(L, 2), j->fn = luaL_ref(L, LUA_REGISTRYINDEX);
     http_jobs.push_back(j);
     std::thread([j] {
-        if (!https_fetch(j->url, HTTP_CAP, j->status, j->ctype, j->body, j->err)) j->status = 0;
+        if (!https_fetch(j->url, HTTP_CAP, j->status, j->ctype, j->body, j->err, j->post)) j->status = 0;
         j->done.store(true, std::memory_order_release);
     }).detach();
     lua_pushboolean(L, 1);
@@ -444,7 +451,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"store_get", l_store_get}, {"store_set", l_store_set}, {"store_keys", l_store_keys},
         {"active", l_active}, {"date", l_date}, {"is_chan", l_is_chan},
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
-        {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"rank", l_rank},
+        {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"nick", l_nick}, {"rank", l_rank},
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
@@ -521,6 +528,12 @@ void Core::plugins_sync() {
                   }), plugins.end());
     for (auto& n : files)
         if (wanted(*this, n) && std::none_of(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; })) load_one(*this, n);
+}
+
+bool Core::plugin_hooks(const char* ev, const Server* s, const std::string& target) {
+    for (auto& p : plugins)
+        if (!p->dead && p->on.count(ev) && (!s || truthy(plugin_opt(p->name, "enabled", s, target, "off", 'c')))) return true;
+    return false;
 }
 
 bool Core::plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args) {
