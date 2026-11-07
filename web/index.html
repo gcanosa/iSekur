@@ -233,6 +233,9 @@ dialog .btns .left { margin-right: auto; }
 @keyframes pop { 0% { transform: none; } 60% { transform: translateY(-12px) rotate(-14deg); } 100% { transform: translateY(-10px) rotate(-10deg); } }
 @keyframes lockout { to { transform: scale(.85); opacity: 0; } }
 @keyframes iris { to { --r: 150%; } }
+/* a plugin's screensaver: its frames on black over everything, the lock window too; any key, click or move ends it */
+#ss { position: fixed; inset: 0; z-index: 200; width: 100%; height: 100%; background: #000; cursor: none; display: none; }
+#ss.on { display: block; }
 @media (prefers-reduced-motion: reduce) { #lock, #lock *, #lock.open, #lock.open * { animation-duration: 1ms !important; animation-delay: 0s !important; } }
 #atext > div { animation: rise .5s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
@@ -698,6 +701,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="status"><span id="stl"></span><span id="sti"></span><span id="dccbar" title="Files and transfers"></span></div>
   <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"><div id="mask" aria-hidden="true"></div></form>
 </div>
+<canvas id="ss" aria-hidden="true"></canvas>
 <div id="lock" role="dialog" aria-modal="true" aria-label="iSekur is locked"><form class="card" id="lockf">
     <svg viewBox="0 0 48 56" width="52" height="60" aria-hidden="true"><path class="shackle" d="M14 26V16a10 10 0 0 1 20 0v10" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/><rect x="5" y="25" width="38" height="29" rx="7" fill="currentColor"/><circle cx="24" cy="37.5" r="4" fill="var(--menu-bg, var(--panel))"/><rect x="22.5" y="39" width="3" height="7" rx="1.5" fill="var(--menu-bg, var(--panel))"/></svg>
     <h1>iSekur is locked</h1>
@@ -1517,6 +1521,10 @@ function onMsg(ev) {
     const a = $("#aupd"); a.hidden = !m.ver; a.lastChild.textContent = m.ver + " available"; a.title = "Download iSekur " + m.ver;
   } else if (m.t === "lock") {
     lockMsg(m);
+  } else if (m.t === "ss") {
+    ssOn(m.on);
+  } else if (m.t === "ssf") {
+    ssFrame(m);
   } else if (m.t === "split") {  // the terminal's /split: on connect and when it changes there
     splitMode = m.mode;
     const f = Math.min(0.85, Math.max(0.15, m.pm / 1000));
@@ -1577,6 +1585,57 @@ function lockMsg(m) {
     setTimeout(() => { if (!locked) L.className = ""; if (!locked && matchMedia("(min-width: 761px)").matches) $("#line").focus(); }, 1000);
   }
 }
+// the screensaver: the server draws a grid of cells (the plugin's frame) at the size this page asks for
+const SS = {on: false, cw: 9, ch: 18, w: 0, h: 0, g: [], raf: 0, poked: 0};
+function ssSize() {
+  const cv = $("#ss"), x = cv.getContext("2d");
+  x.font = "15px ui-monospace, Menlo, Consolas, monospace";
+  SS.cw = x.measureText("M").width || 9;
+  send({t: "ssize", w: Math.max(1, Math.floor(innerWidth / SS.cw)), h: Math.max(1, Math.floor(innerHeight / SS.ch))});
+}
+function ssOn(on) {
+  SS.on = on; SS.w = 0;
+  $("#ss").classList.toggle("on", on);
+  if (on) ssSize();
+  else if (locked) { const L = $("#lock"); L.classList.remove("on"); void L.offsetWidth; L.classList.add("on"); setTimeout(() => $("#lockp").focus(), 60); }
+}
+// the frame's changed cells into SS.g ([char, color, ox, oy] or null), then the whole canvas again: a mote between
+// two cells leaves nothing behind when it moves on
+function ssFrame(m) {
+  if (!SS.on) return;
+  const cv = $("#ss"), dpr = devicePixelRatio || 1, {cw, ch} = SS;
+  if (m.full || m.w !== SS.w || m.h !== SS.h) {
+    SS.w = m.w; SS.h = m.h; SS.g = new Array(m.w * m.h).fill(null);
+    cv.width = Math.round(m.w * cw * dpr); cv.height = Math.round(m.h * ch * dpr);  // another page's size: stretched to fit
+  }
+  for (const [y, x0, t, fg, ox = 0, oy = 0] of m.c)
+    Array.from(t).forEach((c, i) => { SS.g[y * m.w + x0 + i] = c === " " || fg < 0 ? null : [c, "#" + fg.toString(16).padStart(6, "0"), ox, oy]; });
+  if (!SS.raf) SS.raf = requestAnimationFrame(ssPaint);
+}
+function ssPaint() {
+  SS.raf = 0;
+  const x = $("#ss").getContext("2d"), dpr = devicePixelRatio || 1, {cw, ch, w, g} = SS;
+  x.setTransform(dpr, 0, 0, dpr, 0, 0);
+  x.fillStyle = "#000"; x.fillRect(0, 0, w * cw, SS.h * ch);
+  x.font = "15px ui-monospace, Menlo, Consolas, monospace"; x.textBaseline = "middle"; x.textAlign = "center";
+  for (let i = 0; i < g.length; i++) {
+    const c = g[i];
+    if (!c) continue;
+    if (x.fillStyle !== c[1]) x.fillStyle = c[1];
+    x.fillText(c[0], (i % w + 0.5 + c[2] / 8) * cw, ((i / w | 0) + 0.5 + c[3] / 8) * ch);
+  }
+}
+// someone's here: wakes a screensaver at once, else says so now and then (its idle time counts keys, clicks and moves)
+function ssPoke(e) {
+  const now = Date.now();
+  if (SS.on) {
+    if (e.type === "pointermove" && Math.abs(e.movementX) + Math.abs(e.movementY) < 4) return;  // a jiggle isn't someone
+    e.preventDefault(); e.stopImmediatePropagation();
+    if (now - SS.poked > 300) SS.poked = now, send({t: "wake"});
+  } else if (now - SS.poked > 10000) SS.poked = now, send({t: "wake"});
+}
+for (const t of ["keydown", "pointerdown", "pointermove", "wheel", "touchstart"]) addEventListener(t, ssPoke, {capture: true, passive: false});
+addEventListener("resize", () => { if (SS.on) ssSize(); });
 $("#lockf").onsubmit = e => { e.preventDefault(); const p = $("#lockp").value; if (p) send({t: "unlock", pass: p}); $("#lockp").value = ""; };
 
 function connect() {

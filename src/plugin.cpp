@@ -37,6 +37,7 @@ struct Plugin {
     std::map<std::string, std::string> store;
     bool store_read = false, store_dirty = false;  // dirty: written by store_flush within STORE_EVERY seconds
     time_t store_at = 0;                           // when it was last written
+    int screen_fn = LUA_NOREF;  // isekur.screen's frame function
     std::weak_ptr<Plugin> me;  // isekur.http: its answer comes back only to a plugin still loaded
     ~Plugin();
 };
@@ -432,6 +433,77 @@ static int l_embed(lua_State* L) {
     return 1;
 }
 
+static void reap(Core& c);
+// ---- the screensaver (API 5) ------------------------------------------------------------
+static std::vector<Core::SCell>* g_grid = nullptr;  // the frame being drawn
+static int g_gw = 0, g_gh = 0;
+// put(x, y, text, color 0xRRGGBB): only from a screen frame; off the grid is clipped. x and y may be fractions:
+// the webchat draws between cells (smooth slow motion), the terminal in the cell
+static int l_put(lua_State* L) {
+    if (!g_grid) return luaL_error(L, "put: only while drawing a screen frame");
+    double fx = luaL_checknumber(L, 1), fy = luaL_checknumber(L, 2);
+    if (!std::isfinite(fx) || !std::isfinite(fy) || fx < -1e6 || fx > 1e6 || fy < -1e6 || fy > 1e6) return 0;
+    int x = (int)std::floor(fx), y = (int)std::floor(fy);
+    auto ox = (uint8_t)std::min(7, (int)((fx - x) * 8)), oy = (uint8_t)std::min(7, (int)((fy - y) * 8));
+    std::string s = str_arg(L, 3);
+    int fg = (int)(luaL_optinteger(L, 4, 0xffffff) & 0xffffff);
+    if (y < 0 || y >= g_gh) return 0;
+    for (size_t i = 0; i < s.size() && x < g_gw; x++) {
+        uint32_t ch = utf8_next(s, i);
+        if (x >= 0) (*g_grid)[(size_t)y * g_gw + x] = {ch == ' ' ? 0 : ch, fg, ox, oy};
+    }
+    return 0;
+}
+static int l_screen(lua_State* L) {  // screen(fn, fps): a screensaver until a key, true if it started (not with no terminal or webchat attached); screen(false) ends yours; screen(): is one up
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (lua_isnone(L, 1)) return lua_pushboolean(L, !c.screen_by.empty()), 1;
+    if (!lua_isfunction(L, 1)) {
+        if (c.screen_by == p->name) c.screen_end();
+        return 0;
+    }
+    if (!c.ui_on) return lua_pushboolean(L, 0), 1;  // nobody at a terminal or a webchat to see it
+    luaL_unref(L, LUA_REGISTRYINDEX, p->screen_fn);
+    lua_pushvalue(L, 1);
+    p->screen_fn = luaL_ref(L, LUA_REGISTRYINDEX);
+    c.screen_fps = std::clamp((int)luaL_optinteger(L, 2, 15), 1, 30);
+    bool was = !c.screen_by.empty();
+    c.screen_by = p->name, c.screen_t0 = now_ms(), c.dirty = true;
+    if (!was) c.notify(Ev::SCREEN, nullptr);
+    return lua_pushboolean(L, 1), 1;
+}
+static int l_inactive(lua_State* L) { lua_pushinteger(L, time(nullptr) - self(L)->c->active_at); return 1; }
+static int l_lock(lua_State* L) {  // lock(): locks like /lock when a lock password is set; false: none is
+    Core& c = *self(L)->c;
+    if (c.lock_on() && !c.locked) c.set_lock(true);
+    lua_pushboolean(L, c.locked);
+    return 1;
+}
+
+bool Core::screen_frame(int w, int h, const char* ui, std::vector<SCell>& g) {
+    g.assign((size_t)std::max(0, w) * std::max(0, h), SCell{});
+    std::shared_ptr<Plugin> p;
+    for (auto& x : plugins)
+        if (x->name == screen_by && !x->dead && x->screen_fn != LUA_NOREF) p = x;
+    if (!p || g.empty() || g_grid) {  // unloaded, or a frame inside a frame
+        if (!p) screen_end();
+        return false;
+    }
+    lua_State* L = p->L;
+    lua_rawgeti(L, LUA_REGISTRYINDEX, p->screen_fn);
+    lua_createtable(L, 0, 4);
+    lua_pushinteger(L, w), lua_setfield(L, -2, "w");
+    lua_pushinteger(L, h), lua_setfield(L, -2, "h");
+    lua_pushstring(L, ui), lua_setfield(L, -2, "ui");
+    lua_pushinteger(L, now_ms() - screen_t0), lua_setfield(L, -2, "t");
+    g_grid = &g, g_gw = w, g_gh = h;
+    bool ok = call(p.get(), 1, 0);
+    g_grid = nullptr;
+    if (!ok) screen_end();  // one error, not one a frame
+    reap(*this);
+    return ok;
+}
+
 static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::string& err) {
     auto p = std::make_shared<Plugin>();
     p->c = &c, p->name = name, p->me = p;
@@ -453,6 +525,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"nick", l_nick}, {"rank", l_rank},
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
+        {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"lock", l_lock},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
     lua_pushstring(L, name.c_str()), lua_setfield(L, -2, "name");

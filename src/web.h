@@ -70,6 +70,11 @@ private:
     time_t last_dcc_at = 0;
     std::string keys_json();  // [keys] for the webchat's own bindings
     std::string lock_json();
+    // the screensaver: frames at the size the last page asked for (ssize; other pages stretch it), only the cells that changed
+    int ss_w = 0, ss_h = 0;
+    long long ss_at = 0;
+    std::vector<Core::SCell> ss_last;
+    void screen_poll();
     std::string update_json();   // /lock: on, msg (the box's error line)
     std::string split_json();  // the terminal's /split: buf (-1: none), first, mode, pm
     std::string last_keys, last_stat;

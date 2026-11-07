@@ -504,6 +504,20 @@ static bool save_general(Core& c, const std::map<std::string, std::string>& kv, 
     return false;
 }
 
+void Core::screen_end() {
+    if (screen_by.empty()) return;
+    screen_by.clear(), dirty = true;
+    if (locked) lock_anim = 'l', lock_anim_at = now_ms();  // under it all along: the box drops in now
+    notify(Ev::SCREEN, nullptr);
+}
+
+bool Core::wake() {
+    active_at = time(nullptr);
+    if (screen_by.empty()) return false;
+    screen_end();
+    return true;
+}
+
 // the lock key: locks at once, terminal and webchat. Without a password it only says how to set one
 void Core::lock_now(Buffer* b) {
     if (lock_on()) set_lock(true);

@@ -231,7 +231,7 @@ int main(int argc, char** argv) {
 
     // banner_anim: a light sweeps the banner (home's first 6 lines) once, ~1.2s,
     // when a terminal first shows it (usually an attach a moment after start); not in banner_mono
-    long long anim0 = 0;
+    long long anim0 = 0, screen_drawn = 0;
     bool anim_due = c.opt_on(nullptr, "banner_anim", true) && !c.opt_on(nullptr, "banner_mono", false);
     time_t last_sec = 0;
     std::vector<pollfd> fds;
@@ -265,6 +265,7 @@ int main(int argc, char** argv) {
         bool typing = c.tty && now_ms() < c.typing_until;  // a line is typing itself out: redraw ~30 times a second
         int wait = c.drain();
         if (anim0 || typing || (c.tty && c.lock_anim)) wait = std::min(wait, 33);
+        if (!c.screen_by.empty()) wait = std::min(wait, 1000 / c.screen_fps);
         if (c.flash_until) wait = std::min(wait, (int)std::max(0LL, c.flash_until - now_ms()));
         if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep
             long long ph = (now_ms() - c.about_t0) % 3500;
@@ -347,8 +348,14 @@ int main(int argc, char** argv) {
 
         time_t now = time(nullptr);
         c.set_attached(c.tty || web.attached() || bnc.attached());
+        if (bool ui = c.tty || web.attached(); ui != c.ui_on) {  // someone sits down: idle starts over; nobody left: no screensaver
+            c.ui_on = ui;
+            if (ui) c.active_at = now;
+            else c.screen_end();
+        }
         if (now != last_sec) last_sec = now, c.dirty = true, c.tick(now);  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
         if (anim_due && c.tty && !c.locked) anim_due = false, anim0 = home->lines.size() >= 6 ? now_ms() : 0;
+        if (!c.screen_by.empty() && c.tty && now_ms() - screen_drawn >= 1000 / c.screen_fps) screen_drawn = now_ms(), c.dirty = true;
         if (c.lock_anim) {  // the lock screen's animations: 900ms at most (tui.cpp draw_lock)
             if (now_ms() - c.lock_anim_at < 900) c.dirty = true;
             else c.lock_anim = 0, c.dirty = true;

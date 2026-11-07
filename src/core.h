@@ -244,7 +244,7 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 4  // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 5  // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings and booleans
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool>>>;
@@ -342,7 +342,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -419,6 +419,19 @@ struct Core {
     // startup, on every attach, after /lock and after lock_idle minutes without input (exec.cpp)
     bool locked = false;
     void set_lock(bool on);
+    // a plugin's screensaver (API 5): isekur.screen(fn, fps) covers the terminal and the webchat, fn draws each
+    // frame with isekur.put into a grid; any key, click or mouse move on either side ends it (wake)
+    std::string screen_by;  // the plugin drawing, "" = none
+    bool ui_on = false;     // a terminal or a webchat is attached (a BNC client isn't one): no screensaver without
+    int screen_fps = 15;
+    long long screen_t0 = 0;
+    time_t active_at = time(nullptr);  // the last key, click or mouse move, terminal or webchat (isekur.inactive)
+    // ox, oy: where in the cell, in eighths (isekur.put at x = 3.5: 3, ox 4); the webchat draws there, the terminal can't
+    struct SCell { uint32_t ch = 0; int fg = 0; uint8_t ox = 0, oy = 0;
+                   bool operator!=(const SCell& o) const { return ch != o.ch || fg != o.fg || ox != o.ox || oy != o.oy; } };
+    bool screen_frame(int w, int h, const char* ui, std::vector<SCell>& g);  // plugin.cpp; false: none (or it failed and ended)
+    void screen_end();
+    bool wake();  // someone's here; true: it ended a screensaver (the key that woke it goes no further)
     // the lock screen's animation, in the terminal (the webchat plays its own off the same events):
     // 'l' it locks, 'f' a wrong password, 'u' it unlocks; 0 when none is running
     char lock_anim = 0;

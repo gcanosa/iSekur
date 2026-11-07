@@ -648,6 +648,16 @@ void Tui::draw() {
     long long la = c.lock_anim ? now_ms() - c.lock_anim_at : 0;
     g_reveal = c.lock_anim == 'u' && la >= 350 ? std::min(1.0, (la - 350) / 550.0) : -1;
     g_cover = def, g_edge = sty(T, "menu_border", "separator"), g_edge.bg = def.bg;
+    if (!c.screen_by.empty()) {  // a plugin's screensaver: its frame on black, over everything (the lock screen too)
+        std::vector<Core::SCell> g;
+        tb_set_clear_attrs(TB_DEFAULT, tbc(0)), tb_clear();
+        if (c.screen_frame(W, H, "term", g))
+            for (int y = 0; y < H; y++)
+                for (int x = 0; x < W; x++)
+                    if (auto& sc = g[(size_t)y * W + x]; sc.ch) tb_set_cell(x, y, sc.ch, tbc(sc.fg ? sc.fg : 0x010101), tbc(0));
+        present();
+        return;
+    }
     if (c.locked || (c.lock_anim == 'u' && la < 350)) {  // the lock screen: nothing of the session shows until the password
         draw_lock(W, H, la);
         present();
@@ -2325,6 +2335,7 @@ void Tui::on_readable() {
     bool enter = false, keyed = false;  // keyed: a key came (typing goes out only then, or on a tab change)
     while (tb_peek_event(&ev, 0) == TB_OK) {
         sync_input();  // a key may have switched tabs: the next one types into that tab's line
+        if ((ev.type == TB_EVENT_KEY || ev.type == TB_EVENT_MOUSE) && c.wake()) { c.dirty = true; continue; }  // it only ends the screensaver
         keyed |= ev.type == TB_EVENT_KEY;
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
         if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || lw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)

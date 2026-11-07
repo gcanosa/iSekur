@@ -423,7 +423,7 @@ void Core::tick(time_t now) {
 void Core::set_attached(bool a) {
     if (a == attached) return;
     attached = a;
-    if (a) last_input = time(nullptr);  // coming back counts as activity
+    if (a) last_input = active_at = time(nullptr);  // coming back counts as activity
     else detached_at = time(nullptr);
     plugin_emit(a ? "attach" : "detach", nullptr, "");
 }

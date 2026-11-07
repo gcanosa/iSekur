@@ -670,6 +670,11 @@ void Web::ws_frames(Client& cl) {
         }
         if (op != 1) continue;
         auto m = json_flat(p);
+        if (m["t"] == "wake") { c.wake(); continue; }  // a key, click or mouse move: someone's here (nothing of the session)
+        if (m["t"] == "ssize") {
+            ss_w = std::clamp(atoi(m["w"].c_str()), 0, 500), ss_h = std::clamp(atoi(m["h"].c_str()), 0, 250), ss_last.clear();
+            continue;
+        }
         if (c.locked) {  // only the password: nothing else of the session goes in or out
             if (m["t"] == "unlock") c.unlock(m["pass"]);
             continue;
@@ -908,6 +913,7 @@ std::string Web::lines_json(Buffer* b) {
 void Web::snapshot(Client& cl) {
     auto send = [&](const std::string& j) { cl.conn.out += ws_frame(j); };
     send(theme_json());
+    if (!c.screen_by.empty()) send("{\"t\":\"ss\",\"on\":true}");
     if (c.locked) { send(lock_json()); return; }  // the rest once it's unlocked
     sent_nicks.clear();  // the next update of each goes out whole to everyone, whatever this one got
     for (auto& b : c.bufs) {
@@ -982,7 +988,41 @@ void Web::flush_buf(Buffer* b) {
 
 // Buffer updates (nicklists!) are coalesced to one per buffer per loop pass,
 // so a netsplit is one message per channel instead of one per quit.
+// a screensaver frame, at the plugin's rate: runs of changed cells per row, [y, x, "text", color (-1: blank)], and
+// a cell between cells alone as [y, x, "c", color, ox, oy] (eighths of a cell)
+void Web::screen_poll() {
+    if (c.screen_by.empty() || ss_w <= 0 || ss_h <= 0) return;
+    long long now = now_ms();
+    if (now - ss_at < 1000 / c.screen_fps) return;
+    ss_at = now;
+    std::vector<Core::SCell> g;
+    if (!c.screen_frame(ss_w, ss_h, "web", g)) return;
+    bool full = ss_last.size() != g.size();
+    std::string o = "{\"t\":\"ssf\",\"w\":" + std::to_string(ss_w) + ",\"h\":" + std::to_string(ss_h) + ",\"full\":" + (full ? "true" : "false") + ",\"c\":[";
+    bool first = true;
+    auto changed = [&](size_t i) { return full || g[i] != ss_last[i]; };
+    for (int y = 0; y < ss_h; y++)
+        for (int x = 0; x < ss_w;) {
+            size_t i = (size_t)y * ss_w + x;
+            if (!changed(i) || (full && !g[i].ch)) { x++; continue; }  // a full frame starts blank
+            const auto& a = g[i];
+            int fg = a.ch ? a.fg : -1, x0 = x;
+            std::string run;
+            for (; x < ss_w; x++) {
+                size_t j = (size_t)y * ss_w + x;
+                if (!changed(j) || (g[j].ch ? g[j].fg : -1) != fg || g[j].ox != a.ox || g[j].oy != a.oy || (x > x0 && (a.ox || a.oy))) break;
+                utf8_put(run, g[j].ch ? g[j].ch : ' ');
+            }
+            o += std::string(first ? "" : ",") + "[" + std::to_string(y) + "," + std::to_string(x0) + "," + json_str(run) + "," + std::to_string(fg) +
+                 (a.ox || a.oy ? "," + std::to_string(a.ox) + "," + std::to_string(a.oy) : "") + "]";
+            first = false;
+        }
+    ss_last.swap(g);
+    if (full || !first) broadcast(o + "]}");
+}
+
 void Web::flush() {
+    if (lfd >= 0 && !clients.empty()) screen_poll();  // locked too: a frame has nothing of the session
     if (lfd < 0 || clients.empty() || c.locked) { pending.clear(); return; }
     for (auto& b : c.bufs)
         if (pending.count(b->id)) flush_buf(b.get());
@@ -1005,6 +1045,11 @@ void Web::flush() {
 
 void Web::on_event(Ev e, Buffer* b, const Line* l) {
     if (lfd < 0 || clients.empty()) return;
+    if (e == Ev::SCREEN) {
+        broadcast(std::string("{\"t\":\"ss\",\"on\":") + (c.screen_by.empty() ? "false" : "true") + "}");
+        ss_last.clear();
+        return;
+    }
     if (e == Ev::LOCK) {
         broadcast(lock_json());
         if (!c.locked)  // unlocked: every page gets the session again, under its unlock animation
@@ -1040,7 +1085,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
     case Ev::BELL: broadcast("{\"t\":\"bell\"}"); break;
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
-    case Ev::LOCK: break;  // above
+    case Ev::LOCK: case Ev::SCREEN: break;  // above
     case Ev::UPDATE: broadcast(update_json()); break;
     case Ev::EMBED:  // a plugin's preview under a line already sent: the line's whole list again
         if (known.count(b->id)) broadcast("{\"t\":\"embed\",\"buf\":" + std::to_string(b->id) + ",\"id\":" + std::to_string(l->id) +

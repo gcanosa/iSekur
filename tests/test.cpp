@@ -2374,6 +2374,46 @@ print("loaded")
         assert(irc_parse(":bob!u@h PRIVMSG #chan :https://x.test/a.mp3 https://cdn.pics.test/a.gif https://x.test/b.gif", pm)), pc.handle(ps, pm);
         assert(pchan->lines.back().embeds == R"({"size":"large","type":"image","url":"https://x.test/b.gif"})");
         pc.exec(ph, "/plugin remove preview");
+        // screensaver: after idle minutes without a key (attached), each saver draws on any grid, a key ends it
+        pc.exec(ph, "/plugin install screensaver");
+        wait_catalog();
+        assert(said("screensaver " + ver["screensaver"] + " installed and on"));
+        pc.attached = true, pc.ui_on = false, pc.active_at = time(nullptr) - 3600;  // only a BNC client: none
+        pc.plugin_emit("tick", nullptr, "");
+        pc.exec(ph, "/screensaver");
+        assert(pc.screen_by.empty() && !pc.locked);
+        pc.ui_on = true, pc.active_at = time(nullptr) - 9 * 60;
+        pc.plugin_emit("tick", nullptr, "");
+        assert(pc.screen_by.empty());
+        pc.active_at -= 60;
+        pc.plugin_emit("tick", nullptr, "");
+        assert(pc.screen_by == "screensaver" && !pc.locked);
+        for (auto n : {"matrix", "particles", "stars"}) {
+            pc.exec(ph, std::string("/screensaver ") + n);
+            std::vector<Core::SCell> g;
+            int lit = 0;
+            for (int f = 0; f < 3; f++) {
+                pc.screen_t0 -= 500;  // half a second a frame
+                assert(pc.screen_frame(80, 24, "term", g) && pc.screen_frame(213, 60, "web", g) && g.size() == 213 * 60);
+            }
+            for (auto& sc : g) lit += sc.ch != 0;
+            assert(lit > 20 && pc.screen_by == "screensaver");
+        }
+        pc.exec(ph, "/screensaver nope");
+        assert(last(ph) == "No such screensaver: nope (matrix, particles, stars)");
+        assert(pc.wake() && pc.screen_by.empty() && !pc.wake() && time(nullptr) - pc.active_at < 2);
+        // lock on: without a lock password it says so (once) and doesn't lock; with one, the screensaver locks
+        pc.exec(ph, "/plugin set screensaver lock on");
+        pc.exec(ph, "/screensaver");
+        assert(said("there's no lock password yet") && !pc.locked);
+        pc.wake();
+        pc.cfg["general"]["lock"] = "on", pc.cfg["general"]["lock_password_hash"] = "x";
+        pc.exec(ph, "/screensaver stars");
+        assert(pc.locked && pc.screen_by == "screensaver");
+        assert(pc.wake() && pc.locked && pc.lock_anim == 'l');  // the lock box, under it, drops in
+        pc.cfg["general"].erase("lock"), pc.cfg["general"].erase("lock_password_hash"), pc.locked = false;
+        pc.exec(ph, "/plugin remove screensaver");
+        assert(pc.screen_by.empty());
         }  // the catalog's plugins
         unsetenv("ISEKUR_PLUGIN_URL");
         unlink((cat + "/index.json").c_str()), unlink((cat + "/t2/t2.lua").c_str()), rmdir((cat + "/t2").c_str()), rmdir(cat.c_str());
