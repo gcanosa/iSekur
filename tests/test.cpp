@@ -1411,8 +1411,14 @@ int main() {
         assert(io(bad, "PASS u/t:nope\r\nNICK x\r\nUSER u 0 * :r\r\n", "ERROR").find(" 464 x ") != std::string::npos);
         close(bad);
         {  // no such network: logged in with none; *isekur says so and "use" goes to one
+            std::string mf = core.cfg_path.substr(0, core.cfg_path.rfind('/') + 1) + "bnc.motd";
+            FILE* mp = fopen(mf.c_str(), "w");
+            fputs("hello there\r\nline two\n", mp), fclose(mp);
             int nn = dial();
             std::string g = io(nn, "PASS u/nope:pw\r\nNICK x\r\nUSER u 0 * :r\r\n", "isekur server");
+            unlink(mf.c_str());
+            assert(g.find(" 375 x :") != std::string::npos && g.find(" 372 x :- hello there\r\n") != std::string::npos &&
+                   g.find(" 372 x :- line two\r\n") != std::string::npos && g.find(" 422 ") == std::string::npos);
             assert(g.find(":isekur 001 x :") != std::string::npos && g.find("PRIVMSG x :No network nope in iSekur. Networks: t") != std::string::npos);
             assert(io(nn, "JOIN #c\r\n", "Not on a network").find("*isekur") != std::string::npos);
             g = io(nn, "PRIVMSG *isekur :use t\r\n", "earlier");

@@ -69,7 +69,9 @@ address and port with the server password
 .IR user / network : password
 and share this session. Logged in with no network (or one iSekur doesn't have),
 .B /msg *isekur
-lists, picks or adds one. It needs
+lists, picks or adds one. A
+.B bnc.motd
+file in the config's folder is the clients' MOTD, read at each login. It needs
 .B [bnc] user
 and
 .BR password_hash ;

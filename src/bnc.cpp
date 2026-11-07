@@ -8,6 +8,7 @@
 // messages go through iSekur, so its tabs, the webchat and the other clients see them too.
 #include "bnc.h"
 #include <algorithm>
+#include <fstream>
 #include <unistd.h>
 #include <openssl/crypto.h>
 #include <openssl/ssl.h>
@@ -458,6 +459,21 @@ void Bnc::welcome(Client& cl, Server* s, const std::string& why) {
     attach(cl, s, why);
 }
 
+// bnc.motd next to the config, as the MOTD (re-read each time: edit it, the next login shows it); false: no file
+bool Bnc::motd(Client& cl, const std::string& extra) {
+    std::ifstream f(c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "bnc.motd");
+    if (!f) return false;
+    auto num = [&](const char* code, const std::string& rest) { send(cl, std::string(":") + SRV + " " + code + " " + cl.nick + " " + rest); };
+    num("375", std::string(":- ") + SRV + " Message of the day -");
+    for (std::string l; std::getline(f, l);) {
+        if (!l.empty() && l.back() == '\r') l.pop_back();
+        num("372", ":- " + l.substr(0, 400));
+    }
+    if (!extra.empty()) num("372", ":- " + extra);
+    num("376", ":End of /MOTD command.");
+    return true;
+}
+
 // onto network s (from none, or from another: its channels PARTed); none: *isekur says why and what to do
 void Bnc::attach(Client& cl, Server* s, const std::string& why) {
     for (auto& [k, ch] : cl.chans) send(cl, ":" + cl.nick + " PART " + ch + " :Leaving " + cl.net);
@@ -466,7 +482,7 @@ void Bnc::attach(Client& cl, Server* s, const std::string& why) {
     if (!s) {
         cl.net.clear(), cl.seen = SS::DISCONNECTED;
         num("005", "NETWORK=iSekur CHANTYPES=# PREFIX=(ov)@+ CASEMAPPING=rfc1459 :are supported by this server");
-        num("422", ":No network: /msg *isekur help");
+        if (!motd(cl, "")) num("422", ":No network: /msg *isekur help");
         tell(cl, why + ". Networks: " + nets_of(c));
         if (!c.servers.empty()) tell(cl, "/msg *isekur use <network> goes to one; next time log in as " + user + "/<network>:<password>");
         tell(cl, "/msg *isekur server irc.sekurnet.org 6697 -tls -name sekurnet adds a network and connects (help: the rest)");
@@ -488,9 +504,12 @@ void Bnc::attach(Client& cl, Server* s, const std::string& why) {
         for (size_t j = i; j < toks.size() && j < i + 12; j++) l += toks[j] + " ";
         num("005", l + ":are supported by this server");
     }
-    num("375", std::string(":- ") + SRV + " Message of the day -");
-    num("372", ":- " + s->cfg.name + (s->state == SS::CONNECTED ? " is connected" : " is not connected: iSekur is reconnecting"));
-    num("376", ":End of /MOTD command.");
+    std::string up = s->cfg.name + (s->state == SS::CONNECTED ? " is connected" : " is not connected: iSekur is reconnecting");
+    if (!motd(cl, up)) {
+        num("375", std::string(":- ") + SRV + " Message of the day -");
+        num("372", ":- " + up);
+        num("376", ":End of /MOTD command.");
+    }
     std::string umodes = s->umodes;
     if (!umodes.empty() && umodes[0] == '+') umodes.erase(0, 1);
     if (!umodes.empty()) send(cl, ":" + me + " MODE " + me + " :+" + umodes);

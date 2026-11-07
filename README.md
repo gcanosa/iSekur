@@ -37,7 +37,7 @@ that mirrors your live session in a browser, bouncer style.
   Off unless you ask: `[web] autostart = on`, `isekur --web`, or `/web start` / `/web stop` while running
 - Built-in BNC (bouncer): irssi, weechat, hexchat, mIRC or a phone app connect to your iSekur and share
   its session, the same networks and channels, the last lines of each tab, then everything live; what
-  they send shows in iSekur too. Logged in with no network, `/msg *isekur` lists, picks or adds one. TLS or plain, one user. `/bnc start`, `[bnc] autostart = on`, or
+  they send shows in iSekur too. Logged in with no network, `/msg *isekur` lists, picks or adds one; `bnc.motd` next to the config is their MOTD. TLS or plain, one user. `/bnc start`, `[bnc] autostart = on`, or
   `isekur --bnc` to run only the bouncer in the background; clients that do IRCv3 get chathistory, tags and echoes (below)
 - Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting

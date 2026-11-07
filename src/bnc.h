@@ -67,6 +67,7 @@ private:
     void welcome(Client& cl, Server* s, const std::string& why = "");  // s null: on no network yet, why says so
     void attach(Client& cl, Server* s, const std::string& why);
     void control(Client& cl, const std::string& text);  // /msg *isekur networks|use|server|save
-    void tell(Client& cl, const std::string& text);     // a line from *isekur
+    void tell(Client& cl, const std::string& text);
+    bool motd(Client& cl, const std::string& extra);  // bnc.motd in the config's folder, if there     // a line from *isekur
     void gone(Client& cl, const std::string& why);
 };

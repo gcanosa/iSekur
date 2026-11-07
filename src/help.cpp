@@ -421,7 +421,7 @@ static const std::vector<CmdInfo> CMDS = {
      "(networks), picks (use name) or adds one (server irc.sekurnet.org 6697 -tls -name sekurnet; save keeps it). IRCv3 clients get what they ask for: chathistory (from iSekur's tabs, so they get no "
      "backlog and load their own), message-tags, echo-message, labeled-response, server-time, away, account and host "
      "changes, extended-join, multi-prefix; another iSekur is a full client of this one (/server host 6698 -tls -noverify, "
-     "then its password). /bnc alone shows where it listens and who is on; /bnc restart picks up changed "
+     "then its password). A bnc.motd file in the config's folder is their MOTD, read at each login. /bnc alone shows where it listens and who is on; /bnc restart picks up changed "
      "[bnc] settings; /set bnc.autostart on starts it now and with iSekur (off stops it), and isekur --bnc runs only the BNC in the background.",
      {"/bnc", "/bnc password", "/bnc start", "/bnc restart", "/connect -tls 127.0.0.1 6698 me/sekurnet:secret  (in irssi, to reach it)"}},
     {"detach", "Session", "", "Leave iSekur running in the background",

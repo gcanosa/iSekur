@@ -185,6 +185,7 @@ html          =              ; serve this file as the webchat page, re-read on e
 # (with one network, me:secret is enough). Set the password with /bnc password.
 # autostart = on starts it with iSekur; else /bnc start, or run isekur --bnc
 # (in the background, no terminal or webchat). /bnc status shows who is on.
+# A bnc.motd file next to this config is the clients' MOTD (read at each login).
 [bnc]
 autostart     = off
 bind          = 127.0.0.1    ; 0.0.0.0 or :: for every address
