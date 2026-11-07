@@ -8,9 +8,18 @@
 #include <random>
 #include "core.h"
 #include "termbox2.h"
+#include <termios.h>
+#include <unistd.h>
 #include "vterm.h"
 
 static const int TB_MOD_SUPER = 16;  // vendor/termbox2.c: CSI u / modifyOtherKeys, Cmd
+// /attach before the remote iSekur shows up: iSekur's input line, not raw keys echoed by the pty;
+// ssh asking a password (echo off) gets the keys themselves
+static bool connecting(const Term* t) {
+    termios ts;
+    return !t->host.empty() && !t->up && !(tcgetattr(t->fd, &ts) == 0 && !(ts.c_lflag & ECHO));
+}
+
 static bool g_true = true;  // truecolor output, else nearest xterm-256
 
 static int nearest256(RGB c) {
@@ -783,7 +792,7 @@ void Tui::draw() {
     Buffer* sb = c.split_buf && c.split_buf != b ? c.split_buf : nullptr;
     bool two = sb && ch >= 7;
     nl_x = -1, other = Box{}, div_x = div_y = -1;
-    Box pane{0, top, W, ch};  // where the focused tab's chat went (a shell's cursor goes in it)
+    pane = Box{0, top, W, ch};  // where the focused tab's chat went (a shell's cursor goes in it)
     auto draw_pane = [&](Buffer* pb, Box bx, bool focus) {
         if (two) {
             Style hs = focus ? T.get("tab_active") : T.get("tabbar");
@@ -1017,10 +1026,10 @@ void Tui::draw() {
         present();
         return;
     }
-    if (Term* term = b->term.get(); term && !c.asking(b)) {  // keys go to the shell: the input line only says so
+    if (Term* term = b->term.get(); term && !c.asking(b) && !(term->fd >= 0 && connecting(term))) {  // keys go to the shell: the input line only says so
         text(0, y, W, "[" + buf_label(b) + "] ", T.get("hilight"), false);
         text((int)buf_label(b).size() + 3, y, W, term->host.empty() ? "keys go to the shell · Alt+←/→ or Alt+1-9: other tabs · wheel: scrollback · exit ends it"
-                                                          : "keys go to the remote iSekur · Alt+←/→ or Alt+1-9: other tabs · Alt+D in it detaches it", sty(T, "timestamp", "input"), false);
+                                                          : "keys go to the remote iSekur · Alt+←/→ or Alt+1-9: other tabs · Alt+D or Ctrl+W detaches it", sty(T, "timestamp", "input"), false);
         VTermPos p;
         vterm_state_get_cursorpos(vterm_obtain_state(term->vt), &p);
         if (term->cursor && b->scroll == 0 && p.row < pane.h && p.col < pane.w) tb_set_cursor(pane.x + p.col, pane.y + p.row);
@@ -2172,7 +2181,7 @@ bool Tui::guide_tab() const { return c.active && !c.active->srv && c.active->nam
 // the active tab has a running shell and nothing (menu, y/n question, login) is asking
 bool Tui::shell_keys() const {
     Buffer* b = c.active;
-    return b && b->term && b->term->fd >= 0 && !c.asking(b) && menu.items.empty() && confirm.empty();
+    return b && b->term && b->term->fd >= 0 && !connecting(b->term.get()) && !c.asking(b) && menu.items.empty() && confirm.empty();
 }
 
 // every key to the shell, but Alt/Cmd ones bound to moving between tabs
@@ -2184,6 +2193,10 @@ void Tui::shell_key(int mod, int k, uint32_t ch) {
             const std::string& a = it->second;
             if (a == "next_tab" || a == "prev_tab" || a == "next_active" || a == "next_server" || a == "prev_server" || a.rfind("tab_", 0) == 0) { action(a); return; }
         }
+    }
+    if (!b->term->host.empty()) {  // /attach: Ctrl+W closes this link (the iSekur there keeps running), not a tab over there
+        auto it = keymap.find(keyspec(mod, k, ch));
+        if (it != keymap.end() && it->second == "close_tab") { action("close_tab"); return; }
     }
     VTerm* vt = b->term->vt;
     b->scroll = 0;  // typing goes back to the live screen
@@ -2493,6 +2506,10 @@ void Tui::key(int mod, int k, uint32_t ch) {
     case TB_KEY_TAB: complete(); break;
     // mIRC formatting: bold, color, reset, reverse, italic, underline
     case TB_KEY_CTRL_C:  // on an empty line it's the "how do I quit?" key: say so, once in a row
+        if (input.empty() && c.active->term && c.active->term->fd >= 0) {  // /attach connecting: ssh gives up
+            if (::write(c.active->term->fd, "\x03", 1) < 0) {}
+            break;
+        }
         if (input.empty()) {
             const std::string hint = "Ctrl+C doesn't quit iSekur (it's the color key while typing): /exit closes iSekur, Ctrl+Z, Alt+D or /detach leave it running";
             if (c.active->lines.empty() || c.active->lines.back().text != hint) {
@@ -2587,6 +2604,15 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (kw.open) {  // the wheel scrolls, a click outside closes
         if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) keys_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
         else if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1)) kw.open = false;
+        return;
+    }
+    // a program in a shell tab that wants the mouse (the remote iSekur's tabs, vim...) gets it, inside its screen
+    if (Term* t = c.active ? c.active->term.get() : nullptr; t && t->mouse && shell_keys() && c.active->scroll == 0 && pane.in(x, y)) {
+        int m = (mod & TB_MOD_ALT ? VTERM_MOD_ALT : 0) | (mod & TB_MOD_CTRL ? VTERM_MOD_CTRL : 0) | (mod & TB_MOD_SHIFT ? VTERM_MOD_SHIFT : 0);
+        vterm_mouse_move(t->vt, y - pane.y, x - pane.x, (VTermModifier)m);
+        int btn = k == TB_KEY_MOUSE_LEFT ? 1 : k == TB_KEY_MOUSE_MIDDLE ? 2 : k == TB_KEY_MOUSE_RIGHT ? 3 : k == TB_KEY_MOUSE_WHEEL_UP ? 4 : k == TB_KEY_MOUSE_WHEEL_DOWN ? 5 : 0;
+        if (k == TB_KEY_MOUSE_RELEASE) vterm_mouse_button(t->vt, 1, false, (VTermModifier)m);  // ponytail: termbox doesn't say which; the left one
+        else if (btn && !(mod & TB_MOD_MOTION)) vterm_mouse_button(t->vt, btn, true, (VTermModifier)m);
         return;
     }
     int top = top_row(), ch = chat_height();

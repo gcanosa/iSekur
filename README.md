@@ -315,10 +315,11 @@ It is never reachable from the webchat or from IRC: only from the terminal iSeku
 `/attach host` does the same with `ssh -t host` and `isekur --attach` there (run through a login
 shell, so a Homebrew `isekur` is found): the iSekur on that machine shows up live in a tab of this
 one. `host` is a name, `user@host` or a `Host` from `~/.ssh/config` (put ports and keys there);
-ssh asks for its own password or uses your keys, so no system login is asked first. Keys go to
-the remote one except Alt+arrows and Alt+1-9, so Alt+D or `/detach` typed in the tab detaches it
-and leaves it running; `/attach host` again reconnects. If none runs there, a new one starts. The
-mouse isn't passed on. `/attach host config` picks one of several iSekurs there (`isekur -c config
+ssh asks for its own password or uses your keys, so no system login is asked first. Keys and
+clicks go to the remote one except Alt+arrows, Alt+1-9 and Ctrl+W; Alt+D or `/detach` typed in the
+tab detaches it and leaves it running, Ctrl+W does too and closes the tab; `/attach host` again
+reconnects. If none runs there, a new one starts. While ssh connects (10s at most), the input line
+is iSekur's: Enter sends the line to ssh (a yes for a new host key), Ctrl+C gives up. `/attach host config` picks one of several iSekurs there (`isekur -c config
 --attach`). From a plain terminal, `ssh -t host isekur --attach` is the same thing.
 
 `/lock on` sets a master password (off by default): from then on iSekur shows only a password

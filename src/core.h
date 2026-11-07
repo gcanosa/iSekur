@@ -128,6 +128,8 @@ struct Term {
     VTerm* vt = nullptr;
     int rows = 24, cols = 80;
     bool cursor = true;
+    int mouse = 0;  // the program in it asked for mouse reports (VTERM_PROP_MOUSE): clicks go to it
+    bool up = false;  // /attach: the remote iSekur took the screen; before, ssh is connecting and the input line is iSekur's
     std::string host, rcfg, port;  // /attach [-p port] host [config]: ssh to another iSekur, "" = /shell
     time_t t0 = time(nullptr);     // started: "connected 47m" when it ends
     Core* c = nullptr;

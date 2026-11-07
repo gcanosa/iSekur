@@ -370,13 +370,13 @@ static const std::vector<CmdInfo> CMDS = {
      "Runs ssh -t host there and isekur --attach on it (through a login shell, so its PATH is "
      "the usual one) in a tab like /shell's: the remote iSekur, live, inside this one. host is a "
      "name, user@host or a Host from ~/.ssh/config (keys go there); -p port is ssh's own -p, for a port other than 22. ssh asks for its own "
-     "password or uses your keys; no system login is asked first. Every key goes to the remote "
-     "except Alt+arrows and Alt+1-9, so Alt+D or /detach typed there detaches it and leaves it "
-     "running; the tab then says so, and /attach host again reconnects. If nothing runs there, a "
+     "password or uses your keys; no system login is asked first. Every key and click goes to the remote "
+     "except Alt+arrows, Alt+1-9 and Ctrl+W, so Alt+D or /detach typed there detaches it and leaves it "
+     "running (Ctrl+W too, and closes the tab); the tab then says so, and /attach host again reconnects. If nothing runs there, a "
      "new iSekur starts. Several iSekurs on one machine each run with their own config (isekur -c "
      "work.conf); config picks one (isekur -c config --attach there) and names the tab host:work; "
      "ssh host isekur --list shows which run there. "
-     "The mouse isn't passed on. Terminal only: never from the webchat.",
+     "While ssh connects (10s at most) the input line is iSekur's: Enter sends it to ssh, Ctrl+C gives up. Terminal only: never from the webchat.",
      {"/attach vps", "/attach me@irc.example.org", "/attach -p 2222 me@irc.example.org", "/attach vps ~/.config/isekur/work.conf"}},
     {"lock", "Session", "[on|off]", "Lock the session (terminal and webchat) with a password",
      "/lock or Alt+S (Option+S on a Mac) locks now: the terminal and every webchat show only a password box, and the webchat "

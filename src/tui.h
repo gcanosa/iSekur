@@ -79,7 +79,8 @@ private:
     void draw_chat(Buffer* b, int x, int y, int w, int h);  // a tab's lines (or its shell) in that box
     void draw_nicks(Buffer* b, int sx, int top, int xend, int h, bool focus);
     struct Box { int x = 0, y = 0, w = 0, h = 0; bool in(int px, int py) const { return w && px >= x && px < x + w && py >= y && py < y + h; } };
-    Box other;  // /split: where the unfocused pane was drawn (a click there focuses it, the wheel scrolls it)
+    Box other;
+    Box pane;   // where the focused tab was drawn (a shell tab's clicks go to its program by it)  // /split: where the unfocused pane was drawn (a click there focuses it, the wheel scrolls it)
     // /split: the first (left/top) pane's share in per mille; a drag on the divider (the │ column, or the lower
     // pane's title row) moves it. div_x / div_y: where the divider was drawn, -1 = none
     int div_x = -1, div_y = -1;

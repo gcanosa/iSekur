@@ -226,6 +226,8 @@ static int term_pushline(int cols, const VTermScreenCell* cells, void* user) {
 
 static int term_prop(VTermProp p, VTermValue* v, void* user) {
     if (p == VTERM_PROP_CURSORVISIBLE) ((Term*)user)->cursor = v->boolean;
+    if (p == VTERM_PROP_MOUSE) ((Term*)user)->mouse = v->number;
+    if (p == VTERM_PROP_ALTSCREEN && v->boolean) ((Term*)user)->up = true;  // the remote iSekur's screen
     return 1;  // the rest (title, mouse modes...) are ignored
 }
 
@@ -361,8 +363,10 @@ void Core::shell_start(Buffer* sb, const std::string& host, const std::string& r
         if (const char* home = getenv("HOME")) if (chdir(home)) {}
         if (!host.empty()) {  // a login shell there, so isekur is on its PATH (Homebrew's too)
             std::string cmd = "sh -c 'exec \"${SHELL:-sh}\" -lc \"isekur " + (rcfg.empty() ? "" : "-c " + rcfg + " ") + "--attach\"'";
-            if (port.empty()) execlp("ssh", "ssh", "-t", "--", host.c_str(), cmd.c_str(), (char*)nullptr);
-            else execlp("ssh", "ssh", "-t", "-p", port.c_str(), "--", host.c_str(), cmd.c_str(), (char*)nullptr);
+            // a wrong port or a dead host gives up in 10s, a link that dies later in ~45s, not the OS's minutes
+            const char* o[] = {"-o", "ConnectTimeout=10", "-o", "ServerAliveInterval=15", "-o", "ServerAliveCountMax=3"};
+            if (port.empty()) execlp("ssh", "ssh", "-t", o[0], o[1], o[2], o[3], o[4], o[5], "--", host.c_str(), cmd.c_str(), (char*)nullptr);
+            else execlp("ssh", "ssh", "-t", o[0], o[1], o[2], o[3], o[4], o[5], "-p", port.c_str(), "--", host.c_str(), cmd.c_str(), (char*)nullptr);
             _exit(127);
         }
         std::string arg0 = "-" + path.substr(path.rfind('/') + 1);  // "-zsh": a login shell
@@ -381,6 +385,10 @@ void Core::shell_start(Buffer* sb, const std::string& host, const std::string& r
     vterm_screen_set_callbacks(scr, &cb, t.get());
     vterm_screen_enable_altscreen(scr, 1);
     vterm_screen_reset(scr, 1);
+    if (!host.empty()) {  // something on the screen until ssh says more (the remote iSekur clears it)
+        std::string m = "Connecting to " + host + (port.empty() ? "" : " port " + port) + "... (Ctrl+C on an empty line gives up)\r\n";
+        vterm_input_write(t->vt, m.data(), m.size());
+    }
     sb->term = std::move(t);
     dirty = true;
 }
@@ -449,6 +457,11 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
 
 // a line typed in a shell tab with no shell running (before the login, or after it ended)
 void Core::shell_line(Buffer* b, const std::string& l) {
+    if (!from_web && b->term && b->term->fd >= 0) {  // /attach still connecting: a line for ssh (yes to a new host key)
+        std::string w = l + "\r";
+        if (::write(b->term->fd, w.data(), w.size()) < 0) {}
+        return;
+    }
     print(b, LK::ERROR, from_web ? "The shell works in the terminal only" : "No shell running here: /shell logs in and starts one, /attach host reaches another iSekur");
 }
 
