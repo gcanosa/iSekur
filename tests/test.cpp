@@ -2399,6 +2399,13 @@ print("loaded")
             for (auto& sc : g) lit += sc.ch != 0;
             assert(lit > 20 && pc.screen_by == "screensaver");
         }
+        pc.exec(ph, "/plugin set screensaver saver nope");  // only its choices, in any case
+        assert(last(ph) == "screensaver saver is one of: random, matrix, particles, stars" && pc.plugin_at("screensaver", "saver", "").empty());
+        pc.exec(ph, "/plugin set screensaver saver Stars");
+        assert(pc.plugin_at("screensaver", "saver", "") == "stars");
+        for (auto& pi : pc.plugin_info())
+            if (pi.name == "screensaver")
+                for (auto& st : pi.sets) if (st.key == "saver") assert(st.choices.size() == 4 && st.choices[3] == "stars");
         pc.exec(ph, "/screensaver nope");
         assert(last(ph) == "No such screensaver: nope (matrix, particles, stars)");
         assert(pc.wake() && pc.screen_by.empty() && !pc.wake() && time(nullptr) - pc.active_at < 2);

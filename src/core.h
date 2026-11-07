@@ -231,7 +231,7 @@ std::string sha256_of(const std::string& s);  // hex
 std::vector<std::map<std::string, std::string>> plugin_index(const std::string& json, bool* ok = nullptr);
 bool old_away_keys(const Core& c);
 // what the plugin windows (terminal and webchat) show
-struct PluginSet { std::string key, def; char scope; bool flag; std::string help = {}; };  // a declared setting; flag: on/off; help: its unit, what it does
+struct PluginSet { std::string key, def; char scope; bool flag; std::string help = {}; std::vector<std::string> choices = {}; };  // a declared setting; flag: on/off; help: its unit, what it does; choices: the only values it takes (none: any)
 struct PluginInfo {
     std::string name, state, local, version, desc;  // state: on, off, failed; local: its "-- version:" line; version, desc: the catalog's
     std::string author, contact;             // the catalog's, else the file's "-- author:" / "-- contact:" lines

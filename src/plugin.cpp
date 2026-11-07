@@ -1,6 +1,7 @@
 // Lua plugins: <config dir>/plugins/<name>.lua, one sandboxed Lua 5.4 state each, the isekur.* API.
 // On when a [plugin.<name>] section (or a @net / @net/#chan override) says enabled = on.
 #include <dirent.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
 #include <algorithm>
@@ -31,7 +32,7 @@ struct Plugin {
     std::map<std::string, std::vector<int>> on;  // event -> handler refs
     struct Cmd { int fn; std::string usage; };
     std::map<std::string, Cmd> cmds;
-    struct Opt { std::string def; int type; char scope; std::string help; };  // type: the default's Lua type, so opt() gives that type back
+    struct Opt { std::string def; int type; char scope; std::string help; std::vector<std::string> choices = {}; };  // type: the default's Lua type, so opt() gives that type back
     std::map<std::string, Opt> opts;
     std::vector<std::string> order;  // opts in the order they were declared
     std::map<std::string, std::string> store;
@@ -136,14 +137,22 @@ static int l_command(lua_State* L) {
     p->cmds[name] = {luaL_ref(L, LUA_REGISTRYINDEX), usage};
     return 0;
 }
-static int l_setting(lua_State* L) {  // setting(key, default, scope "g"|"n"|"c", help: what it is, its unit)
+// setting(key, default, scope "g"|"n"|"c", help: what it is, its unit, choices: {"a", "b"} the only values it takes)
+static int l_setting(lua_State* L) {
     std::string key = str_arg(L, 1), sc = luaL_optstring(L, 3, "c");
     int t = lua_type(L, 2);
     std::string def = t == LUA_TBOOLEAN ? (lua_toboolean(L, 2) ? "on" : "off") : t == LUA_TNIL ? "" : str_arg(L, 2);
     if (sc != "g" && sc != "n" && sc != "c") luaL_error(L, "scope is g, n or c");
     Plugin* p = self(L);
     if (!p->opts.count(key)) p->order.push_back(key);
-    p->opts[key] = {def, t, sc[0], one_line(opt_str(L, 4)).substr(0, 120)};
+    std::vector<std::string> ch;
+    if (!lua_isnoneornil(L, 5)) {
+        luaL_checktype(L, 5, LUA_TTABLE);
+        for (lua_Integer i = 1; i <= 32 && lua_rawgeti(L, 5, i) == LUA_TSTRING; i++, lua_pop(L, 1))
+            if (std::string v = one_line(lua_tostring(L, -1)).substr(0, 32); !v.empty() && v.find(' ') == std::string::npos) ch.push_back(v);
+        lua_pop(L, 1);
+    }
+    p->opts[key] = {def, t, sc[0], one_line(opt_str(L, 4)).substr(0, 120), ch};
     return 0;
 }
 static int l_opt(lua_State* L) {  // opt(key, srv, target): channel, network, global, the default
@@ -1051,7 +1060,7 @@ std::vector<PluginInfo> Core::plugin_info() const {
             for (auto& [cmd, i] : p->cmds) pi.cmds.push_back(cmd);
             for (auto& k : p->order) {
                 auto& o = p->opts.at(k);
-                pi.sets.push_back({k, o.def, o.scope, o.type == LUA_TBOOLEAN, o.help});
+                pi.sets.push_back({k, o.def, o.scope, o.type == LUA_TBOOLEAN, o.help, o.choices});
             }
         }
         auto fi = file_info(plugin_dir() + "/" + n + ".lua", n);
@@ -1183,6 +1192,18 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
     if (sub == "set") {
         if (argv.size() < 3) { plug_print(b, LK::ERROR, usage); return; }
         std::string val = after_words(args, 3);
+        for (auto& p : plugins)  // a setting with choices takes only those (in any case)
+            if (auto o = p->name == name ? p->opts.find(argv[2]) : p->opts.end(); o != p->opts.end() && !o->second.choices.empty() && !val.empty()) {
+                auto& cs = o->second.choices;
+                auto it = std::find_if(cs.begin(), cs.end(), [&](auto& v) { return strcasecmp(v.c_str(), val.c_str()) == 0; });
+                if (it == cs.end()) {
+                    std::string all;
+                    for (auto& v : cs) all += (all.empty() ? "" : ", ") + v;
+                    plug_print(b, LK::ERROR, name + " " + argv[2] + " is one of: " + all);
+                    return;
+                }
+                val = *it;
+            }
         if (!write(argv[2], val)) return;
         if (argv[2] == "enabled") plugins_sync();
         plug_print(b, LK::INFO, name + " " + argv[2] + " = " + (val.empty() ? "(default)" : val) + where);

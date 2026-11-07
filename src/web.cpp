@@ -734,7 +734,7 @@ void Web::ws_frames(Client& cl) {
                 first = false;
                 for (size_t i = 0; i < pi.sets.size(); i++)
                     o += std::string(i ? "," : "") + "{\"key\":" + json_str(pi.sets[i].key) + ",\"def\":" + json_str(pi.sets[i].def) +
-                         ",\"scope\":\"" + pi.sets[i].scope + "\",\"flag\":" + (pi.sets[i].flag ? "1" : "0") + ",\"help\":" + json_str(pi.sets[i].help) + "}";
+                         ",\"scope\":\"" + pi.sets[i].scope + "\",\"flag\":" + (pi.sets[i].flag ? "1" : "0") + ",\"help\":" + json_str(pi.sets[i].help) + ",\"choices\":" + arr(pi.sets[i].choices) + "}";
                 o += "],\"cfg\":{";  // what each of its sections sets: {"": {...}, "sekurnet": {...}}
                 bool f2 = true;
                 for (auto& [sec, kv] : c.cfg) {

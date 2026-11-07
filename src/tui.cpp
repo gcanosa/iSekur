@@ -1875,7 +1875,7 @@ void Tui::draw_plugins(int W, int H) {
                 tb_set_cursor(std::min(ex, x1 - 3), y);
                 continue;
             }
-            std::string v = s.flag ? std::string(truthy_str(eff) ? "● on" : "○ off") : eff.empty() ? "(empty)" : eff;
+            std::string v = s.flag ? std::string(truthy_str(eff) ? "● on" : "○ off") : eff.empty() ? "(empty)" : !s.choices.empty() && on ? "◂ " + eff + " ▸" : eff;
             text(cb2, y, cc - 12, v, at.empty() ? mk(d) : st, false);
             text(cc - 11, y, cc - 1, at.empty() ? (scope.empty() ? "default" : "inherited") : "set here", at.empty() ? mk(d) : mk(keyst), false);
             if (!s.help.empty()) text(cc, y, xm, s.help, mk(d), false);
@@ -1916,6 +1916,11 @@ void Tui::draw_plugins(int W, int H) {
         state = at.empty() ? (scope.empty() ? "default " : "inherits ") + (eff.empty() ? "(empty)" : eff) : "set to " + at + " " + (scope.empty() ? "everywhere" : "for " + scope);
         state_st = at.empty() ? dim : keyst;
         if (!s.help.empty()) add_wrapped(s.help, bs);
+        if (!s.choices.empty()) {
+            std::string all;
+            for (auto& v : s.choices) all += (all.empty() ? "" : ", ") + v;
+            add_wrapped("One of: " + all + " · Space or Enter: the next one", dim);
+        }
         add_wrapped(std::string("Applies ") + (s.scope == 'g' ? "everywhere only" : s.scope == 'n' ? "everywhere or per network" : "everywhere, per network or per channel")
                     + (at.empty() ? "" : " · Del clears it here"), dim);
     } else if (!cp && !pw.avail && n) {
@@ -1961,8 +1966,8 @@ void Tui::draw_plugins(int W, int H) {
     std::vector<std::pair<std::string, std::string>> keys;
     if (pw.editing) keys = {{"Enter", "set"}, {"empty", "inherit or the default"}, {"Esc", "cancel"}};
     else if (cp) {
-        bool flag = n && cfg[(size_t)pw.sel].flag;
-        keys = {{"Enter", flag ? "switch" : "edit"}};
+        bool flag = n && cfg[(size_t)pw.sel].flag, pick = n && !cfg[(size_t)pw.sel].choices.empty();
+        keys = {{"Enter", flag ? "switch" : pick ? "next value" : "edit"}};
         if (flag) keys.push_back({"Space", "on/off"});
         keys.insert(keys.end(), {{"Del", "clear here"}, {"←→", "scope"}, {"Esc", "back"}});
     } else if (pw.avail) {
@@ -2049,7 +2054,10 @@ void Tui::plugin_key(int k, uint32_t ch) {
         else if (k == TB_KEY_ARROW_LEFT) pw.scope = (pw.scope + (int)scopes.size() - 1) % (int)scopes.size();
         else if (k == TB_KEY_SPACE && st.flag) set(truthy_str(eff) ? "off" : "on");
         else if (k == TB_KEY_DELETE || bs) set("");
-        else if (k == TB_KEY_ENTER) {
+        else if ((k == TB_KEY_ENTER || k == TB_KEY_SPACE) && !st.choices.empty()) {  // the next of its values, round
+            auto it = std::find(st.choices.begin(), st.choices.end(), eff);
+            set(it == st.choices.end() || ++it == st.choices.end() ? st.choices.front() : *it);
+        } else if (k == TB_KEY_ENTER) {
             if (st.flag) set(truthy_str(eff) ? "off" : "on");
             else pw.editing = true, pw.ed = from_utf8(c.plugin_at(cp->name, st.key, scope));
         }

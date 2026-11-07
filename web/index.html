@@ -2403,6 +2403,11 @@ function renderPlugCfg() {
       for (const [v, t] of [["", (plugScope ? "inherit: " : "default: ") + (truthy(inh) ? "on" : "off")], ["on", "on"], ["off", "off"]]) { const o = el("option", "", t); o.value = v; ctl.append(o); }
       ctl.value = own ? (truthy(own) ? "on" : "off") : "";
       ctl.onchange = () => set(ctl.value);
+    } else if (s.choices && s.choices.length) {  // only these values: a list, the inherited one first
+      ctl = el("select");
+      for (const [v, t] of [["", (plugScope ? "inherit: " : "default: ") + inh], ...s.choices.map(c => [c, c])]) { const o = el("option", "", t); o.value = v; ctl.append(o); }
+      ctl.value = s.choices.includes(own) ? own : "";
+      ctl.onchange = () => set(ctl.value);
     } else {
       ctl = el("input"); ctl.value = own; ctl.placeholder = (plugScope ? "inherits: " : "default: ") + inh; ctl.autocomplete = "off";
       ctl.onchange = () => set(ctl.value.trim());
