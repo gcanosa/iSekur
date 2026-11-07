@@ -157,7 +157,7 @@ iSekur, so your terminal, the webchat and the other clients see it too. One user
 1. Pick a login name and a password (inside iSekur, or in `[bnc]` in the config):
 
        /set bnc.user me
-       /bnc password            # asks in a box, saves the hash
+       /bnc password            # asks twice in a box, saves the hash
 
 2. Choose where it listens. The defaults are `127.0.0.1`, port `6698`, TLS on:
 

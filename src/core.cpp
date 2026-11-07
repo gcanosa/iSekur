@@ -1838,10 +1838,13 @@ void Core::exec(Buffer* b, const std::string& input) {
         else if (a == "restart") bnc_req = BncReq::RESTART;
         else if (a == "status") bnc_req = BncReq::STATUS;
         else if (a == "password")
-            ask_pass(b, "BNC password", [this, b](const std::string& p) {
-                if (p.empty()) { print(b, LK::ERROR, "No password: it stays as it was"); return; }
-                exec(b, "/set bnc.password_hash " + hash_password(p));
-                if (save_section(*this, "bnc", b)) print(b, LK::INFO, "BNC password saved; /bnc restart uses it");
+            ask_pass(b, "BNC password", [this, b](const std::string& p1) {
+                if (p1.empty()) { print(b, LK::ERROR, "No password: it stays as it was"); return; }
+                ask_pass(b, "again", [this, b, p1](const std::string& p2) {
+                    if (p1 != p2) { print(b, LK::ERROR, "The passwords don't match: it stays as it was, /bnc password to try again"); return; }
+                    cfg["bnc"]["password_hash"] = unsaved["bnc"]["password_hash"] = hash_password(p1);  // not /set: it says "/save writes it", saved just below
+                    if (save_section(*this, "bnc", b)) print(b, LK::INFO, "BNC password saved; /bnc restart uses it");
+                }, true, "BNC password", {"Type it again"});
             }, true, "BNC password", {"The password your other IRC clients log in with"});
         else print(b, LK::ERROR, "Usage: /bnc [start|stop|restart|status|password]");
         return;
