@@ -1410,6 +1410,16 @@ int main() {
         int bad = dial();
         assert(io(bad, "PASS u/t:nope\r\nNICK x\r\nUSER u 0 * :r\r\n", "ERROR").find(" 464 x ") != std::string::npos);
         close(bad);
+        {  // no such network: logged in with none; *isekur says so and "use" goes to one
+            int nn = dial();
+            std::string g = io(nn, "PASS u/nope:pw\r\nNICK x\r\nUSER u 0 * :r\r\n", "isekur server");
+            assert(g.find(":isekur 001 x :") != std::string::npos && g.find("PRIVMSG x :No network nope in iSekur. Networks: t") != std::string::npos);
+            assert(io(nn, "JOIN #c\r\n", "Not on a network").find("*isekur") != std::string::npos);
+            g = io(nn, "PRIVMSG *isekur :use t\r\n", "earlier");
+            assert(g.find(":x NICK me") != std::string::npos && g.find(":me JOIN #c\r\n") != std::string::npos);
+            close(nn);
+            io(-1, "", "~");  // its hangup handled before the next login
+        }
         int fd = dial();
         std::string w = io(fd, "CAP LS 302\r\nPASS u/t:pw\r\nNICK x\r\nUSER u 0 * :r\r\nCAP REQ :server-time\r\nCAP END\r\n", "earlier");
         assert(w.find(":isekur CAP * LS :account-notify account-tag away-notify batch chghost draft/chathistory echo-message extended-join "

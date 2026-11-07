@@ -64,6 +64,9 @@ private:
     void line(Client& cl, const std::string& raw);
     void cap(Client& cl, const Msg& m);
     void login(Client& cl);
-    void welcome(Client& cl, Server* s);
+    void welcome(Client& cl, Server* s, const std::string& why = "");  // s null: on no network yet, why says so
+    void attach(Client& cl, Server* s, const std::string& why);
+    void control(Client& cl, const std::string& text);  // /msg *isekur networks|use|server|save
+    void tell(Client& cl, const std::string& text);     // a line from *isekur
     void gone(Client& cl, const std::string& why);
 };

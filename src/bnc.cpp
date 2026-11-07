@@ -99,7 +99,7 @@ std::vector<std::string> Bnc::status() {
     std::vector<std::string> out{"BNC on " + url + ", log in as " + user + "/<network>:<password>"};
     time_t now = time(nullptr);
     for (auto& cl : clients)
-        if (cl->reg) out.push_back("  " + cl->ip + "  " + cl->net + " as " + cl->nick + ", for " + fmt_dur((long)(now - cl->since)));
+        if (cl->reg) out.push_back("  " + cl->ip + "  " + (cl->net.empty() ? "(no network)" : cl->net) + " as " + cl->nick + ", for " + fmt_dur((long)(now - cl->since)));
     if (out.size() == 1) out.push_back("  no clients attached");
     return out;
 }
@@ -225,10 +225,11 @@ void Bnc::process(const std::vector<pollfd>& v) {
             if (now - cl.since > 30) dead.push_back(&cl);  // never logged in
             continue;
         }
-        Server* s = server(cl.net);
-        if (!s) { send(cl, "ERROR :" + cl.net + " is gone from iSekur"), cl.conn.closing = true; continue; }
+        Server* s = cl.net.empty() ? nullptr : server(cl.net);
+        if (!s && !cl.net.empty()) { send(cl, "ERROR :" + cl.net + " is gone from iSekur"), cl.conn.closing = true; continue; }
         if (now - cl.rx > 240) { dead.push_back(&cl); continue; }  // asleep, or the network went away
         if (now - cl.rx >= 90 && now - cl.pinged >= 90) send(cl, std::string("PING :") + SRV), cl.pinged = now;
+        if (!s) continue;  // on no network yet
         if (cl.seen == SS::CONNECTED && s->state != SS::CONNECTED) {  // its channels close; the rejoins open them again
             send(cl, std::string(":") + SRV + " NOTICE " + cl.nick + " :*** Disconnected from " + cl.net + ", iSekur is reconnecting");
             for (auto& [k, ch] : cl.chans) send(cl, ":" + cl.nick + " PART " + ch + " :Disconnected from " + cl.net);
@@ -253,7 +254,7 @@ void Bnc::process(const std::vector<pollfd>& v) {
 }
 
 void Bnc::gone(Client& cl, const std::string& why) {
-    c.print(c.bufs.front().get(), LK::INFO, "◀ BNC gone: " + cl.ip + " (" + cl.net + "), attached " +
+    c.print(c.bufs.front().get(), LK::INFO, "◀ BNC gone: " + cl.ip + " (" + (cl.net.empty() ? "no network" : cl.net) + "), attached " +
                                                 fmt_dur((long)(time(nullptr) - cl.since)) + (why == "gone" ? "" : ": " + why));
     cl.reg = false;
 }
@@ -310,8 +311,12 @@ void Bnc::line(Client& cl, const std::string& raw) {
         return;
     }
     if (cmd == "PASS" || cmd == "USER") return;
-    Server* s = server(cl.net);
-    if (!s) return;
+    if (cmd == "PRIVMSG" && irc_lower(m.p(0)) == "*isekur") { control(cl, m.p(1)); return; }
+    Server* s = cl.net.empty() ? nullptr : server(cl.net);
+    if (!s) {
+        if (cl.net.empty() && (cmd == "PRIVMSG" || cmd == "JOIN")) tell(cl, "Not on a network: /msg *isekur help");
+        return;
+    }
     if (cmd == "CHATHISTORY") { history(cl, s, m, labt); return; }  // ours, never upstream
     if (s->state != SS::CONNECTED) {
         send(cl, std::string(":") + SRV + " NOTICE " + cl.nick + " :*** " + cl.net + " is not connected: not sent");
@@ -395,27 +400,82 @@ void Bnc::login(Client& cl) {
     fails.erase(cl.ip);
     if (net.empty() && c.servers.size() == 1) net = c.servers.front()->cfg.name;
     Server* s = server(net);
-    if (!s) {
-        std::string nets;
-        for (auto& sv : c.servers) nets += (nets.empty() ? "" : ", ") + sv->cfg.name;
-        refuse((net.empty() ? "Which network? " : "No network " + net + ". ") + "Log in as " + user + "/<network>:<password>; networks: " +
-               (nets.empty() ? "none yet" : nets));
-        return;
-    }
-    cl.reg = true, cl.net = s->cfg.name, cl.since = now;
-    welcome(cl, s);
-    c.print(c.bufs.front().get(), LK::INFO, "▶ BNC attached: " + cl.ip + " (" + cl.net + ")");
+    // no such network: logged in all the same, with none; *isekur says why and picks or adds one
+    std::string why = s ? "" : c.servers.empty() ? "iSekur has no networks yet" : net.empty() ? "Which network?" : "No network " + net + " in iSekur";
+    cl.reg = true, cl.since = now;
+    welcome(cl, s, why);
+    c.print(c.bufs.front().get(), LK::INFO, "▶ BNC attached: " + cl.ip + " (" + (s ? cl.net : why + ": no network, /msg *isekur") + ")");
 }
 
-void Bnc::welcome(Client& cl, Server* s) {
-    std::string me = s->nick.empty() ? cl.nick : s->nick;
-    cl.nick = me, cl.seen = s->state;
-    std::string net = s->network.empty() ? s->cfg.name : s->network;
+static std::string nets_of(const Core& c) {
+    std::string o;
+    for (auto& sv : c.servers) o += (o.empty() ? "" : ", ") + sv->cfg.name + (sv->state == SS::CONNECTED ? "" : " (not connected)");
+    return o.empty() ? "none yet" : o;
+}
+
+// *isekur: a query that lists, picks and adds networks, for a client on none (or to switch)
+void Bnc::tell(Client& cl, const std::string& text) { send(cl, std::string(":*isekur!isekur@") + SRV + " PRIVMSG " + cl.nick + " :" + text); }
+
+void Bnc::control(Client& cl, const std::string& text) {
+    auto w = split(text, ' ');
+    std::string verb = w.empty() ? "" : irc_lower(w[0]);
+    if (verb == "networks") { tell(cl, "Networks: " + nets_of(c)); return; }
+    if (verb == "use" && w.size() > 1) {
+        Server* s = server(w[1]);
+        if (!s) { tell(cl, "No network " + w[1] + ". Networks: " + nets_of(c)); return; }
+        attach(cl, s, "");
+        c.print(c.bufs.front().get(), LK::INFO, "▶ BNC attached: " + cl.ip + " (" + cl.net + ")");
+        return;
+    }
+    if (verb == "server" && w.size() > 1) {  // iSekur's own /server: in the config (unsaved, like /set) and connecting
+        size_t n = c.servers.size();
+        Buffer* was = c.active;
+        c.exec(c.bufs.front().get(), "/" + text);
+        // ponytail: /server selects the tab it opens or connects; an unchanged tab and no new server: it failed
+        Server* s = c.servers.size() > n ? c.servers.back().get() : c.active != was && c.active ? c.active->srv : nullptr;
+        if (!s) { tell(cl, "Not added: iSekur's console says why"); return; }
+        attach(cl, s, "");
+        tell(cl, s->cfg.name + " added; /msg *isekur save keeps it, then log in as " + user + "/" + s->cfg.name + ":<password>");
+        c.print(c.bufs.front().get(), LK::INFO, "▶ BNC attached: " + cl.ip + " (" + cl.net + ")");
+        return;
+    }
+    if (verb == "save") { c.exec(c.bufs.front().get(), "/save"); tell(cl, "Saved to iSekur's config"); return; }
+    tell(cl, "networks: the networks iSekur has");
+    tell(cl, "use <network>: go to one");
+    tell(cl, "server <host> [port] [-tls] [-name network]: add one and connect, e.g. server irc.sekurnet.org 6697 -tls -name sekurnet");
+    tell(cl, "save: write iSekur's config");
+}
+
+void Bnc::welcome(Client& cl, Server* s, const std::string& why) {
+    std::string me = s && !s->nick.empty() ? s->nick : cl.nick;
+    cl.nick = me;
+    std::string net = !s ? "" : s->network.empty() ? s->cfg.name : s->network;
     auto num = [&](const char* code, const std::string& rest) { send(cl, std::string(":") + SRV + " " + code + " " + me + " " + rest); };
-    num("001", ":Welcome to " + net + " through iSekur, " + me);
+    num("001", s ? ":Welcome to " + net + " through iSekur, " + me : ":Welcome to iSekur's bouncer, " + me);
     num("002", std::string(":Your host is ") + SRV + ", running " + version_string());
-    num("003", ":This is iSekur's bouncer for " + s->cfg.name);
+    num("003", ":This is iSekur's bouncer" + (s ? " for " + s->cfg.name : ""));
     num("004", std::string(SRV) + " iSekur-" ISEKUR_VERSION " iowx " + "beIklmnopstv");
+    attach(cl, s, why);
+}
+
+// onto network s (from none, or from another: its channels PARTed); none: *isekur says why and what to do
+void Bnc::attach(Client& cl, Server* s, const std::string& why) {
+    for (auto& [k, ch] : cl.chans) send(cl, ":" + cl.nick + " PART " + ch + " :Leaving " + cl.net);
+    cl.chans.clear();
+    auto num = [&](const char* code, const std::string& rest) { send(cl, std::string(":") + SRV + " " + code + " " + cl.nick + " " + rest); };
+    if (!s) {
+        cl.net.clear(), cl.seen = SS::DISCONNECTED;
+        num("005", "NETWORK=iSekur CHANTYPES=# PREFIX=(ov)@+ CASEMAPPING=rfc1459 :are supported by this server");
+        num("422", ":No network: /msg *isekur help");
+        tell(cl, why + ". Networks: " + nets_of(c));
+        if (!c.servers.empty()) tell(cl, "/msg *isekur use <network> goes to one; next time log in as " + user + "/<network>:<password>");
+        tell(cl, "/msg *isekur server irc.sekurnet.org 6697 -tls -name sekurnet adds a network and connects (help: the rest)");
+        return;
+    }
+    std::string me = s->nick.empty() ? cl.nick : s->nick;
+    if (me != cl.nick) send(cl, ":" + cl.nick + " NICK " + me), cl.nick = me;
+    cl.net = s->cfg.name, cl.seen = s->state;
+    std::string net = s->network.empty() ? s->cfg.name : s->network;
     std::vector<std::string> toks;
     for (auto& [k, val] : s->isupport)
         if (!k.empty() && k[0] != '-' && k != "CHATHISTORY" && k != "MSGREFTYPES")  // ours below
