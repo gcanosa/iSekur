@@ -598,11 +598,11 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   #app { grid-template-columns: 1fr; grid-template-areas: "topic" "msgs" "status" "input"; }
   /* the overlays sit under the topic bar, so ☰ and 👥 stay there to close them; a tap outside closes them too */
   #topic { position: relative; z-index: 7; padding-top: max(8px, env(safe-area-inset-top)); }
-  #side { display: none; position: fixed; inset: var(--toph, 44px) 30% 0 0; z-index: 5; box-shadow: 0 0 40px #000; }
+  #side { display: none; grid-area: msgs; justify-self: start; width: 70%; min-height: 0; z-index: 5; box-shadow: 0 0 40px #000; }  /* over the messages only: the status line and the input stay visible */
   #side.open { display: block; padding-bottom: 56px; }
   #foot { display: none; }
   #sidebtn { display: none; }
-  #side.open ~ #foot { display: flex; position: fixed; left: 0; right: 30%; bottom: 0; z-index: 6; }
+  #side.open ~ #foot { display: flex; grid-area: msgs; align-self: end; justify-self: start; width: 70%; z-index: 6; }  /* the buttons at the bottom of the tab list */
   #nicks { display: none; grid-area: msgs; justify-self: end; width: 60%; min-height: 0; z-index: 5; box-shadow: 0 0 40px #000; }  /* over the messages only: the status line and the input stay visible */
   #nicks.open { display: block; }
   #topic #menu { display: inline-flex; }
