@@ -426,8 +426,12 @@ static void clip(Row& r, int w, Style st) {
     r.push_back({U'…', st, 1});
 }
 
+// what a copy needs of a line's rows: its time, its nick column, where its text starts, each text row's width
+struct WrapInfo { std::string ts, marker; bool ts_right = false; int indent = 0, tsx = -1, tsw = 0; std::vector<int> bw; };
+
 // tsf: a time stamp format of its own (the log browser's has the seconds)
-static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false, const char* tsf = nullptr) {
+static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false, const char* tsf = nullptr,
+                             WrapInfo* info = nullptr) {
     const Theme& T = c.theme;
     int nw = atoi(ini_get(c.cfg, "general", "nick_width", T.lay("nick_width", "12")).c_str());  // /set nick_width beats the theme's
     std::string tsfmt = tsf ? tsf : ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
@@ -509,11 +513,21 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         }
         if (j < body_cells.size() && last_space != std::string::npos && last_space > i) j = last_space + 1;
         cur.insert(cur.end(), body_cells.begin() + (long)i, body_cells.begin() + (long)j);
+        if (info) info->bw.push_back(width(cur) - indent);
         rows.push_back(cur);
         cur.assign((size_t)indent, Cell{' ', T.get("default"), 1});
         i = j;
     }
     if (rows.empty()) rows.push_back(cur);
+    if (info) {
+        if (info->bw.empty()) info->bw.push_back(0);
+        info->indent = indent, info->marker = table ? "" : marker;
+        if (!table) {
+            info->ts = fmt_time(l.ts, tsfmt), info->ts_right = ts_right, info->tsx = ts_right ? width_ - width(tsr) : 0;
+            Row t;
+            cells(t, info->ts, T.get("timestamp"), false), info->tsw = width(t);
+        }
+    }
     if (!tsr.empty()) {
         Row& r0 = rows[0];
         for (int w = width(r0); w < width_ - (tsw - 1); w++) r0.push_back({' ', T.get("default"), 1});
@@ -598,6 +612,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             if (!(b->quiet && noise(*it))) b->scroll += (int)wrap(c, *it, b, w, true).size();
     b->scroll_new = 0;
     std::vector<Row> rows;  // bottom-up
+    std::vector<CopyRow> meta;  // rows' copy info, y filled in when drawn
     int need = h + b->scroll;
     size_t n = 0;
     for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it, ++n) {
@@ -606,10 +621,19 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             std::string bar = "── new ";
             for (int k = 7; k < w; k++) bar += "─";
             cells(mk, bar, sty(T, "marker", "separator"), false);
-            rows.push_back(mk);
+            rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1});
         }
         if (b->quiet && noise(*it)) continue;
-        auto r = wrap(c, *it, b, w, b->scroll > 0);
+        WrapInfo wi;
+        auto r = wrap(c, *it, b, w, b->scroll > 0, nullptr, &wi);
+        int id = (int)n + 1000000 * (x + 1);  // one per line, per pane
+        for (size_t k = r.size(); k-- > 0;) {
+            CopyRow cr{0, x, x + wi.indent, 0, id, k == 0, wi.ts, wi.marker, -1, -1};
+            if (k < wi.bw.size()) cr.bend = cr.bx + wi.bw[k];
+            else cr.bend = x + width(r[k]), cr.id = -1;  // a link preview's row: a line of its own
+            if (k == 0 && wi.tsx >= 0) cr.tsx0 = x + wi.tsx, cr.tsx1 = cr.tsx0 + wi.tsw;
+            meta.push_back(cr);
+        }
         rows.insert(rows.end(), r.rbegin(), r.rend());
     }
     if ((int)rows.size() < need) b->scroll = std::max(0, (int)rows.size() - h);
@@ -617,6 +641,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
         size_t idx = (size_t)(b->scroll + k);
         if (idx >= rows.size()) break;
         draw_row(x, y + h - 1 - k, x + w, rows[idx]);
+        meta[idx].y = y + h - 1 - k, crows.push_back(meta[idx]);
     }
 }
 
@@ -644,7 +669,7 @@ void Tui::draw() {
     sync_input();  // a tab switch from outside a key (a command, the webchat, a closed tab)
     Buffer* b = c.active;
     c.dirty = false;
-    hits.clear(), nl_x = -1;
+    hits.clear(), crows.clear(), nl_x = -1;
     long long la = c.lock_anim ? now_ms() - c.lock_anim_at : 0;
     g_reveal = c.lock_anim == 'u' && la >= 350 ? std::min(1.0, (la - 350) / 550.0) : -1;
     g_cover = def, g_edge = sty(T, "menu_border", "separator"), g_edge.bg = def.bg;
@@ -2559,17 +2584,44 @@ bool Tui::in_sel(int x, int y) const {
     return p >= std::min(a, z) && p <= std::max(a, z);
 }
 
-// the selected cells as text, one line per row, to the terminal's clipboard
+// the selection to the terminal's clipboard: chat lines as their text, "00:08 nick text" (the time first even when
+// drawn at the right, no padding, a wrapped line joined back up); other rows (a shell tab) as their cells
 void Tui::copy_sel() {
     tb_cell* cb = tb_cell_buffer();
     int W = tb_width(), cw = nl_x >= 0 ? nl_x : W;
-    std::string out;
+    auto take = [&](int y, int x0, int x1) {
+        std::string s;
+        for (int x = x0; x < x1 && x < W; x++)
+            if (cb[y * W + x].ch && in_sel(x, y)) utf8_put(s, cb[y * W + x].ch);
+        return s;
+    };
+    auto any = [&](int y, int x0, int x1) {
+        for (int x = x0; x < x1; x++)
+            if (in_sel(x, y)) return true;
+        return false;
+    };
+    std::vector<std::string> lines;
+    int last = -1;
     for (int y = std::min(sel_y0, sel_y1); y <= std::max(sel_y0, sel_y1); y++) {
-        std::string row;
-        for (int x = 0; x < cw; x++)
-            if (cb[y * W + x].ch && in_sel(x, y)) utf8_put(row, cb[y * W + x].ch);
-        while (!row.empty() && row.back() == ' ') row.pop_back();
-        out += (out.empty() && y == std::min(sel_y0, sel_y1) ? "" : "\n") + row;
+        bool chat = false;
+        for (auto& r : crows) {
+            if (r.y != y) continue;
+            chat = true;
+            if (r.id == -2 || !any(y, r.x0, std::max(r.bend, r.tsx1))) continue;
+            std::string text = take(y, r.bx, r.bend);
+            if (r.id >= 0 && r.id == last && !r.first) { lines.back() += text; continue; }  // the rest of a wrapped line
+            std::string head;
+            if (r.tsx0 >= 0 && any(y, r.tsx0, r.tsx1)) head = r.ts + " ";
+            int nx = r.tsx0 == r.x0 ? r.tsx1 : r.x0;  // the nick column, past a time drawn at the left
+            if (r.first && !r.marker.empty() && any(y, nx, r.bx)) head += r.marker + " ";
+            lines.push_back(head + text), last = r.id;
+        }
+        if (!chat) lines.push_back(take(y, 0, cw)), last = -1;
+    }
+    std::string out;
+    for (auto& l : lines) {
+        while (!l.empty() && l.back() == ' ') l.pop_back();
+        out += (&l == &lines[0] ? "" : "\n") + l;
     }
     if (out.empty()) return;
     std::string osc = "\x1b]52;c;" + b64(out) + "\x07";
