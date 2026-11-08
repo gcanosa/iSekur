@@ -236,6 +236,10 @@ int main(int argc, char** argv) {
     time_t last_sec = 0;
     std::vector<pollfd> fds;
     std::vector<Server*> polled;
+    // nothing in a stage may take iSekur down (and every IRC connection with it): an exception is said in the console
+    auto guard = [&](const char* stage, auto&& fn) {
+        try { fn(); } catch (const std::exception& e) { c.print(home, LK::ERROR, std::string("Internal error in ") + stage + ": " + e.what()); }
+    };
     while (!c.quit && !g_term) {
         fds.clear(), polled.clear();
         if (c.tty) {
@@ -274,17 +278,17 @@ int main(int argc, char** argv) {
         if (wait_fds(fds, wait) < 0 && errno != EINTR) break;
         if (typing) c.dirty = true;
         if (c.flash_until && now_ms() >= c.flash_until) c.flash.clear(), c.flash_until = 0, c.dirty = true;
-        c.terms_poll(fds, term0);  // first: nothing has closed a tab yet, so the order still holds
-        c.dccs_poll(fds, dcc0);
+        guard("shell tabs", [&] { c.terms_poll(fds, term0); });  // first: nothing has closed a tab yet, so the order still holds
+        guard("DCC", [&] { c.dccs_poll(fds, dcc0); });
         // servers first: their handlers never delete servers, so `polled` stays valid
         for (size_t i = 0; i < polled.size(); i++)
             if (fds[srv0 + i].revents) c.on_readable(polled[i], fds[srv0 + i].revents);
         // the attach process quit (closed window, dropped SSH) or the terminal hung up
         bool hung = !local && (ses.lost || (c.tty && (fds[0].revents & (POLLHUP | POLLERR))));
-        if (c.tty && !hung && (fds[0].revents || fds[1].revents)) tui.on_readable();
+        if (c.tty && !hung && (fds[0].revents || fds[1].revents)) guard("keyboard input", [&] { tui.on_readable(); });
         web.process(fds);
         bnc.process(fds);
-        c.jobs_poll(fds, job0);
+        guard("/exec", [&] { c.jobs_poll(fds, job0); });
         int t = ses.process(fds, c.tty);
         // the audit lines: who attached from where, for how long, and who was turned away
         if (!ses.refused.empty())
@@ -353,7 +357,7 @@ int main(int argc, char** argv) {
             if (ui) c.active_at = now;
             else c.screen_end();
         }
-        if (now != last_sec) last_sec = now, c.dirty = true, c.tick(now);  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
+        if (now != last_sec) last_sec = now, c.dirty = true, guard("the clock tick", [&] { c.tick(now); });  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
         if (anim_due && c.tty && !c.locked) anim_due = false, anim0 = home->lines.size() >= 6 ? now_ms() : 0;
         if (!c.screen_by.empty() && c.tty && now_ms() - screen_drawn >= 1000 / c.screen_fps) screen_drawn = now_ms(), c.dirty = true;
         if (c.lock_anim) {  // the lock screen's animations: 900ms at most (tui.cpp draw_lock)
@@ -391,7 +395,7 @@ int main(int argc, char** argv) {
                 lit = ph < 1200, c.dirty = true;
             }
         }
-        if (c.tty && c.dirty) tui.draw();
+        if (c.tty && c.dirty) guard("drawing", [&] { tui.draw(); });
     }
 
     // flush QUITs for up to a second

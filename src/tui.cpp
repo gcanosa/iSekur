@@ -1209,7 +1209,7 @@ void Tui::draw_lock(int W, int H, long long ms) {
 //   │     Logs      5 │                                         │
 //   │ ↑↓ move · e edit · Space on/off · d default · s save · q  │
 //   └───────────────────────────────────────────────────────────┘
-static std::string lower(std::string s) { for (auto& ch : s) ch = (char)tolower((unsigned char)ch); return s; }
+static std::string lower(std::string s) { to_lower(s); return s; }
 static bool truthy_str(const std::string& v) { return v == "on" || v == "true" || v == "yes" || v == "1"; }
 static std::string full_key(const Core::SetRow& r) { return (r.sec == "general" ? "" : r.sec + ".") + r.key; }
 
@@ -2982,13 +2982,6 @@ void Tui::complete() {
 
 // ---- /logs: the log browser ------------------------------------------------------------------
 static const char* MONTHS[] = {"January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"};
-static std::string kb(long long n) {
-    char b[32];
-    if (n < 1024) snprintf(b, sizeof b, "%lldB", n);
-    else if (n < 1024 * 1024) snprintf(b, sizeof b, "%lldK", (n + 512) / 1024);
-    else snprintf(b, sizeof b, "%.1fM", n / 1048576.0);
-    return b;
-}
 static std::string thousands(size_t n) {
     std::string s = std::to_string(n);
     for (int i = (int)s.size() - 3; i > 0; i -= 3) s.insert((size_t)i, ",");
@@ -3216,7 +3209,7 @@ void Tui::draw_logs(int W, int H) {
         else if (n.lvl == 1) label = std::string(lw.unfolded.count(n.net + "\t" + n.name) ? "  ▾ " : "  ▸ ") + n.name, right = std::to_string(n.n) + (n.n == 1 ? " day" : " days");
         else {
             auto& f = lw.files[(size_t)n.file];
-            label = std::string(n.file == lw.file && !lw.searched ? "    ● " : "      ") + f.day, right = kb(f.size);
+            label = std::string(n.file == lw.file && !lw.searched ? "    ● " : "      ") + f.day, right = human_bytes((unsigned long long)f.size);
         }
         int rx = lw.xd - 1 - (int)right.size();
         text(lw.x0 + 2, y, rx - 1, label, n.lvl == 1 && !focus ? (on ? st : hs) : st, false);

@@ -20,6 +20,7 @@
 
 static const char* OK_TOKEN = "isekur-e2e-ok";
 static const char* ACK_TOKEN = "isekur-e2e-ack";  // differs from OK: a reflected OK is no ACK
+static const char* OFF_TOKEN = "isekur-e2e-off";  // sealed with the chat's key: only its holders can end it
 
 std::string e2e_key(const std::string& pass, const std::string& salt) {
     unsigned char k[32];
@@ -89,7 +90,8 @@ void Core::e2e_cmd(Buffer* b, const std::string& args) {
     if (argv.empty()) {
         if (s->e2e.empty() && s->chan_e2e.empty()) print(b, LK::INFO, "No encrypted chats. Start one with /e2e nick or /e2e #channel");
         for (auto& [k, e] : s->e2e)
-            print(b, LK::INFO, e.nick + ": " + (e.ok ? "encrypted" : e.key.empty() ? "invited you (/e2e " + e.nick + ")" : "waiting for the other side"));
+            print(b, LK::INFO, e.nick + ": " + (e.ok ? "encrypted" : e.key.empty() ? "invited you (/e2e " + e.nick + ")" : "waiting for the other side") +
+                                   (e.pend.empty() ? "" : "; a new invitation is waiting (/e2e " + e.nick + " takes it)"));
         for (auto& [k, key] : s->chan_e2e) print(b, LK::INFO, k + ": encrypted");
         return;
     }
@@ -105,8 +107,10 @@ void Core::e2e_cmd(Buffer* b, const std::string& args) {
             return;
         }
         if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
-        if (nick.empty() || !s->e2e.erase(irc_lower(nick))) { print(b, LK::ERROR, "No encrypted chat with " + (nick.empty() ? "anyone here" : nick)); return; }
-        ctcp(s, nick, "ISEKUR-E2E-OFF");
+        auto eo = nick.empty() ? s->e2e.end() : s->e2e.find(irc_lower(nick));
+        if (eo == s->e2e.end()) { print(b, LK::ERROR, "No encrypted chat with " + (nick.empty() ? "anyone here" : nick)); return; }
+        ctcp(s, nick, "ISEKUR-E2E-OFF" + (eo->second.key.empty() ? "" : " " + e2e_seal(eo->second.key, OFF_TOKEN)));
+        s->e2e.erase(eo);
         e2e_note(s, nick, LK::INFO, "Encryption with " + nick + " turned off");
         return;
     }
@@ -171,11 +175,12 @@ void Core::e2e_pass(Buffer* q, const std::string& pass) {
     std::string nick = q->name;
     E2E& e = s->e2e[irc_lower(nick)];
     e.nick = nick;
+    if (!e.pend.empty()) e = E2E{nick, e.pend, "", false, false, ""};  // they asked again (a restart?) and now we answer it
     bool accept = !e.salt.empty() && e.key.empty() && !e.mine;
     if (!accept) {
         unsigned char salt[16];
         RAND_bytes(salt, sizeof salt);
-        e = E2E{nick, std::string((char*)salt, 16), "", true, false};
+        e = E2E{nick, std::string((char*)salt, 16), "", true, false, ""};
     }
     e.key = e2e_key(pass, e.salt);
     if (accept) {
@@ -198,10 +203,16 @@ void Core::e2e_ctcp(Server* s, const std::string& nick, const std::string& verb,
     if (verb == "ISEKUR-E2E") {
         std::string salt = unb64(arg);
         if (salt.size() != 16) return;
-        s->e2e[k] = E2E{nick, salt, "", false, false};
+        if (it != s->e2e.end() && it->second.ok) {  // a chat that is on keeps its key: this line could come from anyone, and the server
+            it->second.pend = salt;                 // sees every one. They take the new key up with /e2e nick
+            e2e_note(s, nick, LK::INFO, nick + " sent a new invitation (a restart?). Your encrypted chat goes on as it is; /e2e " + nick +
+                                            " takes the new one, /e2e off " + nick + " ends it");
+            return;
+        }
+        s->e2e[k] = E2E{nick, salt, "", false, false, ""};
         e2e_note(s, nick, LK::INFO, nick + " wants an encrypted conversation. To accept: /e2e " + nick);
     } else if (verb == "ISEKUR-E2E-OK") {
-        if (it == s->e2e.end() || it->second.key.empty()) return;
+        if (it == s->e2e.end() || it->second.key.empty() || it->second.ok) return;
         if (!e2e_open(it->second.key, arg, plain) || plain != OK_TOKEN) {
             ctcp(s, nick, "ISEKUR-E2E-BAD");
             mismatch();
@@ -211,14 +222,18 @@ void Core::e2e_ctcp(Server* s, const std::string& nick, const std::string& verb,
         ctcp(s, nick, "ISEKUR-E2E-ACK " + e2e_seal(it->second.key, ACK_TOKEN));
         e2e_note(s, nick, LK::INFO, "\xf0\x9f\x94\x92 Encrypted chat with " + nick + " is on");
     } else if (verb == "ISEKUR-E2E-ACK") {
-        if (it == s->e2e.end() || it->second.key.empty()) return;
+        if (it == s->e2e.end() || it->second.key.empty() || it->second.ok) return;
         if (!e2e_open(it->second.key, arg, plain) || plain != ACK_TOKEN) { mismatch(); return; }
         it->second.ok = true;
         e2e_note(s, nick, LK::INFO, "\xf0\x9f\x94\x92 Encrypted chat with " + nick + " is on");
     } else if (verb == "ISEKUR-E2E-BAD") {
-        if (it != s->e2e.end()) mismatch();
+        if (it != s->e2e.end() && !it->second.ok) mismatch();  // only a handshake can fail: a chat that is on isn't ended by a line
     } else if (verb == "ISEKUR-E2E-OFF") {
         if (it == s->e2e.end()) return;
+        if (it->second.ok && !(e2e_open(it->second.key, arg, plain) && plain == OFF_TOKEN)) {  // ending it takes the key
+            e2e_note(s, nick, LK::ERROR, nick + " asked to turn encryption off without proving they hold the key, so it stays on. /e2e off " + nick + " ends it here");
+            return;
+        }
         s->e2e.erase(it);
         e2e_note(s, nick, LK::INFO, nick + " turned encryption off; messages are plain text again");
     }

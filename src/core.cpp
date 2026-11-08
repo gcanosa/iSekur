@@ -6,6 +6,7 @@
 #include <unistd.h>
 #include <pwd.h>
 #include <glob.h>
+#include <fstream>
 #include <sstream>
 #include <sys/stat.h>
 #include <sys/utsname.h>
@@ -143,7 +144,7 @@ std::vector<std::string> banner_lines(const Theme& t, bool mono, double shine, i
 // /about: the banner, then who and where. mIRC codes, so the webchat's dialog shows the same
 std::string release_tag(const std::string& head) {
     std::string low = head;
-    for (auto& ch : low) ch = (char)tolower((unsigned char)ch);
+    to_lower(low);
     size_t loc = low.find("\nlocation:");
     if (loc == std::string::npos) return "";
     size_t eol = low.find('\r', loc), tag = low.find("/tag/v", loc);
@@ -295,7 +296,7 @@ size_t services_secret(const std::string& tgt, const std::string& text, size_t* 
     if (text.back() == ' ') w.push_back({text.size(), text.size()});
     auto up = [&](size_t k) {
         std::string v = k < w.size() ? text.substr(w[k].first, w[k].second - w[k].first) : "";
-        for (auto& ch : v) ch = (char)toupper((unsigned char)ch);
+        to_upper(v);
         return v;
     };
     auto word = [&](size_t k, bool one) {  // word k on (one: only it)
@@ -439,7 +440,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         r.cat = sec == "general" ? "general/" + grp : srv ? sec + "/" + grp : sec;
         r.head = sec == "general" ? grp : srv ? "⇢ " + sec.substr(7) + " · " + grp : "[" + sec + "]";
         std::string v = r.val.empty() ? def : r.val;
-        for (auto& ch : v) ch = (char)tolower((unsigned char)ch);
+        to_lower(v);
         if (sec == "general" && k == "theme") r.choices = themes;
         else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
         else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
@@ -951,6 +952,20 @@ std::string Core::log_folder(const Server* s) const {
 
 std::string Core::log_path(Buffer* b) const { return log_folder(b->srv) + "/" + safe_name(b->name) + ".log"; }
 
+// yesterday's lines go to <name>.YYYY-MM-DD.log; one already there (another iSekur, a clock set back) gets them added
+// to its end, never overwritten by a rename
+static void rotate_log(const std::string& from, const std::string& to) {
+    if (access(to.c_str(), F_OK) != 0) { rename(from.c_str(), to.c_str()); return; }
+    std::stringstream ss;
+    { std::ifstream in(from, std::ios::binary); ss << in.rdbuf(); }
+    mode_t old = umask(077);
+    std::ofstream out(to, std::ios::binary | std::ios::app);
+    umask(old);
+    out << ss.str();
+    out.close();
+    if (out) unlink(from.c_str());
+}
+
 // [general] log = on writes channels and queries to <log_dir>/<server>/<name>.log
 void Core::log_line(Buffer* b, const Line& l) {
     if (l.nolog || !b->srv || b->type == BT::STATUS || !opt_on(b->srv, "log", false)) return;
@@ -960,7 +975,7 @@ void Core::log_line(Buffer* b, const Line& l) {
     if (b->log && rotate && b->log_day != today) {
         fclose(b->log), b->log = nullptr;
         std::string path = log_path(b);
-        rename(path.c_str(), (path.substr(0, path.size() - 4) + "." + b->log_day + ".log").c_str());
+        rotate_log(path, path.substr(0, path.size() - 4) + "." + b->log_day + ".log");
     }
     if (!b->log) {
         std::string path = log_path(b);
@@ -968,7 +983,7 @@ void Core::log_line(Buffer* b, const Line& l) {
         struct stat st;
         if (rotate && stat(path.c_str(), &st) == 0) {  // left over from an earlier day
             std::string day = fmt_time(st.st_mtime, "%Y-%m-%d");
-            if (day != today) rename(path.c_str(), (path.substr(0, path.size() - 4) + "." + day + ".log").c_str());
+            if (day != today) rotate_log(path, path.substr(0, path.size() - 4) + "." + day + ".log");
         }
         b->log_day = today;
         mode_t old = umask(077);  // chat logs are private
@@ -1101,7 +1116,7 @@ std::string raw_redact(const std::string& line) {
     std::string w = word();
     if (!w.empty() && w[0] == '@') w = word();  // tags
     if (!w.empty() && w[0] == ':') w = word();  // prefix
-    for (auto& ch : w) ch = (char)toupper((unsigned char)ch);
+    to_upper(w);
     size_t verb_end = at;
     std::string a = word();
     if (w == "PASS" || w == "REGISTER") return line.substr(0, verb_end) + " ***";
@@ -1300,6 +1315,23 @@ std::string after_words(const std::string& args, size_t n) {
     return pos == std::string::npos ? std::string() : args.substr(pos);
 }
 
+// What lets a grabbed session reach further than the chat is changed only with the lock password (when one is set): /exec from
+// the webchat, the lock itself, the folder the webchat serves files from, the webchat's and the bouncer's logins and pages.
+// true: the password is being asked, and `line` runs again once it's right
+static bool lock_ok = false;
+static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::string& what) {
+    if (!c.lock_on() || lock_ok) return false;
+    c.ask_pass(b, "lock password", [&c, b, line](const std::string& p) {
+        if (!check_password(p, c.opt(nullptr, "lock_password_hash", ""))) { c.print(b, LK::ERROR, "Wrong password: it stays as it was"); return; }
+        lock_ok = true, c.exec(b, line), lock_ok = false;
+    }, true, "Lock password", {"Changing " + what + ": the lock password first"});
+    return true;
+}
+static bool lock_guarded(const std::string& sec, const std::string& key) {
+    return (sec == "general" && (key == "exec_web" || key == "lock" || key == "lock_password_hash" || key == "dcc_web")) || key == "dcc_dir" ||
+           sec == "web" || sec == "bnc";
+}
+
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
     if (input.find('\n') != std::string::npos) {
@@ -1363,7 +1395,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     size_t sp = in.find(' ');
     std::string cmd = in.substr(1, sp == std::string::npos ? std::string::npos : sp - 1);
     std::string args = sp == std::string::npos ? "" : in.substr(sp + 1);
-    for (auto& ch : cmd) ch = (char)tolower((unsigned char)ch);
+    to_lower(cmd);
     auto argv = split(args, ' ');
     auto rest = [&](size_t n) { return after_words(args, n); };
     Server* s = b->srv;
@@ -1452,18 +1484,8 @@ void Core::exec(Buffer* b, const std::string& input) {
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }
-        // exec_web lets the webchat run commands here, and lock guards it: whoever sits at this machine (or the
-        // webchat) types the lock password to change either, so a grabbed session can't switch /exec on
-        static bool lock_ok = false;
-        if (sec == "general" && (key == "exec_web" || key == "lock" || key == "lock_password_hash") && lock_on() && !lock_ok &&
-            val != ini_get(cfg, sec, key)) {
-            std::string line = in;
-            ask_pass(b, "lock password", [this, b, line](const std::string& p) {
-                if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: it stays as it was"); return; }
-                lock_ok = true, exec(b, line), lock_ok = false;
-            }, true, "Lock password", {"Changing " + key + ": the lock password first"});
-            return;
-        }
+        // a grabbed session can't switch /exec on, or point the webchat at other folders or logins, without the lock password
+        if (lock_guarded(sec, key) && val != ini_get(cfg, sec, key) && lock_gate(*this, b, in, key)) return;
         // a password typed into a *password_hash key is kept as its hash
         if (key.size() >= 13 && key.compare(key.size() - 13, 13, "password_hash") == 0 && !val.empty() && val.rfind("pbkdf2$", 0) != 0)
             val = hash_password(val);
@@ -1837,7 +1859,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         else if (a == "stop") bnc_req = BncReq::STOP;
         else if (a == "restart") bnc_req = BncReq::RESTART;
         else if (a == "status") bnc_req = BncReq::STATUS;
-        else if (a == "password")
+        else if (a == "password") {
+            if (lock_gate(*this, b, in, "the BNC password")) return;
             ask_pass(b, "BNC password", [this, b](const std::string& p1) {
                 if (p1.empty()) { print(b, LK::ERROR, "No password: it stays as it was"); return; }
                 ask_pass(b, "again", [this, b, p1](const std::string& p2) {
@@ -1846,7 +1869,7 @@ void Core::exec(Buffer* b, const std::string& input) {
                     if (save_section(*this, "bnc", b)) print(b, LK::INFO, "BNC password saved; /bnc restart uses it");
                 }, true, "BNC password", {"Type it again"});
             }, true, "BNC password", {"The password your other IRC clients log in with"});
-        else print(b, LK::ERROR, "Usage: /bnc [start|stop|restart|status|password]");
+        } else print(b, LK::ERROR, "Usage: /bnc [start|stop|restart|status|password]");
         return;
     }
     if (cmd == "back") { exec(b, "/away"); return; }  // /away with no message
@@ -2143,7 +2166,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "ctcp") {  // /ctcp nick VERSION|TIME|PING|...
         if (argv.size() < 2) { print(b, LK::ERROR, "Usage: /ctcp target VERSION|TIME|PING [args]"); return; }
         std::string verb = argv[1];
-        for (auto& ch : verb) ch = (char)toupper((unsigned char)ch);
+        to_upper(verb);
         std::string arg = rest(2);
         if (verb == "PING" && arg.empty()) arg = std::to_string(now_ms());
         s->send("PRIVMSG " + argv[0] + " :\x01" + verb + (arg.empty() ? "" : " " + arg) + "\x01");
@@ -2159,7 +2182,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     // anything else goes to the server verbatim: /whois, /mode, /away, /kick...
-    for (auto& ch : cmd) ch = (char)toupper((unsigned char)ch);
+    to_upper(cmd);
     // ...but the free text at the end needs a ':', or the server keeps only its first word
     static const std::map<std::string, int> trail = {
         {"AWAY", 0}, {"WALLOPS", 0}, {"GLOBOPS", 0}, {"LOCOPS", 0}, {"OPERWALL", 0},

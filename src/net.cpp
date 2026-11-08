@@ -103,58 +103,6 @@ static SSL_CTX* new_client_ctx() {
     return c;
 }
 
-// Blocking: for a background thread. One HEAD over verified TLS; the reply's headers, or "".
-// ponytail: no timeout, a black-holed network parks the (detached) thread until the OS gives up
-std::string https_head(const std::string& host, const std::string& path) {
-    static SSL_CTX* ctx = new_client_ctx();
-    BIO* b = BIO_new_ssl_connect(ctx);
-    SSL* ssl = nullptr;
-    BIO_get_ssl(b, &ssl);
-    SSL_set_tlsext_host_name(ssl, host.c_str());
-    SSL_set1_host(ssl, host.c_str());
-    SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
-    BIO_set_conn_hostname(b, (host + ":443").c_str());
-    std::string req = "HEAD " + path + " HTTP/1.1\r\nHost: " + host + "\r\nUser-Agent: iSekur\r\nConnection: close\r\n\r\n", got;
-    char buf[4096];
-    int n;
-    if (BIO_do_connect(b) == 1 && BIO_write(b, req.data(), (int)req.size()) == (int)req.size())
-        while (got.find("\r\n\r\n") == std::string::npos && got.size() < 65536 && (n = BIO_read(b, buf, sizeof buf)) > 0) got.append(buf, (size_t)n);
-    BIO_free_all(b);
-    return got;
-}
-
-bool https_get(const std::string& host, const std::string& path, size_t cap, std::string& out) {
-    static SSL_CTX* ctx = new_client_ctx();
-    BIO* b = BIO_new_ssl_connect(ctx);
-    SSL* ssl = nullptr;
-    BIO_get_ssl(b, &ssl);
-    SSL_set_tlsext_host_name(ssl, host.c_str());
-    SSL_set1_host(ssl, host.c_str());
-    SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
-    BIO_set_conn_hostname(b, (host + ":443").c_str());
-    // HTTP/1.0: no chunked bodies, the server closes at the end
-    std::string req = "GET " + path + " HTTP/1.0\r\nHost: " + host + "\r\nUser-Agent: iSekur\r\n\r\n", got;
-    out.clear();
-    if (BIO_do_connect(b) != 1) { out = "can't connect to " + host + ": " + ssl_errstr(); BIO_free_all(b); return false; }
-    timeval tv{20, 0};  // a stalled server doesn't park the thread for good
-    int fd = (int)BIO_get_fd(b, nullptr);
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof tv), setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof tv);
-    char buf[16384];
-    int n;
-    if (BIO_write(b, req.data(), (int)req.size()) == (int)req.size())
-        while (got.size() <= cap + 65536 && (n = BIO_read(b, buf, sizeof buf)) > 0) got.append(buf, (size_t)n);
-    BIO_free_all(b);
-    size_t hdr = got.find("\r\n\r\n");
-    if (hdr == std::string::npos) { out = "no answer from " + host; return false; }
-    if (got.compare(0, 5, "HTTP/") != 0 || got.find(" 200 ") > got.find("\r\n")) {
-        out = host + ": " + got.substr(0, got.find("\r\n"));
-        return false;
-    }
-    if (got.size() - hdr - 4 > cap) { out = "too big (over " + std::to_string(cap / 1024) + " KB)"; return false; }
-    out = got.substr(hdr + 4);
-    return true;
-}
-
 // not loopback, private, CGNAT, link-local, multicast or unspecified: somewhere on the internet
 bool public_addr(const sockaddr* sa) {
     if (sa->sa_family == AF_INET) {
@@ -210,7 +158,7 @@ std::string https_fetch_err(const std::string& url) {
 
 // one GET: false with err on a failure; true with the status line's code, headers and up to cap bytes of body
 static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err,
-                       const std::string& post = "") {
+                       const std::string& post = "", bool guard = true) {
     static SSL_CTX* ctx = new_client_ctx();
     std::string host, port, path;
     bool tls = true;
@@ -219,7 +167,7 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
     hints.ai_socktype = SOCK_STREAM;
     if (int e = getaddrinfo(host.c_str(), port.c_str(), &hints, &ai)) { err = host + ": " + gai_strerror(e); return false; }
     int fd = -1;
-    for (addrinfo* a = ai; a; a = a->ai_next)  // every address must be public: a name that's half LAN is refused
+    for (addrinfo* a = ai; a && guard; a = a->ai_next)  // every address must be public: a name that's half LAN is refused
         if (!public_addr(a->ai_addr)) { freeaddrinfo(ai); err = host + " is on a private network: not fetched"; return false; }
     for (addrinfo* a = ai; a && fd < 0; a = a->ai_next) {  // connect to the address checked, not a second lookup
         fd = socket(a->ai_family, SOCK_STREAM, 0);
@@ -304,10 +252,32 @@ bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, 
                 loc = base + dir.substr(0, dir.rfind('/') + 1) + loc;
             }
         }
+        if (!strncasecmp(url.c_str(), "https://", 8) && !strncasecmp(loc.c_str(), "http://", 7)) {  // never down from TLS to plain text
+            err = "redirected from https to plain http: not followed";
+            return false;
+        }
         url = loc;
     }
     err = "too many redirects";
     return false;
+}
+
+// iSekur's own fetches (the release check, the plugin catalog): fixed GitHub hosts, so no private-address guard (a split-horizon
+// DNS may well answer a LAN address for them), but the same timeouts as any other fetch
+std::string https_head(const std::string& host, const std::string& path) {
+    int status = 0;
+    std::string hdrs, body, err;
+    return fetch_once("https://" + host + path, 0, status, hdrs, body, err, "", false) ? hdrs : "";  // cap 0: stops at the headers
+}
+
+bool https_get(const std::string& host, const std::string& path, size_t cap, std::string& out) {
+    int status = 0;
+    std::string hdrs, err;
+    out.clear();
+    if (!fetch_once("https://" + host + path, cap + 1, status, hdrs, out, err, "", false)) { out = err; return false; }
+    if (status != 200) { out = host + ": HTTP " + std::to_string(status); return false; }
+    if (out.size() > cap) { out = "too big (over " + std::to_string(cap / 1024) + " KB)"; return false; }
+    return true;
 }
 
 bool Conn::start_tls() {
@@ -473,14 +443,15 @@ int listen_tcp(const std::string& bind, int port, std::string& err) {
                         &hints, &res);
     if (r) { err = gai_strerror(r); return -1; }
     int fd = socket(res->ai_family, SOCK_STREAM, 0);
+    if (fd < 0) { err = strerror(errno); freeaddrinfo(res); return -1; }
     int one = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
     // "::" takes IPv4 too (BSD/macOS default to v6 only, Linux doesn't)
     int zero = 0;
     if (res->ai_family == AF_INET6) setsockopt(fd, IPPROTO_IPV6, IPV6_V6ONLY, &zero, sizeof zero);
-    if (fd < 0 || ::bind(fd, res->ai_addr, res->ai_addrlen) || listen(fd, 16)) {
+    if (::bind(fd, res->ai_addr, res->ai_addrlen) || listen(fd, 16)) {
         err = strerror(errno);
-        if (fd >= 0) ::close(fd);
+        ::close(fd);
         freeaddrinfo(res);
         return -1;
     }
@@ -658,7 +629,7 @@ bool Conn::spawn_ssh() {
 
 std::string Conn::ssh_said() {  // why ssh ended: its first line on stderr, it has exited by now
     char buf[512];
-    for (int i = 0; i < 20; i++) {  // ponytail: up to 200ms for the exiting ssh to say it
+    for (int i = 0; i < 5; i++) {  // ponytail: up to 50ms for the exiting ssh to say it
         ssize_t n = read(ssh_err, buf, sizeof buf - 1);
         if (n > 0) {
             std::string l(buf, (size_t)n);

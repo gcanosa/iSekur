@@ -114,7 +114,6 @@ private:
         bool to_servers = false;                   // /servers: opens at the first server's category
     };
     SetWin sw;
-    struct SetView { std::vector<std::string> cats; std::vector<int> counts; std::vector<const void*> rows; };
     void draw_settings(int W, int H);
     void settings_key(int mod, int k, uint32_t ch);
     void settings_mouse(int k, int x, int y);

@@ -290,6 +290,39 @@ std::string ssh_dest(const std::string& g) {
     return (user.empty() ? "" : user + "@") + hostname + (port.empty() ? "" : ":" + port);
 }
 
+// `ssh -G host`: what ssh would use after ~/.ssh/config. No shell in between, and the UI waits no more than 3s for it
+// (a `Match exec` in the config can run anything)
+static std::string ssh_config(const std::string& host, const std::string& port) {
+    int p[2];
+    if (pipe(p)) return "";
+    pid_t pid = fork();
+    if (pid < 0) { ::close(p[0]), ::close(p[1]); return ""; }
+    if (pid == 0) {
+        for (int sig : {SIGPIPE, SIGHUP, SIGINT, SIGTERM}) signal(sig, SIG_DFL);
+        int nul = ::open("/dev/null", O_RDWR);
+        dup2(nul, 0), dup2(p[1], 1), dup2(nul, 2);
+        for (int fd = 3; fd < 1024; fd++) ::close(fd);
+        if (port.empty()) execlp("ssh", "ssh", "-G", "--", host.c_str(), (char*)nullptr);
+        else execlp("ssh", "ssh", "-G", "-p", port.c_str(), "--", host.c_str(), (char*)nullptr);
+        _exit(127);
+    }
+    ::close(p[1]);
+    std::string out;
+    long long until = now_ms() + 3000;
+    for (;;) {
+        long long left = until - now_ms();
+        pollfd pf{p[0], POLLIN, 0};
+        char buf[4096];
+        ssize_t n;
+        if (left <= 0 || out.size() > 65536 || poll(&pf, 1, (int)left) <= 0 || (n = read(p[0], buf, sizeof buf)) <= 0) break;
+        out.append(buf, (size_t)n);
+    }
+    ::close(p[0]);
+    kill(pid, SIGKILL);  // it's done, or too slow
+    waitpid(pid, nullptr, 0);
+    return out;
+}
+
 // /attach host: ssh runs the other machine's iSekur --attach in a tab like /shell's.
 // No login asked here: ssh asks for (or uses keys for) its own.
 void Core::attach_cmd(Buffer* b, const std::string& args) {
@@ -333,14 +366,7 @@ void Core::attach_cmd(Buffer* b, const std::string& args) {
     select(ab);
     if (ab->term) return;  // already attached there
     // what ssh will really reach after ~/.ssh/config: ssh -G only reads config, no network
-    // (host is safe(): no quote, so single quotes hold it; '[' would glob otherwise)
-    std::string g;
-    if (FILE* f = popen(("ssh -G " + (port.empty() ? "" : "-p " + port + " ") + "-- '" + host + "' 2>/dev/null").c_str(), "r")) {
-        char buf[4096];
-        size_t k;
-        while ((k = fread(buf, 1, sizeof buf, f)) > 0 && g.size() < 65536) g.append(buf, k);
-        pclose(f);
-    }
+    std::string g = ssh_config(host, port);
     std::string dest = ssh_dest(g);
     print(ab, LK::INFO, "\u25b6 ssh " + (dest.empty() ? (port.empty() ? "" : "-p " + port + " ") + host : dest + " (" + host + ")") +
                             ": iSekur --attach there" + (rcfg.empty() ? "" : " with " + rcfg) + " (Alt+D or /detach inside leaves it running)");
@@ -442,7 +468,12 @@ void Core::terms_poll(const std::vector<pollfd>& fds, size_t from) {
         int st = 0;
         pid_t pid = t->pid;
         t->pid = -1;  // reaped here, not hung up
-        std::string end = waitpid(pid, &st, 0) == pid && WIFEXITED(st) && WEXITSTATUS(st) ? ": exit " + std::to_string(WEXITSTATUS(st)) : "";
+        // its terminal closed, so it is exiting: a moment for its status, never more (a process that closed its tty and
+        // carries on is reaped later with the hung up ones, not waited for with the whole client stopped)
+        pid_t gone = 0;
+        for (int i = 0; i < 20 && !(gone = waitpid(pid, &st, WNOHANG)); i++) usleep(5000);
+        if (!gone) hung_up.push_back(pid);
+        std::string end = gone == pid && WIFEXITED(st) && WEXITSTATUS(st) ? ": exit " + std::to_string(WEXITSTATUS(st)) : "";
         std::string host = (t->port.empty() || t->host.empty() ? "" : "-p " + t->port + " ") + t->host + (t->rcfg.empty() ? "" : " " + t->rcfg);
         time_t t0 = t->t0;
         b->term.reset();

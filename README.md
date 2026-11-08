@@ -296,7 +296,8 @@ unless `exec_web = on`.
 
 Files (DCC): what's sent to you is only offered until you `/dcc get` it; it downloads in the
 background into `dcc_dir` (default `~/Downloads`, on the machine iSekur runs on), and a broken
-download resumes where it stopped. `/dcc send nick file` offers one (behind a router set `dcc_ip`
+download resumes where it stopped (iSekur leaves a hidden `.name.part` beside the file until it's whole, and only a file with
+that mark is resumed: one that merely has the name is never touched). `/dcc send nick file` offers one (behind a router set `dcc_ip`
 and forward `dcc_ports`). Progress shows in the status bar and the webchat; `/dcc` lists the
 transfers, `/dcc close n` refuses or cancels one. With `dcc_web = on` the webchat's Files window
 (⇅) downloads what's in `dcc_dir` to your own computer, seedbox style, so iSekur on a VPS can
@@ -326,7 +327,8 @@ is iSekur's: Enter sends the line to ssh (a yes for a new host key), Ctrl+C give
 box at startup, on every `--attach` and after `/lock`, before any tab, log or message. It's
 stored hashed in the config; three wrong tries wait a minute; `/lock off` asks for it before
 turning it off, `/lock on` again changes it (current password first), and `/exit` asks for it
-too, so an unlocked terminal or an open webchat can't close iSekur (Alt+D still detaches). Forgot it? Stop
+too, so an unlocked terminal or an open webchat can't close iSekur (Alt+D still detaches). It is also asked before changing what
+would let a hijacked webchat session reach further: `exec_web`, `dcc_web`, `dcc_dir`, the `[web]` and `[bnc]` settings and `/bnc password`. Forgot it? Stop
 iSekur (`pkill isekur`), set `lock = off` in the config and start it again. It locks the screen, not the files: the config and logs aren't encrypted, and
 the webchat keeps its own login.
 
@@ -339,7 +341,8 @@ Encrypted queries between two iSekur users: `/e2e nick` (alias `/sq`) asks for a
 (typed hidden) and invites nick, who accepts with `/e2e yournick` and the same password. A
 matching password turns on AES-256-GCM (key = scrypt of the password) for that query and both
 sides see 🔒; a wrong one is reported to both and nothing is encrypted. Keys are kept in memory
-only. `/e2e off` ends it. With `--daemon` the decryption happens in the daemon, so the webchat
+only. `/e2e off` ends it on both sides: the line it sends is sealed with the key, so a line anyone else could send (the server
+included) can't end a chat that is on, fail it or replace its key; a new invitation from the same nick waits for your `/e2e nick`. With `--daemon` the decryption happens in the daemon, so the webchat
 shows plain text (and the browser input does not hide the password).
 
 Encrypted channels: `/e2e #chan` (or "Turn on E2E" in the channel tab's right click menu) asks

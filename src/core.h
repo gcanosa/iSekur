@@ -1,5 +1,6 @@
 // Core state shared by every frontend: servers, buffers, theme, commands.
 #pragma once
+#include <cctype>
 #define ISEKUR_VERSION "0.5.1"
 #include <atomic>
 #include <cstdint>
@@ -26,6 +27,7 @@ std::string mask_services(const std::string& tgt, const std::string& text);
 // where that password starts, or npos; *end: where it ends (npos: the end of the text)
 size_t services_secret(const std::string& tgt, const std::string& text, size_t* end = nullptr);
 size_t input_secret(const std::string& buf, const std::string& line, size_t* end = nullptr);  // the same in a typed line ("/msg NickServ ...")
+std::string trim(const std::string& s);  // without the spaces, tabs and line ends at both ends
 Ini ini_parse(const std::string& text);
 bool ini_load(const std::string& path, Ini& out);
 std::string ini_update(const std::string& text, const Ini& changes);
@@ -78,12 +80,16 @@ struct Msg {
     std::string prefix, nick, cmd;
     std::vector<std::string> params;
     const std::string& p(size_t i) const;  // "" if missing
+    const std::string& last() const { return p(params.empty() ? 0 : params.size() - 1); }  // the trailing parameter, "" if none
 };
 bool irc_parse(const std::string& line, Msg& m);
+inline std::string& to_lower(std::string& s) { for (auto& ch : s) ch = (char)tolower((unsigned char)ch); return s; }  // ASCII, in place
+inline std::string& to_upper(std::string& s) { for (auto& ch : s) ch = (char)toupper((unsigned char)ch); return s; }
 std::string irc_lower(const std::string& s, int casemap = 0);  // 0 rfc1459, 1 ascii, 2 strict-rfc1459 (005 CASEMAPPING)
 std::string escape_tag(const std::string& v);  // an IRCv3 tag value as it goes on the wire
 std::string reply_snippet(const std::string& text);  // “the first 40 characters…” of a line, for replies and reactions
 time_t parse_server_time(const std::string& iso);
+std::string iso_utc(time_t t, const char* frac);  // "2024-01-02T03:04:05" + frac (".000Z")
 
 // ---- buffers ---------------------------------------------------------------
 enum class LK { MSG, ACTION, NOTICE, JOIN, PART, QUIT, NICK, MODE, TOPIC, INFO, ERROR };
@@ -189,6 +195,7 @@ struct E2E {
     std::string nick, salt, key;  // key = scrypt(password, salt), "" until the password is typed
     bool mine = false;            // we sent the invite (salt)
     bool ok = false;              // both sides proved the same key: messages are encrypted
+    std::string pend = {};        // a new invitation's salt, offered while this chat is on: /e2e nick takes it up
 };
 
 // /exec: a running shell command (exec.cpp)

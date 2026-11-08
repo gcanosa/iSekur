@@ -99,7 +99,7 @@ std::string reply_snippet(const std::string& text) {
     return "\u201c" + t.substr(0, i) + (i < t.size() ? "\u2026" : "") + "\u201d";
 }
 
-static std::string iso_utc(time_t t, const char* frac) {  // 2024-01-02T03:04:05 + frac
+std::string iso_utc(time_t t, const char* frac) {  // 2024-01-02T03:04:05 + frac
     char out[40] = "";
     tm g{};
     if (gmtime_r(&t, &g)) strftime(out, sizeof out, "%Y-%m-%dT%H:%M:%S", &g);
@@ -369,7 +369,11 @@ void Core::on_readable(Server* s, short rev) {
         s->last_rx = time(nullptr);
         if (s->raw_hook) s->raw_hook("\xe2\x86\x90", line);  // ←
         if (Server::tap) Server::tap(s, false, line);
-        if (irc_parse(line, m)) handle(s, m);
+        try {
+            if (irc_parse(line, m)) handle(s, m);
+        } catch (const std::exception& e) {  // a line nobody foresaw is dropped, not the client
+            print(s->status, LK::ERROR, std::string("Internal error on a line from the server (dropped): ") + e.what());
+        }
         if (s->state == SS::DISCONNECTED) return;  // handler closed it (connect() cleared inbuf)
     }
     s->inbuf.erase(0, at);
@@ -739,6 +743,10 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "433" && s->state != SS::CONNECTED) {
+        if (s->nick_tries >= 10) {  // a server that cuts nicks short would answer 433 to every "_" we add, for ever
+            print(s->status, LK::ERROR, "No free nick after " + std::to_string(s->nick_tries) + " tries: /nick name picks one");
+            return;
+        }
         std::string next = s->nick_tries++ == 0 && !s->cfg.altnick.empty() ? s->cfg.altnick
                                                                            : s->nick + "_";
         print(s->status, LK::ERROR, "Nick " + m.p(1) + " in use, trying " + next);
@@ -1074,7 +1082,7 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "REGISTER" || cmd == "VERIFY") {  // draft/account-registration: SUCCESS|VERIFICATION_REQUIRED account :message
-        print(reply_buf(), LK::INFO, m.params.back());
+        print(reply_buf(), LK::INFO, m.last());
         if (m.p(0) == "SUCCESS" && !s->reg_pass.empty() && s->cfg.sasl_user.empty()) {  // SASL logs in next time
             std::string sec = "server." + s->cfg.name;
             s->cfg.sasl_user = cfg[sec]["sasl_user"] = unsaved[sec]["sasl_user"] = m.p(1);
@@ -1096,11 +1104,11 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "730" || cmd == "731") {  // MONITOR: :nick!u@h,... online / :nick,... offline
-        for (auto& who : split(m.params.back(), ','))
+        for (auto& who : split(m.last(), ','))
             if (!who.empty()) notify_seen(s, who.substr(0, who.find('!')), cmd == "730", who.find('!') == std::string::npos ? "" : who.substr(who.find('!') + 1));
         return;
     }
-    if (cmd == "734") { print(s->status, LK::ERROR, "/notify: " + m.params.back() + " (" + m.p(1) + " at most)"); return; }
+    if (cmd == "734") { print(s->status, LK::ERROR, "/notify: " + m.last() + " (" + m.p(1) + " at most)"); return; }
     if (cmd == "303" && s->ison_wait > 0) {  // our ISON: the watched nicks that are on
         s->ison_wait--;
         std::set<std::string> on;

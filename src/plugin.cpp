@@ -127,7 +127,7 @@ static int l_on(lua_State* L) {
 static int l_command(lua_State* L) {
     Plugin* p = self(L);
     std::string name = str_arg(L, 1), usage = opt_str(L, 2);
-    for (auto& ch : name) ch = (char)tolower((unsigned char)ch);
+    to_lower(name);
     luaL_checktype(L, 3, LUA_TFUNCTION);
     if (name.empty() || name.find(' ') != std::string::npos) luaL_error(L, "bad command name");
     if (find_command(name) || name == "plugin" || name == "plugins") luaL_error(L, "/%s is iSekur's own", name.c_str());
@@ -237,10 +237,11 @@ static bool store_flush(Plugin* p) {
     if (!p->store_dirty) return true;
     std::string path = store_path(p), tmp = path + ".tmp";
     mkdir_p(p->c->plugin_dir());
+    mode_t old_mask = umask(077);  // private from its first byte, not after a chmod
     FILE* f = fopen(tmp.c_str(), "w");
+    umask(old_mask);
     p->store_at = time(nullptr);
     if (!f) return false;
-    chmod(tmp.c_str(), 0600);
     for (auto& [kk, v] : p->store) fprintf(f, "%s\t%s\n", esc(kk).c_str(), esc(v).c_str());
     bool ok = fclose(f) == 0 && rename(tmp.c_str(), path.c_str()) == 0;
     if (ok) p->store_dirty = false;
@@ -391,7 +392,7 @@ static void http_poll() {
         lua_pushinteger(L, j->status), lua_setfield(L, -2, "status");
         std::string t = j->ctype.substr(0, j->ctype.find(';'));
         while (!t.empty() && t.back() == ' ') t.pop_back();
-        for (auto& ch : t) ch = (char)tolower((unsigned char)ch);
+        to_lower(t);
         lua_pushstring(L, t.c_str()), lua_setfield(L, -2, "type");
         lua_pushlstring(L, j->body.data(), j->body.size()), lua_setfield(L, -2, "body");
         lua_pushstring(L, j->url.c_str()), lua_setfield(L, -2, "url");

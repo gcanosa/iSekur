@@ -12,11 +12,6 @@ bool rank_ok(const Server* s, const std::string& pfx, char need) {
     return !pfx.empty() && r != std::string::npos && s->prefix_rank(pfx) <= (int)r;
 }
 
-static std::string trim(const std::string& t) {
-    size_t a = t.find_first_not_of(' '), z = t.find_last_not_of(' ');
-    return a == std::string::npos ? "" : t.substr(a, z - a + 1);
-}
-
 // how long the flood queue takes to send n more lines
 static std::string queued_for(const Server* s, size_t n) {
     long secs = n > (size_t)s->flood_burst && s->flood_ms > 0
@@ -374,10 +369,10 @@ void Core::list_table(Server* s) {
     });
     std::vector<const Server::ListEntry*> V;  // the rows shown: all, or those the filter matches
     std::string f = s->list_filter;
-    for (auto& ch : f) ch = (char)tolower((unsigned char)ch);  // ponytail: ASCII case folding, UTF-8 matches as typed
+    to_lower(f);  // ponytail: ASCII case folding, UTF-8 matches as typed
     for (auto& e : L) {
         std::string hay = e.chan + " " + mirc_strip(e.topic);
-        for (auto& ch : hay) ch = (char)tolower((unsigned char)ch);
+        to_lower(hay);
         if (hay.find(f) != std::string::npos) V.push_back(&e);
     }
     auto len = [](const std::string& t) { size_t n = 0; for (unsigned char ch : t) n += (ch & 0xc0) != 0x80; return n; };

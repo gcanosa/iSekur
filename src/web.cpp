@@ -348,8 +348,13 @@ void Web::process(const std::vector<pollfd>& v) {
         if (ok && cl.file) feed(cl), cl.since = now;
         if (cl.ws && (p.revents & POLLIN)) cl.since = now;
         if (ok && cl.conn.st == Conn::OPEN && !cl.conn.closing && !cl.file) {
-            if (cl.ws) ws_frames(cl);
-            else http(cl);
+            try {
+                if (cl.ws) ws_frames(cl);
+                else http(cl);
+            } catch (const std::exception& e) {  // one bad request must not take iSekur (and its IRC connections) down: drop that connection
+                c.print(c.bufs.front().get(), LK::ERROR, std::string("Webchat: dropped a connection after an internal error: ") + e.what());
+                ok = false;
+            }
         }
         if (!ok) dead.push_back(&cl);
     }
@@ -411,7 +416,7 @@ void Web::http(Client& cl) {
         size_t col = lines[i].find(':');
         if (col == std::string::npos) continue;
         std::string k = lines[i].substr(0, col), val = lines[i].substr(col + 1);
-        for (auto& ch : k) ch = (char)tolower((unsigned char)ch);
+        to_lower(k);
         val.erase(0, val.find_first_not_of(' '));
         while (!val.empty() && (val.back() == '\r' || val.back() == ' ')) val.pop_back();
         h[k] = val;
@@ -426,8 +431,8 @@ void Web::http(Client& cl) {
     time_t now = time(nullptr);
     std::string token;
     for (auto& ck : split(h["cookie"], ';')) {
-        std::string t = ck.substr(ck.find_first_not_of(' '));
-        if (t.rfind("isekur_sid=", 0) == 0) token = t.substr(11);
+        size_t at = ck.find_first_not_of(' ');  // "a=b; ;c=d": a segment of spaces has no name
+        if (at != std::string::npos && ck.compare(at, 11, "isekur_sid=") == 0) token = ck.substr(at + 11);
     }
     auto sit = sessions.find(sha256_hex(token));
     bool authed = !token.empty() && sit != sessions.end() && sit->second > now;

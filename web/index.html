@@ -2593,7 +2593,6 @@ const line = $("#line");
 const enc = s => s.replace(/\r\n?/g, "\n").replace(/\n/g, "↵").replace(/[\x00-\x1f]/g, c => String.fromCharCode(0x2400 + c.charCodeAt(0)));
 const dec = s => s.replace(/↵/g, "\n").replace(/[␀-␟]/g, c => String.fromCharCode(c.charCodeAt(0) - 0x2400));
 function insert(s) { line.setRangeText(s, line.selectionStart, line.selectionEnd, "end"); renderSugg(); }
-function setLine(v) { line.value = enc(v); line.focus(); line.selectionStart = line.selectionEnd = line.value.length; renderSugg(); }
 // a password asked for here (/oper, /e2e...): a hidden field, no history, Esc cancels
 function applyAsk() {
   const b = bufs.get(active), a = b && b.ask, pw = !!(a && a.hidden);

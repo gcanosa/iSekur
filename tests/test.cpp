@@ -4,6 +4,7 @@
 #include <sys/stat.h>
 #include <cstdio>
 #include <filesystem>
+#include <sys/time.h>
 #include <fstream>
 #include <sstream>
 #include <csignal>
@@ -295,6 +296,20 @@ int main() {
         assert(core.cfg["general"]["exec_web"] == "on" && !core.pass_buf);
         core.exec(home, "/set exec_web on");  // no change: nothing asked
         assert(!core.pass_buf);
+        // the folder the webchat serves files from, and the logins of the webchat and the bouncer, are as guarded
+        for (const char* line : {"/set dcc_dir /etc", "/set server.t.dcc_dir /etc", "/set dcc_web on", "/set web.user x", "/set web.html /etc/passwd", "/set bnc.password_hash x", "/bnc password"}) {
+            core.exec(home, line);
+            assert(core.pass_buf == home);
+            core.exec(home, "nope");
+            assert(!core.pass_buf && home->lines.back().text == "Wrong password: it stays as it was");
+        }
+        assert(ini_get(core.cfg, "general", "dcc_dir").empty() && ini_get(core.cfg, "general", "dcc_web").empty() && ini_get(core.cfg, "web", "user").empty() &&
+               ini_get(core.cfg, "bnc", "password_hash").empty());
+        core.exec(home, "/set dcc_dir /etc"), core.exec(home, "pw");  // the right one, and the line runs
+        assert(core.cfg["general"]["dcc_dir"] == "/etc" && !core.pass_buf);
+        core.exec(home, "/set dcc_dir"), core.exec(home, "/set nick_width 12");  // reading one, or a setting that isn't guarded, asks nothing
+        assert(!core.pass_buf && core.cfg["general"]["nick_width"] == "12");
+        core.cfg["general"].erase("dcc_dir"), core.cfg["general"].erase("nick_width"), core.unsaved.clear(), core.set_was.clear();
         core.exec(home, "/exit -y"), core.exec(home, "nope");  // /exit too: the lock password, or iSekur stays
         assert(home->lines.back().text == "Wrong password: iSekur keeps running" && !core.quit);
         core.exec(home, "/exit -y");
@@ -678,6 +693,87 @@ int main() {
         assert(ini_load(core.cfg_path, disk) && ini_get(disk, "server.t", "e2e_keys").empty());
         core.exec(chb, "/autojoin del");
         unlink(core.cfg_path.c_str()), core.cfg_path.clear();
+    }
+    {  // /e2e bob: a chat that is on isn't replaced, switched off or failed by a line anyone (the server too) could send; only its key does
+        bool had = core.find(ts, "bob") != nullptr;
+        Buffer* was = core.active;
+        auto ctcp_in = [&](const std::string& verb, const std::string& arg) { feed(":bob!u@h PRIVMSG me :\x01" + verb + (arg.empty() ? "" : " " + arg) + "\x01"); };
+        auto arg_of = [](const std::string& l, const std::string& verb) {  // "PRIVMSG bob :\x01VERB arg\x01" -> arg
+            size_t a = l.find(verb + " ");
+            assert(a != std::string::npos);
+            a += verb.size() + 1;
+            return l.substr(a, l.find('\x01', a) - a);
+        };
+        std::string plain;
+        auto establish = [&](const std::string& pw) {  // we invite, bob answers with the same password, we prove it back
+            core.exec(chb, "/e2e bob " + pw);
+            std::string key = e2e_key(pw, unb64(arg_of(sent(), "ISEKUR-E2E")));
+            ctcp_in("ISEKUR-E2E-OK", e2e_seal(key, "isekur-e2e-ok"));
+            assert(arg_of(sent(), "ISEKUR-E2E-ACK").size() > 20 && ts->e2e["bob"].ok);
+            return key;
+        };
+        std::string key = establish("pw1"), salt0 = ts->e2e["bob"].salt, forged(16, 'z');
+        ctcp_in("ISEKUR-E2E", b64(forged));  // a new invitation: kept aside, the chat is as it was
+        ctcp_in("ISEKUR-E2E-OFF", ""), ctcp_in("ISEKUR-E2E-OFF", e2e_seal(e2e_key("other", salt0), "isekur-e2e-off"));
+        ctcp_in("ISEKUR-E2E-OFF", e2e_seal(key, "isekur-e2e-ok"));  // the right key, the wrong token
+        ctcp_in("ISEKUR-E2E-BAD", ""), ctcp_in("ISEKUR-E2E-ACK", "junk"), ctcp_in("ISEKUR-E2E-OK", "junk");
+        E2E& e = ts->e2e["bob"];
+        assert(e.ok && e.key == key && e.salt == salt0 && e.pend == forged && e2e_on(core.find(ts, "bob")));
+        core.exec(chb, "/e2e bob pw2");  // taking the new invitation up is the user's call
+        assert(e.salt == forged && !e.ok && e.pend.empty() && sent().find("ISEKUR-E2E-OK ") != std::string::npos);
+        std::string key2 = e2e_key("pw2", forged);
+        ctcp_in("ISEKUR-E2E-ACK", e2e_seal(key2, "isekur-e2e-ack"));
+        assert(ts->e2e["bob"].ok);
+        ctcp_in("ISEKUR-E2E-OFF", e2e_seal(key2, "isekur-e2e-off"));  // the holder of the key ends it
+        assert(!ts->e2e.count("bob"));
+        std::string key3 = establish("pw3");
+        core.exec(chb, "/e2e off bob");  // and so do we: the line we send proves it
+        assert(!ts->e2e.count("bob") && e2e_open(key3, arg_of(sent(), "ISEKUR-E2E-OFF"), plain) && plain == "isekur-e2e-off");
+        establish("pw4");
+        ctcp_in("ISEKUR-E2E-OFF", "");  // an old iSekur's bare OFF can't end a chat that is on
+        assert(ts->e2e.count("bob"));
+        core.exec(chb, "/e2e off bob");
+        sent();
+        if (!had) core.close(core.find(ts, "bob"));
+        core.select(was);
+    }
+    {  // 433 while registering: altnick, then "_" added, and after ten tries it stops (a server cutting nicks short said 433 for ever)
+        ts->state = SS::REGISTERING, ts->nick_tries = 0, ts->nick = "me";
+        sent();
+        for (int i = 0; i < 14; i++) feed(":srv 433 * me :Nickname is already in use");
+        std::string out = sent();
+        size_t nicks = 0;
+        for (size_t at = 0; (at = out.find("NICK ", at)) != std::string::npos; at += 5) nicks++;
+        assert(nicks == 10 && ts->nick_tries == 10 && ts->status->lines.back().text.find("No free nick after 10 tries") == 0);
+        ts->state = SS::CONNECTED, ts->nick_tries = 0, ts->nick = "me";
+    }
+    {  // a config symlinked into a dotfiles repo is written through, not replaced by a regular file
+        std::filesystem::remove_all("build/symtest");
+        std::filesystem::create_directories("build/symtest/repo");
+        { std::ofstream("build/symtest/repo/real.conf") << "[general]\nnick = a\n"; }
+        std::filesystem::create_symlink("repo/real.conf", "build/symtest/isekur.conf");
+        std::string serr;
+        assert(ini_save("build/symtest/isekur.conf", Ini{{"general", {{"nick", "b"}}}}, serr));
+        assert(std::filesystem::is_symlink("build/symtest/isekur.conf") && ini_get(ini_parse([&] { std::ifstream in("build/symtest/repo/real.conf"); std::stringstream ss; ss << in.rdbuf(); return ss.str(); }()), "general", "nick") == "b");
+        std::filesystem::remove_all("build/symtest");
+    }
+    {  // log rotation: an earlier day's leftover goes to the dated file, which if already there is added to, never overwritten
+        std::filesystem::remove_all("build/logtest");
+        std::filesystem::create_directories("build/logtest/t");
+        core.cfg["general"]["log"] = "on", core.cfg["general"]["log_dir"] = "build/logtest";
+        std::string day = fmt_time(1577962800, "%Y-%m-%d");  // that file's own day, the local one
+        auto put = [](const std::string& f, const std::string& text) { std::ofstream(f) << text; };
+        auto get = [](const std::string& f) { std::ifstream in(f); std::stringstream ss; ss << in.rdbuf(); return ss.str(); };
+        put("build/logtest/t/#lr." + day + ".log", "OLD\n"), put("build/logtest/t/#lr.log", "LEFT\n");
+        timeval tv[2] = {{1577962800, 0}, {1577962800, 0}};
+        utimes("build/logtest/t/#lr.log", tv);
+        Buffer* lb = core.open(ts, BT::CHANNEL, "#lr");
+        core.add(lb, Line{time(nullptr), LK::MSG, "bob", "hi"});
+        assert(get("build/logtest/t/#lr." + day + ".log") == "OLD\nLEFT\n");
+        assert(get("build/logtest/t/#lr.log").find("<bob> hi") != std::string::npos && get("build/logtest/t/#lr.log").find("LEFT") == std::string::npos);
+        core.close(lb);
+        core.cfg["general"].erase("log"), core.cfg["general"].erase("log_dir");
+        std::filesystem::remove_all("build/logtest");
     }
     core.chan_timers(ts, t0 + 999);
     assert(sent().empty());
@@ -1331,6 +1427,7 @@ int main() {
         // resume: "r.txt" is there with 5 of its 11 bytes, so /dcc get asks for the rest
         f = fopen("build/dcctest/r.txt", "wb");
         fputs("hello", f), fclose(f);
+        fclose(fopen("build/dcctest/.r.txt.part", "wb"));  // what a broken download of ours leaves beside it
         lfd = listen_tcp("127.0.0.1", 0, derr);
         ll = sizeof la, getsockname(lfd, (sockaddr*)&la, &ll);
         port = std::to_string(ntohs(la.sin_port));
@@ -1348,6 +1445,37 @@ int main() {
         memset(fb, 0, sizeof fb);
         assert(fread(fb, 1, sizeof fb, f) == 11 && std::string(fb) == "hello world");
         fclose(f), close(peer), close(lfd);
+        assert(access("build/dcctest/.r.txt.part", F_OK) != 0);  // whole: the mark is gone
+        {   // a file that merely has the name isn't a broken download: left alone, the new one takes another name
+            Dcc* keep = d;
+            f = fopen("build/dcctest/u.txt", "wb"), fputs("abc", f), fclose(f);
+            feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND u.txt 2130706433 9 11\x01");
+            sent();
+            core.exec(chb, "/dcc get");
+            d = core.dccs.back().get();
+            assert(d->path == "build/dcctest/u (1).txt" && d->pos == 0 && access("build/dcctest/.u (1).txt.part", F_OK) == 0);
+            std::string id = std::to_string(d->id);
+            core.exec(chb, "/dcc close " + id);  // cancelled before a byte came: nothing of it stays
+            assert(access("build/dcctest/u (1).txt", F_OK) != 0 && access("build/dcctest/.u (1).txt.part", F_OK) != 0);
+            core.exec(chb, "/dcc close " + id);  // off the list
+            f = fopen("build/dcctest/u.txt", "rb");
+            memset(fb, 0, sizeof fb);
+            assert(fread(fb, 1, sizeof fb, f) == 3 && std::string(fb) == "abc");
+            fclose(f);
+            // cancelling a resume nobody answered keeps the part it was going to continue
+            f = fopen("build/dcctest/p.txt", "wb"), fputs("hello", f), fclose(f), fclose(fopen("build/dcctest/.p.txt.part", "wb"));
+            feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND p.txt 2130706433 9 11\x01");
+            sent();
+            core.exec(chb, "/dcc get");
+            d = core.dccs.back().get();
+            assert(d->st == Dcc::RESUME && d->pos == 5);
+            id = std::to_string(d->id);
+            core.exec(chb, "/dcc close " + id);
+            assert(access("build/dcctest/p.txt", F_OK) == 0 && access("build/dcctest/.p.txt.part", F_OK) == 0);
+            core.exec(chb, "/dcc close " + id);
+            sent();  // the RESUME it asked for
+            d = keep;
+        }
 
         // /dcc send: a name alone is in dcc_dir; we listen, they connect, read it all and ack it
         core.cfg["general"]["dcc_ip"] = "127.0.0.1";
@@ -1395,7 +1523,7 @@ int main() {
         core.cfg["bnc"] = {{"bind", "127.0.0.1"}, {"port", "18797"}, {"tls", "off"}, {"user", "u"}, {"password_hash", hash_password("pw")}};
         std::string nick0 = ts->nick, berr;
         ts->nick = "me", chb->joined = true, chb->topic = "the topic";
-        chb->nicks["bob"] = NickEntry{"bob", "@+"};
+        chb->nicks["bob"] = NickEntry{"bob", "@+", false, "", "", "", false};
         core.add(chb, Line{time(nullptr), LK::MSG, "bob", "earlier"});
         Bnc bnc(core);
         assert(bnc.start(berr) && bnc.url == "irc://127.0.0.1:18797" && !bnc.attached());
@@ -1611,6 +1739,16 @@ int main() {
         size_t ck = login.find("isekur_sid=");
         assert(login.rfind("HTTP/1.1 200", 0) == 0 && ck != std::string::npos);
         std::string cookie = login.substr(ck, login.find(';', ck) - ck);
+        {  // a Cookie header with a segment of only spaces answered with a crash (substr at npos): it's just no session
+            for (const char* odd : {"a=b; ;c=d", "a=b; ", ";", " ; ; ", "isekur_sid="}) {
+                auto [fd, r] = talk(std::string("GET /session HTTP/1.1\r\nHost: x\r\nCookie: ") + odd + "\r\n\r\n", 1);
+                close(fd);
+                assert(r.rfind("HTTP/1.1 401", 0) == 0);
+            }
+            auto [fd, r] = talk("GET /session HTTP/1.1\r\nHost: x\r\nCookie: a=b; ;  " + cookie + "\r\n\r\n", 1);
+            close(fd);
+            assert(r.rfind("HTTP/1.1 200", 0) == 0);  // after the spaces, the real one still counts
+        }
         auto [ws0, snap] = talk("GET /ws HTTP/1.1\r\nHost: x\r\nCookie: " + cookie + "\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n", 1 << 30);
         int ws = ws0;  // lambdas below capture it; capturing a structured binding is C++20
         std::string me = "{\"t\":\"buf\",\"id\":" + std::to_string(chb->id) + ",";
@@ -1853,6 +1991,8 @@ int main() {
         vf(":srv 731 me :zed");  // offline from the start: nothing to say
         vf(":srv 731 me :alice");
         assert(v->status->lines.back().text == "alice went offline");
+        // a server line with nothing after the command used to read the back() of an empty parameter list
+        for (const char* bare : {":srv 730", ":srv 731", ":srv 734", ":srv REGISTER", ":srv VERIFY", "@time=2026-01-02T03:04:05.000Z :bob!u@h 734"}) vf(bare);
         core.exec(vb, "/notify del zed");
         assert(vs().find("MONITOR - zed") != std::string::npos);
         // ...and ISON where there's no MONITOR
@@ -2083,6 +2223,8 @@ print("loaded")
         // old keys (and the comments over them) out of a config's text
         assert(ini_drop_keys("[general]\n# about it\n# more\nauto_away = on\nnick = x\n[server.a]\n; auto_away = off ; c\nhost = h\n", {"auto_away"}) ==
                "[general]\nnick = x\n[server.a]\nhost = h\n");
+        // a comment line of nothing but #s and ;s used to throw out of the migration (substr at npos)
+        assert(ini_drop_keys("[general]\n#\nnick = x\nauto_away = on\n;;\n########\n", {"auto_away"}) == "[general]\n#\nnick = x\n;;\n########\n");
         auto wait_catalog = [&] {
             for (int i = 0; i < 500 && pc.catalog; i++) usleep(10000), pc.plugins_poll();
             assert(!pc.catalog);

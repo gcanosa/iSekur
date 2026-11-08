@@ -111,21 +111,13 @@ Server* Bnc::server(const std::string& net) const {
     return nullptr;
 }
 
-static std::string iso_time(time_t t) {
-    char b[32];
-    tm g{};
-    gmtime_r(&t, &g);
-    strftime(b, sizeof b, "%Y-%m-%dT%H:%M:%S.000Z", &g);
-    return b;
-}
-
 void Bnc::send(Client& cl, const std::string& line, time_t ts, const std::string& tags, const std::string& batch) {
     if (cl.conn.closing) return;
     if (cl.conn.out.size() > MAX_OUT) { cl.conn.out.clear(), cl.conn.closing = true; return; }  // not reading: let go of it
     std::string t;
     auto add = [&](const std::string& x) { t += (t.empty() ? "" : ";") + x; };
     if (!batch.empty() && cl.caps.count("batch")) add("batch=" + batch);
-    if (ts && cl.caps.count("server-time")) add("time=" + iso_time(ts));
+    if (ts && cl.caps.count("server-time")) add("time=" + iso_utc(ts, ".000Z"));
     for (auto& tg : split(tags, ';')) {
         std::string k = tg.substr(0, tg.find('='));
         if (!k.empty() && (k == "label" ? cl.caps.count("labeled-response") > 0
@@ -206,7 +198,12 @@ void Bnc::process(const std::vector<pollfd>& v) {
             std::string l = cl.in.substr(at, nl - at);
             at = nl + 1;
             while (!l.empty() && l.back() == '\r') l.pop_back();
-            if (!l.empty()) line(cl, l);
+            try {
+                if (!l.empty()) line(cl, l);
+            } catch (const std::exception& e) {  // one bad line drops that client, not iSekur
+                c.print(c.bufs.front().get(), LK::ERROR, "BNC: dropped " + cl.ip + " after an internal error: " + e.what());
+                ok = false;
+            }
         }
         cl.in.erase(0, at);
         if (cl.in.size() > 16384) cl.conn.closing = true;  // no line is that long
@@ -230,17 +227,7 @@ void Bnc::process(const std::vector<pollfd>& v) {
         if (!s && !cl.net.empty()) { send(cl, "ERROR :" + cl.net + " is gone from iSekur"), cl.conn.closing = true; continue; }
         if (now - cl.rx > 240) { dead.push_back(&cl); continue; }  // asleep, or the network went away
         if (now - cl.rx >= 90 && now - cl.pinged >= 90) send(cl, std::string("PING :") + SRV), cl.pinged = now;
-        if (!s) continue;  // on no network yet
-        if (cl.seen == SS::CONNECTED && s->state != SS::CONNECTED) {  // its channels close; the rejoins open them again
-            send(cl, std::string(":") + SRV + " NOTICE " + cl.nick + " :*** Disconnected from " + cl.net + ", iSekur is reconnecting");
-            for (auto& [k, ch] : cl.chans) send(cl, ":" + cl.nick + " PART " + ch + " :Disconnected from " + cl.net);
-            cl.chans.clear();
-        }
-        else if (cl.seen != SS::CONNECTED && s->state == SS::CONNECTED) {
-            send(cl, std::string(":") + SRV + " NOTICE " + cl.nick + " :*** Connected to " + cl.net);
-            if (s->nick != cl.nick) send(cl, ":" + cl.nick + " NICK " + s->nick), cl.nick = s->nick;
-        }
-        cl.seen = s->state;
+        if (s) sync(cl, s);  // else on no network yet
     }
     clients.erase(std::remove_if(clients.begin(), clients.end(),
                                  [&](auto& cl) {
@@ -254,6 +241,20 @@ void Bnc::process(const std::vector<pollfd>& v) {
                   clients.end());
 }
 
+// the network's state as this client last heard it: said when it changes. from_server calls it first, so the rejoins
+// after a reconnect never overtake the "Connected" line (and the NICK that goes with it)
+void Bnc::sync(Client& cl, Server* s) {
+    if (cl.seen == SS::CONNECTED && s->state != SS::CONNECTED) {  // its channels close; the rejoins open them again
+        send(cl, std::string(":") + SRV + " NOTICE " + cl.nick + " :*** Disconnected from " + cl.net + ", iSekur is reconnecting");
+        for (auto& [k, ch] : cl.chans) send(cl, ":" + cl.nick + " PART " + ch + " :Disconnected from " + cl.net);
+        cl.chans.clear();
+    } else if (cl.seen != SS::CONNECTED && s->state == SS::CONNECTED) {
+        send(cl, std::string(":") + SRV + " NOTICE " + cl.nick + " :*** Connected to " + cl.net);
+        if (s->nick != cl.nick) send(cl, ":" + cl.nick + " NICK " + s->nick), cl.nick = s->nick;
+    }
+    cl.seen = s->state;
+}
+
 void Bnc::gone(Client& cl, const std::string& why) {
     c.print(c.bufs.front().get(), LK::INFO, "◀ BNC gone: " + cl.ip + " (" + (cl.net.empty() ? "no network" : cl.net) + "), attached " +
                                                 fmt_dur((long)(time(nullptr) - cl.since)) + (why == "gone" ? "" : ": " + why));
@@ -262,7 +263,7 @@ void Bnc::gone(Client& cl, const std::string& why) {
 
 void Bnc::cap(Client& cl, const Msg& m) {
     std::string sub = m.p(0);
-    for (auto& ch : sub) ch = (char)toupper((unsigned char)ch);
+    to_upper(sub);
     std::string me = cl.nick.empty() ? "*" : cl.nick;
     auto join = [](const std::set<std::string>& v) {
         std::string o;
@@ -617,6 +618,7 @@ void Bnc::from_server(Server* s, const std::string& line) {
     std::string tags = wire_tags(m);
     for (auto& cl : clients) {
         if (!cl->reg || cl->net != s->cfg.name) continue;
+        sync(*cl, s);
         if (to && cl.get() != to->cl && !echo) continue;  // someone else's answer
         bool sender = cl.get() == from || (to && cl.get() == to->cl);
         if (echo && sender && !cl->caps.count("echo-message")) {  // its own line: ACK the label instead
@@ -656,7 +658,7 @@ Bnc::Client* Bnc::take(Server* s, const std::string& cmd, const std::string& tgt
 // Refs: *, timestamp= (to the second: Lines keep no more) or msgid= (where the network gave one)
 void Bnc::history(Client& cl, Server* s, const Msg& m, const std::string& label) {
     std::string sub = m.p(0);
-    for (auto& ch : sub) ch = (char)toupper((unsigned char)ch);
+    to_upper(sub);
     std::string id = "h" + std::to_string(++batch_n), me = cl.nick, self = self_prefix(c, s);
     auto lim = [&](size_t i) { int n = atoi(m.p(i).c_str()); return (size_t)std::min(n <= 0 ? HIST_MAX : n, HIST_MAX); };
     auto fail = [&](const std::string& code, const std::string& why) { send(cl, std::string(":") + SRV + " FAIL CHATHISTORY " + code + " " + sub + " :" + why); };
@@ -676,7 +678,7 @@ void Bnc::history(Client& cl, Server* s, const Msg& m, const std::string& label)
         std::sort(hits.begin(), hits.end());
         if (hits.size() > lim(3)) hits.resize(lim(3));
         send(cl, std::string(":") + SRV + " BATCH +" + id + " draft/chathistory-targets", 0, label);
-        for (auto& [t, n] : hits) send(cl, std::string(":") + SRV + " CHATHISTORY TARGETS " + n + " " + iso_time(t), 0, "", id);
+        for (auto& [t, n] : hits) send(cl, std::string(":") + SRV + " CHATHISTORY TARGETS " + n + " " + iso_utc(t, ".000Z"), 0, "", id);
         send(cl, std::string(":") + SRV + " BATCH -" + id);
         return;
     }

@@ -114,7 +114,8 @@ static const std::vector<CmdInfo> CMDS = {
      "accept with /e2e yournick and the same password. If the passwords match, both sides see "
      "\"Encrypted chat is on\" and the query is AES-256-GCM encrypted from then on; if not, "
      "both are told and nothing is encrypted. Keys live in memory only: after a restart, start "
-     "again. /e2e off ends it, /e2e alone lists sessions. Other clients see +iSE lines. "
+     "again. /e2e off ends it (for both sides: the line it sends is sealed with the key, so nobody else can end a chat that is "
+     "on, and a new invitation from the same nick waits for your /e2e nick instead of replacing it); /e2e alone lists sessions. Other clients see +iSE lines. "
      "/e2e #channel asks for a password and encrypts what you say there; whoever typed the same "
      "password reads it (lines with 🔒), the rest see +iSE noise. No check: a wrong password just "
      "can't open the others' lines. Anyone with the password reads it all; to drop someone, change it. "
@@ -349,7 +350,7 @@ static const std::vector<CmdInfo> CMDS = {
      "A file someone sends you is only offered: nothing is downloaded until you /dcc get it "
      "(the newest offer, the one with that number, or the newest from that nick). It goes into "
      "dcc_dir (default ~/Downloads, on the machine iSekur runs on) without overwriting anything; "
-     "a smaller file there with the same name is taken as a broken download and resumed. /dcc send "
+     "a download of ours that broke (a hidden .name.part sits beside it until it's whole) is resumed; a file that merely has the name is never touched. /dcc send "
      "offers a file (a name alone is looked for in dcc_dir; from the webchat only those) and waits "
      "5 minutes for them to take it. Behind a router set dcc_ip to your public address and forward "
      "dcc_ports (e.g. 5000-5010) to this machine. Transfers run in the background with their "
@@ -385,8 +386,9 @@ static const std::vector<CmdInfo> CMDS = {
      "--attach. /lock on sets or changes it (the current one first) without locking; /lock off "
      "asks for it and turns locking off. lock_idle = N locks after N minutes without typing "
      "(0, the default: never). Forgot it? Stop iSekur, set lock = off in the config and start "
-     "it again. Three wrong tries wait a minute. While it's set, /exit asks for it as well. The config and "
-     "logs are not encrypted by it.",
+     "it again. Three wrong tries wait a minute. While it's set, /exit asks for it as well, and so does "
+     "changing what would let a hijacked session reach further: exec_web, dcc_web, dcc_dir, the [web] and [bnc] "
+     "settings, and /bnc password. The config and logs are not encrypted by it.",
      {"/lock", "/lock on", "/lock off", "/set lock_idle 15"}},
     {"plugin", "Session", "[list] | available | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name",
      "Lua plugins: install, turn on and off, configure",

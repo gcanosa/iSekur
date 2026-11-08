@@ -69,9 +69,10 @@ private:
 
 std::string ssl_errstr();
 int listen_tcp(const std::string& bind, int port, std::string& err);
-std::string https_head(const std::string& host, const std::string& path);  // blocking, for a thread
-// blocking, for a thread: GET https://host/path, verified TLS, 20s timeouts, at most cap bytes of body.
-// true with a 200 and the body in out; false with why in out
+// blocking, for a thread, both on fetch_once's verified TLS and 10s connect / 15s read timeouts; for iSekur's own fixed hosts, so
+// without the private-address guard https_fetch has. The headers of GET https://host/path (a release's Location), "" on any failure
+std::string https_head(const std::string& host, const std::string& path);
+// GET https://host/path, at most cap bytes of body. true with a 200 and the body in out; false with why in out
 bool https_get(const std::string& host, const std::string& path, size_t cap, std::string& out);
 // blocking, for a thread: GET an https:// URL for a plugin (isekur.http). Redirects followed (https only), the body cut
 // at cap, 10s connect and 15s read timeouts. Hosts that resolve to loopback, private or link-local addresses are

@@ -8,6 +8,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <cerrno>
+#include <climits>
 #include <cstring>
 #include <set>
 #include <glob.h>
@@ -16,7 +17,7 @@
 #include <openssl/rand.h>
 #include "core.h"
 
-static std::string trim(const std::string& s) {
+std::string trim(const std::string& s) {
     size_t a = s.find_first_not_of(" \t\r\n"), b = s.find_last_not_of(" \t\r\n");
     return a == std::string::npos ? "" : s.substr(a, b - a + 1);
 }
@@ -168,7 +169,8 @@ std::string ini_drop_keys(const std::string& text, const std::set<std::string>& 
     while (std::getline(in, line)) {
         std::string t = trim(line);
         bool comment = !t.empty() && (t[0] == '#' || t[0] == ';');
-        std::string body = comment ? trim(t.substr(t.find_first_not_of("#;"))) : t;
+        size_t from = comment ? t.find_first_not_of("#;") : 0;  // a line of only #s and ;s says nothing
+        std::string body = !comment ? t : from == std::string::npos ? "" : trim(t.substr(from));
         size_t eq = body.find('=');
         std::string key = eq == std::string::npos ? "" : trim(body.substr(0, eq));
         bool is_key = !key.empty() && key.find(' ') == std::string::npos;
@@ -188,7 +190,9 @@ bool ini_drop_keys_file(const std::string& path, const std::set<std::string>& ke
 }
 
 // text into path through a temporary file, so a crash never leaves half a config
-static bool write_file(const std::string& path, const std::string& text, std::string& err) {
+static bool write_file(const std::string& link, const std::string& text, std::string& err) {
+    char real[PATH_MAX];
+    std::string path = realpath(link.c_str(), real) ? real : link;  // a config symlinked into a dotfiles repo stays a symlink
     std::string tmp = path + ".tmp";
     mode_t old = umask(077);  // the config holds passwords
     std::ofstream o(tmp, std::ios::trunc);

@@ -54,6 +54,13 @@ static std::string clean_file(std::string n) {
     return n.empty() ? "file" : n;
 }
 
+// a download of ours leaves ".<name>.part" beside it until it's whole: only a file with that mark is a broken download
+// to resume, never an unrelated one that happens to have the name (and a smaller size)
+static std::string part_mark(const std::string& path) {
+    size_t sl = path.rfind('/') + 1;
+    return path.substr(0, sl) + "." + path.substr(sl) + ".part";
+}
+
 static std::string quoted(const std::string& f) { return f.find(' ') != std::string::npos ? "\"" + f + "\"" : f; }
 
 // `"file name" a b c` or `file a b c`: the file, then the words after it
@@ -96,6 +103,8 @@ static void finish(Core& c, Dcc* d, const std::string& err) {
     d->st = err.empty() ? Dcc::DONE : Dcc::FAILED;
     d->err = err;
     d->ended = time(nullptr);
+    bool kept = d->got || d->pos;  // pos: a resume asked for, nothing received yet; the part on disk is still worth having
+    if (!d->send && !d->path.empty() && (err.empty() || !kept)) unlink(part_mark(d->path).c_str());  // whole, or nothing worth resuming
     long secs = std::max<long>(1, (long)(time(nullptr) - d->at));
     std::string moved = human_bytes(d->got - d->pos) + " in " + std::to_string(secs) + "s (" +
                         human_bytes((d->got - d->pos) / (unsigned long long)secs) + "/s)";
@@ -107,7 +116,7 @@ static void finish(Core& c, Dcc* d, const std::string& err) {
         note(c, d, LK::ERROR, err == "cancelled" ? "DCC stopped" : "DCC failed", tag(d) + d->file + (d->send ? " to " : " from ") + d->nick + ": " + err + " after " +
                                                  human_bytes(d->got) + (d->size ? " of " + human_bytes(d->size) : "") +
                                                  (!d->send && d->got ? " (the part stays in " + d->path + ", /dcc get resumes it)" : ""));
-    if (!d->send && !d->got && !d->path.empty()) unlink(d->path.c_str());
+    if (!d->send && !kept && !d->path.empty()) unlink(d->path.c_str());
     c.dirty = true;
 }
 
@@ -125,7 +134,7 @@ static void receive(Core& c, Dcc* d) {
 // SEND file ip port [size] [token]; RESUME file port pos (they take ours from pos); ACCEPT file port pos (they let us resume)
 void Core::dcc_ctcp(Server* s, const std::string& nick, const std::string& arg) {
     std::string type = arg.substr(0, arg.find(' '));
-    for (auto& ch : type) ch = (char)toupper((unsigned char)ch);
+    to_upper(type);
     if (!opt_on(nullptr, "dcc", true)) {  // dcc = off ([general] only): nothing comes in, they get no answer
         print(where(*this, s), LK::INFO, "DCC " + type + " from " + nick + " dropped (dcc is off: /set dcc on)");
         return;
@@ -208,12 +217,16 @@ static void start(Core& c, Buffer* b, Dcc* d, bool fresh) {
         d->path = dir + "/" + base + (n ? " (" + std::to_string(n) + ")" : "") + ext;
         struct stat st;
         if (!fresh && d->size && lstat(d->path.c_str(), &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0 &&
-            (unsigned long long)st.st_size < d->size) {
+            (unsigned long long)st.st_size < d->size && access(part_mark(d->path).c_str(), F_OK) == 0) {
             d->pos = (unsigned long long)st.st_size;
             break;
         }
         fd = open(d->path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0644);
         if (fd < 0 && errno != EEXIST) break;
+    }
+    if (fd >= 0) {
+        int mk = open(part_mark(d->path).c_str(), O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
+        if (mk >= 0) ::close(mk);
     }
     if (d->pos) {
         d->st = Dcc::RESUME;

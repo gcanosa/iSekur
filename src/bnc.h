@@ -70,4 +70,5 @@ private:
     void tell(Client& cl, const std::string& text);
     bool motd(Client& cl, const std::string& extra);  // bnc.motd in the config's folder, if there     // a line from *isekur
     void gone(Client& cl, const std::string& why);
+    void sync(Client& cl, Server* s);  // tell it the network connected or dropped, once
 };
