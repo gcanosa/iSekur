@@ -203,7 +203,16 @@ int main(int argc, char** argv) {
         else if (a == "--web") web_flag = 1;
         else if (a == "--no-web") web_flag = 0;
         else if (a == "--hash-password") return hash_pw_cmd();
-        else if (a == "-v" || a == "--version") { puts(version_string().c_str()); return 0; }
+        else if (a == "-v" || a == "--version") {
+            puts(version_string().c_str());
+            puts("A small, very colorful terminal IRC client with a built-in webchat\n"
+                 "Author:  Gerardo Canosa (github.com/gcanosa)\n"
+                 "Source:  https://github.com/gcanosa/iSekur\n"
+                 "Issues:  https://github.com/gcanosa/iSekur/issues\n"
+                 "IRC:     #iSekur on irc.sekurnet.org\n"
+                 "License: GPL-3.0-or-later");
+            return 0;
+        }
         else return usage();
     }
     bool own_cfg = !c.cfg_path.empty();
