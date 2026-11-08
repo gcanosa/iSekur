@@ -2933,8 +2933,10 @@ navigator.serviceWorker?.register("/sw.js").then(r => swReg = r, () => {});
 navigator.serviceWorker?.addEventListener("message", e => noteClick(e.data));
 function noteClick(d) { if (d === "files") openFiles(); else select(d); }
 function notify(title, body, tag, data) {
-  if (swReg) return swReg.showNotification(title, {body, tag, data}).catch(() => {});
-  try { const n = new Notification(title, {body, tag}); n.onclick = () => { window.focus(); noteClick(data); n.close(); }; } catch (e) {}
+  // showNotification rejects until the worker is active (the first visit, or an update): then the page's own one
+  const plain = () => { try { const n = new Notification(title, {body, tag}); n.onclick = () => { window.focus(); noteClick(data); n.close(); }; } catch (e) {} };
+  if (swReg) return swReg.showNotification(title, {body, tag, data}).catch(plain);
+  plain();
 }
 function seen() { missed = 0; document.title = "iSekur Webchat"; }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) seen(); });
