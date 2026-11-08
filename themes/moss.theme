@@ -1,0 +1,57 @@
+# Moss (dark theme): soft sage-grey on forest dark, easy on the eyes. /theme moss
+[colors]
+default        = #c3cfbd #1a211c
+topic          = #c3cfbd #232c25 bold
+tabbar         = #6f8068 #232c25
+tab_server     = #aebba6 #232c25 bold
+tab_home       = #a5c48a #232c25 bold
+tab_shell      = #d7bd7e #232c25 bold
+tab_active     = #1a211c #9dbb88 bold
+tab_data       = #8fbcb4 #232c25
+tab_msg        = #c3cfbd #232c25 bold
+tab_hilight    = #b99bc4 #232c25 bold
+tab_quiet      = #6f8068 #232c25 italic
+tab_quiet_act  = #1a211c #6f8068 bold
+status         = #6f8068 #232c25
+status_hi      = #c3cfbd #232c25
+status_info    = #c3cfbd #232c25
+status_ok      = #a5c48a
+status_warn    = #d7bd7e
+status_high    = #cf9c6c
+status_crit    = #c97c70 bold
+status_bat     = #6f8068 #33402f
+input          = #c3cfbd #1a211c
+input_prompt   = #9dbb88 #1a211c bold
+set_key        = #9dbb88 #1a211c bold
+set_value      = #d7bd7e #1a211c
+timestamp      = #6f8068 #1a211c
+separator      = #33402f #1a211c
+nicklist       = #aebba6 #1a211c
+nicklist_title = #6f8068 #1a211c italic
+nicklist_border= #33402f #1a211c
+nicklist_op    = #cf9c6c #1a211c bold
+nicklist_voice = #a5c48a #1a211c
+menu           = #c3cfbd #232c25
+menu_sel       = #1a211c #9dbb88 bold
+menu_border    = #33402f #232c25
+msg_self       = #8fbcb4 #1a211c bold
+marker         = #b99bc4
+hilight        = #1a211c #b99bc4 bold
+hilight_text   = #b99bc4 #1a211c
+join           = #a5c48a #1a211c
+part           = #cf9c6c #1a211c
+quit           = #c97c70 #1a211c
+notice         = #d7bd7e #1a211c bold
+action         = #b99bc4 #1a211c italic
+info           = #8fbcb4 #1a211c
+error          = #c97c70 #1a211c bold
+
+[nicks]
+palette = #c97c70 #cf9c6c #d7bd7e #a5c48a #8fbcb4 #8ba7c6 #b99bc4
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

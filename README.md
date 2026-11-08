@@ -14,7 +14,7 @@ that mirrors your live session in a browser, bouncer style.
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
 - Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
-- 37 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme` alone opens a live picker):
+- 45 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme` alone opens a live picker):
   - dark: default, neon, dracula, tokyonight, catppuccin-mocha, gruvbox, nord, onedark, rose-pine, kanagawa, solarized,
     github-dark, everforest, ayu, nightfox, night-owl, material, contrast-dark (high contrast)
   - light: tokyonight-day, catppuccin-latte, gruvbox-light, rose-pine-dawn, solarized-light, github-light, one-light,
@@ -60,7 +60,7 @@ that mirrors your live session in a browser, bouncer style.
 - The status bar can show CPU, memory, load and a battery next to the uptime (`/statusbar`), colored by thresholds you can change (`cpu_levels`, `mem_levels`) and by the theme
 - Optional chat logs (`log = on`, rotated daily) and `/logs`, a browser for them: network, channel and day in a tree, a calendar, and a search over every day; without them, tabs still show their last lines after a restart (`keep_history`). CTCP VERSION/TIME/PING replies you can switch on or off, globally or per server
 
-Six of the 37 themes, same chat (mIRC, Rosé Pine, Ayu, Neon, Catppuccin Latte, Dracula):
+Six of the 45 themes, same chat (mIRC, Rosé Pine, Ayu, Neon, Catppuccin Latte, Dracula):
 
 | | |
 |---|---|

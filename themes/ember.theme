@@ -1,0 +1,57 @@
+# Ember (dark theme): warm amber on charcoal, for late nights. /theme ember
+[colors]
+default        = #d9c09a #1b1511
+topic          = #d9c09a #251c16 bold
+tabbar         = #8a7259 #251c16
+tab_server     = #c8a57a #251c16 bold
+tab_home       = #a3b56a #251c16 bold
+tab_shell      = #dcb062 #251c16 bold
+tab_active     = #1b1511 #d9995a bold
+tab_data       = #8fb3b0 #251c16
+tab_msg        = #d9c09a #251c16 bold
+tab_hilight    = #c98fa6 #251c16 bold
+tab_quiet      = #8a7259 #251c16 italic
+tab_quiet_act  = #1b1511 #8a7259 bold
+status         = #8a7259 #251c16
+status_hi      = #d9c09a #251c16
+status_info    = #d9c09a #251c16
+status_ok      = #a3b56a
+status_warn    = #dcb062
+status_high    = #d5804f
+status_crit    = #d0675a bold
+status_bat     = #8a7259 #3a2c22
+input          = #d9c09a #1b1511
+input_prompt   = #d9995a #1b1511 bold
+set_key        = #d9995a #1b1511 bold
+set_value      = #dcb062 #1b1511
+timestamp      = #8a7259 #1b1511
+separator      = #3a2c22 #1b1511
+nicklist       = #c8a57a #1b1511
+nicklist_title = #8a7259 #1b1511 italic
+nicklist_border= #3a2c22 #1b1511
+nicklist_op    = #d5804f #1b1511 bold
+nicklist_voice = #a3b56a #1b1511
+menu           = #d9c09a #251c16
+menu_sel       = #1b1511 #d9995a bold
+menu_border    = #3a2c22 #251c16
+msg_self       = #8fb3b0 #1b1511 bold
+marker         = #c98fa6
+hilight        = #1b1511 #c98fa6 bold
+hilight_text   = #c98fa6 #1b1511
+join           = #a3b56a #1b1511
+part           = #d5804f #1b1511
+quit           = #d0675a #1b1511
+notice         = #dcb062 #1b1511 bold
+action         = #c98fa6 #1b1511 italic
+info           = #8fb3b0 #1b1511
+error          = #d0675a #1b1511 bold
+
+[nicks]
+palette = #d0675a #d5804f #dcb062 #a3b56a #8fb3b0 #8ea6c9 #c98fa6
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

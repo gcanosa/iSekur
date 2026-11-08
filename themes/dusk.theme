@@ -1,0 +1,57 @@
+# Dusk (dark theme): muted plum and lilac, for the wind-down. /theme dusk
+[colors]
+default        = #cbbdd6 #1e1a24
+topic          = #cbbdd6 #29232f bold
+tabbar         = #7b6d8a #29232f
+tab_server     = #b3a3c0 #29232f bold
+tab_home       = #95bf9a #29232f bold
+tab_shell      = #d9b783 #29232f bold
+tab_active     = #1e1a24 #b89ad6 bold
+tab_data       = #8fb7cf #29232f
+tab_msg        = #cbbdd6 #29232f bold
+tab_hilight    = #e0a0c4 #29232f bold
+tab_quiet      = #7b6d8a #29232f italic
+tab_quiet_act  = #1e1a24 #7b6d8a bold
+status         = #7b6d8a #29232f
+status_hi      = #cbbdd6 #29232f
+status_info    = #cbbdd6 #29232f
+status_ok      = #95bf9a
+status_warn    = #d9b783
+status_high    = #d59a7a
+status_crit    = #d17a8c bold
+status_bat     = #7b6d8a #3d3446
+input          = #cbbdd6 #1e1a24
+input_prompt   = #b89ad6 #1e1a24 bold
+set_key        = #b89ad6 #1e1a24 bold
+set_value      = #d9b783 #1e1a24
+timestamp      = #7b6d8a #1e1a24
+separator      = #3d3446 #1e1a24
+nicklist       = #b3a3c0 #1e1a24
+nicklist_title = #7b6d8a #1e1a24 italic
+nicklist_border= #3d3446 #1e1a24
+nicklist_op    = #d59a7a #1e1a24 bold
+nicklist_voice = #95bf9a #1e1a24
+menu           = #cbbdd6 #29232f
+menu_sel       = #1e1a24 #b89ad6 bold
+menu_border    = #3d3446 #29232f
+msg_self       = #8fb7cf #1e1a24 bold
+marker         = #e0a0c4
+hilight        = #1e1a24 #e0a0c4 bold
+hilight_text   = #e0a0c4 #1e1a24
+join           = #95bf9a #1e1a24
+part           = #d59a7a #1e1a24
+quit           = #d17a8c #1e1a24
+notice         = #d9b783 #1e1a24 bold
+action         = #e0a0c4 #1e1a24 italic
+info           = #8fb7cf #1e1a24
+error          = #d17a8c #1e1a24 bold
+
+[nicks]
+palette = #d17a8c #d59a7a #d9b783 #95bf9a #8fb7cf #9aa6d9 #e0a0c4
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

@@ -1,0 +1,57 @@
+# Midnight (dark theme): low blue-grey on navy, for the small hours. /theme midnight
+[colors]
+default        = #b8c4d8 #131a24
+topic          = #b8c4d8 #1b2431 bold
+tabbar         = #5d6b84 #1b2431
+tab_server     = #9eabc2 #1b2431 bold
+tab_home       = #8fb996 #1b2431 bold
+tab_shell      = #d6b07a #1b2431 bold
+tab_active     = #131a24 #7ea6d8 bold
+tab_data       = #8cc7c4 #1b2431
+tab_msg        = #b8c4d8 #1b2431 bold
+tab_hilight    = #b8a0d6 #1b2431 bold
+tab_quiet      = #5d6b84 #1b2431 italic
+tab_quiet_act  = #131a24 #5d6b84 bold
+status         = #5d6b84 #1b2431
+status_hi      = #b8c4d8 #1b2431
+status_info    = #b8c4d8 #1b2431
+status_ok      = #8fb996
+status_warn    = #d6b07a
+status_high    = #d19a66
+status_crit    = #c97a7a bold
+status_bat     = #5d6b84 #2b3749
+input          = #b8c4d8 #131a24
+input_prompt   = #7ea6d8 #131a24 bold
+set_key        = #7ea6d8 #131a24 bold
+set_value      = #d6b07a #131a24
+timestamp      = #5d6b84 #131a24
+separator      = #2b3749 #131a24
+nicklist       = #9eabc2 #131a24
+nicklist_title = #5d6b84 #131a24 italic
+nicklist_border= #2b3749 #131a24
+nicklist_op    = #d19a66 #131a24 bold
+nicklist_voice = #8fb996 #131a24
+menu           = #b8c4d8 #1b2431
+menu_sel       = #131a24 #7ea6d8 bold
+menu_border    = #2b3749 #1b2431
+msg_self       = #8cc7c4 #131a24 bold
+marker         = #b8a0d6
+hilight        = #131a24 #b8a0d6 bold
+hilight_text   = #b8a0d6 #131a24
+join           = #8fb996 #131a24
+part           = #d19a66 #131a24
+quit           = #c97a7a #131a24
+notice         = #d6b07a #131a24 bold
+action         = #b8a0d6 #131a24 italic
+info           = #8cc7c4 #131a24
+error          = #c97a7a #131a24 bold
+
+[nicks]
+palette = #c97a7a #d19a66 #d6b07a #8fb996 #8cc7c4 #7ea6d8 #b8a0d6
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

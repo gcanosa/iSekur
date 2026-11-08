@@ -1,0 +1,57 @@
+# Sage (light theme): pale green paper, calm for long sessions. /theme sage
+[colors]
+default        = #33402f #eef3ea
+topic          = #33402f #e0e9d8 bold
+tabbar         = #7b8b72 #e0e9d8
+tab_server     = #4a5a43 #e0e9d8 bold
+tab_home       = #3f7d3a #e0e9d8 bold
+tab_shell      = #94702a #e0e9d8 bold
+tab_active     = #f5faf2 #4a7a46 bold
+tab_data       = #2f7470 #e0e9d8
+tab_msg        = #33402f #e0e9d8 bold
+tab_hilight    = #7b5a8a #e0e9d8 bold
+tab_quiet      = #7b8b72 #e0e9d8 italic
+tab_quiet_act  = #f5faf2 #7b8b72 bold
+status         = #7b8b72 #e0e9d8
+status_hi      = #33402f #e0e9d8
+status_info    = #33402f #e0e9d8
+status_ok      = #3f7d3a
+status_warn    = #94702a
+status_high    = #a86a3a
+status_crit    = #a6413a bold
+status_bat     = #7b8b72 #bfcdb4
+input          = #33402f #eef3ea
+input_prompt   = #4a7a46 #eef3ea bold
+set_key        = #4a7a46 #eef3ea bold
+set_value      = #94702a #eef3ea
+timestamp      = #7b8b72 #eef3ea
+separator      = #bfcdb4 #eef3ea
+nicklist       = #4a5a43 #eef3ea
+nicklist_title = #7b8b72 #eef3ea italic
+nicklist_border= #bfcdb4 #eef3ea
+nicklist_op    = #a86a3a #eef3ea bold
+nicklist_voice = #3f7d3a #eef3ea
+menu           = #33402f #e0e9d8
+menu_sel       = #f5faf2 #4a7a46 bold
+menu_border    = #bfcdb4 #e0e9d8
+msg_self       = #2f7470 #eef3ea bold
+marker         = #7b5a8a
+hilight        = #f5faf2 #7b5a8a bold
+hilight_text   = #7b5a8a #eef3ea
+join           = #3f7d3a #eef3ea
+part           = #a86a3a #eef3ea
+quit           = #a6413a #eef3ea
+notice         = #94702a #eef3ea bold
+action         = #7b5a8a #eef3ea italic
+info           = #2f7470 #eef3ea
+error          = #a6413a #eef3ea bold
+
+[nicks]
+palette = #a6413a #a86a3a #94702a #3f7d3a #2f7470 #3e6496 #7b5a8a
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

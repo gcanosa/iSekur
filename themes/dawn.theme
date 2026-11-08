@@ -1,0 +1,57 @@
+# Dawn (light theme): peach and cream, soft morning light. /theme dawn
+[colors]
+default        = #4d3b33 #fbf4ec
+topic          = #4d3b33 #f3e6d8 bold
+tabbar         = #9a8273 #f3e6d8
+tab_server     = #6b5548 #f3e6d8 bold
+tab_home       = #5f7f4a #f3e6d8 bold
+tab_shell      = #a86b1f #f3e6d8 bold
+tab_active     = #fffaf5 #b5583a bold
+tab_data       = #3f6f8c #f3e6d8
+tab_msg        = #4d3b33 #f3e6d8 bold
+tab_hilight    = #8e4a7a #f3e6d8 bold
+tab_quiet      = #9a8273 #f3e6d8 italic
+tab_quiet_act  = #fffaf5 #9a8273 bold
+status         = #9a8273 #f3e6d8
+status_hi      = #4d3b33 #f3e6d8
+status_info    = #4d3b33 #f3e6d8
+status_ok      = #5f7f4a
+status_warn    = #a86b1f
+status_high    = #b8673f
+status_crit    = #a8323e bold
+status_bat     = #9a8273 #dcc7b3
+input          = #4d3b33 #fbf4ec
+input_prompt   = #b5583a #fbf4ec bold
+set_key        = #b5583a #fbf4ec bold
+set_value      = #a86b1f #fbf4ec
+timestamp      = #9a8273 #fbf4ec
+separator      = #dcc7b3 #fbf4ec
+nicklist       = #6b5548 #fbf4ec
+nicklist_title = #9a8273 #fbf4ec italic
+nicklist_border= #dcc7b3 #fbf4ec
+nicklist_op    = #b8673f #fbf4ec bold
+nicklist_voice = #5f7f4a #fbf4ec
+menu           = #4d3b33 #f3e6d8
+menu_sel       = #fffaf5 #b5583a bold
+menu_border    = #dcc7b3 #f3e6d8
+msg_self       = #3f6f8c #fbf4ec bold
+marker         = #8e4a7a
+hilight        = #fffaf5 #8e4a7a bold
+hilight_text   = #8e4a7a #fbf4ec
+join           = #5f7f4a #fbf4ec
+part           = #b8673f #fbf4ec
+quit           = #a8323e #fbf4ec
+notice         = #a86b1f #fbf4ec bold
+action         = #8e4a7a #fbf4ec italic
+info           = #3f6f8c #fbf4ec
+error          = #a8323e #fbf4ec bold
+
+[nicks]
+palette = #a8323e #b8673f #a86b1f #5f7f4a #3f6f8c #4e6aa8 #8e4a7a
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

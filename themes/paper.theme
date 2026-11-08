@@ -1,0 +1,57 @@
+# Paper (light theme): sepia page, low blue light for daytime. /theme paper
+[colors]
+default        = #4a4033 #f5edda
+topic          = #4a4033 #ebdfc5 bold
+tabbar         = #8e8168 #ebdfc5
+tab_server     = #625743 #ebdfc5 bold
+tab_home       = #5d7a3a #ebdfc5 bold
+tab_shell      = #9a6a1c #ebdfc5 bold
+tab_active     = #fbf6ea #8a5a2b bold
+tab_data       = #2f6c76 #ebdfc5
+tab_msg        = #4a4033 #ebdfc5 bold
+tab_hilight    = #7a4f7c #ebdfc5 bold
+tab_quiet      = #8e8168 #ebdfc5 italic
+tab_quiet_act  = #fbf6ea #8e8168 bold
+status         = #8e8168 #ebdfc5
+status_hi      = #4a4033 #ebdfc5
+status_info    = #4a4033 #ebdfc5
+status_ok      = #5d7a3a
+status_warn    = #9a6a1c
+status_high    = #a85c2e
+status_crit    = #a0332f bold
+status_bat     = #8e8168 #d4c4a3
+input          = #4a4033 #f5edda
+input_prompt   = #8a5a2b #f5edda bold
+set_key        = #8a5a2b #f5edda bold
+set_value      = #9a6a1c #f5edda
+timestamp      = #8e8168 #f5edda
+separator      = #d4c4a3 #f5edda
+nicklist       = #625743 #f5edda
+nicklist_title = #8e8168 #f5edda italic
+nicklist_border= #d4c4a3 #f5edda
+nicklist_op    = #a85c2e #f5edda bold
+nicklist_voice = #5d7a3a #f5edda
+menu           = #4a4033 #ebdfc5
+menu_sel       = #fbf6ea #8a5a2b bold
+menu_border    = #d4c4a3 #ebdfc5
+msg_self       = #2f6c76 #f5edda bold
+marker         = #7a4f7c
+hilight        = #fbf6ea #7a4f7c bold
+hilight_text   = #7a4f7c #f5edda
+join           = #5d7a3a #f5edda
+part           = #a85c2e #f5edda
+quit           = #a0332f #f5edda
+notice         = #9a6a1c #f5edda bold
+action         = #7a4f7c #f5edda italic
+info           = #2f6c76 #f5edda
+error          = #a0332f #f5edda bold
+
+[nicks]
+palette = #a0332f #a85c2e #9a6a1c #5d7a3a #2f6c76 #3c5f9a #7a4f7c
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M

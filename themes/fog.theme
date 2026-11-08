@@ -1,0 +1,57 @@
+# Fog (light theme): cool grey-blue, low glare. /theme fog
+[colors]
+default        = #2e3945 #eef2f5
+topic          = #2e3945 #e0e7ee bold
+tabbar         = #7a8794 #e0e7ee
+tab_server     = #4a5767 #e0e7ee bold
+tab_home       = #3f7a5a #e0e7ee bold
+tab_shell      = #9b6e1b #e0e7ee bold
+tab_active     = #f7fafc #3f6b8f bold
+tab_data       = #2f6f9a #e0e7ee
+tab_msg        = #2e3945 #e0e7ee bold
+tab_hilight    = #7a5ca0 #e0e7ee bold
+tab_quiet      = #7a8794 #e0e7ee italic
+tab_quiet_act  = #f7fafc #7a8794 bold
+status         = #7a8794 #e0e7ee
+status_hi      = #2e3945 #e0e7ee
+status_info    = #2e3945 #e0e7ee
+status_ok      = #3f7a5a
+status_warn    = #9b6e1b
+status_high    = #b06036
+status_crit    = #b13a48 bold
+status_bat     = #7a8794 #c4cfda
+input          = #2e3945 #eef2f5
+input_prompt   = #3f6b8f #eef2f5 bold
+set_key        = #3f6b8f #eef2f5 bold
+set_value      = #9b6e1b #eef2f5
+timestamp      = #7a8794 #eef2f5
+separator      = #c4cfda #eef2f5
+nicklist       = #4a5767 #eef2f5
+nicklist_title = #7a8794 #eef2f5 italic
+nicklist_border= #c4cfda #eef2f5
+nicklist_op    = #b06036 #eef2f5 bold
+nicklist_voice = #3f7a5a #eef2f5
+menu           = #2e3945 #e0e7ee
+menu_sel       = #f7fafc #3f6b8f bold
+menu_border    = #c4cfda #e0e7ee
+msg_self       = #2f6f9a #eef2f5 bold
+marker         = #7a5ca0
+hilight        = #f7fafc #7a5ca0 bold
+hilight_text   = #7a5ca0 #eef2f5
+join           = #3f7a5a #eef2f5
+part           = #b06036 #eef2f5
+quit           = #b13a48 #eef2f5
+notice         = #9b6e1b #eef2f5 bold
+action         = #7a5ca0 #eef2f5 italic
+info           = #2f6f9a #eef2f5
+error          = #b13a48 #eef2f5 bold
+
+[nicks]
+palette = #b13a48 #b06036 #9b6e1b #3f7a5a #2f6f9a #4a63a8 #7a5ca0
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M
