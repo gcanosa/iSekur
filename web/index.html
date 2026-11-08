@@ -603,7 +603,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   #foot { display: none; }
   #sidebtn { display: none; }
   #side.open ~ #foot { display: flex; position: fixed; left: 0; right: 30%; bottom: 0; z-index: 6; }
-  #nicks { display: none; position: fixed; inset: var(--toph, 44px) 0 0 40%; z-index: 5; width: auto; box-shadow: 0 0 40px #000; }
+  #nicks { display: none; grid-area: msgs; justify-self: end; width: 60%; min-height: 0; z-index: 5; box-shadow: 0 0 40px #000; }  /* over the messages only: the status line and the input stay visible */
   #nicks.open { display: block; }
   #topic #menu { display: inline-flex; }
   #topic button { padding: 4px 10px; }  /* a finger, not a mouse */
