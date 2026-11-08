@@ -1,0 +1,36 @@
+iSekur for Windows
+==================
+
+A Cygwin build of iSekur with everything it needs in this folder: no installer, nothing
+to install, no Cygwin required. It is new and less tried than the macOS and Linux
+packages: please report what doesn't work on https://github.com/gcanosa/iSekur/issues
+
+Run
+---
+Open Windows Terminal (or cmd, or PowerShell) and run isekur.cmd from this folder:
+
+    .\isekur.cmd
+
+Try Windows Terminal first. Put this folder
+anywhere (add it to your PATH to type just "isekur.cmd"). Your settings, logs and
+plugins are kept in your profile, in %USERPROFILE%\.config\isekur, so replacing this
+folder with a newer one keeps them.
+
+To add a network: "/server irc.sekurnet.org 6697 -tls -name sekurnet", then
+"/join #iSekur". "/help" lists everything; the README.md here and
+https://gcanosa.github.io/isekur-site/ have the rest, including the built-in webchat
+("/web start" after setting [web] user and password_hash) that you can open in any browser.
+
+What this build doesn't have
+----------------------------
+Cygwin has no PAM and its unix sockets can't pass a terminal, so:
+  - no /shell
+  - no detach and attach (Alt+D, /detach, --daemon, --attach)
+
+For all of iSekur on Windows, use WSL ("wsl --install" in an administrator terminal),
+and inside it the Linux package from the same release page (isekur-linux-x86_64.tar.gz).
+
+Windows may say it protected your PC the first time (the program isn't signed): "More
+info", then "Run anyway".
+
+iSekur is free software, GPL-3.0-or-later: see LICENSE.

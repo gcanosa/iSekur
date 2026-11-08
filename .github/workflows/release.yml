@@ -41,8 +41,75 @@ jobs:
       - uses: actions/upload-artifact@v4
         with: { name: '${{ matrix.name }}', path: 'isekur-${{ matrix.name }}.tar.gz' }
 
+  # Windows: the Cygwin build, with the DLLs it needs, so it runs without Cygwin installed. cygwin1.dll takes its root from
+  # <root>\bin, so bin\ holds the exe and the DLLs, and the paths compiled in (the themes in /usr/local/share/isekur,
+  # OpenSSL's CA bundle) are folders inside the package.
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: C:\cygwin\bin\bash.exe --login -eo pipefail -o igncr '{0}'
+    steps:
+      - run: git config --global core.autocrlf input
+        shell: cmd
+      - uses: actions/checkout@v5
+        with: { fetch-depth: 0, ref: '${{ env.TAG }}' }
+      - uses: cygwin/cygwin-install-action@v4
+        with:
+          packages: gcc-g++ make libssl-devel openssl ca-certificates zip
+      - run: cd "$(cygpath "$GITHUB_WORKSPACE")" && make && make test
+      - uses: actions/checkout@v5  # what is packaged comes from the workflow's own commit (a re-run of an old tag has the new files too)
+        with: { path: ci, sparse-checkout: .github }
+      - run: |
+          cd "$(cygpath "$GITHUB_WORKSPACE")"
+          d=isekur-windows-x86_64
+          mkdir -p $d/bin $d/usr/local/share/isekur/themes
+          cp isekur.exe $d/bin/ && strip $d/bin/isekur.exe
+          # every Cygwin DLL it needs, and the ones those need
+          todo=$d/bin/isekur.exe
+          while [ -n "$todo" ]; do
+            next=
+            for f in $todo; do
+              for l in $(ldd "$f" | awk '/=> \/(usr\/)?bin\// {print $3}'); do
+                [ -e "$d/bin/$(basename "$l")" ] || { cp "$l" $d/bin/; next="$next $d/bin/$(basename "$l")"; }
+              done
+            done
+            todo=$next
+          done
+          ls -l $d/bin
+          cp themes/*.theme $d/usr/local/share/isekur/themes/
+          cp iSekur.conf.example README.md LICENSE $d/usr/local/share/isekur/
+          cp iSekur.conf.example README.md LICENSE ci/.github/windows.txt $d/
+          # the CA bundle where this OpenSSL looks for it (<OPENSSLDIR>/cert.pem), or no TLS server verifies
+          o=$(openssl version -d | sed -n 's/^OPENSSLDIR: "\(.*\)"$/\1/p')
+          test -n "$o"
+          mkdir -p "$d$o"
+          for c in /etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem /etc/pki/tls/certs/ca-bundle.crt /etc/pki/tls/cert.pem /etc/ssl/certs/ca-bundle.crt /usr/ssl/certs/ca-bundle.crt; do
+            [ -s "$c" ] && cp -L "$c" "$d$o/cert.pem" && break
+          done
+          test -s "$d$o/cert.pem"
+          # HOME is the Windows profile (the config survives replacing this folder); xterm-256color is what the terminal library knows
+          printf '@echo off\r\nif not defined HOME set "HOME=%%USERPROFILE%%"\r\nif not defined TERM set "TERM=xterm-256color"\r\n"%%~dp0bin\\isekur.exe" %%*\r\n' > $d/isekur.cmd
+          cat -A $d/isekur.cmd
+          zip -qr $d.zip $d
+          ls -l $d.zip
+      - name: runs with no Cygwin on the PATH
+        shell: pwsh
+        run: |
+          Expand-Archive isekur-windows-x86_64.zip -DestinationPath "$env:RUNNER_TEMP\unzipped"
+          $env:PATH = "$env:SystemRoot\System32;$env:SystemRoot"
+          $exe = "$env:RUNNER_TEMP\unzipped\isekur-windows-x86_64\bin\isekur.exe"
+          $v = & $exe --version
+          Write-Host $v
+          if ($LASTEXITCODE -ne 0 -or "$v" -notmatch '^iSekur ') { exit 1 }
+          $h = "pw" | & $exe --hash-password   # the crypto DLLs load and work
+          Write-Host $h
+          if ($LASTEXITCODE -ne 0 -or "$h" -notmatch 'password_hash = pbkdf2\$') { exit 1 }
+      - uses: actions/upload-artifact@v4
+        with: { name: windows-x86_64, path: isekur-windows-x86_64.zip }
+
   release:
-    needs: build
+    needs: [build, windows]
     runs-on: ubuntu-latest
     permissions: { contents: write }
     steps:
@@ -52,6 +119,6 @@ jobs:
         with: { merge-multiple: true }
       - run: git archive --prefix=isekur-${TAG#v}/ -o isekur-src.tar.gz HEAD
       - run: |
-          gh release create "$TAG" --title "iSekur ${TAG#v}" --generate-notes isekur-*.tar.gz ||
-            gh release upload "$TAG" --clobber isekur-*.tar.gz
+          gh release create "$TAG" --title "iSekur ${TAG#v}" --generate-notes isekur-*.tar.gz isekur-*.zip ||
+            gh release upload "$TAG" --clobber isekur-*.tar.gz isekur-*.zip
         env: { GH_TOKEN: '${{ github.token }}' }

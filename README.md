@@ -82,10 +82,16 @@ Prebuilt packages of the latest release (the links always point at the newest on
 [macOS, Apple silicon](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz),
 [Linux x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-x86_64.tar.gz),
 [Linux arm64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-arm64.tar.gz) (both need libssl3),
+[Windows x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-windows-x86_64.zip) (a Cygwin build, see below),
 [source](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-src.tar.gz).
 
     curl -L https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz | tar xz
     sudo isekur-macos-arm64/install.sh     # /usr/local
+
+Windows: unzip the package anywhere and run `isekur.cmd` in Windows Terminal. It is a Cygwin build with
+the DLLs it needs inside (nothing to install, no Cygwin needed), newer and less tried than the others, and
+without `/shell` and detach/attach, which Cygwin can't do. Your settings go to `%USERPROFILE%\.config\isekur`.
+For all of iSekur on Windows, use [WSL](https://learn.microsoft.com/windows/wsl/install) with the Linux package.
 
 ## Install
 
