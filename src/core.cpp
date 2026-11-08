@@ -1367,7 +1367,10 @@ void Core::exec(Buffer* b, const std::string& input) {
                 return;
             }
         }
-        for (auto& l : split(input, '\n')) exec(b, l);
+        for (auto& l : split(input, '\n')) {
+            if (index_of(b) < 0) break;  // a line (/close, /part, /disconnect) closed this tab: the rest has nowhere to go (b was freed)
+            exec(b, l);
+        }
         return;
     }
     std::string in = input;

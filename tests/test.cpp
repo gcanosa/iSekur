@@ -280,6 +280,12 @@ int main() {
         assert(tm.size() == 1 && tm[0].first == "Close" && tm[0].second == "/close");  // a remote one: "Disconnect", asking first
         core.close(sh);
     }
+    {  // a pasted "/close" with lines after it: the rest has no tab to run in (it used to run in the freed one)
+        Buffer* gone = core.open(nullptr, BT::SHELL, "gone");
+        size_t n = core.bufs.size();
+        core.exec(gone, "/close\n/help /join\n/help bogus");
+        assert(core.bufs.size() == n - 1 && core.index_of(gone) < 0);
+    }
     core.from_web = true;
     core.exec(home, "/attach vps");
     core.from_web = false;
