@@ -53,6 +53,19 @@ int main() {
     mirc_walk("\x03" "12,04Z", {}, [&](uint32_t cp, const Style& s) { if (cp == 'Z') seen = s; });
     assert(seen.fg == 0x0000fc && seen.bg == 0xff0000);
 
+    {  // isekur.crash's breadcrumbs: the last 32, oldest first, with the loop stage and the last frame
+        for (int n = 0; n < 40; n++) crumb("exec", ("/c" + std::to_string(n)).c_str());
+        crumb_stage("drawing"), crumb_state("80x24 tab=cmd");
+        char path[] = "/tmp/isekur-crumbs-XXXXXX";
+        int fd = mkstemp(path);
+        crumbs_write(fd), close(fd);
+        std::ifstream cf(path);
+        std::string t((std::istreambuf_iterator<char>(cf)), std::istreambuf_iterator<char>());
+        unlink(path);
+        assert(t.find("stage: drawing") != std::string::npos && t.find("80x24 tab=cmd") != std::string::npos);
+        assert(t.find("/c7\n") == std::string::npos && t.find("/c8\n") != std::string::npos && t.find("/c8\n") < t.find("/c39\n"));
+    }
+
     size_t i = 0;
     assert(utf8_next("\xc3\xa9", i) == 0xe9 && i == 2);
     i = 0;

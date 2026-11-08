@@ -522,6 +522,7 @@ void Core::unlock(const std::string& pass) {
 
 void Core::set_lock(bool on) {
     locked = on, lock_msg.clear(), dirty = true;
+    crumb("lock", on ? "on" : "off");
     lock_anim = on ? 'l' : 'u', lock_anim_at = now_ms();
     notify(Ev::LOCK, nullptr);
 }
@@ -537,6 +538,7 @@ static bool save_general(Core& c, const std::map<std::string, std::string>& kv, 
 
 void Core::screen_end() {
     if (screen_by.empty()) return;
+    crumb("screen", "end");
     screen_by.clear(), dirty = true;
     if (locked) lock_anim = 'l', lock_anim_at = now_ms();  // under it all along: the box drops in now
     notify(Ev::SCREEN, nullptr);

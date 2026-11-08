@@ -36,10 +36,22 @@ jobs:
           mkdir -p $d/themes
           cp isekur isekur.1 iSekur.conf.example README.md LICENSE .github/install.sh $d/
           cp themes/*.theme $d/themes/
+          # the symbols of this exact binary (the build-id in isekur.crash names it), kept apart from the stripped one:
+          # addr2line -Cfpe isekur-<name>-debug/isekur.debug 0x... (Linux), atos -o isekur.dSYM/... (macOS)
+          if [ "$RUNNER_OS" = Linux ]; then
+            mkdir $d-debug && objcopy --only-keep-debug isekur $d-debug/isekur.debug
+          else
+            dsymutil isekur -o $d-debug.dSYM && mv $d-debug.dSYM $d-debug
+          fi
+          tar czf $d-debug.tar.gz $d-debug
           strip $d/isekur
           tar czf $d.tar.gz $d
       - uses: actions/upload-artifact@v4
-        with: { name: '${{ matrix.name }}', path: 'isekur-${{ matrix.name }}.tar.gz' }
+        with:
+          name: '${{ matrix.name }}'
+          path: |
+            isekur-${{ matrix.name }}.tar.gz
+            isekur-${{ matrix.name }}-debug.tar.gz
 
   # Windows: the Cygwin build, with the DLLs it needs, so it runs without Cygwin installed. cygwin1.dll takes its root from
   # <root>\bin, so bin\ holds the exe and the DLLs, and the paths compiled in (the themes in /usr/local/share/isekur,

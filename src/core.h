@@ -74,6 +74,14 @@ std::string mirc_prefix(const std::string& s, size_t n);  // up to the n-th visi
 uint32_t utf8_next(const std::string& s, size_t& i);  // invalid bytes -> Latin-1
 void utf8_put(std::string& out, uint32_t cp);
 
+// What iSekur was doing, for isekur.crash (main.cpp): the last 32 things that happened (a command's name, a webchat
+// message's type, a tab closed, a lock...: never arguments or text), the main loop's stage, and what the last frame
+// drew. Fixed buffers a signal handler can write out; main thread only
+void crumb(const char* what, const char* arg = "");
+void crumb_stage(const char* literal);   // the main loop's stage: a string literal
+void crumb_state(const char* s);         // the last frame's state
+void crumbs_write(int fd);               // async-signal-safe
+
 // ---- IRC message -----------------------------------------------------------
 struct Msg {
     std::map<std::string, std::string> tags;

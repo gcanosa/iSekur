@@ -669,6 +669,14 @@ void Tui::draw() {
     sync_input();  // a tab switch from outside a key (a command, the webchat, a closed tab)
     Buffer* b = c.active;
     c.dirty = false;
+    {  // for isekur.crash: what this frame is about to draw
+        char st[240];
+        snprintf(st, sizeof st, "%dx%d theme=%s tab=%s lines=%zu scroll=%d unread=%d quiet=%d term=%d split=%d locked=%d saver=%s", W, H, T.name.c_str(),
+                 !b ? "none" : b->type == BT::STATUS ? (b->srv ? "status" : "cmd") : b->type == BT::CHANNEL ? "channel" : b->type == BT::QUERY ? "query" : "shell",
+                 b ? b->lines.size() : 0, b ? b->scroll : 0, b ? b->unread : 0, b && b->quiet, b && b->term, c.split_buf != nullptr, c.locked,
+                 c.screen_by.empty() ? "-" : c.screen_by.c_str());
+        crumb_state(st);
+    }
     hits.clear(), crows.clear(), nl_x = -1;
     long long la = c.lock_anim ? now_ms() - c.lock_anim_at : 0;
     g_reveal = c.lock_anim == 'u' && la >= 350 ? std::min(1.0, (la - 350) / 550.0) : -1;

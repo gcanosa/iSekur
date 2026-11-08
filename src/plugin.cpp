@@ -478,6 +478,7 @@ static int l_screen(lua_State* L) {  // screen(fn, fps): a screensaver until a k
     p->screen_fn = luaL_ref(L, LUA_REGISTRYINDEX);
     c.screen_fps = std::clamp((int)luaL_optinteger(L, 2, 15), 1, 30);
     bool was = !c.screen_by.empty();
+    crumb("screen", p->name.c_str());
     c.screen_by = p->name, c.screen_t0 = now_ms(), c.dirty = true;
     if (!was) c.notify(Ev::SCREEN, nullptr);
     return lua_pushboolean(L, 1), 1;

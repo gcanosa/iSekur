@@ -747,6 +747,7 @@ void Core::close(Buffer* b, const std::string& part_msg) {
     if (pass_buf == b) pass_buf = nullptr, pass_done = nullptr;
     if (s && b->name == "*raw" && b->type == BT::QUERY) s->raw_hook = nullptr;  // /rawlog stops with its tab
     bool drop_server = s && b->type == BT::STATUS;
+    crumb("close", b->type == BT::STATUS ? "status" : b->type == BT::CHANNEL ? "channel" : b->type == BT::QUERY ? "query" : "shell");
     int i = index_of(b);
     notify(Ev::CLOSE, b);
     if (active == b) active = bufs[(size_t)(i > 0 ? i - 1 : 1 % bufs.size())].get();
@@ -1317,6 +1318,21 @@ std::string after_words(const std::string& args, size_t n) {
 
 // What lets a grabbed session reach further than the chat is changed only with the lock password (when one is set): /exec from
 // the webchat, the lock itself, the folder the webchat serves files from, the webchat's and the bouncer's logins and pages.
+// ---- breadcrumbs for isekur.crash (core.h) ---------------------------------------------
+static char g_crumbs[32][96], g_state[240];
+static unsigned g_crumb_n;
+static const char* volatile g_stage = "start";
+void crumb(const char* what, const char* arg) {
+    snprintf(g_crumbs[g_crumb_n++ % 32], sizeof g_crumbs[0], "%lld %.20s %.50s", (long long)time(nullptr), what, arg);
+}
+void crumb_stage(const char* literal) { g_stage = literal; }
+void crumb_state(const char* s) { snprintf(g_state, sizeof g_state, "%s", s); }
+void crumbs_write(int fd) {
+    auto put = [&](const char* s) { (void)!write(fd, s, strlen(s)); };
+    put("main loop stage: "), put(g_stage), put("\nlast frame: "), put(g_state), put("\nrecent, oldest first:\n");
+    for (unsigned i = g_crumb_n > 32 ? g_crumb_n - 32 : 0; i < g_crumb_n; i++) put("  "), put(g_crumbs[i % 32]), put("\n");
+}
+
 // true: the password is being asked, and `line` runs again once it's right
 static bool lock_ok = false;
 static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::string& what) {
@@ -1335,6 +1351,7 @@ static bool lock_guarded(const std::string& sec, const std::string& key) {
 void Core::exec(Buffer* b, const std::string& input) {
     if (!b) return;
     if (input.find('\n') != std::string::npos) {
+        crumb("exec", "multi-line");
         std::vector<std::string> ls;
         bool chat = true;
         size_t bytes = 0;
@@ -1399,6 +1416,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     std::string cmd = in.substr(1, sp == std::string::npos ? std::string::npos : sp - 1);
     std::string args = sp == std::string::npos ? "" : in.substr(sp + 1);
     to_lower(cmd);
+    crumb("exec", ("/" + cmd).c_str());  // the name only, never what follows
     auto argv = split(args, ' ');
     auto rest = [&](size_t n) { return after_words(args, n); };
     Server* s = b->srv;

@@ -15,6 +15,12 @@
 #if __has_include(<execinfo.h>)
 #include <execinfo.h>
 #endif
+#ifdef __linux__
+#include <link.h>
+#elif defined(__APPLE__)
+#include <mach-o/dyld.h>
+#include <mach-o/loader.h>
+#endif
 #include "core.h"
 #include "session.h"
 #include "tui.h"
@@ -23,23 +29,55 @@
 
 static volatile sig_atomic_t g_term = 0;
 
-// A crash (segfault, abort...) appends the signal and a backtrace to isekur.crash next to the
-// config, then dies as it would have (a core dump too, if ulimit -c allows). Only
-// async-signal-safe calls in the handler; the file is opened up front.
-// Read it with: addr2line -Cfpe isekur 0x... (Linux: the +0x offsets), or atos on macOS.
+// A crash (segfault, abort...) appends what it knows to isekur.crash next to the config, then dies as
+// it would have (a core dump too, if ulimit -c allows): the signal and the faulting address, the build id
+// (which binary: with its symbols, addr2line -Cfpe isekur.debug 0x... resolves the +0x offsets; atos on macOS), the end
+// of the log (glibc says "malloc(): corrupted top size" there before it aborts), what the last frame drew and the last
+// things that happened (core.h crumb), then the backtrace. Only async-signal-safe calls in the handler; the file is
+// opened up front, and the handler runs on its own stack, so a stack overflow gets written too.
 static int g_crash_fd = -1;
-static char g_crash_head[256];
-static void on_crash(int sig) {
+static char g_crash_head[256], g_build_id[72];
+static char g_altstack[1 << 16];
+#ifdef __linux__
+static int find_build_id(dl_phdr_info* i, size_t, void*) {  // the main program's GNU build-id note
+    for (int k = 0; k < i->dlpi_phnum; k++) {
+        const ElfW(Phdr)& ph = i->dlpi_phdr[k];
+        if (ph.p_type != PT_NOTE) continue;
+        const char* p = (const char*)(i->dlpi_addr + ph.p_vaddr);
+        const char* end = p + ph.p_memsz;
+        while (p + sizeof(ElfW(Nhdr)) <= end) {
+            auto* n = (const ElfW(Nhdr)*)p;
+            auto* desc = (const unsigned char*)p + sizeof *n + ((n->n_namesz + 3) & ~3u);
+            if (n->n_type == NT_GNU_BUILD_ID && n->n_descsz <= 32)
+                for (unsigned j = 0; j < n->n_descsz; j++) snprintf(g_build_id + 2 * j, 3, "%02x", desc[j]);
+            p = (const char*)desc + ((n->n_descsz + 3) & ~3u);
+        }
+    }
+    return 1;  // the first object is the program
+}
+#endif
+static void on_crash(int sig, siginfo_t* si, void*) {
     if (g_crash_fd >= 0) {
-        (void)!write(g_crash_fd, g_crash_head, strlen(g_crash_head));
-        char n[64];
-        int l = snprintf(n, sizeof n, "signal %d, at %lld\n", sig, (long long)time(nullptr));  // ponytail: snprintf isn't strictly signal-safe, fine in practice
-        (void)!write(g_crash_fd, n, (size_t)l);
+        auto put = [](const char* s) { (void)!write(g_crash_fd, s, strlen(s)); };
+        put(g_crash_head);
+        char n[160];
+        snprintf(n, sizeof n, "signal %d, code %d, address %p, at %lld\nbuild-id %s\n", sig, si ? si->si_code : 0,
+                 si ? si->si_addr : nullptr, (long long)time(nullptr), *g_build_id ? g_build_id : "?");  // ponytail: snprintf isn't strictly signal-safe, fine in practice
+        put(n);
+        struct stat st;  // stderr is the log in the background process
+        if (fstat(2, &st) == 0 && S_ISREG(st.st_mode) && st.st_size > 0) {
+            char tail[400];
+            off_t from = st.st_size > (off_t)sizeof tail ? st.st_size - (off_t)sizeof tail : 0;
+            ssize_t got = pread(2, tail, sizeof tail - 1, from);
+            if (got > 0) tail[got] = 0, put("end of the log:\n"), put(tail), put(tail[got - 1] == '\n' ? "" : "\n");
+        }
+        crumbs_write(g_crash_fd);
+        put("backtrace:\n");
 #if __has_include(<execinfo.h>)
         void* bt[64];
         backtrace_symbols_fd(bt, backtrace(bt, 64), g_crash_fd);
 #endif
-        (void)!write(g_crash_fd, "\n", 1);
+        put("\n");
     }
     signal(sig, SIG_DFL);
     raise(sig);
@@ -53,11 +91,27 @@ static void crash_dumps(const std::string& path) {
         if (g_crash_fd >= 0 && fstat(g_crash_fd, &st) == 0 && st.st_size == 0) unlink(g_crash_path.c_str());
     });
     snprintf(g_crash_head, sizeof g_crash_head, "--- %s crashed: ", version_string().c_str());
+#ifdef __linux__
+    dl_iterate_phdr(find_build_id, nullptr);
+#elif defined(__APPLE__)
+    auto* mh = (const mach_header_64*)_dyld_get_image_header(0);
+    auto* lc = (const load_command*)(mh + 1);
+    for (uint32_t i = 0; mh && i < mh->ncmds; i++, lc = (const load_command*)((const char*)lc + lc->cmdsize))
+        if (lc->cmd == LC_UUID)
+            for (int j = 0; j < 16; j++) snprintf(g_build_id + 2 * j, 3, "%02x", ((const uuid_command*)lc)->uuid[j]);
+#endif
 #if __has_include(<execinfo.h>)
     void* warm[1];
     backtrace(warm, 1);  // loads libgcc now: the first call may malloc, not allowed in the handler
 #endif
-    for (int sig : {SIGSEGV, SIGBUS, SIGABRT, SIGFPE, SIGILL}) signal(sig, on_crash);
+    stack_t ss{};
+    ss.ss_sp = g_altstack, ss.ss_size = sizeof g_altstack;
+    sigaltstack(&ss, nullptr);
+    struct sigaction sa{};
+    sa.sa_sigaction = on_crash;
+    sa.sa_flags = SA_SIGINFO | SA_ONSTACK | SA_RESETHAND;  // a crash inside the handler ends it, no loop
+    sigemptyset(&sa.sa_mask);
+    for (int sig : {SIGSEGV, SIGBUS, SIGABRT, SIGFPE, SIGILL}) sigaction(sig, &sa, nullptr);
 }
 
 static int usage() {
@@ -238,6 +292,7 @@ int main(int argc, char** argv) {
     std::vector<Server*> polled;
     // nothing in a stage may take iSekur down (and every IRC connection with it): an exception is said in the console
     auto guard = [&](const char* stage, auto&& fn) {
+        crumb_stage(stage);
         try { fn(); } catch (const std::exception& e) { c.print(home, LK::ERROR, std::string("Internal error in ") + stage + ": " + e.what()); }
     };
     while (!c.quit && !g_term) {
@@ -281,14 +336,16 @@ int main(int argc, char** argv) {
         guard("shell tabs", [&] { c.terms_poll(fds, term0); });  // first: nothing has closed a tab yet, so the order still holds
         guard("DCC", [&] { c.dccs_poll(fds, dcc0); });
         // servers first: their handlers never delete servers, so `polled` stays valid
+        crumb_stage("IRC servers");
         for (size_t i = 0; i < polled.size(); i++)
             if (fds[srv0 + i].revents) c.on_readable(polled[i], fds[srv0 + i].revents);
         // the attach process quit (closed window, dropped SSH) or the terminal hung up
         bool hung = !local && (ses.lost || (c.tty && (fds[0].revents & (POLLHUP | POLLERR))));
         if (c.tty && !hung && (fds[0].revents || fds[1].revents)) guard("keyboard input", [&] { tui.on_readable(); });
-        web.process(fds);
-        bnc.process(fds);
+        crumb_stage("webchat"), web.process(fds);
+        crumb_stage("BNC"), bnc.process(fds);
         guard("/exec", [&] { c.jobs_poll(fds, job0); });
+        crumb_stage("session");
         int t = ses.process(fds, c.tty);
         // the audit lines: who attached from where, for how long, and who was turned away
         if (!ses.refused.empty())
@@ -299,6 +356,7 @@ int main(int argc, char** argv) {
             ses.release('D');
             c.tty = false;
             tty_off = time(nullptr);
+            crumb("tty", hung ? "gone" : "detach");
             c.print(home, LK::INFO, std::string(hung ? "\u25c0 Terminal gone: " : "\u25c0 Detached: ") + ses.who + ", attached " +
                                         fmt_dur((long)(tty_off - tty_on)) + "; " + how + " brings it back");
         }
@@ -310,6 +368,7 @@ int main(int argc, char** argv) {
             }
             else {
                 c.tty = c.dirty = true;
+                crumb("tty", "attach");
                 tty_on = time(nullptr);
                 const passwd* pw = getpwuid(geteuid());  // always us: the socket takes no one else
                 c.print(home, LK::INFO, "\u25b6 Attached: " + std::string(pw ? pw->pw_name : "?") + ", " + ses.who +
@@ -318,7 +377,7 @@ int main(int argc, char** argv) {
                 if (!hinted) c.print(home, LK::INFO, "Alt+D (Option+D on a Mac) or /detach leaves iSekur running in the background"), hinted = true;
             }
         }
-        web.flush();
+        crumb_stage("webchat out"), web.flush();
         if (c.web_req != Core::WebReq::NONE) {
             Buffer* to = c.index_of(c.web_req_buf) >= 0 ? c.web_req_buf : c.bufs.front().get();
             if (c.web_req == Core::WebReq::RESTART && web.running()) web.stop(), c.web_req = Core::WebReq::START;

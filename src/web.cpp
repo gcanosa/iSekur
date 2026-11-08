@@ -675,6 +675,7 @@ void Web::ws_frames(Client& cl) {
         }
         if (op != 1) continue;
         auto m = json_flat(p);
+        if (m["t"] != "wake" && m["t"] != "ssize" && m["t"] != "typing" && m["t"] != "read" && m["t"] != "seen") crumb("web", m["t"].c_str());
         if (m["t"] == "wake") { c.wake(); continue; }  // a key, click or mouse move: someone's here (nothing of the session)
         if (m["t"] == "ssize") {
             ss_w = std::clamp(atoi(m["w"].c_str()), 0, 500), ss_h = std::clamp(atoi(m["h"].c_str()), 0, 250), ss_last.clear();
