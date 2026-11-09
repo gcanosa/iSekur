@@ -74,11 +74,12 @@ bell_notifications = on
 exec_timeout = 30
 exec_web     = off
 
-# A named pipe (weechat's fifo): a line written to it runs as if typed in the
-# active tab, e.g. echo "/msg bob hi" > ~/.config/isekur/fifo. Owner-only (0600),
-# dropped while locked, removed at exit. /set general.fifo opens, moves or closes
-# it at once. Empty: off. Not on native Windows (no named pipes there).
-fifo         = 
+# A named pipe (weechat's fifo): with fifo = on, a line written to it runs as if
+# typed in the active tab, e.g. echo "/msg bob hi" > ~/.config/isekur/fifo. It is
+# created when turned on and removed when turned off or at exit. Owner-only (0600),
+# dropped while locked. fifo_path moves it. Not on native Windows (no named pipes).
+fifo         = off
+fifo_path    = ~/.config/isekur/fifo
 # A password before anything shows, in the terminal and the webchat: at startup,
 # on every attach and after /lock. /lock sets it the first time (it's stored
 # hashed here), /lock on changes it, /lock off turns it off.

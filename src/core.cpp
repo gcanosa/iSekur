@@ -386,7 +386,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
     {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
-    {"exec_timeout", "Security", 'g'}, {"exec_web", "Security", 'g'}, {"fifo", "Session", 'g'},
+    {"exec_timeout", "Security", 'g'}, {"exec_web", "Security", 'g'}, {"fifo", "Session", 'g'}, {"fifo_path", "Session", 'g'},
     {"check_updates", "Updates", 'g'},
 };
 const std::vector<KeyInfo>& setting_keys() { return KEYS; }
@@ -1344,7 +1344,7 @@ static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::st
     return true;
 }
 static bool lock_guarded(const std::string& sec, const std::string& key) {
-    return (sec == "general" && (key == "exec_web" || key == "lock" || key == "lock_password_hash" || key == "dcc_web" || key == "fifo")) || key == "dcc_dir" ||
+    return (sec == "general" && (key == "exec_web" || key == "lock" || key == "lock_password_hash" || key == "dcc_web" || key == "fifo" || key == "fifo_path")) || key == "dcc_dir" ||
            sec == "web" || sec == "bnc";
 }
 
@@ -1554,7 +1554,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0)) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (key == "log") notify(Ev::THEME, nullptr);  // the webchat shows its Logs button only while logging
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
-        if (sec == "general" && key == "fifo") fifo_open();  // the pipe opens, moves or closes at once
+        if (sec == "general" && (key == "fifo" || key == "fifo_path")) fifo_open();  // the pipe opens, moves or closes at once
         // autostart on/off starts / stops the service now too (main loop answers); a daemon keeps its webchat, the only way back in
         bool svc_now = key == "autostart" && (sec == "bnc" || (sec == "web" && (Web::autostart(cfg) || !daemon)));
         if (svc_now) {

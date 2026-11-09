@@ -300,8 +300,8 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
 
-FIFO: with `/set general.fifo ~/.config/isekur/fifo` (or `fifo =` in `[general]`) set, a line written to that named pipe runs as if typed in
-the active tab: `echo "/msg bob hi" > ~/.config/isekur/fifo`. Owner-only, ignored while locked, removed at exit.
+FIFO: `/set fifo on` creates a named pipe at `fifo_path` (default `~/.config/isekur/fifo`, shown in `/set`), and a line written to it
+runs as if typed in the active tab: `echo "/msg bob hi" > ~/.config/isekur/fifo`. `/set fifo off` removes it. Owner-only, ignored while locked, removed at exit.
 Like weechat's fifo. POSIX only (Linux, macOS, BSDs, Cygwin): there are no named pipes on native Windows.
 
 Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab without blocking

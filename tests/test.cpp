@@ -1793,7 +1793,9 @@ int main() {
         char d[] = "/tmp/isekur-fifo-XXXXXX";
         assert(mkdtemp(d));
         std::string p = std::string(d) + "/fifo";
-        core.exec(home, "/set fifo " + p);  // the setting opens the pipe at once
+        core.exec(home, "/set fifo_path " + p);  // a path alone opens nothing: fifo is still off
+        assert(core.fifo_fd < 0 && access(p.c_str(), F_OK) != 0);
+        core.exec(home, "/set fifo on");  // on: the pipe is created at once, at fifo_path
         assert(core.fifo_fd >= 0 && core.fifo_path == p);
         int w = open(p.c_str(), O_WRONLY | O_NONBLOCK);
         assert(w >= 0);
@@ -1815,12 +1817,24 @@ int main() {
         assert(core.cfg["general"]["nick_width"] == "14");  // locked: dropped
         core.locked = false;
         close(w);
-        core.exec(home, "/set fifo \"\"");  // empty: off, and the pipe iSekur made is gone
+        core.exec(home, "/set fifo off");  // off: the pipe iSekur made is gone
         assert(core.fifo_fd < 0 && access(p.c_str(), F_OK) != 0);
-        core.cfg["general"].erase("fifo"), core.cfg["general"].erase("nick_width");
-        bool row = false;
-        for (auto& r : core.setting_rows()) row |= r.sec == "general" && r.key == "fifo";
-        assert(row);  // a settings window row, next to the others
+        core.cfg["general"].erase("fifo_path"), core.cfg["general"].erase("nick_width");
+        {  // no fifo_path: the default ~/.config/isekur/fifo, with ~ taken from HOME
+            const char* oldhome = getenv("HOME");
+            std::string oh = oldhome ? oldhome : "";
+            setenv("HOME", d, 1);
+            std::filesystem::create_directories(std::string(d) + "/.config/isekur");
+            core.exec(home, "/set fifo on");
+            assert(core.fifo_fd >= 0 && core.fifo_path == std::string(d) + "/.config/isekur/fifo");
+            core.exec(home, "/set fifo off");
+            assert(core.fifo_fd < 0);
+            setenv("HOME", oh.c_str(), 1);
+        }
+        core.cfg["general"].erase("fifo");
+        bool row = false, prow = false;
+        for (auto& r : core.setting_rows()) row |= r.sec == "general" && r.key == "fifo", prow |= r.sec == "general" && r.key == "fifo_path";
+        assert(row && prow);  // settings window rows, next to the others
         std::filesystem::remove_all(d);
     }
 

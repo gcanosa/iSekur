@@ -15,11 +15,12 @@ static const size_t MAX_FIFO_LINE = 8192;  // a longer line with no newline is d
 void Core::fifo_open() {
     bool was = fifo_fd >= 0;
     fifo_close();
-    std::string p = ini_get(cfg, "general", "fifo");
-    if (p.empty()) {
+    if (!opt_on(nullptr, "fifo", false)) {
         if (was) print(bufs.front().get(), LK::INFO, "FIFO off");
         return;
     }
+    std::string p = ini_get(cfg, "general", "fifo_path");
+    if (p.empty()) p = "~/.config/isekur/fifo";
     if (p[0] == '~' && p.size() > 1 && p[1] == '/')
         if (const char* h = getenv("HOME")) p = h + p.substr(1);
     struct stat st;
