@@ -545,7 +545,7 @@ void Core::screen_end() {
 }
 
 bool Core::wake() {
-    active_at = time(nullptr);
+    active_at = last_input = time(nullptr);  // a key, click or move is input too: autoaway's idle and lock_idle count it
     if (screen_by.empty()) return false;
     screen_end();
     return true;

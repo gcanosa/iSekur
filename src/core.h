@@ -401,7 +401,7 @@ struct Core {
     bool quit = false, dirty = true, cfg_changed = false;  // cfg_changed: the TUI re-reads keys, mouse, colors
     // auto-away: nobody attached (daemon, no web client) or no input for a while
     bool attached = true;
-    time_t detached_at = 0, last_input = time(nullptr);
+    time_t detached_at = 0, last_input = time(nullptr);  // last line sent, or key/click/move (Core::wake), or attach
     const time_t started = time(nullptr);  // uptime in the nick list
     void set_attached(bool a);
     std::string quit_msg;  // from /quit text; else quit_message

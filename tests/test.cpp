@@ -2570,6 +2570,9 @@ print("loaded")
         pc.exec(ph, "/screensaver nope");
         assert(last(ph) == "No such screensaver: nope (matrix, particles, stars)");
         assert(pc.wake() && pc.screen_by.empty() && !pc.wake() && time(nullptr) - pc.active_at < 2);
+        pc.last_input = 0;  // a key, click or move is input for autoaway too, not only a sent line
+        pc.wake();
+        assert(time(nullptr) - pc.last_input < 2);
         // lock on: without a lock password it says so (once) and doesn't lock; with one, the screensaver locks
         pc.exec(ph, "/plugin set screensaver lock on");
         pc.exec(ph, "/screensaver");
