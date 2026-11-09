@@ -2213,6 +2213,79 @@ int main() {
                          "ssh://me:pw@h", "socks5://h x", "http://@h"})
             assert(!parse_proxy(bad, px, e) && !e.empty());
     }
+    {  // isekur.sort_tabs: a network's tabs together in its place, status first, the rest by name; the console stays first
+        char d[] = "/tmp/isekur-sort-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d;
+        Core sc;
+        sc.cfg_path = dir + "/isekur.conf";
+        mkdir_p(dir + "/plugins");
+        FILE* o = fopen((dir + "/plugins/sorter.lua").c_str(), "w");
+        fputs("isekur.command(\"srt\", \"\", function() print(isekur.sort_tabs()) end)\n", o), fclose(o);
+        Buffer* ph = sc.open(nullptr, BT::STATUS, "isekur");
+        auto last = [&](Buffer* b) { return b->lines.empty() ? std::string() : b->lines.back().text; };
+        sc.exec(ph, "/plugin enable sorter");
+        assert(sc.plugins.size() == 1);
+        Server* zn = sc.add_server(sc.server_cfg("zn"));
+        Server* an = sc.add_server(sc.server_cfg("an"));
+        sc.open(zn, BT::QUERY, "bob");     // open() puts each tab at the end of its network: the order is out of sort
+        sc.open(zn, BT::CHANNEL, "#zeta");
+        sc.open(an, BT::CHANNEL, "#beta");
+        sc.open(an, BT::CHANNEL, "#Alpha");
+        auto names = [&] {
+            std::string s;
+            for (auto& b : sc.bufs) s += (s.empty() ? "" : " ") + (b->srv ? b->name : std::string("console"));
+            return s;
+        };
+        assert(names() == "console zn bob #zeta an #beta #Alpha");
+        sc.exec(ph, "/srt");
+        assert(last(ph) == "true" && names() == "console zn #zeta bob an #Alpha #beta");  // networks keep their order
+        sc.exec(ph, "/srt");
+        assert(last(ph) == "false" && names() == "console zn #zeta bob an #Alpha #beta");
+    }
+    {  // speech host API: isekur.run only starts speech engines (no shell), which/platform, speak_web without a client
+        char d[] = "/tmp/isekur-speech-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d;
+        Core sp;
+        sp.cfg_path = dir + "/isekur.conf";
+        mkdir_p(dir + "/plugins");
+        FILE* o = fopen((dir + "/plugins/spk.lua").c_str(), "w");
+        fputs(R"LUA(
+isekur.command("spk", "", function()
+  print(isekur.platform() ~= "", isekur.which("sh") ~= nil, isekur.which("no-such-program-xyz") == nil, isekur.which("a/b") == nil)
+  print(select(2, pcall(isekur.run, {"sh", "-c", "true"}, "")))
+  print(select(2, pcall(isekur.run, {}, "")))
+  isekur.speak_web("hello")
+  print("spoke")
+end)
+isekur.command("sp", "", function() print(isekur.run({"espeak", "-v", "x"}, "hello there")) end)
+)LUA", o), fclose(o);
+        Buffer* ph = sp.open(nullptr, BT::STATUS, "isekur");
+        sp.exec(ph, "/plugin enable spk");
+        sp.exec(ph, "/spk");
+        auto out = [&](size_t back) { return ph->lines[ph->lines.size() - back].text; };
+        assert(out(4) == "true true true true");
+        assert(out(3).find("sh isn't a speech engine") != std::string::npos);
+        assert(out(2).find("(nothing) isn't a speech engine") != std::string::npos);
+        assert(out(1) == "spoke");
+        // a stand-in espeak on PATH: isekur.run starts it with the text on its stdin
+        std::string fake = dir + "/bin", got = dir + "/got", oldpath = getenv("PATH") ? getenv("PATH") : "";
+        mkdir_p(fake);
+        FILE* fe = fopen((fake + "/espeak").c_str(), "w");
+        fputs(("#!/bin/sh\ncat > '" + got + "'\n").c_str(), fe), fclose(fe);
+        chmod((fake + "/espeak").c_str(), 0755);
+        setenv("PATH", (fake + ":" + oldpath).c_str(), 1);
+        sp.exec(ph, "/sp");
+        assert(out(1) == "true");
+        std::string text;
+        for (int i = 0; i < 200 && text.empty(); i++) {
+            usleep(10000);
+            if (FILE* g = fopen(got.c_str(), "r")) { char b[256] = {0}; text = fgets(b, sizeof b, g) ? b : "", fclose(g); }
+        }
+        assert(text == "hello there");
+        setenv("PATH", oldpath.c_str(), 1);
+    }
     {  // Lua plugins: the sandbox, the step and memory caps, scoped options, the store, enable/disable, events
         char d[] = "/tmp/isekur-plugins-XXXXXX";
         assert(mkdtemp(d));

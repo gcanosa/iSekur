@@ -1097,6 +1097,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
         if (known.count(b->id)) broadcast("{\"t\":\"embed\",\"buf\":" + std::to_string(b->id) + ",\"id\":" + std::to_string(l->id) +
                                           ",\"em\":[" + l->embeds + "]}");
         break;
+    case Ev::SPEAK: broadcast("{\"t\":\"speak\",\"text\":" + json_str(l->text) + "}"); break;  // a plugin's text: the browser says it
     case Ev::NOTE:
         broadcast("{\"t\":\"note\",\"buf\":" + std::to_string(b->id) + ",\"err\":" + (l->kind == LK::ERROR ? "true" : "false") +
                   ",\"title\":" + json_str(l->nick) + ",\"x\":" + json_str(l->text) + "}");

@@ -259,7 +259,7 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 5  // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 7 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings and booleans
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool>>>;
@@ -357,7 +357,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save

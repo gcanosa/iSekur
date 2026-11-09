@@ -1537,6 +1537,8 @@ function onMsg(ev) {
     keymap = {...KEYS_DEF, ...m.map};
   } else if (m.t === "stat") {
     stat = m; renderStatus();
+  } else if (m.t === "speak") {  // a plugin's text: the browser's voice
+    say(m.text);
   } else if (m.t === "bell") {
     beep();
   } else if (m.t === "menu") {
@@ -2903,6 +2905,10 @@ let actx = null;
 const unlockAudio = () => { try { actx = actx || new AudioContext(); actx.resume(); } catch (e) {} };
 addEventListener("pointerdown", unlockAudio, {once: true});
 addEventListener("keydown", unlockAudio, {once: true});
+// a plugin's text, read aloud by the browser's voice (no voice or no speechSynthesis: silent)
+function say(text) {
+  try { if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (e) {}
+}
 function beep() {
   if (!actx || actx.state !== "running") return;
   const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;

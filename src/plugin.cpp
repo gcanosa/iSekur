@@ -1,16 +1,22 @@
 // Lua plugins: <config dir>/plugins/<name>.lua, one sandboxed Lua 5.4 state each, the isekur.* API.
 // On when a [plugin.<name>] section (or a @net / @net/#chan override) says enabled = on.
 #include <dirent.h>
+#include <fcntl.h>
+#include <signal.h>
 #include <strings.h>
 #include <sys/stat.h>
+#include <sys/utsname.h>
+#include <sys/wait.h>
 #include <unistd.h>
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <set>
 #include <fstream>
+#include <map>
 #include <sstream>
 #include <thread>
+#include <tuple>
 #include <openssl/evp.h>
 #include "core.h"
 #include "lua/lua.hpp"
@@ -39,6 +45,7 @@ struct Plugin {
     bool store_read = false, store_dirty = false;  // dirty: written by store_flush within STORE_EVERY seconds
     time_t store_at = 0;                           // when it was last written
     int screen_fn = LUA_NOREF;  // isekur.screen's frame function
+    pid_t speaker = -1;         // isekur.run: the speech engine still running, -1 = none
     std::weak_ptr<Plugin> me;  // isekur.http: its answer comes back only to a plugin still loaded
     ~Plugin();
 };
@@ -187,6 +194,110 @@ static int l_print(lua_State* L) {  // print(srv, target, text, note): note true
 static int l_exec(lua_State* L) {  // exec(srv, target, "/command ...") as if typed in that tab
     Buffer* b = tab(L, 1, 2);
     if (b) self(L)->c->exec(b, one_line(str_arg(L, 3)));
+    return 0;
+}
+static int l_sort_tabs(lua_State* L) {  // sort_tabs(): each network's tabs together, status first, the rest by name; true if the order changed
+    auto& bs = self(L)->c->bufs;
+    std::map<const Server*, size_t> first;  // a network's group sits where its first tab is, so networks keep their order
+    for (size_t i = 0; i < bs.size(); i++)
+        if (bs[i]->srv) first.emplace(bs[i]->srv, i);
+    auto key = [&](size_t i) {
+        Buffer* b = bs[i].get();
+        std::string name = b->name;
+        return std::make_tuple(b->srv ? first[b->srv] : i, b->type != BT::STATUS, to_lower(name));
+    };
+    std::vector<size_t> ord(bs.size());
+    for (size_t i = 0; i < ord.size(); i++) ord[i] = i;
+    std::stable_sort(ord.begin(), ord.end(), [&](size_t x, size_t y) { return key(x) < key(y); });
+    bool moved = !std::is_sorted(ord.begin(), ord.end());  // ord is a permutation: sorted means unchanged
+    if (moved) {
+        std::vector<std::unique_ptr<Buffer>> out;
+        out.reserve(bs.size());
+        for (size_t i : ord) out.push_back(std::move(bs[i]));
+        bs = std::move(out);
+        Core* c = self(L)->c;
+        c->dirty = true;
+        if (c->active) c->notify(Ev::BUFFER, c->active);  // the webchat's tab list follows
+    }
+    lua_pushboolean(L, moved);
+    return 1;
+}
+// isekur.platform(): the system's name in lowercase: "darwin", "linux", "freebsd", "openbsd", "netbsd", "dragonfly"
+static int l_platform(lua_State* L) {
+    struct utsname u;
+    std::string s = uname(&u) == 0 ? u.sysname : "";
+    lua_pushstring(L, to_lower(s).c_str());
+    return 1;
+}
+// isekur.which(name): the program's full path on PATH, nil when it isn't there
+static int l_which(lua_State* L) {
+    std::string n = str_arg(L, 1);
+    const char* path = getenv("PATH");
+    if (n.empty() || n.find('/') != std::string::npos || !path) { lua_pushnil(L); return 1; }
+    std::string p = path;
+    for (size_t i = 0; i <= p.size();) {
+        size_t j = p.find(':', i);
+        if (j == std::string::npos) j = p.size();
+        std::string f = (j > i ? p.substr(i, j - i) : std::string(".")) + "/" + n;
+        if (access(f.c_str(), X_OK) == 0) { lua_pushstring(L, f.c_str()); return 1; }
+        i = j + 1;
+    }
+    lua_pushnil(L);
+    return 1;
+}
+// the speech engines isekur.run starts: nothing else, and never through a shell
+static const char* const SPEAK_PROGS[] = {"say", "spd-say", "espeak-ng", "espeak", "flite", "festival"};
+// isekur.run(argv, text): starts argv (a speech engine, by its name) with text on its stdin, its output dropped.
+// false while the last one still runs (one at a time per plugin): the plugin queues the rest.
+static int l_run(lua_State* L) {
+    Plugin* p = self(L);
+    luaL_checktype(L, 1, LUA_TTABLE);
+    std::vector<std::string> av;
+    for (lua_Integer i = 1;; i++) {
+        lua_rawgeti(L, 1, i);
+        if (lua_isnil(L, -1)) { lua_pop(L, 1); break; }
+        av.push_back(luaL_checkstring(L, -1));
+        lua_pop(L, 1);
+    }
+    bool ok = !av.empty() && std::any_of(std::begin(SPEAK_PROGS), std::end(SPEAK_PROGS), [&](const char* s) { return av[0] == s; });
+    if (!ok) luaL_error(L, "%s isn't a speech engine", av.empty() ? "(nothing)" : av[0].c_str());
+    std::string text = opt_str(L, 2);
+    if (text.size() > 4096) luaL_error(L, "text too long for an engine");
+    if (p->speaker > 0) {
+        if (waitpid(p->speaker, nullptr, WNOHANG) == 0) { lua_pushboolean(L, 0); return 1; }
+        p->speaker = -1;
+    }
+    int in[2];
+    if (pipe(in) != 0) { lua_pushboolean(L, 0); return 1; }
+    fcntl(in[1], F_SETFD, FD_CLOEXEC);  // only the child's stdin is the read end
+    std::vector<char*> argv;
+    for (auto& a : av) argv.push_back(const_cast<char*>(a.c_str()));
+    argv.push_back(nullptr);
+    pid_t pid = fork();
+    if (pid < 0) { close(in[0]), close(in[1]); lua_pushboolean(L, 0); return 1; }
+    if (pid == 0) {  // child: the text on stdin, nothing on stdout or stderr (they'd draw over the screen)
+        int nul = open("/dev/null", O_WRONLY);
+        dup2(in[0], 0), dup2(nul, 1), dup2(nul, 2);
+        for (int fd = 3; fd < 1024; fd++) close(fd);
+        signal(SIGPIPE, SIG_DFL);
+        execvp(argv[0], argv.data());
+        _exit(127);  // not installed: the plugin checked with isekur.which before
+    }
+    close(in[0]);
+    for (size_t off = 0; off < text.size();) {
+        ssize_t n = write(in[1], text.data() + off, text.size() - off);
+        if (n <= 0) break;  // the engine went away: nothing more to say
+        off += (size_t)n;
+    }
+    close(in[1]);
+    p->speaker = pid;
+    lua_pushboolean(L, 1);
+    return 1;
+}
+// isekur.speak_web(text): the webchat says text aloud in the browser (speechSynthesis); nothing in the terminal
+static int l_speak_web(lua_State* L) {
+    Line l{time(nullptr), LK::INFO, "", str_arg(L, 1)};
+    self(L)->c->notify(Ev::SPEAK, nullptr, &l);
     return 0;
 }
 static int l_lua_print(lua_State* L) {  // print(...): the main window, with the plugin's badge
@@ -536,7 +647,8 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"nick", l_nick}, {"rank", l_rank},
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
-        {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"lock", l_lock},
+        {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
+        {"platform", l_platform}, {"which", l_which}, {"run", l_run}, {"speak_web", l_speak_web},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
     lua_pushstring(L, name.c_str()), lua_setfield(L, -2, "name");
