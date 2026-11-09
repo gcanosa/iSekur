@@ -1795,11 +1795,15 @@ int main() {
         auto f = fifo_lines("\\b\\i\\u\\s\\m\\v\\o");  // named formatting: bold italics underline strike mono reverse reset
         assert(f.size() == 1 && f[0] == "\x02\x1d\x1f\x1e\x11\x16\x0f");
     }
-    {  // a target before the first |: a tab that isn't open is refused; a prefix with no such tab is plain text
+    {  // a target before the first |: a tab that isn't open is refused, a plain word too (never sent as chat); a prefix with a space is text
         core.fifo_line("nosuch/#x|/me hi");
         assert(core.bufs.front()->lines.back().text.find("no open tab nosuch/#x") != std::string::npos);
+        size_t before = core.bufs.front()->lines.size();
         core.fifo_line("lol|ok");
-        assert(core.bufs.front()->lines.back().text.find("no open tab lol") == std::string::npos);
+        assert(core.bufs.front()->lines.back().text.find("no open tab lol") != std::string::npos);
+        assert(core.bufs.front()->lines.size() > before);
+        core.fifo_line("Build passed|ok");  // a space: not a target, plain text to the active tab
+        assert(core.bufs.front()->lines.back().text.find("no open tab Build") == std::string::npos);
     }
     {  // [general] fifo: a line written to the pipe runs as if typed; a partial line waits; nothing runs while locked
         char d[] = "/tmp/isekur-fifo-XXXXXX";

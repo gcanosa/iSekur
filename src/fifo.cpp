@@ -132,12 +132,8 @@ void Core::fifo_line(const std::string& raw) {
         Server* s = named(t.substr(0, sl));
         return s ? find(s, t.substr(sl + 1)) : nullptr;
     };
-    // a line is "target|text" when the part before the | names a tab or looks like one; with no such tab it is refused
-    auto shaped = [&](const std::string& t) {
-        if (t.find_first_not_of("0123456789") == std::string::npos || t.find('/') != std::string::npos || t[0] == '#' || t[0] == '&') return true;
-        for (auto& sv : servers) if (irc_lower(sv->cfg.name) == irc_lower(t)) return true;
-        return false;
-    };
+    // a line is "target|text" when the part before the | has no space; a target that matches no server or tab is refused,
+    // never sent as chat to the active tab (a wrong network name would otherwise post the whole line)
     for (auto& x : fifo_lines(l)) {  // escapes decoded; each resulting line is routed and runs
         if (x.empty()) continue;
         Buffer* b = act;
@@ -146,7 +142,7 @@ void Core::fifo_line(const std::string& raw) {
         if (bar != std::string::npos && bar > 0 && x.substr(0, bar).find(' ') == std::string::npos) {
             std::string t = x.substr(0, bar);
             if (Buffer* tb = target(t)) b = tb, text = x.substr(bar + 1);
-            else if (shaped(t)) { print(bufs.front().get(), LK::ERROR, "FIFO: no open tab " + t + ", the line was ignored"); continue; }
+            else { print(bufs.front().get(), LK::ERROR, "FIFO: no open tab " + t + " (see /servers for network names), the line was ignored"); continue; }
         }
         if (!text.empty()) exec(b, text);
     }

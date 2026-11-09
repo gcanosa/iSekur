@@ -249,7 +249,9 @@ or
 .IR N | text
 for tab N, as in
 .BR /win ).
-A target with no open tab is refused with a message in the status tab. A prefix that is not a target is plain text.
+The network name is the server name (see
+.BR /servers ),
+matched without regard to case. A prefix with no space must be a target: when no server or open tab matches, the line is refused with a message in the status tab and nothing is sent. A prefix with a space is plain text.
 .PP
 Each line is decoded:
 .B \(rsn

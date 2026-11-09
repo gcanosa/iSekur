@@ -428,8 +428,9 @@ Set `fifo_path` in the config to put the pipe anywhere else; `/set fifo_path` mo
 | `#chan\|text` | a channel on the active network |
 | `3\|text` | tab 3, by position as in `/win 3` |
 
-  A target with no open tab is refused, with a message in the status tab. The line is not sent anywhere else.
-  A prefix with a space in it, or one that doesn't look like a target, is plain text: `lol|ok` sends `lol|ok`.
+  The network name is the server name: `/servers` lists them, and it matches without regard to case. Not the host name.
+  A prefix with no space in it must be a target. If no server or open tab matches, the line is refused with a message in the status tab (`FIFO: no open tab lol (see /servers for network names)`), and nothing is sent: `lol|ok` is refused, not posted.
+  A prefix with a space in it is plain text: `Build passed|ok` is sent as typed.
 - **Several lines in one write:** `\n` ends a line, and each piece is routed on its own: `'a/#x|hi\n#y|yo'` sends to two tabs.
 
 ### Escapes
