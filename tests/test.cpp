@@ -2785,8 +2785,8 @@ print("loaded")
             pc.exec(ph, std::string("/screensaver ") + n);
             std::vector<Core::SCell> g;
             int lit = 0;
-            for (int f = 0; f < 3; f++) {
-                pc.screen_t0 -= 500;  // half a second a frame
+            for (int f = 0; f < 40; f++) {  // 8 seconds at the saver's step cap: matrix rain falls in from above first (3 frames left it to the seed)
+                pc.screen_t0 -= 200;
                 assert(pc.screen_frame(80, 24, "term", g) && pc.screen_frame(213, 60, "web", g) && g.size() == 213 * 60);
             }
             for (auto& sc : g) lit += sc.ch != 0;
