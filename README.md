@@ -300,13 +300,6 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
 
-FIFO: `/set fifo on` creates a named pipe at `fifo_path`, and a line written to it
-runs as if typed in the active tab: `echo "/msg bob hi" > ~/.config/isekur/fifo`. `/set fifo off` removes it. Owner-only, ignored while locked, removed at exit.
-In a line, `\n` ends it (the rest runs as its own line), `\xHH` is any byte (`\x03` color), `\e` is the escape, `\t`, `\r` and `\\` are what they say; other backslashes stay as typed. Formatting: `\b` bold, `\i` italics, `\u` underline, `\s` strikethrough, `\m` monospace, `\v` reverse, `\o` reset. E.g. `printf '/me \b hi\o\n' > ~/.config/isekur/fifo`.
-A line can name where it goes before a `|`: `sekurnet/#chan|hello` (a channel on a network), `sekurnet|/msg bob hi` (that network's status tab), `#chan|hello` (on the active network), `3|hello` (tab 3). Without one, it runs in the active tab. A target with no open tab is refused with a message in the status tab.
-With `fifo_path` empty, the pipe is `<name>.fifo` beside the config, like its socket: `isekur.conf` uses `~/.config/isekur/fifo`, and `-c work.conf` uses `work.fifo`. So each running iSekur has its own pipe.
-Like weechat's fifo. POSIX only (Linux, macOS, BSDs, Cygwin): there are no named pipes on native Windows.
-
 Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab without blocking
 the chat; `/exec -o uptime` says it in the current channel or query (longer than `paste_confirm`
 lines needs `-y`; `paste_confirm = 0` sends any length). Commands are killed after `exec_timeout` seconds; the webchat can't run them
@@ -400,6 +393,74 @@ picks up an edited file. Writing one: [WRITING.md](https://github.com/gcanosa/is
 `/help` lists every command by group, in color; `/help <command>` explains it with examples.
 Type `/` and the matching commands show up above the input line; Tab completes them.
 `/about` shows the version and where to find iSekur.
+
+## FIFO: send lines from a shell or script
+
+With `/set fifo on`, iSekur creates a named pipe and reads it. Every line written to the pipe runs as if
+you had typed it. Like weechat's fifo.
+
+    /set fifo on                                        # creates the pipe
+    printf '%s\n' '/msg bob hi' > ~/.config/isekur/fifo  # bob gets "hi"
+
+`/set fifo off` removes the pipe. It is owner-only (0600), ignored while iSekur is locked, and removed at exit.
+POSIX only (Linux, macOS, BSDs, Cygwin): native Windows has no named pipes.
+
+### Which pipe
+
+Each running iSekur has its own pipe, so you pick one by writing to its path.
+
+| Config | Pipe (with `fifo_path` empty) |
+|---|---|
+| `isekur.conf` (the default) | `~/.config/isekur/fifo` |
+| `-c work.conf` | `work.fifo` beside it |
+
+Set `fifo_path` in the config to put the pipe anywhere else; `/set fifo_path` moves it while it's on.
+
+### Where a line goes
+
+- **No target:** the active tab, or the status tab if none is active.
+- **A target before `|`:** the text after the first `|` runs in the tab named before it:
+
+| Target | Meaning |
+|---|---|
+| `sekurnet/#chan\|text` | a channel on the network named `sekurnet` |
+| `sekurnet\|/msg bob hi` | that network's status tab |
+| `#chan\|text` | a channel on the active network |
+| `3\|text` | tab 3, by position as in `/win 3` |
+
+  A target with no open tab is refused, with a message in the status tab. The line is not sent anywhere else.
+  A prefix with a space in it, or one that doesn't look like a target, is plain text: `lol|ok` sends `lol|ok`.
+- **Several lines in one write:** `\n` ends a line, and each piece is routed on its own: `'a/#x|hi\n#y|yo'` sends to two tabs.
+
+### Escapes
+
+iSekur decodes these in each line. Use single quotes so the shell passes the backslashes through.
+
+| Escape | Meaning |
+|---|---|
+| `\n` | ends the line |
+| `\xHH` | any byte, for example `\x03` (color) |
+| `\e` | the escape character (ANSI) |
+| `\t`, `\r`, `\\` | tab, carriage return, backslash |
+| `\b` | bold |
+| `\i` | italics |
+| `\u` | underline |
+| `\s` | strikethrough |
+| `\m` | monospace |
+| `\v` | reverse |
+| `\o` | reset all formatting |
+
+Other backslashes stay as typed, and a malformed `\xHH` (`\xZZ`, or `\x7` at the end) stays as typed too.
+
+### Examples
+
+    printf '%s\n' '/me \bwaves\b hello' > ~/.config/isekur/fifo
+    printf '%s\n' 'sekurnet/#chan|\u\bBuild\o passed' > ~/.config/isekur/fifo
+    printf '%s\n' '#ops|\x034alert\x03 disk full' > ~/.config/isekur/fifo
+    printf '%s\n' '3|hello from a script' > ~/.config/isekur/fifo
+    printf '%s\n' 'sekurnet|/join #new' > ~/.config/isekur/fifo
+
+Use `printf '%s\n'` rather than `echo`: shells differ on whether `echo` interprets backslashes.
 
 ## Reading old logs
 

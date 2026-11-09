@@ -228,6 +228,44 @@ Other commands are sent to the server unchanged.
 lists them in the client;
 .BI /help " command"
 explains one, with examples.
+.SH FIFO
+With
+.B fifo = on
+in the config (or
+.BR "/set fifo on" ),
+iSekur creates a named pipe and reads it: every line written to it runs as if typed.
+Each running iSekur has its own pipe (see FILES); write to the one for the instance you want.
+.PP
+.nf
+.B printf '%s\(rsn' '/msg bob hi' > ~/.config/isekur/fifo
+.fi
+.PP
+A line runs in the active tab, unless it starts with a target and a
+.B |
+.RI ( net / #chan | text ,
+.IR net | /cmd ,
+.IR #chan | text ,
+or
+.IR N | text
+for tab N, as in
+.BR /win ).
+A target with no open tab is refused with a message in the status tab. A prefix that is not a target is plain text.
+.PP
+Each line is decoded:
+.B \(rsn
+ends it,
+.B \(rsxHH
+is any byte (\(rsx03 color),
+.B \(rse
+the escape,
+.B \(rs\(rs
+a backslash, and
+.BR \(rsb ", " \(rsi ", " \(rsu ", " \(rss ", " \(rsm ", " \(rsv ", " \(rso
+are bold, italics, underline, strikethrough, monospace, reverse and reset.
+Other backslashes stay as typed.
+.PP
+The pipe is owner-only (mode 0600), ignored while iSekur is locked, and removed at exit.
+Not available on native Windows.
 .SH FILES
 .TP
 .I ~/.config/isekur/isekur.conf
@@ -270,6 +308,17 @@ Hashed webchat login sessions
 .RI ( work.web.sessions
 for
 .IR work.conf ).
+.TP
+.I ~/.config/isekur/fifo
+The FIFO pipe, with
+.B fifo = on
+(
+.I work.fifo
+beside
+.IR work.conf ).
+Or wherever
+.B fifo_path
+says.
 .SH SEE ALSO
 https://github.com/gcanosa/iSekur
 .SH LICENSE
