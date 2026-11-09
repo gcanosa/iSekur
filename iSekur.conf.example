@@ -73,6 +73,12 @@ bell_notifications = on
 # webchat can't run them unless exec_web = on (anyone logged in to it could).
 exec_timeout = 30
 exec_web     = off
+
+# A named pipe (weechat's fifo): a line written to it runs as if typed in the
+# active tab, e.g. echo "/msg bob hi" > ~/.config/isekur/fifo. Owner-only (0600),
+# dropped while locked, removed at exit. /set general.fifo opens, moves or closes
+# it at once. Empty: off. Not on native Windows (no named pipes there).
+fifo         = 
 # A password before anything shows, in the terminal and the webchat: at startup,
 # on every attach and after /lock. /lock sets it the first time (it's stored
 # hashed here), /lock on changes it, /lock off turns it off.
@@ -195,6 +201,8 @@ user          = me
 password_hash =              ; /bnc password sets it (or isekur --hash-password)
 cert          =              ; e.g. /path/fullchain.pem (empty: self-signed bnc.crt)
 key           =              ; e.g. /path/privkey.pem
+certfp        =              ; SHA-256 of a client certificate (comma-separated): it logs in with SASL EXTERNAL,
+                             ; no password. Needs tls = on. Get it: openssl x509 -noout -fingerprint -sha256 -in client.pem
 backlog       = 50           ; lines of each tab a client gets when it connects (0: none)
 
 # Key bindings: <action> = <key> [key...]

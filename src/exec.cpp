@@ -39,6 +39,16 @@ static std::string clean(const std::string& s) {
     return o;
 }
 
+// the shell a /exec line runs in: bash or zsh (your login shell when it is one), else bash. /bin/sh is dash, or bash in
+// POSIX mode on macOS, where echo -e and echo -n print the flag as text
+static std::string exec_shell() {
+    const char* sh = getenv("SHELL");
+    std::string base = sh ? sh : "";
+    base = base.substr(base.rfind('/') + 1);
+    if (base == "bash" || base == "zsh") return sh;
+    return access("/bin/bash", X_OK) == 0 ? "/bin/bash" : "/bin/sh";
+}
+
 // /exec [-o] [-y] command
 void Core::exec_cmd(Buffer* b, const std::string& args) {
     if (from_web && !opt_on(nullptr, "exec_web", false)) {
@@ -61,6 +71,7 @@ void Core::exec_cmd(Buffer* b, const std::string& args) {
     if (j.say && (b->type == BT::STATUS || !b->srv)) { print(b, LK::ERROR, "/exec -o sends to a channel or query: type it there"); return; }
     int p[2];
     if (pipe(p) < 0) { print(b, LK::ERROR, std::string("pipe: ") + strerror(errno)); return; }
+    std::string sh = exec_shell();
     pid_t pid = fork();
     if (pid < 0) { ::close(p[0]), ::close(p[1]); print(b, LK::ERROR, std::string("fork: ") + strerror(errno)); return; }
     if (pid == 0) {  // child: own process group (the timeout kills it all), no terminal, no sockets
@@ -69,7 +80,7 @@ void Core::exec_cmd(Buffer* b, const std::string& args) {
         int nul = ::open("/dev/null", O_RDONLY);
         dup2(nul, 0), dup2(p[1], 1), dup2(p[1], 2);
         for (int fd = 3; fd < 1024; fd++) ::close(fd);
-        execl("/bin/sh", "sh", "-c", cmd.c_str(), (char*)nullptr);
+        execl(sh.c_str(), sh.substr(sh.rfind('/') + 1).c_str(), "-c", cmd.c_str(), (char*)nullptr);
         _exit(127);
     }
     ::close(p[1]);
