@@ -300,8 +300,11 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
 
-FIFO: `/set fifo on` creates a named pipe at `fifo_path` (default `~/.config/isekur/fifo`, shown in `/set`), and a line written to it
+FIFO: `/set fifo on` creates a named pipe at `fifo_path`, and a line written to it
 runs as if typed in the active tab: `echo "/msg bob hi" > ~/.config/isekur/fifo`. `/set fifo off` removes it. Owner-only, ignored while locked, removed at exit.
+In a line, `\n` ends it (the rest runs as its own line), `\xHH` is any byte (`\x03` color), `\e` is the escape, `\t`, `\r` and `\\` are what they say; other backslashes stay as typed. Formatting: `\b` bold, `\i` italics, `\u` underline, `\s` strikethrough, `\m` monospace, `\v` reverse, `\o` reset. E.g. `printf '/me \b hi\o\n' > ~/.config/isekur/fifo`.
+A line can name where it goes before a `|`: `sekurnet/#chan|hello` (a channel on a network), `sekurnet|/msg bob hi` (that network's status tab), `#chan|hello` (on the active network), `3|hello` (tab 3). Without one, it runs in the active tab. A target with no open tab is refused with a message in the status tab.
+With `fifo_path` empty, the pipe is `<name>.fifo` beside the config, like its socket: `isekur.conf` uses `~/.config/isekur/fifo`, and `-c work.conf` uses `work.fifo`. So each running iSekur has its own pipe.
 Like weechat's fifo. POSIX only (Linux, macOS, BSDs, Cygwin): there are no named pipes on native Windows.
 
 Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab without blocking

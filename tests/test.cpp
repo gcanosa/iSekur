@@ -1789,6 +1789,18 @@ int main() {
         std::filesystem::remove_all(dir);
     }
 
+    {  // FIFO escapes: \n splits, \xHH and \e are bytes, \\ is a backslash, anything else stays as typed
+        auto v = fifo_lines("/me \\x02bold\\x0f \\e[0m\\x03" "4red\\n/msg bob \\\\n \\xZZ \\q\\x7");
+        assert(v.size() == 2 && v[0] == "/me \x02" "bold\x0f \x1b[0m\x03" "4red" && v[1] == "/msg bob \\n \\xZZ \\q\\x7");
+        auto f = fifo_lines("\\b\\i\\u\\s\\m\\v\\o");  // named formatting: bold italics underline strike mono reverse reset
+        assert(f.size() == 1 && f[0] == "\x02\x1d\x1f\x1e\x11\x16\x0f");
+    }
+    {  // a target before the first |: a tab that isn't open is refused; a prefix with no such tab is plain text
+        core.fifo_line("nosuch/#x|/me hi");
+        assert(core.bufs.front()->lines.back().text.find("no open tab nosuch/#x") != std::string::npos);
+        core.fifo_line("lol|ok");
+        assert(core.bufs.front()->lines.back().text.find("no open tab lol") == std::string::npos);
+    }
     {  // [general] fifo: a line written to the pipe runs as if typed; a partial line waits; nothing runs while locked
         char d[] = "/tmp/isekur-fifo-XXXXXX";
         assert(mkdtemp(d));
@@ -1825,11 +1837,23 @@ int main() {
             std::string oh = oldhome ? oldhome : "";
             setenv("HOME", d, 1);
             std::filesystem::create_directories(std::string(d) + "/.config/isekur");
+            std::string keep = core.cfg_path;
+            core.cfg_path = default_config_path();  // the main config
             core.exec(home, "/set fifo on");
             assert(core.fifo_fd >= 0 && core.fifo_path == std::string(d) + "/.config/isekur/fifo");
             core.exec(home, "/set fifo off");
             assert(core.fifo_fd < 0);
+            core.cfg_path = keep;
             setenv("HOME", oh.c_str(), 1);
+        }
+        {  // no fifo_path in another config: <name>.fifo beside it, so two iSekurs never share a pipe
+            std::string keep = core.cfg_path;
+            core.cfg_path = std::string(d) + "/work.conf";
+            core.exec(home, "/set fifo on");
+            assert(core.fifo_fd >= 0 && core.fifo_path == std::string(d) + "/work.fifo");
+            core.exec(home, "/set fifo off");
+            assert(core.fifo_fd < 0 && access((std::string(d) + "/work.fifo").c_str(), F_OK) != 0);
+            core.cfg_path = keep;
         }
         core.cfg["general"].erase("fifo");
         bool row = false, prow = false;

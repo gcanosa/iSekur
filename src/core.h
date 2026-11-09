@@ -639,6 +639,7 @@ bool version_newer(const std::string& a, const std::string& b);  // a > b, dotte
 std::vector<std::string> about_lines(const Theme& t, double shine = -99, bool web = false, std::vector<int>* typed = nullptr, const std::string& update = "");  // /about: the banner + version, author, links
 std::string fresh_config();  // the compiled-in template as a first config file
 std::string default_config_path();  // $XDG_CONFIG_HOME or ~/.config, /isekur/isekur.conf
+std::vector<std::string> fifo_lines(const std::string& s);  // a FIFO line with \n \xHH etc. decoded, split at each \n (fifo.cpp)
 void mkdir_p(const std::string& path);  // 0700
 // the settings' keys (core.cpp): scope 'g' [general] only, 'n' a network only, 'b' both (a network overrides [general])
 struct KeyInfo { const char* key; const char* grp; char scope; };
