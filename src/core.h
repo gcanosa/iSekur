@@ -376,6 +376,7 @@ struct Core {
     std::vector<SetRow> setting_rows() const;
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     bool settings_servers = false;  // /servers: that window, at the first server
+    std::string settings_srv;       // /servers name: that window, at this network
     bool keys_win = false;      // /keys in the terminal: the TUI opens its key list
     bool logs_win = false;      // /logs in the terminal: the TUI opens its log browser
     std::string logs_at, logs_q;  // ...at this tab's logs ("net" or "net\tname" as on disk), searching logs_q

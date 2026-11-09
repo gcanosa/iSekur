@@ -857,9 +857,13 @@ int main() {
     // a server tab's menu: reconnect / disconnect while up, fold, close (asks first)
     {
         auto sm = core.tab_menu(ts->status);
-        assert(sm.size() == 8 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
-               sm[5].second.rfind("?Disconnect from ", 0) == 0 && sm[6].second == "/server rename t" && sm[7].second.rfind("?Delete t:", 0) == 0 &&
-               sm[7].second.find("\n/server del t") != std::string::npos);
+        assert(sm.size() == 9 && sm[0].second == "/reconnect" && sm[1].second == "/disconnect" && sm[2].first == "Hide its channels" &&
+               sm[4] == std::make_pair(std::string("Edit network..."), std::string("/servers t")) &&
+               sm[6].second.rfind("?Disconnect from ", 0) == 0 && sm[7].second == "/server rename t" && sm[8].second.rfind("?Delete t:", 0) == 0 &&
+               sm[8].second.find("\n/server del t") != std::string::npos);
+        // /servers name: the Edit network item's command; an unknown name is refused
+        core.exec(ts->status, "/servers nosuch");
+        assert(core.settings_srv.empty() && !core.settings_servers);
         // connect at startup or not: flips with the setting and goes to the config at once
         std::string path = "build/test-autoconnect.conf";
         remove(path.c_str());

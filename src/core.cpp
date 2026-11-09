@@ -1470,8 +1470,11 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "shell") { shell_cmd(b); return; }
     if (cmd == "attach") { attach_cmd(b, args); return; }
     if (cmd == "lock") { lock_cmd(b, args); return; }
-    if (cmd == "servers") {  // the terminal: the settings window at the first server (the webchat opens its Servers window)
-        if (tty && !from_web) { settings_win = settings_servers = dirty = true; return; }
+    if (cmd == "servers") {  // the terminal: the settings window at the first server, or at /servers name (the webchat opens its Servers window)
+        if (!argv.empty() && !std::any_of(servers.begin(), servers.end(), [&](auto& sv) { return sv->cfg.name == argv[0]; })) {
+            print(b, LK::ERROR, "No network " + argv[0]); return;
+        }
+        if (tty && !from_web) { settings_win = settings_servers = dirty = true; settings_srv = argv.empty() ? "" : argv[0]; return; }
         if (servers.empty()) { print(b, LK::INFO, "No servers: /server host [port] [-tls] adds one"); return; }
         for (auto& sv : servers)
             print(b, LK::INFO, sv->cfg.name + "  " + sv->cfg.host + ":" + std::to_string(sv->cfg.port) + (sv->cfg.tls ? " (TLS)" : "") +

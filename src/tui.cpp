@@ -651,6 +651,7 @@ void Tui::draw() {
     xbtn = XBtn{};
     if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
     if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true, sw.to_servers = c.settings_servers, c.settings_servers = false;
+    if (c.settings_srv.size()) sw.cat = "server." + c.settings_srv, c.settings_srv.clear();  // /servers name: that network's category
     if (c.theme_win) {
         c.theme_win = false, tw = ThemeWin{}, tw.open = true, tw.orig = c.theme.name;
         auto l = theme_list();
@@ -1289,9 +1290,11 @@ void Tui::draw_settings(int W, int H) {
     std::vector<const Core::SetRow*> rows;
     if (sw.to_servers) {
         sw.to_servers = false;
-        for (auto& r : all)
-            if (r.sec.rfind("server.", 0) == 0) { sw.cat = r.sec, sw.focus = 0, sw.sel = sw.top = 0; break; }
+        if (sw.cat.empty())  // else /servers name set it
+            for (auto& r : all)
+                if (r.sec.rfind("server.", 0) == 0) { sw.cat = r.sec; break; }
         if (sw.cat.empty()) sw.msg = "No servers yet: n adds one";
+        else sw.focus = 0, sw.sel = sw.top = 0;
     }
     int ci = set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
     sw.sel = std::max(0, std::min(sw.sel, (int)rows.size() - 1));

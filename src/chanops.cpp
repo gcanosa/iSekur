@@ -286,6 +286,7 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
         else m.push_back({"Connect", "/connect"});
         m.push_back({b->collapsed ? "Show its channels" : "Hide its channels", "/fold"});
         m.push_back({s->cfg.autoconnect ? "Don't connect at startup" : "Connect at startup", s->cfg.autoconnect ? "/autoconnect off" : "/autoconnect on"});
+        m.push_back({"Edit network...", "/servers " + s->cfg.name});
         m.push_back({"", ""});
         m.push_back({"Close", up ? "?Disconnect from " + s->cfg.name + " and close all its tabs?\n/close" : "/close"});
         m.push_back({"Rename server...", "/server rename " + s->cfg.name});

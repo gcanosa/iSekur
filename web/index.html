@@ -1548,7 +1548,7 @@ function onMsg(ev) {
   } else if (m.t === "settings") {
     setCache = m.list;
     if (dset.open) renderSettings(m.list);
-    if (dsrv.open) { srvs = srvRows(m.list); if (srvSel && !srvs.some(x => x.name === srvSel)) srvSel = null; renderSrv(); }
+    if (dsrv.open) { srvs = srvRows(m.list); if (srvWant) { const w = srvWant; srvWant = null; srvPick(w); } if (srvSel && !srvs.some(x => x.name === srvSel)) srvSel = null; renderSrv(); }
     renderSugg();
   } else if (m.t === "logs" || m.t === "logread" || m.t === "logfind") {
     logMsg(m);
@@ -1786,7 +1786,7 @@ function syncAsk() {
 // picking one fills the form: Save writes the changes (/set + /save), Connect also connects, Delete removes it
 // (/server del). New, or no server yet: the form adds one, as /server
 const dsrv = $("#dsrv"), fs = dsrv.querySelector("form").elements;
-let srvs = [], srvSel = null, srvNote = "";  // srvSel: the [server.x] name being edited, null: a new one; srvNote: "Saved."
+let srvs = [], srvSel = null, srvNote = "", srvWant = null;  // srvSel: the [server.x] name being edited, null: a new one; srvNote: "Saved."; srvWant: Edit network, picked once the list comes
 const isOn = v => /^(true|on|yes|1)$/i.test(v || "");
 function srvRows(list) {  // [section, key, value, default, ...] rows -> one object per server: what's in effect
   const by = new Map();
@@ -3067,7 +3067,8 @@ function showMenu(m) {
         const nl = cmd.indexOf("\n");
         const mb = menuBuf;
         askBox({title: label.replace(/\.\.\.$/, ""), text: cmd.slice(1, nl), ok: label.replace(/\.\.\.$/, "")}).then(v => { if (v !== null) send({t: "input", buf: mb, text: cmd.slice(nl + 1)}); });
-      } else if (/[ :]$/.test(cmd)) { $("#line").value = cmd; $("#line").focus(); }  // you finish it
+      } else if (/^\/servers \S/.test(cmd)) { srvWant = cmd.slice(9); $("#addsrv").click(); }  // Edit network: the Servers window, on it
+      else if (/[ :]$/.test(cmd)) { $("#line").value = cmd; $("#line").focus(); }  // you finish it
       else send({t: "input", buf: menuBuf, text: cmd});
     };
     box.append(it);
