@@ -561,6 +561,14 @@ struct Core {
     void term_resize(Term* t, int rows, int cols);
     void terms_poll(const std::vector<pollfd>& fds, size_t from);  // their ptys from fds[from] on
     void jobs_poll(const std::vector<pollfd>& fds, size_t from);  // their pipes from fds[from] on
+    // [general] fifo: a named pipe whose lines run as if typed (fifo.cpp)
+    int fifo_fd = -1;
+    std::string fifo_path, fifo_buf;
+    bool fifo_made = false;  // iSekur created the pipe: it removes it at exit
+    void fifo_open();   // at start, from [general] fifo
+    void fifo_close();  // at exit, or before a reopen
+    void fifo_poll(const std::vector<pollfd>& fds, size_t k);  // its fd at fds[k]
+    void fifo_line(const std::string& l);
     void job_read(Job& j);
     void job_line(Job& j, const std::string& raw);
     void e2e_cmd(Buffer* b, const std::string& args);  // e2e.cpp

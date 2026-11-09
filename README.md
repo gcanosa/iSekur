@@ -176,6 +176,11 @@ iSekur, so your terminal, the webchat and the other clients see it too. One user
    then have to skip the certificate check; point `cert`/`key` at a real one (Let's Encrypt,
    `tailscale cert`) to avoid that. The same settings are under **BNC** in the `/set` window.
 
+   Clients can log in with a certificate instead of the password (SASL EXTERNAL, over TLS): put the
+   certificate's SHA-256 in `/set bnc.certfp` (or `[bnc] certfp`), comma-separated for several. Get it with
+   `openssl x509 -noout -fingerprint -sha256 -in client.pem`. Empty turns it off. Clients without a
+   matching certificate still log in with the password.
+
 3. Start it:
 
        /bnc start               # now; /bnc stop, /bnc restart after changing settings
@@ -294,6 +299,10 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/masskick [-yes] [reason]` (asks first), `/lockdown` (+mntsi) and `/unlock` (-msi),
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
+
+FIFO: with `/set general.fifo ~/.config/isekur/fifo` (or `fifo =` in `[general]`) set, a line written to that named pipe runs as if typed in
+the active tab: `echo "/msg bob hi" > ~/.config/isekur/fifo`. Owner-only, ignored while locked, removed at exit.
+Like weechat's fifo. POSIX only (Linux, macOS, BSDs, Cygwin): there are no named pipes on native Windows.
 
 Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab without blocking
 the chat; `/exec -o uptime` says it in the current channel or query (longer than `paste_confirm`

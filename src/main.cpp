@@ -283,6 +283,7 @@ int main(int argc, char** argv) {
             if (bnc_mode) { fprintf(stderr, "--bnc: %s\n", err.c_str()); return 1; }
         } else c.info_note(home, "BNC on " + bnc.url);
     } else c.info_note(home, "BNC off: /bnc start, or /set bnc.autostart on");
+    c.fifo_open();  // [general] fifo: a named pipe (not on native Windows)
     c.listener = [&](Ev e, Buffer* b, const Line* l) { web.on_event(e, b, l); };
 
     Tui tui(c);
@@ -318,6 +319,8 @@ int main(int argc, char** argv) {
         web.add_fds(fds);
         bnc.add_fds(fds);
         ses.add_fds(fds);
+        size_t fifo0 = fds.size();
+        if (c.fifo_fd >= 0) fds.push_back({c.fifo_fd, POLLIN, 0});
         size_t job0 = fds.size();
         for (auto& j : c.jobs)
             if (j.fd >= 0) fds.push_back({j.fd, POLLIN, 0});
@@ -353,6 +356,7 @@ int main(int argc, char** argv) {
         if (c.tty && !hung && (fds[0].revents || fds[1].revents)) guard("keyboard input", [&] { tui.on_readable(); });
         crumb_stage("webchat"), web.process(fds);
         crumb_stage("BNC"), bnc.process(fds);
+        guard("FIFO", [&] { c.fifo_poll(fds, fifo0); });
         guard("/exec", [&] { c.jobs_poll(fds, job0); });
         crumb_stage("session");
         int t = ses.process(fds, c.tty);
@@ -481,6 +485,7 @@ int main(int argc, char** argv) {
             if (fds[i].revents) polled[i]->conn.pump(fds[i].revents, polled[i]->inbuf);
     }
     c.save_history();
+    c.fifo_close();
     if (c.tty) tui.shutdown();
     ses.release('Q');
     ses.close();

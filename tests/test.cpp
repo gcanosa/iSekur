@@ -12,6 +12,11 @@
 #include <functional>
 #include <unistd.h>
 #include <netinet/in.h>
+#include <fcntl.h>
+#include <openssl/evp.h>
+#include <openssl/pem.h>
+#include <openssl/ssl.h>
+#include <openssl/x509.h>
 #include <arpa/inet.h>
 #include "core.h"
 #include "session.h"
@@ -1701,6 +1706,122 @@ int main() {
         assert(!Server::tap && !bnc.running());
         ts->nick = nick0, chb->topic.clear(), chb->nicks.erase("bob"), ts->conn.out.clear(), ts->sendq.clear();
         core.cfg.erase("bnc");
+    }
+
+    {  // SASL EXTERNAL: a client certificate in [bnc] certfp logs in with no password; another certificate, or none, is refused
+        char d[] = "/tmp/isekur-sasl-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d, err;
+        assert(gen_selfsigned(dir + "/srv.crt", dir + "/srv.key", err) && gen_selfsigned(dir + "/cl.crt", dir + "/cl.key", err) &&
+               gen_selfsigned(dir + "/other.crt", dir + "/other.key", err));
+        auto fp_of = [](const std::string& crt) {  // SHA-256 of the certificate's DER, as the config has it
+            FILE* f = fopen(crt.c_str(), "r");
+            X509* x = PEM_read_X509(f, nullptr, nullptr, nullptr);
+            fclose(f);
+            unsigned char md[EVP_MAX_MD_SIZE];
+            unsigned int n = 0;
+            assert(x && X509_digest(x, EVP_sha256(), md, &n) == 1);
+            X509_free(x);
+            std::string h;
+            char b[3];
+            for (unsigned i = 0; i < n; i++) snprintf(b, sizeof b, "%02x", md[i]), h += b;
+            return h;
+        };
+        std::string colon;  // the client's fingerprint as openssl prints it: AB:CD:...
+        for (size_t i = 0, cl_n = fp_of(dir + "/cl.crt").size(); i < cl_n; i += 2) colon += (colon.empty() ? "" : ":") + fp_of(dir + "/cl.crt").substr(i, 2);
+        core.cfg["bnc"] = {{"bind", "127.0.0.1"}, {"port", "18798"}, {"tls", "on"}, {"cert", dir + "/srv.crt"}, {"key", dir + "/srv.key"},
+                           {"user", "u"}, {"password_hash", hash_password("pw")}, {"certfp", colon + ", " + fp_of(dir + "/other.crt")}};
+        Bnc bnc(core);
+        std::string berr;
+        assert(bnc.start(berr) && bnc.url == "ircs://127.0.0.1:18798");
+        bool row = false;
+        for (auto& r : core.setting_rows()) row |= r.sec == "bnc" && r.key == "certfp";
+        assert(row);  // a setting: /set bnc.certfp, and the settings window
+        // a TLS client: connects, presents cert_file (or none), and speaks lines until `until` shows up
+        auto talk = [&](const char* cert_file, const std::string& lines, const std::string& until) {
+            SSL_CTX* cx = SSL_CTX_new(TLS_client_method());
+            if (cert_file) assert(SSL_CTX_use_certificate_file(cx, cert_file, SSL_FILETYPE_PEM) == 1 &&
+                                  SSL_CTX_use_PrivateKey_file(cx, (std::string(cert_file).substr(0, std::string(cert_file).size() - 4) + ".key").c_str(), SSL_FILETYPE_PEM) == 1);
+            SSL_CTX_set_verify(cx, SSL_VERIFY_NONE, nullptr);
+            int fd = socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in a{};
+            a.sin_family = AF_INET, a.sin_port = htons(18798), a.sin_addr.s_addr = htonl(0x7f000001);
+            assert(connect(fd, (sockaddr*)&a, sizeof a) == 0);
+            fcntl(fd, F_SETFL, O_NONBLOCK);
+            SSL* ssl = SSL_new(cx);
+            SSL_set_fd(ssl, fd);
+            SSL_set_connect_state(ssl);
+            auto pump = [&] {
+                std::vector<pollfd> pf;
+                bnc.add_fds(pf);
+                poll(pf.data(), pf.size(), 5);
+                bnc.process(pf);
+            };
+            for (int i = 0; i < 400 && SSL_do_handshake(ssl) != 1; i++) pump();
+            assert(SSL_is_init_finished(ssl));
+            std::string got;
+            size_t sent = 0;
+            for (int i = 0; i < 400 && got.find(until) == std::string::npos; i++) {
+                if (sent < lines.size()) {
+                    int w = SSL_write(ssl, lines.data() + sent, (int)(lines.size() - sent));
+                    if (w > 0) sent += (size_t)w;
+                }
+                pump();
+                char rb[65536];
+                int n = SSL_read(ssl, rb, sizeof rb);
+                if (n > 0) got.append(rb, (size_t)n);
+            }
+            SSL_shutdown(ssl);
+            SSL_free(ssl), SSL_CTX_free(cx), close(fd);
+            return got;
+        };
+        std::string ok = talk((dir + "/cl.crt").c_str(),
+                              "CAP REQ :sasl\r\nAUTHENTICATE EXTERNAL\r\nAUTHENTICATE +\r\nCAP END\r\nNICK x\r\nUSER u 0 * :r\r\n", " 903 ");
+        assert(ok.find("CAP * ACK :sasl") != std::string::npos && ok.find("AUTHENTICATE +") != std::string::npos && ok.find(" 903 * ") != std::string::npos);
+        assert(ok.find(" 904 ") == std::string::npos && bnc.attached());
+        std::string bad = talk((dir + "/other.crt").c_str(),
+                               "AUTHENTICATE EXTERNAL\r\nAUTHENTICATE +\r\nNICK y\r\n", " 904 ");
+        assert(bad.find(" 904 ") != std::string::npos && bad.find(" 903 ") == std::string::npos);
+        std::string none = talk(nullptr, "CAP LS 302\r\n", "sasl=EXTERNAL");
+        assert(none.find("sasl=EXTERNAL") != std::string::npos);
+        bnc.stop();
+        core.cfg.erase("bnc");
+        std::filesystem::remove_all(dir);
+    }
+
+    {  // [general] fifo: a line written to the pipe runs as if typed; a partial line waits; nothing runs while locked
+        char d[] = "/tmp/isekur-fifo-XXXXXX";
+        assert(mkdtemp(d));
+        std::string p = std::string(d) + "/fifo";
+        core.exec(home, "/set fifo " + p);  // the setting opens the pipe at once
+        assert(core.fifo_fd >= 0 && core.fifo_path == p);
+        int w = open(p.c_str(), O_WRONLY | O_NONBLOCK);
+        assert(w >= 0);
+        auto pump = [&] {
+            std::vector<pollfd> pf{{core.fifo_fd, POLLIN, 0}};
+            poll(pf.data(), 1, 50);
+            core.fifo_poll(pf, 0);
+        };
+        auto put = [&](const char* text) { assert(write(w, text, strlen(text)) == (ssize_t)strlen(text)); };
+        put("/set nick_width 13\n/set nick_width 14");
+        pump();
+        assert(core.cfg["general"]["nick_width"] == "13");  // the complete line ran; the partial one waits
+        put("\n");
+        pump();
+        assert(core.cfg["general"]["nick_width"] == "14");
+        core.locked = true;
+        put("/set nick_width 15\n");
+        pump();
+        assert(core.cfg["general"]["nick_width"] == "14");  // locked: dropped
+        core.locked = false;
+        close(w);
+        core.exec(home, "/set fifo \"\"");  // empty: off, and the pipe iSekur made is gone
+        assert(core.fifo_fd < 0 && access(p.c_str(), F_OK) != 0);
+        core.cfg["general"].erase("fifo"), core.cfg["general"].erase("nick_width");
+        bool row = false;
+        for (auto& r : core.setting_rows()) row |= r.sec == "general" && r.key == "fifo";
+        assert(row);  // a settings window row, next to the others
+        std::filesystem::remove_all(d);
     }
 
     {  // the webchat end to end: login, WebSocket, nick lists only when they change, older lines on request

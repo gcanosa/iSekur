@@ -34,12 +34,15 @@ private:
         std::set<std::string> caps;  // what it asked for, of OFFER (bnc.cpp)
         std::map<std::string, std::string> chans;  // lowered name -> name: the channels it was told it's in: PARTed when the network drops
         bool reg = false, capneg = false;
+        bool sasl_wait = false, sasl_ok = false;  // SASL EXTERNAL: sent "+" and waits for our answer; the certificate matched
         time_t since = 0, rx = 0, pinged = 0;
         SS seen = SS::DISCONNECTED;  // the network's state it last heard about
     };
     int lfd = -1;
     SSL_CTX* ctx = nullptr;
     std::string user, pass_hash;
+    std::set<std::string> certfps;  // [bnc] certfp: SHA-256 of the client certificates that log in with SASL EXTERNAL
+    bool sasl_on() const { return !certfps.empty(); }  // needs TLS, which certfp requires
     std::vector<std::unique_ptr<Client>> clients;
     size_t fd_start = 0, fd_count = 0;
     std::map<std::string, std::pair<int, time_t>> fails;  // ip -> (count, locked until)
@@ -63,6 +66,7 @@ private:
     void send(Client& cl, const std::string& line, time_t ts = 0, const std::string& tags = "", const std::string& batch = "");
     void line(Client& cl, const std::string& raw);
     void cap(Client& cl, const Msg& m);
+    void authenticate(Client& cl, const std::string& arg);  // AUTHENTICATE: SASL EXTERNAL, by the client's certificate
     void login(Client& cl);
     void welcome(Client& cl, Server* s, const std::string& why = "");  // s null: on no network yet, why says so
     void attach(Client& cl, Server* s, const std::string& why);

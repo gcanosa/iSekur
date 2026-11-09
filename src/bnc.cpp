@@ -11,7 +11,9 @@
 #include <fstream>
 #include <unistd.h>
 #include <openssl/crypto.h>
+#include <openssl/evp.h>
 #include <openssl/ssl.h>
+#include <openssl/x509.h>
 #include "web.h"  // check_password, gen_selfsigned
 
 static const size_t MAX_CLIENTS = 16, MAX_OUT = 8 << 20;
@@ -22,6 +24,33 @@ static const std::set<std::string> OFFER = {"server-time", "message-tags", "echo
                                             "labeled-response", "away-notify", "account-notify", "account-tag", "chghost",
                                             "setname", "extended-join", "multi-prefix", "userhost-in-names", "invite-notify"};
 static const int HIST_MAX = 500;  // CHATHISTORY's limit
+
+// a client certificate's SHA-256 as 64 lowercase hex digits, "" when it has none
+static std::string cert_fp(SSL* ssl) {
+    X509* x = ssl ? SSL_get1_peer_certificate(ssl) : nullptr;
+    if (!x) return "";
+    unsigned char md[EVP_MAX_MD_SIZE];
+    unsigned int n = 0;
+    bool ok = X509_digest(x, EVP_sha256(), md, &n) == 1;
+    X509_free(x);
+    std::string h;
+    char b[3];
+    for (unsigned i = 0; ok && i < n; i++) snprintf(b, sizeof b, "%02x", md[i]), h += b;
+    return h;
+}
+
+// a fingerprint as written in the config ("AB:CD:..." or "abcd...") in cert_fp's form, "" if it isn't one
+static std::string fp_norm(const std::string& s) {
+    std::string h;
+    for (char ch : s)
+        if (ch != ':' && ch != ' ') h += (char)tolower((unsigned char)ch);
+    if (h.size() != 64 || h.find_first_not_of("0123456789abcdef") != std::string::npos) return "";
+    return h;
+}
+
+// we ask for a client certificate but check it ourselves (its fingerprint), so any one, or none, passes the handshake
+static int accept_any_cert(int, X509_STORE_CTX*) { return 1; }
+
 static bool is_msg(const Line& l) { return (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) && !l.nick.empty() && !l.nolog; }
 
 Bnc::~Bnc() { stop(); }
@@ -59,6 +88,7 @@ bool Bnc::start_(std::string& err) {
         err = "[bnc] needs user and password_hash: /set bnc.user name, then /bnc password";
         return false;
     }
+    certfps.clear();
     std::string t = ini_get(cfg, "bnc", "tls", "on");
     bool tls = !(t == "off" || t == "false" || t == "no" || t == "0");
     if (tls) {
@@ -80,6 +110,16 @@ bool Bnc::start_(std::string& err) {
             err = "BNC TLS: " + ssl_errstr();
             return false;
         }
+        for (auto& f : split(ini_get(cfg, "bnc", "certfp"), ',')) {
+            if (f.find_first_not_of(" ") == std::string::npos) continue;
+            std::string h = fp_norm(f);
+            if (h.empty()) { err = "[bnc] certfp: SHA-256 fingerprints of client certificates (64 hex digits), comma-separated"; return false; }
+            certfps.insert(h);
+        }
+        if (sasl_on()) SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, accept_any_cert);  // asks for one; a client without one still logs in with the password
+    } else if (!ini_get(cfg, "bnc", "certfp").empty()) {
+        err = "[bnc] certfp needs tls = on";
+        return false;
     }
     lfd = listen_tcp(bind, port, err);
     if (lfd < 0) { err = "BNC listen " + bind + ":" + std::to_string(port) + ": " + err; return false; }
@@ -272,13 +312,13 @@ void Bnc::cap(Client& cl, const Msg& m) {
     };
     if (sub == "LS") {
         if (!cl.reg) cl.capneg = true;
-        send(cl, std::string(":") + SRV + " CAP " + me + " LS :" + join(OFFER));
+        send(cl, std::string(":") + SRV + " CAP " + me + " LS :" + join(OFFER) + (sasl_on() ? " sasl=EXTERNAL" : ""));
     } else if (sub == "REQ") {
         if (!cl.reg) cl.capneg = true;
         auto want = split(m.p(1), ' ');
         bool ok = true;
         for (auto& w : want)
-            if (!w.empty() && !OFFER.count(w[0] == '-' ? w.substr(1) : w)) ok = false;
+            if (!w.empty() && !OFFER.count(w[0] == '-' ? w.substr(1) : w) && !(sasl_on() && (w == "sasl" || w == "-sasl"))) ok = false;
         for (auto& w : want) {
             if (!ok || w.empty()) continue;
             if (w[0] == '-') cl.caps.erase(w.substr(1));
@@ -306,6 +346,7 @@ void Bnc::line(Client& cl, const std::string& raw) {
         cl.conn.closing = true;
         return;
     }
+    if (cmd == "AUTHENTICATE") { authenticate(cl, m.p(0)); return; }
     if (!cl.reg) {
         if (cmd == "PASS") cl.pass = m.p(0);
         else if (cmd == "NICK") cl.nick = m.p(0), login(cl);
@@ -374,6 +415,37 @@ void Bnc::line(Client& cl, const std::string& raw) {
     origin = nullptr;
 }
 
+// SASL EXTERNAL: the client proves who it is with its certificate, not a password. It logs in as [bnc] user (its USER
+// line names the network, as with a password); the authzid is not needed and ignored
+void Bnc::authenticate(Client& cl, const std::string& arg) {
+    std::string me = cl.nick.empty() ? "*" : cl.nick;
+    auto fail = [&](const std::string& code, const std::string& text) { send(cl, std::string(":") + SRV + " " + code + " " + me + " :" + text); };
+    if (cl.reg || !cl.caps.count("sasl") || !sasl_on()) { fail("904", "SASL authentication failed"); return; }
+    if (cl.sasl_ok) { fail("907", "You have already authenticated using SASL"); return; }
+    if (arg == "*") { cl.sasl_wait = false; fail("906", "SASL authentication aborted"); return; }
+    if (!cl.sasl_wait) {
+        std::string mech = arg;
+        to_upper(mech);
+        if (mech != "EXTERNAL") {
+            send(cl, std::string(":") + SRV + " 908 " + me + " EXTERNAL :are available SASL mechanisms");
+            fail("904", "SASL authentication failed");
+            return;
+        }
+        cl.sasl_wait = true;
+        send(cl, "AUTHENTICATE +");
+        return;
+    }
+    cl.sasl_wait = false;
+    if (certfps.count(cert_fp(cl.conn.ssl))) {
+        cl.sasl_ok = true;
+        fail("903", "SASL authentication successful");
+        c.print(c.bufs.front().get(), LK::INFO, "BNC SASL EXTERNAL accepted: " + cl.ip);
+    } else {
+        fail("904", "SASL authentication failed");
+        c.print(c.bufs.front().get(), LK::ERROR, "✕ BNC SASL EXTERNAL refused (no matching certificate): " + cl.ip);
+    }
+}
+
 void Bnc::login(Client& cl) {
     if (cl.capneg || cl.nick.empty() || cl.user.empty() || cl.reg) return;
     time_t now = time(nullptr);
@@ -390,7 +462,7 @@ void Bnc::login(Client& cl) {
     if (f.second > now) { refuse("Too many failed logins, try again in " + fmt_dur((long)(f.second - now))); return; }
     // both checks every time, so the timing doesn't say which was wrong
     bool user_ok = u.size() == user.size() && CRYPTO_memcmp(u.data(), user.data(), u.size()) == 0;
-    bool pass_ok = check_password(pw, pass_hash);
+    bool pass_ok = cl.sasl_ok || check_password(pw, pass_hash);  // SASL: the certificate was the check
     if (!user_ok || !pass_ok) {
         if (++f.first >= 5) f.second = now + std::min<time_t>(3600, 60L << std::min(f.first - 5, 6));
         c.print(c.bufs.front().get(), LK::ERROR, "✕ BNC login failed: " + cl.ip + (f.second > now ? ", locked out " + fmt_dur((long)(f.second - now)) : ""));
