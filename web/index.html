@@ -1538,7 +1538,7 @@ function onMsg(ev) {
   } else if (m.t === "stat") {
     stat = m; renderStatus();
   } else if (m.t === "speak") {  // a plugin's text: the browser's voice
-    say(m.text);
+    say(m.text, m.lang);
   } else if (m.t === "bell") {
     beep();
   } else if (m.t === "menu") {
@@ -2906,8 +2906,13 @@ const unlockAudio = () => { try { actx = actx || new AudioContext(); actx.resume
 addEventListener("pointerdown", unlockAudio, {once: true});
 addEventListener("keydown", unlockAudio, {once: true});
 // a plugin's text, read aloud by the browser's voice (no voice or no speechSynthesis: silent)
-function say(text) {
-  try { if ("speechSynthesis" in window) speechSynthesis.speak(new SpeechSynthesisUtterance(text)); } catch (e) {}
+function say(text, lang) {
+  try {
+    if (!("speechSynthesis" in window)) return;
+    const u = new SpeechSynthesisUtterance(text);
+    if (lang) u.lang = lang;  // the browser picks a voice for it
+    speechSynthesis.speak(u);
+  } catch (e) {}
 }
 function beep() {
   if (!actx || actx.state !== "running") return;

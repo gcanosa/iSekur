@@ -294,9 +294,10 @@ static int l_run(lua_State* L) {
     lua_pushboolean(L, 1);
     return 1;
 }
-// isekur.speak_web(text): the webchat says text aloud in the browser (speechSynthesis); nothing in the terminal
+// isekur.speak_web(text, lang): the webchat says text aloud in the browser (speechSynthesis), in language lang (a code
+// such as "es", "" = the browser's); nothing in the terminal
 static int l_speak_web(lua_State* L) {
-    Line l{time(nullptr), LK::INFO, "", str_arg(L, 1)};
+    Line l{time(nullptr), LK::INFO, opt_str(L, 2), str_arg(L, 1)};  // nick carries the language for SPEAK
     self(L)->c->notify(Ev::SPEAK, nullptr, &l);
     return 0;
 }
