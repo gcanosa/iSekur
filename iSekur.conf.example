@@ -191,6 +191,7 @@ cert          =              ; e.g. /path/fullchain.pem (empty: self-signed)
 key           =              ; e.g. /path/privkey.pem
 html          =              ; serve this file as the webchat page, re-read on every load,
                              ; e.g. ~/src/iSekur/web/index.html (empty: the built-in one)
+tls           = auto         ; auto: HTTPS unless bound to localhost; true: HTTPS on localhost too
 
 # Built-in BNC (bouncer): your other IRC clients (irssi, weechat, hexchat, mIRC...)
 # connect here and share this session: the same networks, channels and recent lines.
@@ -219,7 +220,31 @@ backlog       = 50           ; lines of each tab a client gets when it connects 
 #          quit (asks first) keys (the key list, F1 M-k)
 #          tab_1 .. tab_10
 [keys]
-; next_tab = M-Right C-n
+; The defaults are shown. Uncomment a line to change that action's keys (or /set keys.next_tab "M-Right C-n").
+; next_tab = M-Down C-n
+; prev_tab = M-Up C-p
+; next_server = M-Right C-x
+; prev_server = M-Left
+; next_active = C-a M-a
+; close_tab = C-w
+; find_tab = C-g M-j
+; other_pane = F6 M-o
+; tab_1 = M-1
+; tab_2 = M-2
+; tab_3 = M-3
+; tab_4 = M-4
+; tab_5 = M-5
+; tab_6 = M-6
+; tab_7 = M-7
+; tab_8 = M-8
+; tab_9 = M-9
+; tab_10 = M-0
+; scroll_up = PgUp
+; scroll_down = PgDn
 ; toggle_nicklist = C-l M-l F2
 ; toggle_topic = C-t M-t
+; toggle_mouse = F3
+; keys = F1 M-k
 ; lock = M-s
+; detach = M-d C-z
+; quit = M-q
