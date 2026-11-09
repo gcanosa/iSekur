@@ -73,6 +73,9 @@ std::string mirc_strip(const std::string& s);
 std::string mirc_prefix(const std::string& s, size_t n);  // up to the n-th visible character, codes kept
 uint32_t utf8_next(const std::string& s, size_t& i);  // invalid bytes -> Latin-1
 void utf8_put(std::string& out, uint32_t cp);
+bool legacy_charset_ok(const std::string& name);  // an iconv name iSekur can convert (ASCII-compatible)
+std::string from_legacy(const std::string& in, const std::string& cs);  // the network's bytes to UTF-8
+std::string to_legacy(const std::string& in, const std::string& cs);    // UTF-8 to the network's bytes
 
 // What iSekur was doing, for isekur.crash (main.cpp): the last 32 things that happened (a command's name, a webchat
 // message's type, a tab closed, a lock...: never arguments or text), the main loop's stage, and what the last frame
@@ -190,6 +193,7 @@ struct ServerCfg {
     int port = 6667;
     bool tls = false, tls_verify = true, autoconnect = true, auto_identify = true;  // auto_identify: SASL / NickServ on connect
     std::string nick, altnick, user, realname, pass;
+    std::string encoding;  // legacy charset of this network (iconv name), "" = UTF-8
     std::string sasl_user, sasl_pass, sasl_mech, cert, key, nickserv_pass;
     std::vector<std::string> autojoin;  // "#chan" or "#chan key"
 };

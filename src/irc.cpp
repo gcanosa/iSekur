@@ -113,11 +113,12 @@ time_t parse_server_time(const std::string& iso) {
 }
 
 // ---- Server helpers --------------------------------------------------------
-static std::string wire(const std::string& line, bool utf8only) {
+static std::string wire(const std::string& line, bool utf8only, const std::string& enc) {
     std::string l = line;
     for (auto& c : l)
         if (c == '\r' || c == '\n' || c == '\0') c = ' ';  // no command injection
-    if (utf8only) {  // UTF8ONLY in 005: invalid bytes (a Latin-1 paste or terminal) go out as their Latin-1 letters
+    if (!enc.empty()) l = to_legacy(l, enc);  // a legacy network: its bytes; UTF8ONLY is its server's business
+    else if (utf8only) {  // UTF8ONLY in 005: invalid bytes (a Latin-1 paste or terminal) go out as their Latin-1 letters
         std::string u;  // ponytail: a re-encoded byte grows to two, past 512 only for a line already at the limit
         for (size_t i = 0; i < l.size();) utf8_put(u, utf8_next(l, i));
         l.swap(u);
@@ -128,7 +129,7 @@ static std::string wire(const std::string& line, bool utf8only) {
 void Server::send_now(const std::string& line) {
     if (raw_hook) raw_hook("\xe2\x86\x92", line);  // →
     if (tap) tap(this, true, line);
-    conn.out += wire(line, isupport.count("UTF8ONLY"));
+    conn.out += wire(line, isupport.count("UTF8ONLY"), cfg.encoding);
 }
 
 void Server::send(const std::string& line) {
@@ -143,7 +144,7 @@ void Server::send(const std::string& line) {
     if (state != SS::CONNECTED || flood_ms <= 0) { send_now(l); return; }
     if (raw_hook) raw_hook("\xe2\x86\x92", l);  // ponytail: logged when queued, not when the flood limit lets it out
     if (tap) tap(this, true, l);
-    sendq.push_back(wire(l, isupport.count("UTF8ONLY")));
+    sendq.push_back(wire(l, isupport.count("UTF8ONLY"), cfg.encoding));
     drain(now_ms());
 }
 
@@ -321,6 +322,10 @@ void Core::connect(Server* s) {
         disconnect(s, s->conn.err);
         return;
     }
+    if (!s->cfg.encoding.empty() && !legacy_charset_ok(s->cfg.encoding)) {
+        print(s->status, LK::ERROR, "encoding " + s->cfg.encoding + " isn't one iSekur can convert: UTF-8 instead");
+        s->cfg.encoding.clear();
+    }
     s->state = SS::CONNECTING;
     if (s->twitch()) twitch_login(s);  // twitch.cpp
     else {
@@ -365,6 +370,7 @@ void Core::on_readable(Server* s, short rev) {
         line.assign(s->inbuf, at, nl - at);
         at = nl + 1;
         while (!line.empty() && line.back() == '\r') line.pop_back();  // every CR: UnrealIRCd ends labeled replies with \r\r\n
+        if (!s->cfg.encoding.empty()) line = from_legacy(line, s->cfg.encoding);  // UTF-8 from here on
         Msg m;
         s->last_rx = time(nullptr);
         if (s->raw_hook) s->raw_hook("\xe2\x86\x90", line);  // ←

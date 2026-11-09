@@ -38,6 +38,7 @@ else
     endif
   else
     PAM_LIBS := -framework IOKit -framework CoreFoundation  # /statusbar bat
+    ICONV_LIBS := -liconv  # legacy charsets (config.cpp); glibc has iconv in libc
   endif
   # \043 is "#": make 4.x keeps a backslash in '\#', so cpp got "\#include", saw no include and always said yes
   ifeq ($(shell printf '\043include <security/pam_appl.h>\n' | $(CXX) -E -x c++ - >/dev/null 2>&1 && echo yes),yes)
@@ -57,7 +58,7 @@ COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-stro
             -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Ivendor/libvterm/include -Isrc -Ibuild $(OPENSSL_CFLAGS)
 CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
-LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS)
+LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS) $(ICONV_LIBS)
 
 SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/bnc.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp src/plugin.cpp src/logs.cpp src/fifo.cpp
 VTERM := $(wildcard vendor/libvterm/src/*.c)

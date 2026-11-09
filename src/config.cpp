@@ -3,6 +3,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <fstream>
+#include <iconv.h>
 #include <sstream>
 #include <sys/time.h>
 #include <sys/stat.h>
@@ -457,6 +458,62 @@ void utf8_put(std::string& o, uint32_t cp) {
     else
         o += (char)(0xf0 | cp >> 18), o += (char)(0x80 | (cp >> 12 & 0x3f)),
             o += (char)(0x80 | (cp >> 6 & 0x3f)), o += (char)(0x80 | (cp & 0x3f));
+}
+
+// ---- legacy charsets: [server.x] encoding = iso-8859-9 etc. Inside iSekur it is always UTF-8; only the wire changes
+static iconv_t charset_cd(const char* from, const char* to) {
+    static std::map<std::string, iconv_t> open;  // ponytail: each pair opened once, kept for the process
+    std::string k = std::string(from) + ">" + to;
+    auto it = open.find(k);
+    if (it != open.end()) return it->second;
+    return open[k] = iconv_open(to, from);
+}
+
+bool legacy_charset_ok(const std::string& name) {
+    // it has to be ASCII-compatible: UTF-16 and friends would turn every IRC line into wide characters
+    const std::string probe = "\r\n :!#Aa";
+    iconv_t cd = charset_cd("UTF-8", name.c_str());
+    return cd != (iconv_t)-1 && to_legacy(probe, name) == probe;
+}
+
+// the network's bytes, decoded to UTF-8: what doesn't decode becomes '?'
+std::string from_legacy(const std::string& in, const std::string& cs) {
+    iconv_t cd = charset_cd(cs.c_str(), "UTF-8");
+    if (cd == (iconv_t)-1) return in;
+    std::string out, src = in;
+    char* ip = &src[0];
+    size_t il = src.size();
+    while (il) {
+        char buf[512];
+        char* op = buf;
+        size_t ol = sizeof buf;
+        size_t r = iconv(cd, &ip, &il, &op, &ol);
+        out.append(buf, (size_t)(op - buf));
+        if (r != (size_t)-1 || errno == E2BIG) continue;
+        if (errno != EILSEQ && errno != EINVAL) break;  // not something a retry can fix
+        out += '?', ip++, il--;
+    }
+    return out;
+}
+
+// UTF-8 to the network's bytes, a character at a time: one it can't write becomes '?'
+std::string to_legacy(const std::string& in, const std::string& cs) {
+    iconv_t cd = charset_cd("UTF-8", cs.c_str());
+    if (cd == (iconv_t)-1) return in;
+    std::string out;
+    for (size_t i = 0; i < in.size();) {
+        size_t j = i;
+        utf8_next(in, j);
+        std::string ch = in.substr(i, j - i);
+        char buf[16];
+        char* ip = &ch[0];
+        char* op = buf;
+        size_t il = ch.size(), ol = sizeof buf;
+        if (iconv(cd, &ip, &il, &op, &ol) == (size_t)-1) out += '?';
+        else out.append(buf, (size_t)(op - buf));
+        i = j;
+    }
+    return out;
 }
 
 // ---- mIRC formatting -------------------------------------------------------

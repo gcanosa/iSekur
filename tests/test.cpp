@@ -77,6 +77,11 @@ int main() {
     assert(utf8_next("\xe9x", i) == 0xe9 && i == 1);  // Latin-1 fallback
     i = 0;
     assert(utf8_next("\xc0\x80", i) == 0xc0);          // overlong rejected
+    // legacy charsets (a network's encoding): decoded to UTF-8, encoded back, unmappable -> ?
+    assert(from_legacy("\xdd\xfe\x41", "iso-8859-9") == "\xc4\xb0\xc5\x9f" "A");  // 0xDD = I-dot, 0xFE = s-cedilla
+    assert(to_legacy("\xc5\x9f\xc4\xb1", "iso-8859-9") == "\xfe\xfd");              // and back: ş ı
+    assert(to_legacy("\xe2\x82\xac", "iso-8859-9") == "?" && from_legacy("\xe9", "iso-8859-1") == "\xc3\xa9");
+    assert(legacy_charset_ok("iso-8859-9") && legacy_charset_ok("windows-1252") && !legacy_charset_ok("utf-16") && !legacy_charset_ok("nonsense"));
 
     Ini ini = ini_parse("# c\n[a]\nk = v ; note\nc = #chan\n[b]\nx=1\n");
     assert(ini["a"]["k"] == "v" && ini["a"]["c"] == "#chan" && ini_get(ini, "b", "x") == "1");

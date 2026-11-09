@@ -369,7 +369,7 @@ std::vector<Core::Setting> Core::settings() const {
 // it (opt() reads it that way). A key added here belongs in iSekur.conf.example too (the tests check both ways)
 static const std::vector<KeyInfo> KEYS = {
     {"name", "Connection", 'n'}, {"host", "Connection", 'n'}, {"port", "Connection", 'n'}, {"tls", "Connection", 'n'},
-    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'},
+    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'},
     {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
@@ -480,7 +480,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         std::map<std::string, std::string> uses = {
             {"name", d.name}, {"host", d.host}, {"port", std::to_string(d.port)}, {"tls", d.tls ? "true" : "false"},
             {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"},
-            {"auto_identify", d.auto_identify ? "true" : "false"}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}};
+            {"auto_identify", d.auto_identify ? "true" : "false"}, {"encoding", d.encoding.empty() ? "utf-8" : d.encoding}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}};
         for (auto& k : KEYS) {
             if (k.scope == 'g') continue;
             auto u = uses.find(k.key);
@@ -578,6 +578,8 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.tls_verify = ini_get(cfg, sec, "tls_verify", "true") == "true";
     sc.autoconnect = ini_get(cfg, sec, "autoconnect", "true") == "true";
     sc.auto_identify = ini_get(cfg, sec, "auto_identify", "true") == "true";
+    sc.encoding = ini_get(cfg, sec, "encoding");
+    if (sc.encoding == "utf-8" || sc.encoding == "UTF-8") sc.encoding.clear();  // the default, spelled out
     sc.nick = ini_get(cfg, sec, "nick", gnick);
     sc.altnick = ini_get(cfg, sec, "altnick", ini_get(cfg, "general", "altnick", sc.nick + "_"));
     sc.user = ini_get(cfg, sec, "user", ini_get(cfg, "general", "user", sc.nick));
