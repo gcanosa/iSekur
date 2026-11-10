@@ -461,11 +461,11 @@ void utf8_put(std::string& o, uint32_t cp) {
 }
 
 // ---- legacy charsets: [server.x] encoding = iso-8859-9 etc. Inside iSekur it is always UTF-8; only the wire changes
-static iconv_t charset_cd(const char* from, const char* to) {
+static iconv_t charset_cd(const char* from, const char* to, const char* tag = "") {
     static struct Cds : std::map<std::string, iconv_t> {  // ponytail: each pair opened once, closed at exit
         ~Cds() { for (auto& kv : *this) if (kv.second != (iconv_t)-1) iconv_close(kv.second); }
     } open;
-    std::string k = std::string(from) + ">" + to;
+    std::string k = std::string(from) + ">" + to + tag;
     auto it = open.find(k);
     if (it != open.end()) return it->second;
     return open[k] = iconv_open(to, from);
@@ -499,6 +499,21 @@ std::string from_legacy(const std::string& in, const std::string& cs) {
     return out;
 }
 
+// whether cs can write ch (one UTF-8 character) as itself: converted alone from the initial state, it decodes back to ch.
+// The return code can't say it: FreeBSD writes the euro sign as "EUR" in ISO-8859-9 and calls that a clean conversion
+static bool writes_itself(const std::string& ch, const std::string& cs) {
+    iconv_t cd = charset_cd("UTF-8", cs.c_str(), " probe");  // its own handle: the line's handle keeps its shift state
+    if (cd == (iconv_t)-1) return false;
+    iconv(cd, nullptr, nullptr, nullptr, nullptr);
+    std::string c = ch;
+    char buf[32];
+    char* ip = &c[0];
+    char* op = buf;
+    size_t il = c.size(), ol = sizeof buf;
+    if (iconv(cd, &ip, &il, &op, &ol) != 0 || iconv(cd, nullptr, nullptr, &op, &ol) == (size_t)-1) return false;
+    return from_legacy(std::string(buf, (size_t)(op - buf)), cs) == ch;
+}
+
 // UTF-8 to the network's bytes, a character at a time: one it can't write becomes '?'
 std::string to_legacy(const std::string& in, const std::string& cs) {
     iconv_t cd = charset_cd("UTF-8", cs.c_str());
@@ -513,7 +528,9 @@ std::string to_legacy(const std::string& in, const std::string& cs) {
         char* ip = &ch[0];
         char* op = buf;
         size_t il = ch.size(), ol = sizeof buf;
-        if (iconv(cd, &ip, &il, &op, &ol) != 0) out += '?';  // -1, or (FreeBSD) the count of characters it substituted
+        bool ascii = ch.size() == 1 && (unsigned char)ch[0] < 0x80;  // legacy_charset_ok: the charset writes ASCII as is
+        if (!ascii && !writes_itself(ch, cs)) out += '?';  // checked first: a converted and dropped character could move the shift state
+        else if (iconv(cd, &ip, &il, &op, &ol) != 0) out += '?';
         else out.append(buf, (size_t)(op - buf));
         i = j;
     }
