@@ -570,6 +570,7 @@ struct Core {
     int fifo_fd = -1;
     std::string fifo_path, fifo_buf;
     bool fifo_made = false;  // iSekur created the pipe: it removes it at exit
+    bool fifo_skip = false;  // in a line too long to run: the rest of it, up to its newline, goes too
     void fifo_open();   // at start, from [general] fifo
     void fifo_close();  // at exit, or before a reopen
     void fifo_poll(const std::vector<pollfd>& fds, size_t k);  // its fd at fds[k]

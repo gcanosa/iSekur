@@ -17,7 +17,10 @@ static const size_t MAX_FIFO_LINE = 8192;  // a longer line with no newline is d
 
 // no fifo_path: the main config gets ~/.config/isekur/fifo; any other config gets <name>.fifo beside it, like its socket
 static std::string default_fifo(const std::string& cfg) {
-    if (cfg.empty() || cfg == default_config_path()) return "~/.config/isekur/fifo";
+    if (cfg.empty() || cfg == default_config_path()) {  // beside it, so $XDG_CONFIG_HOME moves the pipe too
+        std::string d = default_config_path();
+        return d.substr(0, d.rfind('/') + 1) + "fifo";
+    }
     return cfg_side(cfg, "fifo");
 }
 
@@ -71,9 +74,9 @@ void Core::fifo_open() {
     struct stat st;
     if (::stat(p.c_str(), &st) == 0) {
         if (!S_ISFIFO(st.st_mode)) { print(bufs.front().get(), LK::ERROR, "FIFO: " + p + " exists and is not a named pipe"); return; }
-        if (st.st_mode & 077) ::chmod(p.c_str(), 0600);  // only you can write it
     } else if (::mkfifo(p.c_str(), 0600) == 0) fifo_made = true;
     else { print(bufs.front().get(), LK::ERROR, "FIFO: cannot create " + p + ": " + strerror(errno)); return; }
+    fifo_path = p;  // fifo_close removes what fifo_made says, from here on
     // read and write at once: a writer closing the pipe is never an end of file, so poll() never spins
     fifo_fd = ::open(p.c_str(), O_RDWR | O_NONBLOCK | O_CLOEXEC);
     if (fifo_fd < 0) {
@@ -81,14 +84,20 @@ void Core::fifo_open() {
         fifo_close();
         return;
     }
-    fifo_path = p;
+    // checked on what was opened, not on the name: whoever owns a pipe (a fifo_path in /tmp) could write your commands to it
+    if (fstat(fifo_fd, &st) != 0 || !S_ISFIFO(st.st_mode) || st.st_uid != geteuid()) {
+        print(bufs.front().get(), LK::ERROR, "FIFO: " + p + " isn't a named pipe of yours");
+        fifo_close();
+        return;
+    }
+    if (st.st_mode & 077) ::chmod(p.c_str(), 0600);  // only you can write it
     print(bufs.front().get(), LK::INFO, "FIFO: " + p + " (a line written to it runs here)");
 }
 
 void Core::fifo_close() {
     if (fifo_fd >= 0) ::close(fifo_fd), fifo_fd = -1;
     if (fifo_made) ::unlink(fifo_path.c_str()), fifo_made = false;  // one iSekur created: gone at exit
-    fifo_path.clear(), fifo_buf.clear();
+    fifo_path.clear(), fifo_buf.clear(), fifo_skip = false;
 }
 
 // the bytes poll() marked, one line at a time
@@ -102,9 +111,14 @@ void Core::fifo_poll(const std::vector<pollfd>& fds, size_t k) {
         while ((nl = fifo_buf.find('\n')) != std::string::npos) {
             std::string l = fifo_buf.substr(0, nl);
             fifo_buf.erase(0, nl + 1);
-            fifo_line(l);
+            bool drop = fifo_skip || l.size() > MAX_FIFO_LINE;
+            fifo_skip = false;
+            if (!drop) fifo_line(l);  // may close the pipe: fifo_buf is empty then, and read() fails
         }
-        if (fifo_buf.size() > MAX_FIFO_LINE) fifo_buf.clear();
+        if (fifo_buf.size() > MAX_FIFO_LINE) {
+            fifo_buf.clear(), fifo_skip = true;
+            print(bufs.front().get(), LK::ERROR, "FIFO: a line over " + std::to_string(MAX_FIFO_LINE) + " bytes was ignored");
+        }
     }
 }
 
@@ -113,7 +127,7 @@ void Core::fifo_line(const std::string& raw) {
     if (!l.empty() && l.back() == '\r') l.pop_back();
     if (l.empty()) return;
     if (locked) { print(bufs.front().get(), LK::ERROR, "FIFO: locked, a line was ignored"); return; }
-    Buffer* act = active && index_of(active) >= 0 ? active : bufs.front().get();
+    Buffer* act = nullptr;  // the active tab, looked up for each line: the one before may have closed it
     // the tab named before the first |: "net/#chan", "net" (its status tab), "#chan" (on the active network), "N" (tab N)
     auto target = [&](const std::string& t) -> Buffer* {
         if (t.size() < 7 && std::all_of(t.begin(), t.end(), [](unsigned char ch) { return isdigit(ch); })) {
@@ -136,6 +150,7 @@ void Core::fifo_line(const std::string& raw) {
     // never sent as chat to the active tab (a wrong network name would otherwise post the whole line)
     for (auto& x : fifo_lines(l)) {  // escapes decoded; each resulting line is routed and runs
         if (x.empty()) continue;
+        act = active && index_of(active) >= 0 ? active : bufs.front().get();
         Buffer* b = act;
         std::string text = x;
         size_t bar = x.find('|');

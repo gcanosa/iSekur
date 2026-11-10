@@ -579,7 +579,8 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.autoconnect = ini_get(cfg, sec, "autoconnect", "true") == "true";
     sc.auto_identify = ini_get(cfg, sec, "auto_identify", "true") == "true";
     sc.encoding = ini_get(cfg, sec, "encoding");
-    if (sc.encoding == "utf-8" || sc.encoding == "UTF-8") sc.encoding.clear();  // the default, spelled out
+    std::string enc = sc.encoding;
+    if (to_lower(enc) == "utf-8" || enc == "utf8") sc.encoding.clear();  // the default, spelled out
     sc.nick = ini_get(cfg, sec, "nick", gnick);
     sc.altnick = ini_get(cfg, sec, "altnick", ini_get(cfg, "general", "altnick", sc.nick + "_"));
     sc.user = ini_get(cfg, sec, "user", ini_get(cfg, "general", "user", sc.nick));

@@ -462,7 +462,9 @@ void utf8_put(std::string& o, uint32_t cp) {
 
 // ---- legacy charsets: [server.x] encoding = iso-8859-9 etc. Inside iSekur it is always UTF-8; only the wire changes
 static iconv_t charset_cd(const char* from, const char* to) {
-    static std::map<std::string, iconv_t> open;  // ponytail: each pair opened once, kept for the process
+    static struct Cds : std::map<std::string, iconv_t> {  // ponytail: each pair opened once, closed at exit
+        ~Cds() { for (auto& kv : *this) if (kv.second != (iconv_t)-1) iconv_close(kv.second); }
+    } open;
     std::string k = std::string(from) + ">" + to;
     auto it = open.find(k);
     if (it != open.end()) return it->second;
@@ -480,6 +482,7 @@ bool legacy_charset_ok(const std::string& name) {
 std::string from_legacy(const std::string& in, const std::string& cs) {
     iconv_t cd = charset_cd(cs.c_str(), "UTF-8");
     if (cd == (iconv_t)-1) return in;
+    iconv(cd, nullptr, nullptr, nullptr, nullptr);  // a stateful charset (ISO-2022-JP): every line starts in its initial state
     std::string out, src = in;
     char* ip = &src[0];
     size_t il = src.size();
@@ -500,6 +503,7 @@ std::string from_legacy(const std::string& in, const std::string& cs) {
 std::string to_legacy(const std::string& in, const std::string& cs) {
     iconv_t cd = charset_cd("UTF-8", cs.c_str());
     if (cd == (iconv_t)-1) return in;
+    iconv(cd, nullptr, nullptr, nullptr, nullptr);
     std::string out;
     for (size_t i = 0; i < in.size();) {
         size_t j = i;
@@ -509,10 +513,14 @@ std::string to_legacy(const std::string& in, const std::string& cs) {
         char* ip = &ch[0];
         char* op = buf;
         size_t il = ch.size(), ol = sizeof buf;
-        if (iconv(cd, &ip, &il, &op, &ol) == (size_t)-1) out += '?';
+        if (iconv(cd, &ip, &il, &op, &ol) != 0) out += '?';  // -1, or (FreeBSD) the count of characters it substituted
         else out.append(buf, (size_t)(op - buf));
         i = j;
     }
+    char end[16];  // a stateful charset goes back to its initial state, or the next line's ASCII is read as Kanji
+    char* op = end;
+    size_t ol = sizeof end;
+    if (iconv(cd, nullptr, nullptr, &op, &ol) != (size_t)-1) out.append(end, (size_t)(op - end));
     return out;
 }
 

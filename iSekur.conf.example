@@ -81,7 +81,7 @@ exec_web     = off
 # \\ a backslash, \b bold \i italics \u underline \s strike \m mono \v reverse \o reset.
 # "net/#chan|text" or "net|/cmd" or "3|text" (tab 3) sends to that tab; no tab, the active one.
 # Not on native Windows (no named pipes).
-# fifo_path empty: <name>.fifo beside this config (isekur.conf: ~/.config/isekur/fifo),
+# fifo_path empty: <name>.fifo beside this config (isekur.conf: "fifo" in its folder),
 # so each iSekur running from its own config has its own pipe. fifo_path moves it.
 fifo         = off
 fifo_path    =

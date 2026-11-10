@@ -179,7 +179,8 @@ iSekur, so your terminal, the webchat and the other clients see it too. One user
    Clients can log in with a certificate instead of the password (SASL EXTERNAL, over TLS): put the
    certificate's SHA-256 in `/set bnc.certfp` (or `[bnc] certfp`), comma-separated for several. Get it with
    `openssl x509 -noout -fingerprint -sha256 -in client.pem`. Empty turns it off. Clients without a
-   matching certificate still log in with the password.
+   matching certificate still log in with the password. Their USER line can still name the network
+   (`anything/sekurnet`).
 
 3. Start it:
 
@@ -300,7 +301,7 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
 
-Shell commands: `/exec ls -la` (alias `/sh`) streams the output into the cmd tab without blocking
+Shell commands: `/exec ls -la` (alias `/sh`, in bash or zsh: your login shell when it is one of them) streams the output into the cmd tab without blocking
 the chat; `/exec -o uptime` says it in the current channel or query (longer than `paste_confirm`
 lines needs `-y`; `paste_confirm = 0` sends any length). Commands are killed after `exec_timeout` seconds; the webchat can't run them
 unless `exec_web = on`.
@@ -377,7 +378,7 @@ you're back), preview, proxy (the networks you pick through a SOCKS4/SOCKS5 or H
 `/plugin set proxy@sekurnet url socks5://127.0.0.1:9050`, the others stay direct), push, seen (`/seen nick`, and `!seen` in
 channels you pick), keepnick (your nick back once it's free), remind (`/remind 10m text`, `/remind 18:30 text`), pmguard
 (private messages from people you haven't let through are held: `/pmguard allow nick`), pasteguard (a paste of
-several lines becomes a pastebin link) and screensaver (after some idle minutes the terminal and the webchat show digital
+several lines becomes a pastebin link), autosort (the tabs kept by network, then by name), tts (messages read aloud by this machine's speech engine or the webchat's browser voice) and screensaver (after some idle minutes the terminal and the webchat show digital
 rain, floating particles or drifting stars until a key, click or mouse move; with its `lock` on, waking asks for the lock
 password; never while nobody is at a terminal or the webchat). Auto-away is a plugin now:
 `/plugin install autoaway` moves your old `auto_away`, `auto_away_idle`, `away_message` and
@@ -394,6 +395,14 @@ picks up an edited file. Writing one: [WRITING.md](https://github.com/gcanosa/is
 Type `/` and the matching commands show up above the input line; Tab completes them.
 `/about` shows the version and where to find iSekur.
 
+## Legacy charsets
+
+A network that isn't on UTF-8 yet: `/set server.sekurnet.encoding iso-8859-9` (or `encoding =` in its
+`[server.x]`), any name `iconv` knows, then reconnect. Inside iSekur everything stays UTF-8; only that
+network's bytes change, and a character its charset can't write goes out as `?`. Empty means UTF-8.
+
+`/servers sekurnet` (or **Edit network...** in a server tab's menu) opens the settings at that network.
+
 ## FIFO: send lines from a shell or script
 
 With `/set fifo on`, iSekur creates a named pipe and reads it. Every line written to the pipe runs as if
@@ -402,7 +411,7 @@ you had typed it. Like weechat's fifo.
     /set fifo on                                        # creates the pipe
     printf '%s\n' '/msg bob hi' > ~/.config/isekur/fifo  # bob gets "hi"
 
-`/set fifo off` removes the pipe. It is owner-only (0600), ignored while iSekur is locked, and removed at exit.
+`/set fifo off` removes the pipe. It is owner-only (0600; a pipe another user made is refused), ignored while iSekur is locked, and removed at exit.
 POSIX only (Linux, macOS, BSDs, Cygwin): native Windows has no named pipes.
 
 ### Which pipe
@@ -411,7 +420,7 @@ Each running iSekur has its own pipe, so you pick one by writing to its path.
 
 | Config | Pipe (with `fifo_path` empty) |
 |---|---|
-| `isekur.conf` (the default) | `~/.config/isekur/fifo` |
+| `isekur.conf` (the default) | `~/.config/isekur/fifo` (in `$XDG_CONFIG_HOME/isekur` when that is set) |
 | `-c work.conf` | `work.fifo` beside it |
 
 Set `fifo_path` in the config to put the pipe anywhere else; `/set fifo_path` moves it while it's on.

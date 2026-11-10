@@ -76,7 +76,9 @@ file in the config's folder is the clients' MOTD, read at each login. It needs
 and
 .BR password_hash ;
 .B /bnc password
-sets the hash from inside iSekur.
+sets the hash from inside iSekur. A client whose certificate's SHA-256 is in
+.B [bnc] certfp
+logs in with SASL EXTERNAL and no password (TLS only).
 .B \-\-attach
 still works. While running,
 .B /bnc start
@@ -228,6 +230,14 @@ Other commands are sent to the server unchanged.
 lists them in the client;
 .BI /help " command"
 explains one, with examples.
+.SH LEGACY CHARSETS
+A network not yet on UTF-8:
+.B [server.sekurnet] encoding = iso-8859-9
+(any
+.BR iconv (1)
+name), from its next connect. Inside iSekur everything stays UTF-8; a character the
+charset can't write goes out as
+.BR ? .
 .SH FIFO
 With
 .B fifo = on

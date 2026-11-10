@@ -81,6 +81,10 @@ int main() {
     assert(from_legacy("\xdd\xfe\x41", "iso-8859-9") == "\xc4\xb0\xc5\x9f" "A");  // 0xDD = I-dot, 0xFE = s-cedilla
     assert(to_legacy("\xc5\x9f\xc4\xb1", "iso-8859-9") == "\xfe\xfd");              // and back: ş ı
     assert(to_legacy("\xe2\x82\xac", "iso-8859-9") == "?" && from_legacy("\xe9", "iso-8859-1") == "\xc3\xa9");
+    if (legacy_charset_ok("iso-2022-jp")) {  // a stateful charset: each line ends back in ASCII, or the next one is read as Kanji
+        std::string jp = to_legacy("\xe3\x81\x82", "iso-2022-jp");
+        assert(jp.size() > 3 && jp.compare(jp.size() - 3, 3, "\x1b(B") == 0);
+    }
     assert(legacy_charset_ok("iso-8859-9") && legacy_charset_ok("windows-1252") && !legacy_charset_ok("utf-16") && !legacy_charset_ok("nonsense"));
 
     Ini ini = ini_parse("# c\n[a]\nk = v ; note\nc = #chan\n[b]\nx=1\n");
@@ -308,6 +312,12 @@ int main() {
         size_t n = core.bufs.size();
         core.exec(gone, "/close\n/help /join\n/help bogus");
         assert(core.bufs.size() == n - 1 && core.index_of(gone) < 0);
+        Buffer* was = core.active;  // the same through the FIFO: an escaped \n after /close runs in the tab active then
+        Buffer* fgone = core.open(nullptr, BT::SHELL, "fgone");
+        core.active = fgone;
+        core.fifo_line("/close\\n/help /join");
+        assert(core.index_of(fgone) < 0);
+        core.active = was && core.index_of(was) >= 0 ? was : core.bufs.front().get();
     }
     core.from_web = true;
     core.exec(home, "/attach vps");
@@ -1788,6 +1798,13 @@ int main() {
                               "CAP REQ :sasl\r\nAUTHENTICATE EXTERNAL\r\nAUTHENTICATE +\r\nCAP END\r\nNICK x\r\nUSER u 0 * :r\r\n", " 903 ");
         assert(ok.find("CAP * ACK :sasl") != std::string::npos && ok.find("AUTHENTICATE +") != std::string::npos && ok.find(" 903 * ") != std::string::npos);
         assert(ok.find(" 904 ") == std::string::npos && bnc.attached());
+        assert(ok.find(" 900 ") != std::string::npos);
+        // the certificate is the login: a client whose USER isn't [bnc] user gets in as it
+        std::string who = talk((dir + "/cl.crt").c_str(),
+                               "CAP REQ :sasl\r\nAUTHENTICATE EXTERNAL\r\nAUTHENTICATE +\r\nCAP END\r\nNICK z\r\nUSER somebody 0 * :r\r\n", " 001 ");
+        assert(who.find(" 001 ") != std::string::npos && who.find(" 464 ") == std::string::npos);
+        std::string old = talk(nullptr, "CAP LS\r\n", "sasl");  // no 302: a cap has no value
+        assert(old.find(" sasl") != std::string::npos && old.find("sasl=") == std::string::npos);
         std::string bad = talk((dir + "/other.crt").c_str(),
                                "AUTHENTICATE EXTERNAL\r\nAUTHENTICATE +\r\nNICK y\r\n", " 904 ");
         assert(bad.find(" 904 ") != std::string::npos && bad.find(" 903 ") == std::string::npos);
@@ -1841,6 +1858,14 @@ int main() {
         pump();
         assert(core.cfg["general"]["nick_width"] == "14");  // locked: dropped
         core.locked = false;
+        std::string chunk(4000, 'x');  // over the limit: all of it goes, the end of the line too, and the next line still runs
+        for (int i = 0; i < 3; i++) put(chunk.c_str()), pump();
+        put("/set nick_width 16\n");
+        pump();
+        assert(core.cfg["general"]["nick_width"] == "14");
+        put("/set nick_width 17\n");
+        pump();
+        assert(core.cfg["general"]["nick_width"] == "17");
         close(w);
         core.exec(home, "/set fifo off");  // off: the pipe iSekur made is gone
         assert(core.fifo_fd < 0 && access(p.c_str(), F_OK) != 0);
@@ -1856,6 +1881,16 @@ int main() {
             assert(core.fifo_fd >= 0 && core.fifo_path == std::string(d) + "/.config/isekur/fifo");
             core.exec(home, "/set fifo off");
             assert(core.fifo_fd < 0);
+            const char* oldxdg = getenv("XDG_CONFIG_HOME");  // $XDG_CONFIG_HOME moves the config, so the pipe with it
+            std::string ox = oldxdg ? oldxdg : "";
+            bool hadx = oldxdg != nullptr;
+            setenv("XDG_CONFIG_HOME", (std::string(d) + "/xdg").c_str(), 1);
+            std::filesystem::create_directories(std::string(d) + "/xdg/isekur");
+            core.cfg_path = default_config_path();
+            core.exec(home, "/set fifo on");
+            assert(core.fifo_fd >= 0 && core.fifo_path == std::string(d) + "/xdg/isekur/fifo");
+            core.exec(home, "/set fifo off");
+            if (hadx) setenv("XDG_CONFIG_HOME", ox.c_str(), 1); else unsetenv("XDG_CONFIG_HOME");
             core.cfg_path = keep;
             setenv("HOME", oh.c_str(), 1);
         }
@@ -2290,6 +2325,7 @@ int main() {
         FILE* o = fopen((dir + "/plugins/spk.lua").c_str(), "w");
         fputs(R"LUA(
 isekur.command("spk", "", function()
+  print(select(2, pcall(isekur.run, {"festival"}, "(system)")))
   print(isekur.platform() ~= "", isekur.which("sh") ~= nil, isekur.which("no-such-program-xyz") == nil, isekur.which("a/b") == nil)
   print(select(2, pcall(isekur.run, {"sh", "-c", "true"}, "")))
   print(select(2, pcall(isekur.run, {}, "")))
@@ -2302,6 +2338,7 @@ isekur.command("sp", "", function() print(isekur.run({"espeak", "-v", "x"}, "hel
         sp.exec(ph, "/plugin enable spk");
         sp.exec(ph, "/spk");
         auto out = [&](size_t back) { return ph->lines[ph->lines.size() - back].text; };
+        assert(out(5).find("festival runs only as") != std::string::npos);
         assert(out(4) == "true true true true");
         assert(out(3).find("sh isn't a speech engine") != std::string::npos);
         assert(out(2).find("(nothing) isn't a speech engine") != std::string::npos);

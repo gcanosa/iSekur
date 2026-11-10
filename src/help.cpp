@@ -41,11 +41,11 @@ static const std::vector<CmdInfo> CMDS = {
     {"connect", "Connection", "[name]", "Reconnect a configured server",
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect sekurnet"}},
-    {"servers", "Connection", "", "Manage your servers",
-     "The terminal: the settings window at the first server, where c connects the selected one, r renames it, x deletes "
+    {"servers", "Connection", "[name]", "Manage your servers",
+     "The terminal: the settings window at the first server (or the one you name; Edit network in a server tab's menu does that), where c connects the selected one, r renames it, x deletes "
      "it (it asks first) and n adds one; its keys edit it. The webchat: the Servers window (the server-rack button). Elsewhere it "
-     "lists them.",
-     {"/servers"}},
+     "lists them. A network still on a legacy charset: /set server.sekurnet.encoding iso-8859-9 (any iconv name), used from its next connect.",
+     {"/servers", "/servers sekurnet"}},
     {"autoconnect", "Connection", "[on|off]", "Connect this server when iSekur starts",
      "Without arguments, says whether this tab's server connects at startup. on / off change it and write it to "
      "the config at once ([server.<name>] autoconnect). Also in a server tab's right-click menu.",
@@ -339,7 +339,7 @@ static const std::vector<CmdInfo> CMDS = {
 
     // ---- Session
     {"exec", "Session", "[-o] [-y] command", "Run a shell command",
-     "The output shows up in the cmd tab as it comes, without blocking the chat. With -o it is "
+     "It runs in bash or zsh (your login shell when it is one of them). The output shows up in the cmd tab as it comes, without blocking the chat. With -o it is "
      "said in the tab you typed it in once the command ends, unless it is longer than "
      "paste_confirm lines (0: no limit; -y sends it anyway). Commands are killed after exec_timeout "
      "seconds (default 30) or 1000 lines. /exec alone lists the running ones. Off in the "
@@ -423,7 +423,7 @@ static const std::vector<CmdInfo> CMDS = {
      "(networks), picks (use name) or adds one (server irc.sekurnet.org 6697 -tls -name sekurnet; save keeps it). IRCv3 clients get what they ask for: chathistory (from iSekur's tabs, so they get no "
      "backlog and load their own), message-tags, echo-message, labeled-response, server-time, away, account and host "
      "changes, extended-join, multi-prefix; another iSekur is a full client of this one (/server host 6698 -tls -noverify, "
-     "then its password). A bnc.motd file in the config's folder is their MOTD, read at each login. /bnc alone shows where it listens and who is on; /bnc restart picks up changed "
+     "then its password). A bnc.motd file in the config's folder is their MOTD, read at each login. A client with a certificate whose SHA-256 is in /set bnc.certfp logs in with SASL EXTERNAL, no password (TLS only). /bnc alone shows where it listens and who is on; /bnc restart picks up changed "
      "[bnc] settings; /set bnc.autostart on starts it now and with iSekur (off stops it), and isekur --bnc runs only the BNC in the background.",
      {"/bnc", "/bnc password", "/bnc start", "/bnc restart", "/connect -tls 127.0.0.1 6698 me/sekurnet:secret  (in irssi, to reach it)"}},
     {"detach", "Session", "", "Leave iSekur running in the background",

@@ -249,20 +249,26 @@ static int l_which(lua_State* L) {
 static const char* const SPEAK_PROGS[] = {"say", "spd-say", "espeak-ng", "espeak", "flite", "festival"};
 // isekur.run(argv, text): starts argv (a speech engine, by its name) with text on its stdin, its output dropped.
 // false while the last one still runs (one at a time per plugin): the plugin queues the rest.
-static int l_run(lua_State* L) {
+// < 0: the error is on the Lua stack. l_run raises it, once av and text are gone: a Lua error jumps past destructors
+static int run_speaker(lua_State* L) {
     Plugin* p = self(L);
     luaL_checktype(L, 1, LUA_TTABLE);
+    std::string text = opt_str(L, 2);
     std::vector<std::string> av;
     for (lua_Integer i = 1;; i++) {
         lua_rawgeti(L, 1, i);
         if (lua_isnil(L, -1)) { lua_pop(L, 1); break; }
-        av.push_back(luaL_checkstring(L, -1));
+        if (!lua_isstring(L, -1)) { lua_pushliteral(L, "run: argv holds strings only"); return -1; }
+        av.push_back(lua_tostring(L, -1));
         lua_pop(L, 1);
     }
-    bool ok = !av.empty() && std::any_of(std::begin(SPEAK_PROGS), std::end(SPEAK_PROGS), [&](const char* s) { return av[0] == s; });
-    if (!ok) luaL_error(L, "%s isn't a speech engine", av.empty() ? "(nothing)" : av[0].c_str());
-    std::string text = opt_str(L, 2);
-    if (text.size() > 4096) luaL_error(L, "text too long for an engine");
+    if (av.empty() || !std::any_of(std::begin(SPEAK_PROGS), std::end(SPEAK_PROGS), [&](const char* s) { return av[0] == s; })) {
+        lua_pushfstring(L, "%s isn't a speech engine", av.empty() ? "(nothing)" : av[0].c_str());
+        return -1;
+    }
+    // without --tts festival reads its stdin as Scheme, which can run programs: the text is whatever someone said on IRC
+    if (av[0] == "festival" && (av.size() != 2 || av[1] != "--tts")) { lua_pushliteral(L, "festival runs only as {\"festival\", \"--tts\"}"); return -1; }
+    if (text.size() > 4096) { lua_pushliteral(L, "text too long for an engine"); return -1; }
     if (p->speaker > 0) {
         if (waitpid(p->speaker, nullptr, WNOHANG) == 0) { lua_pushboolean(L, 0); return 1; }
         p->speaker = -1;
@@ -293,6 +299,10 @@ static int l_run(lua_State* L) {
     p->speaker = pid;
     lua_pushboolean(L, 1);
     return 1;
+}
+static int l_run(lua_State* L) {
+    int n = run_speaker(L);
+    return n < 0 ? lua_error(L) : n;
 }
 // isekur.speak_web(text, lang): the webchat says text aloud in the browser (speechSynthesis), in language lang (a code
 // such as "es", "" = the browser's); nothing in the terminal
