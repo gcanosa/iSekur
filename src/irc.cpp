@@ -687,6 +687,7 @@ void Core::handle(Server* s, const Msg& m) {
         // ponytail: IDENTIFY goes out right before the JOINs, so a +r channel can still beat
         // NickServ; SASL has no such race. Wait for the 900/NOTICE if that bites.
         if (s->cfg.auto_identify && !s->cfg.nickserv_pass.empty() && !s->sasl_ok) s->send("PRIVMSG NickServ :IDENTIFY " + s->cfg.nickserv_pass), s->ident_at = time(nullptr);
+        s->join_focus.clear();  // a refused /join from before doesn't make its autojoin take focus
         std::vector<std::string> chans;  // autojoin, then the channel tabs still open (reconnects)
         for (auto& e : s->cfg.autojoin) {
             auto w = split(e, ' ');
@@ -844,7 +845,8 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "JOIN") {
         const std::string& ch = m.p(0);
         if (is_me(m.nick)) {
-            bool fresh = !find(s, ch);  // rejoins after reconnect don't steal focus
+            // only a /join of ours takes focus: autojoin and rejoins open in the background, so typing isn't split across tabs
+            bool fresh = s->join_focus.erase(s->lower(ch)) && !find(s, ch);
             Buffer* b = open(s, BT::CHANNEL, ch);
             b->joined = true;
             b->nicks.clear();

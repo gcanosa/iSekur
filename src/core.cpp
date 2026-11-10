@@ -2113,6 +2113,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string ch = s->is_chan(argv[0]) ? argv[0] : "#" + argv[0];
         if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
         s->send("JOIN " + ch + (argv.size() > 1 ? " " + argv[1] : ""));
+        for (auto& c1 : split(ch, ',')) s->join_focus.insert(s->lower(c1));
         if (argv.size() > 1) s->chan_keys[s->lower(ch)] = argv[1];
         return;
     }

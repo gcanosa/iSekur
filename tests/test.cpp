@@ -580,6 +580,10 @@ int main() {
         assert(sp->activity == 0 && sp->unread == 0);  // on screen in the other pane
         core.select(sp);  // F6, a click, its tab: the panes stay put, the focus moves
         assert(core.active == sp && core.split_buf == sq && core.split_first);
+        feed(":" + ts->nick + "!u@h JOIN #bg");  // autojoin (no /join of ours): opens in the background, typing stays here
+        assert(core.find(ts, "#bg") && core.active == sp);
+        core.close(core.find(ts, "#bg")), sent();
+        core.exec(sp, "/join #new"), sent();
         feed(":" + ts->nick + "!u@h JOIN #new");  // a /join while split: the new channel takes the focused pane, the other stays
         Buffer* nw = core.find(ts, "#new");
         assert(nw && core.active == nw && core.split_buf == sq);
