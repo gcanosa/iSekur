@@ -1468,6 +1468,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
+    if (plugin_depth && (cmd == "exec" || cmd == "sh" || cmd == "shell")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: no programs
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "dcc") { dcc_cmd(b, args); return; }
     if (cmd == "shell") { shell_cmd(b); return; }

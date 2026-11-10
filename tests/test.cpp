@@ -2387,6 +2387,7 @@ isekur.command("ptest", "", function(args, srv, target)
   if args == "opt" then print(isekur.opt("greet"), isekur.opt("loud")) return end
   if args == "store" then isekur.store_set("k", "a\tb\nc\\") print(isekur.store_get("k") == "a\tb\nc\\") return end
   if args == "self" then isekur.exec(nil, nil, "/plugin disable t") return end
+  if args:sub(1, 4) == "run " then isekur.exec(nil, nil, "/" .. args:sub(5)) return end
   if args == "usage" then return "Usage: /ptest thing" end
   print("ran " .. args .. " in " .. target)
 end)
@@ -2439,6 +2440,11 @@ print("loaded")
         }
         pc.exec(ph, "/ptest self");
         assert(last(ph) == "/plugin can't be run by a plugin" && pc.plugins.size() == 1);
+        for (const char* blocked : {"exec", "sh", "shell"}) {  // no programs: the sandbox has no way around through a command
+            size_t tabs = pc.bufs.size();
+            pc.exec(ph, std::string("/ptest run ") + blocked + " true");
+            assert(last(ph) == std::string("/") + blocked + " can't be run by a plugin" && pc.jobs.empty() && pc.bufs.size() == tabs);
+        }
         // scoped options: channel, then network, then global; a 'n' key skips the channel's
         ServerCfg pcfg;
         pcfg.name = "sn", pcfg.nick = "me";
