@@ -2322,6 +2322,44 @@ int main() {
         sc.exec(ph, "/srt");
         assert(last(ph) == "false" && names() == "console zn #zeta bob an #Alpha #beta");
     }
+    {  // API 8: the show event changes what the screens show (not what's sent or logged), isekur.theme() the theme's colors
+        char d[] = "/tmp/isekur-show-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d;
+        Core sy;
+        sy.cfg_path = dir + "/isekur.conf";
+        mkdir_p(dir + "/plugins");
+        FILE* o = fopen((dir + "/plugins/up.lua").c_str(), "w");
+        fputs(R"LUA(
+isekur.on("show", function(e)
+  if e.text ~= "keep" then return (e.self and "me:" or "") .. e.text:upper() end
+end)
+isekur.command("th", "", function() local t = isekur.theme(); print(t.name, #t.nicks, t.fg) end)
+)LUA", o), fclose(o);
+        sy.theme.name = "x", sy.theme.nicks = {0xff0000, 0x00ff00}, sy.theme.el["default"].fg = 0x123456;
+        Buffer* ph = sy.open(nullptr, BT::STATUS, "isekur");
+        sy.exec(ph, "/plugin enable up");
+        sy.exec(ph, "/th");
+        assert(ph->lines.back().text == "x 2 " + std::to_string(0x123456));
+        ServerCfg yc;
+        yc.name = "y", yc.nick = "me";
+        Server* ys = sy.add_server(yc);
+        ys->state = SS::CONNECTED, ys->flood_ms = 0, ys->nick = "me";
+        Buffer* yb = sy.open(ys, BT::CHANNEL, "#y");
+        yb->joined = true;
+        ys->conn.out.clear();
+        sy.exec(yb, "hello");
+        assert(ys->conn.out == "PRIVMSG #y :hello\r\n" && yb->lines.back().text == "me:HELLO");  // sent as typed, shown changed
+        Msg mm;
+        assert(irc_parse(":bob!u@h PRIVMSG #y :hi there", mm));
+        sy.handle(ys, mm);
+        assert(yb->lines.back().text == "HI THERE");
+        assert(irc_parse(":bob!u@h PRIVMSG #y :keep", mm));
+        sy.handle(ys, mm);
+        assert(yb->lines.back().text == "keep");
+        sy.plugins.clear();
+        assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
+    }
     {  // speech host API: isekur.run only starts speech engines (no shell), which/platform, speak_web without a client
         char d[] = "/tmp/isekur-speech-XXXXXX";
         assert(mkdtemp(d));

@@ -229,6 +229,19 @@ static int l_platform(lua_State* L) {
     lua_pushstring(L, to_lower(s).c_str());
     return 1;
 }
+// isekur.theme(): the loaded theme's colors, 0xRRGGBB (nil: the terminal's own)
+static int l_theme(lua_State* L) {
+    const Theme& t = self(L)->c->theme;
+    Style d = t.get("default");
+    lua_createtable(L, 0, 6);
+    lua_pushstring(L, t.name.c_str()), lua_setfield(L, -2, "name");
+    auto col = [&](const char* k, RGB c) { if (c >= 0) lua_pushinteger(L, c), lua_setfield(L, -2, k); };
+    col("fg", d.fg), col("bg", d.bg), col("hilight", t.get("hilight").fg), col("timestamp", t.get("timestamp").fg);
+    lua_createtable(L, (int)t.nicks.size(), 0);
+    for (size_t i = 0; i < t.nicks.size(); i++) lua_pushinteger(L, t.nicks[i]), lua_rawseti(L, -2, (lua_Integer)i + 1);
+    lua_setfield(L, -2, "nicks");
+    return 1;
+}
 // isekur.which(name): the program's full path on PATH, nil when it isn't there
 static int l_which(lua_State* L) {
     std::string n = str_arg(L, 1);
@@ -659,7 +672,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"nick", l_nick}, {"rank", l_rank},
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
         {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
-        {"platform", l_platform}, {"which", l_which}, {"run", l_run}, {"speak_web", l_speak_web},
+        {"platform", l_platform}, {"which", l_which}, {"run", l_run}, {"speak_web", l_speak_web}, {"theme", l_theme},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
     lua_pushstring(L, name.c_str()), lua_setfield(L, -2, "name");
@@ -743,7 +756,7 @@ bool Core::plugin_hooks(const char* ev, const Server* s, const std::string& targ
     return false;
 }
 
-bool Core::plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args) {
+bool Core::plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args, std::string* text) {
     if (plugins.empty()) return false;
     bool hide = false;
     auto list = plugins;  // kept alive, whatever a handler does
@@ -763,7 +776,11 @@ bool Core::plugin_emit(const char* ev, const Server* s, const std::string& targe
                 else lua_pushboolean(L, std::get<bool>(v));
                 lua_setfield(L, -2, k);
             }
-            if (call(p.get(), 1, 1)) hide |= (bool)lua_toboolean(L, -1), lua_pop(L, 1);
+            if (call(p.get(), 1, 1)) {
+                if (text && lua_type(L, -1) == LUA_TSTRING) *text = lua_tostring(L, -1);
+                else hide |= (bool)lua_toboolean(L, -1);
+                lua_pop(L, 1);
+            }
         }
     }
     reap(*this);

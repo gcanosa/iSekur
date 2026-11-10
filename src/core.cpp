@@ -828,6 +828,14 @@ void Core::add(Buffer* b, Line l) {
     // /typing: other people's messages type themselves out
     if (!l.self && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) && opt_on(b->srv, "typing_effect", false))
         l.typed_at = now_ms(), typing_until = std::max(typing_until, l.typed_at + 2100);
+    // a plugin's string is what the screens show (lolcat); the log keeps what was said
+    std::string said;
+    if (b->srv && !plugin_depth && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE)) {
+        std::string t = l.text;
+        plugin_emit("show", b->srv, b->name, {{"nick", l.nick}, {"text", l.text}, {"self", l.self},
+                                              {"action", l.kind == LK::ACTION}, {"notice", l.kind == LK::NOTICE}}, &t);
+        if (t != l.text) said = std::move(l.text), l.text = std::move(t);
+    }
     b->lines.push_back(std::move(l));
     b->added++;
     while (b->lines.size() > max_lines) b->lines.pop_front();
@@ -838,7 +846,8 @@ void Core::add(Buffer* b, Line l) {
     if (b->unread || (b != active && b != split_buf && lvl >= 2)) b->unread++;
     if (b != active && b != split_buf && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }  // split: on screen too
     dirty = true;
-    log_line(b, ln);
+    if (said.empty()) log_line(b, ln);
+    else { Line o = ln; o.text = said; log_line(b, o); }
     notify(Ev::LINE, b, &ln);
     // copy highlights and private messages to the first window, so whatever
     // happened while you were away is in one place
