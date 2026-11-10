@@ -750,13 +750,31 @@ void Core::plugins_sync() {
         if (wanted(*this, n) && std::none_of(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; })) load_one(*this, n);
 }
 
+// a nickmenu handler's {{label, "/command"}, ...}: one-line labels, /commands only, none of those a plugin can't run
+static void menu_items(lua_State* L, std::vector<std::pair<std::string, std::string>>& out) {
+    for (lua_Integer i = 1; i <= 8; i++) {  // ponytail: 8 items per plugin, a menu not a page
+        bool more = lua_rawgeti(L, -1, i) == LUA_TTABLE;
+        if (!more) { lua_pop(L, 1); break; }
+        lua_rawgeti(L, -1, 1), lua_rawgeti(L, -2, 2);
+        std::string l = lua_type(L, -2) == LUA_TSTRING ? one_line(lua_tostring(L, -2)).substr(0, 40) : "";
+        std::string cmd = lua_type(L, -1) == LUA_TSTRING ? one_line(lua_tostring(L, -1)) : "";
+        lua_pop(L, 3);
+        std::string w = cmd.substr(1, cmd.find(' ') - 1);
+        to_lower(w);
+        if (!l.empty() && cmd.size() > 1 && cmd[0] == '/' &&
+            w != "plugin" && w != "exec" && w != "sh" && w != "shell" && w != "attach")
+            out.push_back({l, cmd});
+    }
+}
+
 bool Core::plugin_hooks(const char* ev, const Server* s, const std::string& target) {
     for (auto& p : plugins)
         if (!p->dead && p->on.count(ev) && (!s || truthy(plugin_opt(p->name, "enabled", s, target, "off", 'c')))) return true;
     return false;
 }
 
-bool Core::plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args, std::string* text) {
+bool Core::plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args, std::string* text,
+                       std::vector<std::pair<std::string, std::string>>* menu) {
     if (plugins.empty()) return false;
     bool hide = false;
     auto list = plugins;  // kept alive, whatever a handler does
@@ -778,6 +796,7 @@ bool Core::plugin_emit(const char* ev, const Server* s, const std::string& targe
             }
             if (call(p.get(), 1, 1)) {
                 if (text && lua_type(L, -1) == LUA_TSTRING) *text = lua_tostring(L, -1);
+                else if (menu && lua_type(L, -1) == LUA_TTABLE) menu_items(L, *menu);
                 else hide |= (bool)lua_toboolean(L, -1);
                 lua_pop(L, 1);
             }

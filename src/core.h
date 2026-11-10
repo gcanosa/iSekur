@@ -263,7 +263,7 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 8 // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 9 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings and booleans
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool>>>;
@@ -591,7 +591,8 @@ struct Core {
     void plugin_cmd(Buffer* b, const std::string& args);  // /plugin
     bool plugin_run(Buffer* b, const std::string& cmd, const std::string& args);  // a plugin's /command; false: none has it
     // ev to every plugin on in s/target (s null: every loaded one); true: a handler returned true (hide the line)
-    bool plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args = {}, std::string* text = nullptr);  // text: a handler returning a string replaces it (show)
+    bool plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args = {}, std::string* text = nullptr,
+                     std::vector<std::pair<std::string, std::string>>* menu = nullptr);  // text: a handler returning a string replaces it (show); menu: the {label, command} pairs handlers return (nickmenu)
     bool plugin_hooks(const char* ev, const Server* s, const std::string& target);  // a plugin on there handles ev
     // [plugin.name@net/#chan], then @net, then [plugin.name], then def; scope 'g' global only, 'n' up to the network
     std::string plugin_opt(const std::string& name, const std::string& key, const Server* s, const std::string& target,

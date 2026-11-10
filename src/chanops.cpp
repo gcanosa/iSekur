@@ -246,6 +246,9 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
     bool ign = std::find(masks.begin(), masks.end(), nick + "!*@*") != masks.end();
     add("", "");
     add(ign ? "Unignore" : "Ignore", (ign ? "/unignore " : "/ignore ") + nick);
+    std::vector<std::pair<std::string, std::string>> pm;  // the plugins on there add theirs (pmguard: Allow PMs)
+    const_cast<Core*>(this)->plugin_emit("nickmenu", s, b->name, {{"nick", nick}}, nullptr, &pm);  // ponytail: the menu is const, the Lua calls aren't
+    if (!pm.empty()) m.push_back({"", ""}), m.insert(m.end(), pm.begin(), pm.end());
     if (b->type == BT::CHANNEL && b->joined) {
         auto me = b->nicks.find(s->lower(s->nick)), them = b->nicks.find(s->lower(nick));
         std::string my = me == b->nicks.end() ? "" : me->second.prefix;

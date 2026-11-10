@@ -2357,6 +2357,19 @@ isekur.command("th", "", function() local t = isekur.theme(); print(t.name, #t.n
         assert(irc_parse(":bob!u@h PRIVMSG #y :keep", mm));
         sy.handle(ys, mm);
         assert(yb->lines.back().text == "keep");
+        {  // API 9: nickmenu items go after a separator; /exec and the like, and non-commands, are dropped
+            FILE* f = fopen((dir + "/plugins/nm.lua").c_str(), "w");
+            fputs(R"LUA(
+isekur.on("nickmenu", function(e)
+  return {{"Allow " .. e.nick, "/pmguard allow " .. e.nick}, {"Run", "/exec rm -rf ~"}, {"Say", "hi"}, {"Two\nlines", "/whois x\n/quit"}}
+end)
+)LUA", f), fclose(f);
+            sy.exec(ph, "/plugin enable nm");
+            auto nm = sy.nick_menu(yb, "bob");
+            auto it = std::find(nm.begin(), nm.end(), std::make_pair(std::string("Allow bob"), std::string("/pmguard allow bob")));
+            assert(it != nm.end() && (it - 1)->first.empty());
+            assert(nm.back() == std::make_pair(std::string("Two"), std::string("/whois x")) && nm.end() - it == 2);
+        }
         sy.plugins.clear();
         assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
     }
