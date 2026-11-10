@@ -494,7 +494,10 @@ struct Core {
     void load_flood(Server* s);  // flood_burst / flood_interval_ms
     void connect(Server* s);
     void disconnect(Server* s, const std::string& why);
-    void on_readable(Server* s, short revents);
+    // until (now_ms): stop handling lines then, the rest stay in inbuf for the next pass (0: all of them).
+    // The keyboard never waits behind a burst (NAMES, chathistory, a netsplit) longer than that
+    void on_readable(Server* s, short revents, long long until = 0);
+    static bool rx_backlog(const Server* s);  // lines left in inbuf, or bytes in TLS: handle them without waiting for poll
     void tick(time_t now);  // pings, timeouts, reconnects, plugins' tick
     void sts_load();                    // the STS policies file next to the config
     std::map<std::string, std::pair<int, time_t>> sts;  // host -> TLS port, until

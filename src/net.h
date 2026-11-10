@@ -53,7 +53,8 @@ struct Conn {
     bool pump(short revents, std::string& in);
     void close();
     bool closing = false;  // close once `out` is flushed (web)
-    size_t in_cap = 0;     // > 0: stop reading at this many bytes, the rest waits for the next poll (/dcc)
+    size_t in_cap = 0;     // > 0: stop reading at this many bytes, the rest waits for the next poll (/dcc, IRC servers)
+    bool pending() const;  // TLS holds decrypted bytes poll() can't see: pump() even without POLLIN
 
 private:
     std::string thost, pin;  // the target behind the proxy, the proxy's answer so far

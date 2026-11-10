@@ -499,6 +499,14 @@ int main() {
         ts->inbuf = "@label=i1 :me NICK :me3\r\r\n@label=i2 :me3 NICK :me\r\r\n";
         core.on_readable(ts, 0);
         assert(ts->nick == "me" && ts->inbuf.empty() && q->lines.back().text == "You are now known as me");
+        // a pass past its time budget handles one line and leaves the rest for the next pass; none get lost
+        ts->inbuf = ":me NICK :a1\r\n:a1 NICK :a2\r\n:a2 NICK :me\r\n";
+        core.on_readable(ts, 0, 1);
+        assert(ts->nick == "a1" && Core::rx_backlog(ts));
+        core.on_readable(ts, 0, 1);
+        assert(ts->nick == "a2" && Core::rx_backlog(ts));
+        core.on_readable(ts, 0);
+        assert(ts->nick == "me" && ts->inbuf.empty() && !Core::rx_backlog(ts));
         sent();
         core.exec(ts->status, "/back");  // /back: AWAY with nothing
         assert(sent().find("AWAY\r\n") != std::string::npos);

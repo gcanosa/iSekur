@@ -361,7 +361,10 @@ void Core::disconnect(Server* s, const std::string& why) {
     notify(Ev::BUFFER, s->status);
 }
 
-void Core::on_readable(Server* s, short rev) {
+bool Core::rx_backlog(const Server* s) { return s->inbuf.find('\n') != std::string::npos || s->conn.pending(); }
+
+void Core::on_readable(Server* s, short rev, long long until) {
+    s->conn.in_cap = 1 << 19;  // a backlog this big: stop reading, the kernel holds the rest (under the 1MB flood cut)
     bool ok = s->conn.pump(rev, s->inbuf);
     if (s->state == SS::CONNECTING && s->conn.st == Conn::OPEN) s->state = SS::REGISTERING;
     // one erase for the whole read, not one per line: a /list or NAMES burst is thousands of lines
@@ -382,6 +385,7 @@ void Core::on_readable(Server* s, short rev) {
             print(s->status, LK::ERROR, std::string("Internal error on a line from the server (dropped): ") + e.what());
         }
         if (s->state == SS::DISCONNECTED) return;  // handler closed it (connect() cleared inbuf)
+        if (until && ok && now_ms() >= until) break;  // the rest next pass; a closed connection's last lines (ERROR) all go now
     }
     s->inbuf.erase(0, at);
     if (!ok) disconnect(s, s->conn.err);

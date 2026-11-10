@@ -424,6 +424,8 @@ bool Conn::pump(short rev, std::string& in) {
     return !(closing && out.empty());
 }
 
+bool Conn::pending() const { return st == OPEN && ssl && SSL_pending(ssl) > 0; }
+
 void Conn::close() {
     if (ssl) SSL_free(ssl), ssl = nullptr;
     if (ctx && !server_side) SSL_CTX_free(ctx), ctx = nullptr;

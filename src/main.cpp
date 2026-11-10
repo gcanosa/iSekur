@@ -12,6 +12,7 @@
 #include <sys/stat.h>
 #include <sys/wait.h>
 #include <algorithm>
+#include <chrono>
 #if __has_include(<execinfo.h>)
 #include <execinfo.h>
 #endif
@@ -187,6 +188,30 @@ static int wait_fds(std::vector<pollfd>& fds, int timeout_ms) {
 #endif
 }
 
+// slow.log next to the config: a pass of the main loop that took over SLOW_US (the keyboard waited that long,
+// the idle wait not counted), with the stages that took 1ms or more. Past 256KB it starts over (the last one: slow.log.old)
+struct Probe {
+    static constexpr long long SLOW_US = 15000;
+    std::string path, spent;
+    long long t0 = 0, last = 0;
+    static long long us() { return std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch()).count(); }
+    void start() { t0 = last = us(), spent.clear(); }
+    void skip() { long long t = us(); t0 += t - last, last = t; }  // the poll() wait: not iSekur's time
+    void lap(const char* stage) {
+        long long t = us();
+        if (t - last >= 1000) spent += std::string(spent.empty() ? "" : ", ") + stage + " " + std::to_string((t - last) / 1000) + "ms";
+        last = t;
+    }
+    void end() {
+        long long total = us() - t0;
+        if (total < SLOW_US) return;
+        struct stat st;
+        if (stat(path.c_str(), &st) == 0 && st.st_size > 256 * 1024) rename(path.c_str(), (path + ".old").c_str());
+        if (FILE* f = fopen(path.c_str(), "a"))
+            fprintf(f, "%s %lldms: %s\n", fmt_time(time(nullptr), "%Y-%m-%d %H:%M:%S").c_str(), total / 1000, spent.c_str()), fclose(f);
+    }
+};
+
 int main(int argc, char** argv) {
     setlocale(LC_ALL, "");
     signal(SIGPIPE, SIG_IGN);
@@ -305,7 +330,11 @@ int main(int argc, char** argv) {
         crumb_stage(stage);
         try { fn(); } catch (const std::exception& e) { c.print(home, LK::ERROR, std::string("Internal error in ") + stage + ": " + e.what()); }
     };
+    Probe probe;
+    probe.path = c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "slow.log";
+    long long drawn = 0;  // the last frame (ms): while a backlog drains, ~30 frames a second, a key's at once
     while (!c.quit && !g_term) {
+        probe.start();
         fds.clear(), polled.clear();
         if (c.tty) {
             int tty = -1, rsz = -1;
@@ -343,22 +372,36 @@ int main(int argc, char** argv) {
             long long ph = (now_ms() - c.about_t0) % 3500;
             wait = std::min(wait, ph < 1200 || !c.about_typed.empty() ? 33 : (int)(3500 - ph));
         }
+        bool behind = std::any_of(c.servers.begin(), c.servers.end(), [](auto& s) { return Core::rx_backlog(s.get()); });
+        if (behind) wait = 0;  // lines left from the last pass: no poll() wakes us for them
+        probe.lap("before the wait");
         if (wait_fds(fds, wait) < 0 && errno != EINTR) break;
+        probe.skip();
         if (typing) c.dirty = true;
         if (c.flash_until && now_ms() >= c.flash_until) c.flash.clear(), c.flash_until = 0, c.dirty = true;
         guard("shell tabs", [&] { c.terms_poll(fds, term0); });  // first: nothing has closed a tab yet, so the order still holds
+        probe.lap("shell tabs");
         guard("DCC", [&] { c.dccs_poll(fds, dcc0); });
-        // servers first: their handlers never delete servers, so `polled` stays valid
+        probe.lap("DCC");
+        // servers first: their handlers never delete servers, so `polled` stays valid.
+        // 8ms of lines a pass, all servers together: a burst can't keep the keys below waiting (Core::on_readable)
         crumb_stage("IRC servers");
+        long long until = now_ms() + 8;
         for (size_t i = 0; i < polled.size(); i++)
-            if (fds[srv0 + i].revents) c.on_readable(polled[i], fds[srv0 + i].revents);
+            if (fds[srv0 + i].revents || Core::rx_backlog(polled[i])) c.on_readable(polled[i], fds[srv0 + i].revents, until);
+        probe.lap("IRC servers");
         // the attach process quit (closed window, dropped SSH) or the terminal hung up
         bool hung = !local && (ses.lost || (c.tty && (fds[0].revents & (POLLHUP | POLLERR))));
-        if (c.tty && !hung && (fds[0].revents || fds[1].revents)) guard("keyboard input", [&] { tui.on_readable(); });
+        bool keys = c.tty && !hung && (fds[0].revents || fds[1].revents);
+        if (keys) guard("keyboard input", [&] { tui.on_readable(); });
+        probe.lap("keyboard input");
         crumb_stage("webchat"), web.process(fds);
+        probe.lap("webchat");
         crumb_stage("BNC"), bnc.process(fds);
+        probe.lap("BNC");
         guard("FIFO", [&] { c.fifo_poll(fds, fifo0); });
         guard("/exec", [&] { c.jobs_poll(fds, job0); });
+        probe.lap("FIFO, /exec");
         crumb_stage("session");
         int t = ses.process(fds, c.tty);
         // the audit lines: who attached from where, for how long, and who was turned away
@@ -430,7 +473,9 @@ int main(int argc, char** argv) {
             if (ui) c.active_at = now;
             else c.screen_end();
         }
+        probe.lap("session, webchat out, requests");
         if (now != last_sec) last_sec = now, c.dirty = true, guard("the clock tick", [&] { c.tick(now); });  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
+        probe.lap("the clock tick (plugins)");
         if (anim_due && c.tty && !c.locked) anim_due = false, anim0 = home->lines.size() >= 6 ? now_ms() : 0;
         if (!c.screen_by.empty() && c.tty && now_ms() - screen_drawn >= 1000 / c.screen_fps) screen_drawn = now_ms(), c.dirty = true;
         if (c.lock_anim) {  // the lock screen's animations: 900ms at most (tui.cpp draw_lock)
@@ -468,7 +513,11 @@ int main(int argc, char** argv) {
                 lit = ph < 1200, c.dirty = true;
             }
         }
-        if (c.tty && c.dirty) guard("drawing", [&] { tui.draw(); });
+        probe.lap("animations");
+        behind = std::any_of(c.servers.begin(), c.servers.end(), [](auto& s) { return Core::rx_backlog(s.get()); });
+        if (c.tty && c.dirty && (keys || !behind || now_ms() - drawn >= 33)) drawn = now_ms(), guard("drawing", [&] { tui.draw(); });
+        probe.lap("drawing");
+        probe.end();
     }
 
     // flush QUITs for up to a second
