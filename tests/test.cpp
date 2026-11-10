@@ -582,6 +582,10 @@ int main() {
         assert(core.active == sp && core.split_buf == sq && core.split_first);
         feed(":" + ts->nick + "!u@h JOIN #bg");  // autojoin (no /join of ours): opens in the background, typing stays here
         assert(core.find(ts, "#bg") && core.active == sp);
+        feed(":srv 332 " + ts->nick + " #bg :a topic");  // the join's topic, names, modes: no activity
+        assert(core.find(ts, "#bg")->activity == 0);
+        feed(":bob!u@h PRIVMSG #bg :hi");  // a message still lights the tab
+        assert(core.find(ts, "#bg")->activity == 2);
         core.close(core.find(ts, "#bg")), sent();
         core.exec(sp, "/join #new"), sent();
         feed(":" + ts->nick + "!u@h JOIN #new");  // a /join while split: the new channel takes the focused pane, the other stays

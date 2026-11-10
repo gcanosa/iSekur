@@ -677,6 +677,7 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "305" || cmd == "306") s->away = cmd == "306", plugin_emit("away", s, "", {{"away", s->away}});  // then printed as usual
     if (cmd == "001") {
+        s->status->sync_until = time(nullptr) + 5;
         s->state = SS::CONNECTED;
         s->nick = m.p(0);
         s->backoff = 0;
@@ -850,6 +851,7 @@ void Core::handle(Server* s, const Msg& m) {
             Buffer* b = open(s, BT::CHANNEL, ch);
             b->joined = true;
             b->nicks.clear();
+            b->sync_until = time(nullptr) + 5;
             // catch up from the server: what was said since the last line we have
             int fetch = atoi(opt(s, "history_fetch", "100").c_str());
             if (fetch > 0 && s->caps.count("draft/chathistory")) {

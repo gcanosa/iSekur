@@ -844,6 +844,7 @@ void Core::add(Buffer* b, Line l) {
     int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : b->quiet && noise(ln) ? 0 : 1;
     // the "new" marker goes above the first message you missed, then counts everything after it
     if (b->unread || (b != active && b != split_buf && lvl >= 2)) b->unread++;
+    if (lvl == 1 && time(nullptr) < b->sync_until) lvl = 0;  // ponytail: a fixed 5s window, end it at 366/376 if slow servers outlast it
     if (b != active && b != split_buf && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }  // split: on screen too
     dirty = true;
     if (ln.said.empty()) log_line(b, ln);

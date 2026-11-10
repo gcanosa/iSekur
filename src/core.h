@@ -167,6 +167,7 @@ struct Buffer {
     std::string topic, modes;
     std::map<std::string, NickEntry> nicks;  // key: irc_lower(nick)
     int activity = 0;                        // 0 none, 1 data, 2 msg, 3 hilight
+    time_t sync_until = 0;                   // our JOIN / the 001: topic, names, modes, MOTD until then aren't activity
     int unread = 0;                          // lines below the "new" marker
     int scroll = 0;                          // rows scrolled back (tui)
     int scroll_new = 0;                      // lines added while scrolled back: the tui adds their rows to scroll
