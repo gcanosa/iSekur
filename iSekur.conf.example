@@ -16,7 +16,7 @@ web_unread_badge = on      ; off: no count of unread messages next to the webcha
 timestamp =                  ; e.g. %H:%M:%S (empty: the theme's, [%H:%M] in mirc)
 nick_width =                 ; nick column, longer nicks are cut (empty: the theme's, 12; 0: no column, mirc style)
 timestamp_align = left      ; left | right (the right edge of the chat, terminal and webchat)
-timestamp_hover = off       ; on: the webchat hides the time, it fades in under the mouse and out slowly
+timestamp_hover = off       ; web | term | both: the time hides, it fades in under the mouse and out slowly (term: with mouse on)
 scrollback = 2000           ; lines kept in memory per tab (min 100); fewer = less memory
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
 mouse     = on               ; click tabs/nicks, wheel scrolls, drag copies; F3 toggles

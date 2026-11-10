@@ -443,6 +443,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         to_lower(v);
         if (sec == "general" && k == "theme") r.choices = themes;
         else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
+        else if (sec == "general" && k == "timestamp_hover") r.choices = {"off", "web", "term", "both"};
         else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
         else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
         else if (v == "on" || v == "off") r.choices = {"on", "off"};
@@ -1565,7 +1566,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             Theme t;
             if (load_theme(ini_get(cfg, "general", "theme", "default"), t, err)) theme = t, notify(Ev::THEME, nullptr);
         }
-        if (sec == "keys") cfg_changed = true;
+        if (sec == "keys" || (sec == "general" && (key == "timestamp_hover" || key == "mouse"))) cfg_changed = true;  // the terminal applies them (tui apply_cfg)
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
         if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0 || key == "web_unread_badge")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (key == "log") notify(Ev::THEME, nullptr);  // the webchat shows its Logs button only while logging

@@ -238,7 +238,7 @@ extern "C" {
 
 /* Some hard-coded caps */
 #define TB_HARDCAP_ENTER_MOUSE  "\x1b[?1000h\x1b[?1002h\x1b[?1015h\x1b[?1006h"
-#define TB_HARDCAP_EXIT_MOUSE   "\x1b[?1006l\x1b[?1015l\x1b[?1002l\x1b[?1000l"
+#define TB_HARDCAP_EXIT_MOUSE   "\x1b[?1003l\x1b[?1006l\x1b[?1015l\x1b[?1002l\x1b[?1000l"  // iSekur: 1003, timestamp_hover
 #define TB_HARDCAP_STRIKEOUT    "\x1b[9m"
 #define TB_HARDCAP_UNDERLINE_2  "\x1b[21m"
 #define TB_HARDCAP_OVERLINE     "\x1b[53m"

@@ -336,6 +336,7 @@ int main(int argc, char** argv) {
         bool typing = c.tty && now_ms() < c.typing_until;  // a line is typing itself out: redraw ~30 times a second
         int wait = c.drain();
         if (anim0 || typing || (c.tty && c.lock_anim)) wait = std::min(wait, 33);
+        if (c.tty && now_ms() < tui.ts_anim_until) wait = std::min(wait, 33), c.dirty = true;  // timestamp_hover: a time fading
         if (!c.screen_by.empty()) wait = std::min(wait, 1000 / c.screen_fps);
         if (c.flash_until) wait = std::min(wait, (int)std::max(0LL, c.flash_until - now_ms()));
         if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep

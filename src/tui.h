@@ -18,6 +18,7 @@ struct Tui {
     void fds(int& tty, int& resize);
     void on_readable();  // drain pending terminal events
     void draw();
+    long long ts_anim_until = 0;  // timestamp_hover: a time fading in or out, redraw ~30 times a second until then
 
 private:
     std::u32string input;
@@ -36,6 +37,15 @@ private:
     void apply_cfg();  // mouse, colors, keys
     void load_keys();  // defaults + [keys]; again after /set keys.*  // "M-Right" -> "next_tab"
     bool nicklist = true, topicbar = true, truecolor = true, mouse_on = true;
+    // timestamp_hover = term | both: the time shows only on the line under the mouse (moves come with mode 1003)
+    bool ts_hover = false, hover_in = false;
+    int hover_x = -1, hover_y = -1;
+    const void* hover_line = nullptr;  // only compared, never read: a line gone just stops matching
+    const void* fade_line = nullptr;
+    long long hover_at = 0, fade_at = 0;
+    void hover_set(const void* l);
+    double hover_alpha(const void* l) const;
+    void set_mouse();  // the input mode, and 1003 (every move) while timestamp_hover wants it
     int top_row() const { return (topicbar ? topic_h : 0) + tab_h; }  // first chat row, under the topic and tab bars
     int tab_h = 1;  // tab bar rows, set by draw()
     // topic bar: wheel scrolls it sideways, a click unfolds it, a double click edits it

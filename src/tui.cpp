@@ -613,6 +613,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
     b->scroll_new = 0;
     std::vector<Row> rows;  // bottom-up
     std::vector<CopyRow> meta;  // rows' copy info, y filled in when drawn
+    std::vector<const Line*> lof;  // each row's line (timestamp_hover)
     int need = h + b->scroll;
     size_t n = 0;
     for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it, ++n) {
@@ -621,7 +622,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             std::string bar = "── new ";
             for (int k = 7; k < w; k++) bar += "─";
             cells(mk, bar, sty(T, "marker", "separator"), false);
-            rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1});
+            rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1}), lof.push_back(nullptr);
         }
         if (b->quiet && noise(*it)) continue;
         WrapInfo wi;
@@ -632,11 +633,37 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             if (k < wi.bw.size()) cr.bend = cr.bx + wi.bw[k];
             else cr.bend = x + width(r[k]), cr.id = -1;  // a link preview's row: a line of its own
             if (k == 0 && wi.tsx >= 0) cr.tsx0 = x + wi.tsx, cr.tsx1 = cr.tsx0 + wi.tsw;
-            meta.push_back(cr);
+            meta.push_back(cr), lof.push_back(&*it);
         }
         rows.insert(rows.end(), r.rbegin(), r.rend());
     }
     if ((int)rows.size() < need) b->scroll = std::max(0, (int)rows.size() - h);
+    if (ts_hover && mouse_on) {  // the times show only on the line under the mouse, fading in and out
+        if (hover_x >= x && hover_x < x + w && hover_y >= y && hover_y < y + h) {
+            size_t idx = (size_t)(b->scroll + y + h - 1 - hover_y);
+            hover_in = true, hover_set(idx < lof.size() ? lof[idx] : nullptr);
+        }
+        RGB dbg = T.get("default").bg;
+        for (int k = 0; k < h; k++) {
+            size_t idx = (size_t)(b->scroll + k);
+            if (idx >= rows.size()) break;
+            if (!meta[idx].first || !lof[idx] || meta[idx].tsx0 < 0) continue;
+            double a = hover_alpha(lof[idx]);
+            int cx = x;
+            for (auto& cl : rows[idx]) {
+                if (cx >= meta[idx].tsx0 && cx < meta[idx].tsx1) {
+                    RGB bg = cl.st.bg >= 0 ? cl.st.bg : dbg, fg = cl.st.fg;
+                    if (a < 0.05 || ((bg < 0 || fg < 0) && a < 0.3)) cl.cp = ' ';
+                    else if (a < 1 && (bg < 0 || fg < 0)) { if (a < 0.7) cl.st.attr |= A_DIM; }  // the terminal's own colors: faint between
+                    else if (a < 1) {
+                        auto mix = [&](int sh) { return (int)(((bg >> sh) & 255) * (1 - a) + ((fg >> sh) & 255) * a) << sh; };
+                        cl.st.fg = mix(16) | mix(8) | mix(0);
+                    }
+                }
+                cx += cl.w;
+            }
+        }
+    }
     for (int k = 0; k < h; k++) {
         size_t idx = (size_t)(b->scroll + k);
         if (idx >= rows.size()) break;
@@ -850,6 +877,7 @@ void Tui::draw() {
         draw_chat(pb, bx.x, bx.y, cwp, bx.h);
         if (focus) pane = Box{bx.x, bx.y, cwp, bx.h};
     };
+    hover_in = false;
     if (!two) draw_pane(b, pane, true);
     else {
         Box p1{0, top, W, ch}, p2 = p1;
@@ -862,6 +890,7 @@ void Tui::draw() {
         draw_pane(b, c.split_first ? p2 : p1, true);
         draw_pane(sb, other, false);
     }
+    if (!hover_in) hover_set(nullptr);  // the mouse over no chat: the last line's time fades out
     int cw = !two && nl_x >= 0 ? nl_x : W, nlw = !two && nl_x >= 0;  // the status line lines up with a lone nicklist
     if (sel_x0 >= 0) {  // the selection, reversed in place
         tb_cell* cb = tb_cell_buffer();
@@ -2319,7 +2348,9 @@ bool Tui::init(std::string& err, int fd) {
 // mouse, colors and keys from the config: at start, and after /set keys.* or /reload
 void Tui::apply_cfg() {
     mouse_on = ini_get(c.cfg, "general", "mouse", "on") != "off";
-    tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
+    std::string th = ini_get(c.cfg, "general", "timestamp_hover", "off");
+    ts_hover = th == "term" || th == "both" || th == "on";  // on: what it was before web/term/both
+    set_mouse();
     std::string mode = ini_get(c.cfg, "general", "colors", "auto");
     const char* ct = getenv("COLORTERM");
     truecolor = mode == "truecolor" ||
@@ -2358,6 +2389,28 @@ void Tui::load_keys() {
 }
 
 void Tui::shutdown() { tb_shutdown(); }
+
+void Tui::set_mouse() {
+    tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
+    if (mouse_on) tb_sendf("\x1b[?1003%c", ts_hover ? 'h' : 'l');
+    if (!mouse_on || !ts_hover) hover_x = hover_y = -1, hover_line = fade_line = nullptr;
+}
+
+// timestamp_hover: the line under the mouse changed; the one left fades out
+void Tui::hover_set(const void* l) {
+    if (l == hover_line) return;
+    long long t = now_ms();
+    if (hover_line) fade_line = hover_line, fade_at = t;
+    hover_line = l, hover_at = t, ts_anim_until = t + 1500;
+}
+
+// how much of a line's time shows: in over 150ms under the mouse, out over 1.5s after
+double Tui::hover_alpha(const void* l) const {
+    long long t = now_ms();
+    if (l == hover_line) return std::min(1.0, (t - hover_at) / 150.0);
+    if (l == fade_line) return std::max(0.0, 1 - (t - fade_at) / 1500.0);
+    return 0;
+}
 
 void Tui::fds(int& tty, int& resize) { tb_get_fds(&tty, &resize); }
 
@@ -2436,7 +2489,7 @@ bool Tui::action(const std::string& a) {
     else if (a == "find_tab") fw = FindWin{}, fw.open = true, fw.sel = std::max(0, c.index_of(c.active));
     else if (a == "toggle_mouse") {  // off = the terminal's own text selection works again
         mouse_on = !mouse_on;
-        tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
+        set_mouse();
         c.print(c.active, LK::INFO, std::string("Mouse ") + (mouse_on ? "on (drag copies, Shift+drag is the terminal's selection)" : "off"));
     }
     else return false;
@@ -2683,6 +2736,7 @@ void Tui::close_box() {
 
 void Tui::mouse(int mod, int k, int x, int y) {
     if (c.locked) return;
+    if (k == TB_KEY_MOUSE_RELEASE && (mod & TB_MOD_MOTION)) { hover_x = x, hover_y = y; return; }  // 1003: a move, no button held
     if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) { close_box(); return; }
     if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
