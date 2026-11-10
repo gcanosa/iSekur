@@ -80,7 +80,14 @@ int main() {
     // legacy charsets (a network's encoding): decoded to UTF-8, encoded back, unmappable -> ?
     assert(from_legacy("\xdd\xfe\x41", "iso-8859-9") == "\xc4\xb0\xc5\x9f" "A");  // 0xDD = I-dot, 0xFE = s-cedilla
     assert(to_legacy("\xc5\x9f\xc4\xb1", "iso-8859-9") == "\xfe\xfd");              // and back: ş ı
-    assert(to_legacy("\xe2\x82\xac", "iso-8859-9") == "?" && from_legacy("\xe9", "iso-8859-1") == "\xc3\xa9");
+    {  // each half on its own, with the bytes said on failure: iconv's answer for an unmappable character differs by system
+        auto hex = [](const std::string& v) { std::string o; char h[4]; for (unsigned char ch : v) snprintf(h, sizeof h, "%02x ", ch), o += h; return o; };
+        std::string eu = to_legacy("\xe2\x82\xac", "iso-8859-9"), ea = from_legacy("\xe9", "iso-8859-1");
+        if (eu != "?") fprintf(stderr, "to_legacy(euro, iso-8859-9) = %s\n", hex(eu).c_str());
+        if (ea != "\xc3\xa9") fprintf(stderr, "from_legacy(e9, iso-8859-1) = %s\n", hex(ea).c_str());
+        assert(eu == "?");
+        assert(ea == "\xc3\xa9");
+    }
     if (legacy_charset_ok("iso-2022-jp")) {  // a stateful charset: each line ends back in ASCII, or the next one is read as Kanji
         std::string jp = to_legacy("\xe3\x81\x82", "iso-2022-jp");
         assert(jp.size() > 3 && jp.compare(jp.size() - 3, 3, "\x1b(B") == 0);
@@ -2440,7 +2447,7 @@ print("loaded")
         }
         pc.exec(ph, "/ptest self");
         assert(last(ph) == "/plugin can't be run by a plugin" && pc.plugins.size() == 1);
-        for (const char* blocked : {"exec", "sh", "shell"}) {  // no programs: the sandbox has no way around through a command
+        for (const char* blocked : {"exec", "sh", "shell", "attach"}) {  // no programs: the sandbox has no way around through a command
             size_t tabs = pc.bufs.size();
             pc.exec(ph, std::string("/ptest run ") + blocked + " true");
             assert(last(ph) == std::string("/") + blocked + " can't be run by a plugin" && pc.jobs.empty() && pc.bufs.size() == tabs);
