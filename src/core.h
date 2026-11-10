@@ -509,6 +509,7 @@ struct Core {
     Buffer* open(Server* s, BT t, const std::string& name);
     void close(Buffer* b, const std::string& part_msg = "");  // a channel: PART (part_msg, else part_message) and the tab goes
     void select(Buffer* b);
+    void mark_all_read();  // Ctrl+R / Cmd+R: no tab has activity or unread lines
     int index_of(Buffer* b) const;
     void add(Buffer* b, Line l);
     void print(Buffer* b, LK k, const std::string& text);

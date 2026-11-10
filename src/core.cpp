@@ -813,6 +813,12 @@ void Core::split_cmd(Buffer* b, const std::string& args) {
     print(b, LK::INFO, "Split" + std::string(how[split_mode]) + " with " + label(t) + ": F6 or Alt+O switches panes (or click one), /unsplit closes it");
 }
 
+void Core::mark_all_read() {
+    for (auto& b : bufs)
+        if (b->activity || b->unread) b->activity = b->unread = 0, notify(Ev::BUFFER, b.get());
+    dirty = true;
+}
+
 void Core::select(Buffer* b) {
     if (!b) return;
     if (active && active != b && active->unread) active->unread = 0, notify(Ev::BUFFER, active);

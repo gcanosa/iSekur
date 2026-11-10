@@ -689,6 +689,7 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("Tabs"),
         "  " G_KEY("Alt+1") ".." G_KEY("Alt+0") "    go to tab 1-10        " G_KEY("Ctrl+N") " " G_KEY("Ctrl+P") "  next / previous tab",
         "  " G_KEY("Ctrl+A") "           next tab with news    " G_KEY("Ctrl+X") "          next server",
+        "  " G_KEY("Ctrl+R") "           mark every tab read",
         "  " G_KEY("Ctrl+W") "           close this tab        " G_KEY("PgUp") " " G_KEY("PgDn") "     scroll the chat",
         "  " G_KEY("Ctrl+G") " " G_KEY("Alt+J") "    find a tab by name (channel, query, network)",
         "  " G_KEY("Alt+S") "            lock the screen now (with a " G_CMD("/lock") " password)",

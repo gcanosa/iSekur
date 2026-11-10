@@ -623,6 +623,9 @@ int main() {
         ts->typed_at = 0;  // long ago (an autojoin): not the active #other
         feed(":srv 474 me #b :Cannot join channel (+b)");
         assert(ts->status->lines.back().text.find("(+b)") != std::string::npos && other->lines.empty());
+        other->activity = 2, other->unread = 3, ts->status->activity = 1;
+        core.mark_all_read();  // Ctrl+R / Cmd+R, the terminal's and the webchat's
+        assert(!other->activity && !other->unread && !ts->status->activity);
         core.close(other), core.select(chb), sent();
     }
     {  // /rawlog: every line in and out in a *raw tab, secrets blanked; the fallbacks show what they used to hide

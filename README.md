@@ -248,6 +248,7 @@ lets any IRC client in, with its own look, but only for what IRC carries (no `/s
 | Alt+↑/↓, Ctrl+P/N | previous / next tab |
 | Alt+←/→ | previous / next server tab, or a tab of no network (cmd, shells) |
 | Ctrl+A, Alt+A | next tab with activity |
+| Ctrl+R, Cmd+R | mark every tab read (webchat: Cmd+R, Alt+R) |
 | Alt+S (Option+S on a Mac) | lock the terminal and the webchat now (`/lock`; with no lock password yet it says how to set one) |
 | Alt+D (Option+D on a Mac), Ctrl+Z | detach: iSekur keeps running in the background |
 | Ctrl+X | next server |

@@ -216,8 +216,8 @@ certfp        =              ; SHA-256 of a client certificate (comma-separated)
 backlog       = 50           ; lines of each tab a client gets when it connects (0: none)
 
 # Key bindings: <action> = <key> [key...]
-# Keys: M-x (Alt), C-x (Ctrl), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
-# Actions: next_tab prev_tab next_active next_server prev_server close_tab scroll_up
+# Keys: M-x (Alt), C-x (Ctrl), D-x (Cmd, where the terminal reports it), F1-F12, PgUp, PgDn, Left/Right/Up/Down (M-Right...).
+# Actions: next_tab prev_tab next_active mark_all_read next_server prev_server close_tab scroll_up
 #          scroll_down toggle_nicklist toggle_topic detach toggle_mouse other_pane find_tab
 #          quit (asks first) keys (the key list, F1 M-k)
 #          tab_1 .. tab_10
@@ -228,6 +228,7 @@ backlog       = 50           ; lines of each tab a client gets when it connects 
 ; next_server = M-Right C-x
 ; prev_server = M-Left
 ; next_active = C-a M-a
+; mark_all_read = C-r D-r
 ; close_tab = C-w
 ; find_tab = C-g M-j
 ; other_pane = F6 M-o
