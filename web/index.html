@@ -476,6 +476,9 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .inline.tsright .l { display: flow-root; }  /* an empty line keeps its floated time, not the next line's row */
 .inline.tsright .l .ts { float: right; margin-left: 10px; }
 .inline.tsright .l .ts::after { content: none; }
+/* /set timestamp_hover on: the time hidden (its column kept), in quick under the mouse, out slowly */
+.tshover .l .ts { opacity: 0; transition: opacity 1.5s ease-out; }
+.tshover .l:hover .ts { opacity: 1; transition: opacity .15s ease-in; }
 .inline .l.hl .nk { border-radius: 0; }
 .l.hdr .tx { cursor: pointer; }
 /* previews a plugin put under a line (isekur.embed, the preview plugin): a link card, a picture, a player. Quiet, in the
@@ -1383,6 +1386,7 @@ function applyTheme() {
     $(p).classList.toggle("inline", (theme.lay || {}).nick_width === "0");
     $(p).style.setProperty("--nw", (+(theme.lay || {}).nick_width || 12) + 1 + "ch");  // nick_width (+1: the mode prefix)
     $(p).classList.toggle("tsright", theme.tsa === "right");  // /set timestamp_align right
+    $(p).classList.toggle("tshover", theme.tsh === "on");  // /set timestamp_hover on
   }
   // /set web_font wins; else the theme's (mirc: Fixedsys where it's installed); else ui-monospace...
   const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim().replace(/^theme$/, "");
@@ -2156,7 +2160,7 @@ const lgDays = (net, name) => lgs ? lgs.files.filter(f => f.net === net && f.nam
 function renderLogLines() {
   const H = $("#loghead"), L = $("#loglines"), q = $("#logq").value, Q = logQuery(q), ev = $("#logev").checked;
   H.textContent = ""; L.textContent = "";
-  for (const k of ["inline", "tsright"]) L.classList.toggle(k, $("#msgs").classList.contains(k));
+  for (const k of ["inline", "tsright", "tshover"]) L.classList.toggle(k, $("#msgs").classList.contains(k));
   L.style.setProperty("--nw", $("#msgs").style.getPropertyValue("--nw"));
   renderLogCal();
   const line = (name, l, i, day) => {

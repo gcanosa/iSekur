@@ -880,7 +880,7 @@ std::string Web::theme_json() {
     for (auto& sv : c.servers) logs |= c.opt_on(sv.get(), "log", false);
     std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"sb\":" + std::to_string(c.max_lines) +
                     ",\"font\":" + json_str(ini_get(c.cfg, "general", "web_font")) + ",\"fsize\":" + json_str(ini_get(c.cfg, "general", "web_font_size")) +
-                    ",\"tsa\":" + json_str(ini_get(c.cfg, "general", "timestamp_align")) + ",\"tree\":" + json_str(ini_get(c.cfg, "general", "web_tree_lines")) + ",\"treew\":" + json_str(ini_get(c.cfg, "general", "web_tree_width")) + ",\"ub\":" + json_str(ini_get(c.cfg, "general", "web_unread_badge")) + ",\"logs\":" + (logs ? "1" : "0") + ",\"el\":{";
+                    ",\"tsa\":" + json_str(ini_get(c.cfg, "general", "timestamp_align")) + ",\"tsh\":" + json_str(ini_get(c.cfg, "general", "timestamp_hover")) + ",\"tree\":" + json_str(ini_get(c.cfg, "general", "web_tree_lines")) + ",\"treew\":" + json_str(ini_get(c.cfg, "general", "web_tree_width")) + ",\"ub\":" + json_str(ini_get(c.cfg, "general", "web_unread_badge")) + ",\"logs\":" + (logs ? "1" : "0") + ",\"el\":{";
     bool first = true;
     for (auto& [k, st] : c.theme.el) {
         o += (first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(st.fg)) +
