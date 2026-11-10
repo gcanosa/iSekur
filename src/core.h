@@ -167,7 +167,7 @@ struct Buffer {
     std::string topic, modes;
     std::map<std::string, NickEntry> nicks;  // key: irc_lower(nick)
     int activity = 0;                        // 0 none, 1 data, 2 msg, 3 hilight
-    time_t sync_until = 0;                   // our JOIN / the 001: topic, names, modes, MOTD until then aren't activity
+    time_t sync_until = 0;                   // server tab: the connect's own lines (CAP, MOTD) until then aren't activity
     int unread = 0;                          // lines below the "new" marker
     int scroll = 0;                          // rows scrolled back (tui)
     int scroll_new = 0;                      // lines added while scrolled back: the tui adds their rows to scroll
@@ -620,6 +620,7 @@ struct Core {
     std::string plugin_at(const std::string& name, const std::string& key, const std::string& scope) const;
     std::string plugin_eff(const std::string& name, const std::string& key, const std::string& scope, const std::string& def, char sc = 'c') const;
     std::shared_ptr<CatalogJob> catalog;  // while one runs
+    bool quiet_add = false;  // a chathistory replay or a join's own replies (topic, names, modes): no activity or unread
     int plugin_depth = 0;  // plugin code running: /plugin is refused, nothing is unloaded
     std::vector<std::shared_ptr<Plugin>> plugins;
 };

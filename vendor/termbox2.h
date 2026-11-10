@@ -2948,18 +2948,21 @@ static int extract_esc_mouse(struct tb_event *event) {
                 index_fail};
             int m_is_capital = 0;
 
-            for (size_t i = 0; i < in->len; i++) {
+            // iSekur: only this sequence, up to its M/m: with 1003 a click often comes in the same read as
+            // moves, and scanning (then dropping) the whole buffer lost it
+            for (size_t i = (type == TYPE_1015 ? 2 : 3); i < in->len; i++) {
                 if (in->buf[i] == ';') {
                     if (indices[FIRST_SEMICOLON] == index_fail) {
                         indices[FIRST_SEMICOLON] = i;
                     } else {
                         indices[LAST_SEMICOLON] = i;
                     }
-                } else if (indices[FIRST_M] == index_fail) {
-                    if (in->buf[i] == 'm' || in->buf[i] == 'M') {
-                        m_is_capital = (in->buf[i] == 'M');
-                        indices[FIRST_M] = i;
-                    }
+                } else if (in->buf[i] == 'm' || in->buf[i] == 'M') {
+                    m_is_capital = (in->buf[i] == 'M');
+                    indices[FIRST_M] = i;
+                    break;
+                } else if (in->buf[i] < '0' || in->buf[i] > '9') {
+                    break;  // not a mouse report
                 }
             }
 
@@ -3004,7 +3007,7 @@ static int extract_esc_mouse(struct tb_event *event) {
                         break;
                 }
 
-                buf_shift = in->len;
+                buf_shift = indices[FIRST_M] + 1;
 
                 if (!fail) {
                     if (!m_is_capital) {
@@ -3020,8 +3023,8 @@ static int extract_esc_mouse(struct tb_event *event) {
                     if (n1 & 8) event->mod |= TB_MOD_ALT;
                     if (n1 & 16) event->mod |= TB_MOD_CTRL;
 
-                    event->x = ((uint8_t)n2) - 1;
-                    event->y = ((uint8_t)n3) - 1;
+                    event->x = (int)n2 - 1;  // iSekur: not uint8_t, wide windows have columns past 255
+                    event->y = (int)n3 - 1;
 
                     ret = TB_OK;
                 }

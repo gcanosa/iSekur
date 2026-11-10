@@ -295,6 +295,7 @@ void Core::connect(Server* s) {
     s->caps.clear(), s->caps_ls.clear();
     s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear(), s->list.clear(), s->listing = false;
     s->away = false;
+    s->status->sync_until = time(nullptr) + 5;  // the handshake's own lines (hostname lookup, CAP) aren't activity either
     s->hist_batches.clear(), s->cap_vals.clear(), s->isupport.clear(), s->casemap = 0;
     s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear();
     s->online.clear(), s->ison_at = 0, s->ison_wait = 0, s->typing_sent.clear(), s->motd_done = false, s->markread_off = false;
@@ -538,6 +539,10 @@ static std::string host_of(const Msg& m) {
 }
 
 void Core::handle(Server* s, const Msg& m) {
+    // a join's own replies come late behind the flood limit (many channels: minutes): never activity
+    static const std::set<std::string> join_replies = {"324", "329", "331", "332", "333", "353", "366"};
+    struct Keep { bool& f; bool was; ~Keep() { f = was; } } keep{quiet_add, quiet_add};
+    if (join_replies.count(m.cmd)) quiet_add = true;
     time_t ts = time(nullptr);
     auto st = m.tags.find("time");
     if (st != m.tags.end())
@@ -851,7 +856,6 @@ void Core::handle(Server* s, const Msg& m) {
             Buffer* b = open(s, BT::CHANNEL, ch);
             b->joined = true;
             b->nicks.clear();
-            b->sync_until = time(nullptr) + 5;
             // catch up from the server: what was said since the last line we have
             int fetch = atoi(opt(s, "history_fetch", "100").c_str());
             if (fetch > 0 && s->caps.count("draft/chathistory")) {
@@ -862,7 +866,7 @@ void Core::handle(Server* s, const Msg& m) {
                 s->send("CHATHISTORY " + std::string(last ? "AFTER " : "LATEST ") + ch + " " + when + " " +
                         std::to_string(std::min(fetch, 500)));
             }
-            line(b, LK::JOIN, m.nick, "You have joined " + ch, true);
+            quiet_add = true, line(b, LK::JOIN, m.nick, "You have joined " + ch, true), quiet_add = false;
             if (!s->twitch()) s->send("MODE " + ch), s->who_auto.insert(s->lower(ch));  // Twitch: 421 unknown command
             if (fresh) select(b);  // the webchat follows too
             plugin_emit("join", s, ch, {{"nick", m.nick}, {"host", host_of(m)}, {"self", true}});
@@ -1323,7 +1327,7 @@ void Core::handle(Server* s, const Msg& m) {
         l.id = lid;
         if (lid && embed_pend.first == lid) l.embeds = std::move(embed_pend.second), embed_pend = {};
         if (s->twitch() && !self && !server_msg && twitch_user(b, m, l)) notify(Ev::BUFFER, b);
-        add(b, l);
+        quiet_add = replay, add(b, l), quiet_add = false;
         if (hl) ring(s);
         return;
     }
