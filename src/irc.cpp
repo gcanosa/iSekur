@@ -540,10 +540,19 @@ static std::string host_of(const Msg& m) {
 
 void Core::handle(Server* s, const Msg& m) {
     // a join's own replies come late behind the flood limit (many channels: minutes): never activity
-    static const std::set<std::string> join_replies = {"324", "329", "331", "332", "333", "353", "366"};
+    static const std::set<std::string> join_replies = {"324", "328", "329", "331", "332", "333", "353", "366"};
     struct Keep { bool& f; bool was; ~Keep() { f = was; } } keep{quiet_add, quiet_add};
     // and so is a server's own MODE (a new channel's +nt / +Cnst right after our JOIN, netsplit rejoins)
     if (join_replies.count(m.cmd) || (m.cmd == "MODE" && m.prefix.find('!') == std::string::npos)) quiet_add = true;
+    // a channel's join burst (ChanServ's +v, a limit bot's +l a while later) ends 30s after the reply to our MODE,
+    // however late the flood limit made it
+    time_t now = time(nullptr);
+    if (m.cmd == "324" || m.cmd == "329")
+        if (Buffer* jb = find(s, m.p(1)); jb && jb->sync_until > now) jb->sync_until = std::min(jb->sync_until, now + 30);
+    // ChanServ's welcome notices ("[#chan] ..." or not) in the server tab while a channel of this server is joining
+    if (m.cmd == "NOTICE" && s->lower(m.nick) == "chanserv")
+        for (auto& o : bufs)
+            if (o->srv == s && o->type == BT::CHANNEL && o->sync_until > now) { quiet_add = true; break; }
     time_t ts = time(nullptr);
     auto st = m.tags.find("time");
     if (st != m.tags.end())
@@ -857,6 +866,7 @@ void Core::handle(Server* s, const Msg& m) {
             Buffer* b = open(s, BT::CHANNEL, ch);
             b->joined = true;
             b->nicks.clear();
+            b->sync_until = time(nullptr) + 60;  // until 30s after the MODE reply; 60s if it never comes (Twitch)
             // catch up from the server: what was said since the last line we have
             int fetch = atoi(opt(s, "history_fetch", "100").c_str());
             if (fetch > 0 && s->caps.count("draft/chathistory")) {
@@ -1328,7 +1338,8 @@ void Core::handle(Server* s, const Msg& m) {
         l.id = lid;
         if (lid && embed_pend.first == lid) l.embeds = std::move(embed_pend.second), embed_pend = {};
         if (s->twitch() && !self && !server_msg && twitch_user(b, m, l)) notify(Ev::BUFFER, b);
-        quiet_add = replay, add(b, l), quiet_add = false;
+        bool was = quiet_add;
+        quiet_add = was || replay, add(b, l), quiet_add = was;
         if (hl) ring(s);
         return;
     }

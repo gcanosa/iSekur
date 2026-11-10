@@ -586,6 +586,10 @@ int main() {
         assert(core.find(ts, "#bg")->activity == 0);
         feed(":irc.test MODE #bg +nt");  // a new channel's modes, set by the server itself: no activity
         assert(core.find(ts, "#bg")->activity == 0);
+        ts->status->activity = 0;
+        feed(":ChanServ!s@services MODE #bg +v " + ts->nick);  // the join burst: services' voice, their welcome notice
+        feed(":ChanServ!s@services NOTICE " + ts->nick + " :Welcome to #bg!");
+        assert(core.find(ts, "#bg")->activity == 0 && ts->status->activity == 0);
         feed(":srv BATCH +h1 chathistory #bg");  // the catch-up of what was said before: old news, no activity
         feed("@batch=h1;time=2020-01-01T00:00:00.000Z :carol!u@h PRIVMSG #bg :old");
         feed(":srv BATCH -h1");

@@ -842,7 +842,7 @@ void Core::add(Buffer* b, Line l) {
     if (b->scroll) b->scroll_new++;  // keep the scrolled view still: the tui knows how many rows it wraps to
     const Line& ln = b->lines.back();
     int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : b->quiet && noise(ln) ? 0 : 1;
-    if (quiet_add || (lvl == 1 && time(nullptr) < b->sync_until)) lvl = 0;  // ponytail: sync_until is a fixed 5s window, end it at 376/422 if a slow MOTD outlasts it
+    if (quiet_add || (lvl == 1 && time(nullptr) < b->sync_until)) lvl = 0;  // server tab: a fixed 5s window (end it at 376/422 if a slow MOTD outlasts it); a channel: 30s past its MODE reply
     // the "new" marker goes above the first message you missed, then counts everything after it
     if (b->unread || (b != active && b != split_buf && lvl >= 2)) b->unread++;
     if (b != active && b != split_buf && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }  // split: on screen too
