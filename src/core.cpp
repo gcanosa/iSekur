@@ -835,14 +835,7 @@ void Core::add(Buffer* b, Line l) {
     // /typing: other people's messages type themselves out
     if (!l.self && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) && opt_on(b->srv, "typing_effect", false))
         l.typed_at = now_ms(), typing_until = std::max(typing_until, l.typed_at + 2100);
-    // a plugin's string is what the screens show (lolcat); the log keeps what was said
-    std::string said;
-    if (b->srv && !plugin_depth && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE)) {
-        std::string t = l.text;
-        plugin_emit("show", b->srv, b->name, {{"nick", l.nick}, {"text", l.text}, {"self", l.self},
-                                              {"action", l.kind == LK::ACTION}, {"notice", l.kind == LK::NOTICE}}, &t);
-        if (t != l.text) said = std::move(l.text), l.text = std::move(t);
-    }
+    if (!plugin_depth) show(b, l);  // a plugin's string is what the screens show (lolcat); the log keeps what was said
     b->lines.push_back(std::move(l));
     b->added++;
     while (b->lines.size() > max_lines) b->lines.pop_front();
@@ -853,8 +846,8 @@ void Core::add(Buffer* b, Line l) {
     if (b->unread || (b != active && b != split_buf && lvl >= 2)) b->unread++;
     if (b != active && b != split_buf && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }  // split: on screen too
     dirty = true;
-    if (said.empty()) log_line(b, ln);
-    else { Line o = ln; o.text = said; log_line(b, o); }
+    if (ln.said.empty()) log_line(b, ln);
+    else { Line o = ln; o.text = ln.said; log_line(b, o); }
     notify(Ev::LINE, b, &ln);
     // copy highlights and private messages to the first window, so whatever
     // happened while you were away is in one place
@@ -863,6 +856,27 @@ void Core::add(Buffer* b, Line l) {
         Line copy = ln;
         copy.text = "\x02[" + b->srv->cfg.name + "/" + b->name + "]\x02 " + ln.text;
         add(home, copy);
+    }
+}
+
+bool Core::show(Buffer* b, Line& l) {
+    if (!b->srv || (l.kind != LK::MSG && l.kind != LK::ACTION && l.kind != LK::NOTICE)) return false;
+    std::string orig = l.said.empty() ? l.text : l.said, t = orig;
+    plugin_emit("show", b->srv, b->name, {{"nick", l.nick}, {"text", orig}, {"self", l.self},
+                                          {"action", l.kind == LK::ACTION}, {"notice", l.kind == LK::NOTICE}}, &t);
+    if (t == l.text) return false;
+    l.said = t == orig ? "" : std::move(orig), l.text = std::move(t);
+    return true;
+}
+
+// lolcat turned on paints the backlog too, turned off gives it back. ponytail: every tab at once (2000 lines each by
+// default: a blink); the hidden tabs on their first look if a huge scrollback ever makes it slow
+void Core::plugins_reshow() {
+    if (plugin_depth) return;
+    for (auto& bp : bufs) {
+        bool changed = false;
+        for (auto& l : bp->lines) changed |= show(bp.get(), l);
+        if (changed) dirty = true, notify(Ev::CLEAR, bp.get());  // the webchat gets the tab's lines again
     }
 }
 

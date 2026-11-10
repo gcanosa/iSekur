@@ -748,6 +748,7 @@ void Core::plugins_sync() {
                   }), plugins.end());
     for (auto& n : files)
         if (wanted(*this, n) && std::none_of(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; })) load_one(*this, n);
+    plugins_reshow();
 }
 
 // a nickmenu handler's {{label, "/command"}, ...}: one-line labels, /commands only, none of those a plugin can't run
@@ -1367,14 +1368,16 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
             }
         if (!write(argv[2], val)) return;
         if (argv[2] == "enabled") plugins_sync();
+        else plugins_reshow();  // lolcat's palette or lines: the backlog too
         plug_print(b, LK::INFO, name + " " + argv[2] + " = " + (val.empty() ? "(default)" : val) + where);
         return;
     }
-    if (sub == "remove") { remove_plugin(*this, b, name); return; }
+    if (sub == "remove") { remove_plugin(*this, b, name), plugins_reshow(); return; }
     if (sub == "reload") {
         plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == name; }), plugins.end());
-        if (!wanted(*this, name)) { plug_print(b, LK::INFO, name + " is off: /plugin enable " + name); return; }
+        if (!wanted(*this, name)) { plugins_reshow(), plug_print(b, LK::INFO, name + " is off: /plugin enable " + name); return; }
         load_one(*this, name);
+        plugins_reshow();
         if (loaded(name)) plug_print(b, LK::INFO, name + " reloaded");
         return;
     }

@@ -2360,6 +2360,12 @@ isekur.command("th", "", function() local t = isekur.theme(); print(t.name, #t.n
         assert(irc_parse(":bob!u@h PRIVMSG #y :keep", mm));
         sy.handle(ys, mm);
         assert(yb->lines.back().text == "keep");
+        // turned off and on: the backlog goes back to what was said, then is shown changed again
+        auto texts = [&] { std::string t; for (auto& l : yb->lines) if (l.kind == LK::MSG) t += l.text + "|"; return t; };
+        sy.exec(ph, "/plugin disable up");
+        assert(texts() == "hello|hi there|keep|");
+        sy.exec(ph, "/plugin enable up");
+        assert(texts() == "me:HELLO|HI THERE|keep|");
         {  // API 9: nickmenu items go after a separator; /exec and the like, and non-commands, are dropped
             FILE* f = fopen((dir + "/plugins/nm.lua").c_str(), "w");
             fputs(R"LUA(

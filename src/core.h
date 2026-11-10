@@ -119,6 +119,7 @@ struct Line {
     char badge_kind = 0;
     unsigned long long id = 0;  // messages: what a plugin's isekur.embed points at (e.id of its message event); 0 = none
     std::string embeds = {};    // isekur.embed's JSON objects, comma separated: the webchat's previews under the line
+    std::string said = {};      // what was said, when a plugin's show event changed text (lolcat); "" = text is it
 };
 // /typing: how many of a line's len visible characters show at now; ~30 a second, never over 2s a line
 inline size_t typed_chars(const Line& l, size_t len, long long now) {
@@ -589,6 +590,8 @@ struct Core {
     // @net, @net/#chan override) says enabled = on. Last member: unloaded first, with the rest still there
     std::string plugin_dir() const;
     void plugins_sync();  // load the enabled ones, unload the rest
+    bool show(Buffer* b, Line& l);  // the plugins' show event on a message: text is what they make of it (said keeps the original)
+    void plugins_reshow();  // show again over every tab's scrollback: a plugin came, went or changed a setting
     void plugin_cmd(Buffer* b, const std::string& args);  // /plugin
     bool plugin_run(Buffer* b, const std::string& cmd, const std::string& args);  // a plugin's /command; false: none has it
     // ev to every plugin on in s/target (s null: every loaded one); true: a handler returned true (hide the line)
