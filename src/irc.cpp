@@ -542,7 +542,8 @@ void Core::handle(Server* s, const Msg& m) {
     // a join's own replies come late behind the flood limit (many channels: minutes): never activity
     static const std::set<std::string> join_replies = {"324", "329", "331", "332", "333", "353", "366"};
     struct Keep { bool& f; bool was; ~Keep() { f = was; } } keep{quiet_add, quiet_add};
-    if (join_replies.count(m.cmd)) quiet_add = true;
+    // and so is a server's own MODE (a new channel's +nt / +Cnst right after our JOIN, netsplit rejoins)
+    if (join_replies.count(m.cmd) || (m.cmd == "MODE" && m.prefix.find('!') == std::string::npos)) quiet_add = true;
     time_t ts = time(nullptr);
     auto st = m.tags.find("time");
     if (st != m.tags.end())
