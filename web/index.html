@@ -75,6 +75,9 @@ button, input { font: inherit; color: inherit; }
   color: var(--muted); background: color-mix(in srgb, var(--muted) 18%, transparent); }
 #side .tab.a3 .ub { color: var(--tab_hilight-fg, #ff6ac1); background: color-mix(in srgb, var(--tab_hilight-fg, #ff6ac1) 16%, transparent); }
 #side .tab .ub + .more, #side .tab .ub + .fold, #side .tab .ub + .x { margin-left: 0; }
+/* a network's row: its × takes the badge's place on hover, so the name keeps its room */
+#side .tab.srv:hover .ub { display: none; }
+#side .tab.srv:hover .ub + .fold { margin-left: auto; }
 #side .tab.shell { color: var(--tab_shell-fg, var(--tab_home-fg, inherit)); }
 #side .tab .more { color: var(--muted); }
 #side .tab .x { margin-left: auto; flex-shrink: 0; padding: 0 4px; font-weight: 400; opacity: .4; visibility: hidden; }  /* the tab's own color, faded: fits every theme and the active tab's */
@@ -1092,7 +1095,7 @@ function renderSide() {
       const u = document.createElement("span"); u.className = "ub"; u.textContent = ub > 999 ? "999+" : ub; u.title = ub + " unread message" + (ub === 1 ? "" : "s");
       t.append(u);
     }
-    if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
+    if (hid && !t.querySelector(".ub")) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }  // a folded network with unread: the badge says it
     if (srvRow) {
       const f = document.createElement("span"); f.className = "fold"; f.textContent = b.fold ? "▸" : "▾";
       f.title = b.fold ? "Show its channels" : "Hide its channels";
