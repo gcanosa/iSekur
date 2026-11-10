@@ -201,14 +201,19 @@ static int l_sort_tabs(lua_State* L) {  // sort_tabs(): each network's tabs toge
     std::map<const Server*, size_t> first;  // a network's group sits where its first tab is, so networks keep their order
     for (size_t i = 0; i < bs.size(); i++)
         if (bs[i]->srv) first.emplace(bs[i]->srv, i);
-    auto key = [&](size_t i) {
-        Buffer* b = bs[i].get();
-        std::string name = b->name;
-        return std::make_tuple(b->srv ? first[b->srv] : i, b->type != BT::STATUS, to_lower(name));
-    };
+    auto grp = [&](size_t i) { return bs[i]->srv ? first[bs[i]->srv] : i; };
     std::vector<size_t> ord(bs.size());
     for (size_t i = 0; i < ord.size(); i++) ord[i] = i;
-    std::stable_sort(ord.begin(), ord.end(), [&](size_t x, size_t y) { return key(x) < key(y); });
+    std::stable_sort(ord.begin(), ord.end(), [&](size_t x, size_t y) { return grp(x) < grp(y); });
+    // within a network: a tab the user /moved keeps its place in the group, the others fill the rest by name
+    for (size_t s = 0, e; s < ord.size(); s = e) {
+        for (e = s; e < ord.size() && grp(ord[e]) == grp(ord[s]); e++) {}
+        std::vector<size_t> free;
+        for (size_t k = s; k < e; k++) if (!bs[ord[k]]->placed) free.push_back(ord[k]);
+        auto key = [&](size_t i) { std::string n = bs[i]->name; return std::make_tuple(bs[i]->type != BT::STATUS, to_lower(n)); };  // to_lower works in place
+        std::stable_sort(free.begin(), free.end(), [&](size_t x, size_t y) { return key(x) < key(y); });
+        for (size_t k = s, f = 0; k < e; k++) if (!bs[ord[k]]->placed) ord[k] = free[f++];
+    }
     bool moved = !std::is_sorted(ord.begin(), ord.end());  // ord is a permutation: sorted means unchanged
     if (moved) {
         std::vector<std::unique_ptr<Buffer>> out;

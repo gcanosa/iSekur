@@ -175,6 +175,7 @@ struct Buffer {
     bool quiet = false;                      // /quiet: hide joins, parts, quits, nick changes
     bool quiet_typing = false;               // quiet only because /typing turned it on: /typing off undoes it
     bool collapsed = false;                  // a server tab hiding its channels in the tab bar (right click)
+    bool placed = false;                     // /move (or a drag) put it here: isekur.sort_tabs leaves it where it is
     std::unique_ptr<Term> term;              // a shell tab's running shell
     FILE* log = nullptr;                     // opened lazily when logging is on
     std::string log_day;                     // YYYY-MM-DD the open log belongs to

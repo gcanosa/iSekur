@@ -1823,6 +1823,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             int seen = 0;
             for (size_t i = 0; i < bufs.size(); i++)
                 if (bufs[i]->srv == sv && (bufs[i]->type == BT::STATUS || seen++ < n - 1)) pos = i + 1;
+            mine->placed = true;
             bufs.insert(bufs.begin() + (long)pos, std::move(mine));
             // the autojoin list follows the tabs: channels join (and their tabs open) in its order at the next start
             auto& aj = sv->cfg.autojoin;

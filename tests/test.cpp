@@ -2343,6 +2343,13 @@ int main() {
         assert(last(ph) == "true" && names() == "console zn #zeta bob an #Alpha #beta");  // networks keep their order
         sc.exec(ph, "/srt");
         assert(last(ph) == "false" && names() == "console zn #zeta bob an #Alpha #beta");
+        Buffer* bob = nullptr;
+        for (auto& b : sc.bufs) if (b->name == "bob") bob = b.get();
+        sc.exec(bob, "/move 1");  // a tab moved by hand stays: the rest sort around it
+        assert(names() == "console zn bob #zeta an #Alpha #beta");
+        sc.open(zn, BT::CHANNEL, "#aaa");
+        sc.exec(ph, "/srt");
+        assert(last(ph) == "true" && names() == "console zn bob #aaa #zeta an #Alpha #beta");
     }
     {  // API 8: the show event changes what the screens show (not what's sent or logged), isekur.theme() the theme's colors
         char d[] = "/tmp/isekur-show-XXXXXX";
