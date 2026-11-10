@@ -2393,7 +2393,8 @@ void Tui::shutdown() { tb_shutdown(); }
 
 void Tui::set_mouse() {
     tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
-    if (mouse_on) tb_sendf("\x1b[?1003%c", ts_hover ? 'h' : 'l');
+    // xterm and Ghostty keep 1000/1002/1003 as one mode: 1003l alone turns all mouse reports off, so 1002 comes back after it
+    if (mouse_on) tb_sendf("%s", ts_hover ? "\x1b[?1003h" : "\x1b[?1003l\x1b[?1002h");
     if (!mouse_on || !ts_hover) hover_x = hover_y = -1, hover_line = fade_line = nullptr;
 }
 
