@@ -70,6 +70,11 @@ button, input { font: inherit; color: inherit; }
 #side .tab.srv:hover .x { display: inline; }
 #side .tab .more, #side .tab .fold { margin-left: auto; }
 #side .tab .more + .fold, #side .tab .more + .x, #side .tab .fold + .x { margin-left: 0; }
+/* /set web_unread_badge: the messages you haven't read, a small muted pill (a mention: the hilight color) */
+#side .tab .ub { margin-left: auto; flex-shrink: 0; align-self: center; font-size: .75em; font-weight: 600; line-height: 1.6em; min-width: 1.6em; padding: 0 .45em; box-sizing: border-box; text-align: center; border-radius: .8em;
+  color: var(--muted); background: color-mix(in srgb, var(--muted) 18%, transparent); }
+#side .tab.a3 .ub { color: var(--tab_hilight-fg, #ff6ac1); background: color-mix(in srgb, var(--tab_hilight-fg, #ff6ac1) 16%, transparent); }
+#side .tab .ub + .more, #side .tab .ub + .fold, #side .tab .ub + .x { margin-left: 0; }
 #side .tab.shell { color: var(--tab_shell-fg, var(--tab_home-fg, inherit)); }
 #side .tab .more { color: var(--muted); }
 #side .tab .x { margin-left: auto; flex-shrink: 0; padding: 0 4px; font-weight: 400; opacity: .4; visibility: hidden; }  /* the tab's own color, faded: fits every theme and the active tab's */
@@ -1032,6 +1037,15 @@ function dragDrop(e) {
   order = rest;
   send({t: "input", buf: f.id, text: "/move " + at});
 }
+// the messages (not joins, parts or your own lines) below a tab's "new" marker: the badge's count
+function unreadMsgs(b) {
+  if (!b.unread || !b.lines) return 0;
+  let n = 0;
+  for (let i = Math.max(0, b.lines.length - b.unread); i < b.lines.length; i++) { const l = b.lines[i]; if (!l.s && (l.k === "msg" || l.k === "action")) n++; }
+  return n;
+}
+let sideQueued = false;  // a busy channel's lines redraw the tab list once a frame, not once a line
+function renderSideSoon() { if (!sideQueued) sideQueued = true, requestAnimationFrame(() => { sideQueued = false; renderSide(); }); }
 function renderSide() {
   if (dragId !== null) return;  // mid-drag: redrawn when it ends
   const side = $("#side");
@@ -1055,9 +1069,9 @@ function renderSide() {
       }
     }
     if (!q.length && st && st.fold && b !== st && id !== active) return;
-    let act = b.act, hid = 0;
+    let act = b.act, hid = 0, ub = id === active || id === split ? 0 : unreadMsgs(b);
     if (b === st && st.fold)
-      for (const x of order) { const o = bufs.get(x); if (o && o !== b && o.srv === b.srv && x !== active) hid++, act = Math.max(act, o.act); }
+      for (const x of order) { const o = bufs.get(x); if (o && o !== b && o.srv === b.srv && x !== active) hid++, act = Math.max(act, o.act), ub += x === split ? 0 : unreadMsgs(o); }
     const t = document.createElement("div");
     t.className = "tab" + (id === active ? " active" : id === split ? " split" : "") + (act ? " a" + act : "") +
       (b.home ? " home" : srvRow ? " server srv" : b.type === "shell" ? " shell" : "") +
@@ -1074,6 +1088,10 @@ function renderSide() {
       d.textContent = b.state === "connected" ? "●" : b.state === "disconnected" ? "○" : "◐";
       t.append(n, d, nm);
     } else t.append(n, nm);
+    if (ub && !/^(off|false|no)$/i.test(theme.ub || "")) {
+      const u = document.createElement("span"); u.className = "ub"; u.textContent = ub > 999 ? "999+" : ub; u.title = ub + " unread message" + (ub === 1 ? "" : "s");
+      t.append(u);
+    }
     if (hid) { const mo = document.createElement("span"); mo.className = "more"; mo.textContent = "+" + hid; t.append(mo); }
     if (srvRow) {
       const f = document.createElement("span"); f.className = "fold"; f.textContent = b.fold ? "▸" : "▾";
@@ -1449,7 +1467,7 @@ function onMsg(ev) {
   if (m.t === "theme") {
     $("#logsbtn").hidden = !m.logs;  // only while logging is on (/set log on); /logs still opens it  // new fonts reflow the chat: one that was at the bottom stays there (renderMsgs would see it scrolled up)
     const end = $("#msgs").pin_;
-    theme = m; applyTheme(); renderMsgs();
+    theme = m; applyTheme(); renderMsgs(); renderSide();  // renderSide: /set web_unread_badge
     if (end) $("#msgs").scrollTop = $("#msgs").scrollHeight;
   }
   else if (m.t === "buf") {
@@ -1482,6 +1500,7 @@ function onMsg(ev) {
     b.lines.push(m.line); b.unread = m.u;
     while (b.lines.length > (theme.sb || 2000)) b.lines.shift(), b.first++;
     alertFor(b, m.buf, m.line);
+    if (m.buf !== active && m.buf !== split && !m.line.s && (m.line.k === "msg" || m.line.k === "action")) renderSideSoon();  // its badge
     if (m.buf === active) {
       const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       const el = lineEl(b, m.line);

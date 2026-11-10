@@ -373,7 +373,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
-    {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"colors", "Look", 'g'},
+    {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
     {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'},
     {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
@@ -1558,7 +1558,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         if (sec == "keys") cfg_changed = true;
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
-        if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0)) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
+        if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0 || key == "web_unread_badge")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (key == "log") notify(Ev::THEME, nullptr);  // the webchat shows its Logs button only while logging
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         if (sec == "general" && (key == "fifo" || key == "fifo_path")) fifo_open();  // the pipe opens, moves or closes at once
