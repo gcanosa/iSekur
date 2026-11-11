@@ -310,6 +310,8 @@ static const std::vector<CmdInfo> CMDS = {
      "Space switches on/off (and steps through the themes, applied at once), d or Del puts the default "
      "back, s or Ctrl+S saves, q or Esc closes; the mouse works too. The webchat's ⚙ is the same, with "
      "switches and a theme list. With a key it shows it; with a value it changes it right away. "
+     "Only keys iSekur reads are taken, in the section that reads them ([plugin.*] takes any); "
+     "one already in the config can still be shown or cleared. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
      "/set key \"\" empties it, which means its default again. 0 turns off a key that counts: no nick column "
      "(nick_width), never (lock_idle, exec_timeout), no limit (paste_confirm), none (log_history, "

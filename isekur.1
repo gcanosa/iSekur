@@ -318,6 +318,11 @@ Its output in the background goes to
 .RI ( work.log )
 in the same directory.
 .TP
+.I ~/.config/isekur/slow.log
+A pass of the main loop that kept the keyboard waiting over 15ms, with the stages that took it
+(past 256KB it starts over; the previous one is
+.IR slow.log.old ).
+.TP
 .I ~/.config/isekur/web.sessions
 Hashed webchat login sessions
 .RI ( work.web.sessions
