@@ -1536,6 +1536,15 @@ void Core::exec(Buffer* b, const std::string& input) {
             else rename_server(b, sec.substr(7), val);
             return;
         }
+        // a key iSekur reads (KEYS, the template's [web]/[bnc]/[keys]); [plugin.*] are the plugins' own. One already
+        // in the config (a typo, an old key) can still be shown or cleared
+        bool known = sec.rfind("plugin.", 0) == 0 || (cfg.count(sec) && cfg.at(sec).count(key));
+        if (!known && (sec == "general" || sec.rfind("server.", 0) == 0)) {
+            const KeyInfo* ki = key_info(key);
+            known = ki && ki->scope != (sec == "general" ? 'n' : 'g');
+        } else if (!known)
+            for (auto& [s2, k] : conf_keys()) known |= s2 == sec && k == key;
+        if (!known) { print(b, LK::ERROR, "No setting " + argv[0] + ": /set lists them"); return; }
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
             if (sec == "general" && key == "timestamp") def = theme.lay("timestamp", "%H:%M") + ", the theme's";

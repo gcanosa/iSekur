@@ -1204,6 +1204,16 @@ int main() {
     assert(chb->quiet);
     core.exec(chb, "/quiet off");
 
+    // /set takes only keys iSekur reads, in the section that reads them; [plugin.*] are the plugins'
+    for (const char* bad : {"/set gera asdasd", "/set cpu off", "/set host x", "/set server.t.theme x", "/set web.nope 1", "/set keys.nope C-x", "/set foo.bar 1"}) {
+        core.exec(chb, bad);
+        assert(chb->lines.back().kind == LK::ERROR);
+    }
+    assert(!ini_get(core.cfg, "general", "gera").size() && !core.unsaved["general"].count("gera"));
+    core.exec(chb, "/set keys.find_tab C-g"), assert(chb->lines.back().kind != LK::ERROR);
+    core.exec(chb, "/set web.port 8443"), assert(chb->lines.back().kind != LK::ERROR);
+    core.exec(chb, "/set plugin.x.foo 1"), assert(chb->lines.back().kind != LK::ERROR);
+
     // our /nick is remembered per server (in the file when the server is saved); /set nick drops it
     {
         std::string path = "build/test-nick.conf";
