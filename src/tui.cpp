@@ -2396,6 +2396,8 @@ void Tui::load_keys() {
     keymap["M-Up"] = keymap["C-p"] = "prev_tab";
     keymap["M-Right"] = "next_server";
     keymap["M-Left"] = "prev_server";
+    keymap["M-f"] = "next_server";  // Ghostty/Terminal.app/iTerm send Option+Right/Left as Esc f / Esc b
+    keymap["M-b"] = "prev_server";
     keymap["C-a"] = keymap["M-a"] = "next_active";
     keymap["C-r"] = keymap["D-r"] = "mark_all_read";  // D-r: Cmd+R, where the terminal reports Cmd (CSI u)
     keymap["C-x"] = "next_server";
