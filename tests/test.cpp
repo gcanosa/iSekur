@@ -747,7 +747,22 @@ int main() {
         std::string line = sent();
         assert(line.rfind("PRIVMSG #c :+iSE ", 0) == 0 && line.find("secret") == std::string::npos);
         feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
-        assert(chb->lines.back().text == "\xf0\x9f\x94\x92 secret");
+        assert(chb->lines.back().text == "secret" && chb->lines.back().e2e);
+        {  // e2e_effect takes /typing's place on encrypted lines only; off, they type out like the rest
+            core.cfg["general"]["typing_effect"] = "on";
+            assert(chb->lines.back().fx_at && !chb->lines.back().typed_at);
+            feed(":r1!u@h2 PRIVMSG #c :plain");
+            assert(!chb->lines.back().e2e && !chb->lines.back().fx_at && chb->lines.back().typed_at);
+            core.cfg["general"]["e2e_effect"] = "off";
+            feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
+            assert(chb->lines.back().e2e && !chb->lines.back().fx_at && chb->lines.back().typed_at);
+            feed(":r1!u@h2 PRIVMSG #c :\xf0\x9f\x94\x92 fake");  // a typed lock is text, not the flag
+            assert(!chb->lines.back().e2e);
+            Line l = chb->lines.back();
+            l.e2e = true, l.fx_at = 1000, l.self = false;
+            assert(e2e_glyph(l, 5, 6, 1000) && !e2e_glyph(l, 5, 6, 1000 + E2E_FX_MS));  // noise, then the text
+            core.cfg["general"].erase("typing_effect"), core.cfg["general"].erase("e2e_effect");
+        }
         ts->chan_e2e["#c"] = e2e_key("nope", "isekur-chan:#c");
         feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
         assert(chb->lines.back().text.find("wrong password?") != std::string::npos);

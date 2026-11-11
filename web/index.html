@@ -464,6 +464,10 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .l .nk { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   border-right: 1px solid var(--separator-fg, var(--line)); padding-right: 10px; }
 .l .tx { white-space: pre-wrap; }
+.l { position: relative; }
+.l > .e2e { position: absolute; top: 2px; right: 1px; font-size: 10px; cursor: default; }
+.tsright .l > .e2e { right: auto; left: 1px; }
+.l .fxn { color: var(--timestamp-fg, var(--muted)); }  /* e2e_effect's noise, dim like the terminal's */
 .l.table { display: block; }
 .l.table .ts, .l.table .nk { display: none; }
 /* a theme with nick_width = 0 (mirc): "[12:34] <nick> text" on one line, no nick column */
@@ -959,6 +963,8 @@ function lineEl(b, l) {
   if (l.bd) tx.prepend(el("span", "badge " + (l.bk || "p"), l.bd), " ");  // iSekur's notices (INFO), a plugin's lines (its name)
   if (b.name === "*channels") d.classList.add("table");  // the /list table: no time, no "--" column, the whole width
   d.append(ts, nk, tx);
+  // the 🔒: drawn, not in the text (a typed one can't pass for it), in the side padding opposite the time, all in one column
+  if (l.e) d.append(Object.assign(el("span", "e2e", "\u{1F512}"), {title: "End-to-end encrypted"}));
   if (l.id) d.dataset.lid = l.id;
   const em = l.em && embedsEl(l.em); if (em) d.append(em), requestAnimationFrame(() => alignEm(d));
   return d;
@@ -1517,7 +1523,8 @@ function onMsg(ev) {
       const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
       const el = lineEl(b, m.line);
       box.append(el);
-      if (m.line.ty) typeOut(el.querySelector(".tx"));
+      if (m.line.fx) cryptFx(el.querySelector(".tx"), m.line.s);
+      else if (m.line.ty) typeOut(el.querySelector(".tx"));
       while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
       if (atBottom && b.name !== "*channels") box.scrollTop = box.scrollHeight;  // the /list table arriving row by row stays at its top
     } else if (m.buf === split) {
@@ -2491,6 +2498,36 @@ function typeOut(tx) {
     tx.textContent = ""; mirc(tx, mircPrefix(src, n));
     if (box?.pin_) box.scrollTop = box.scrollHeight;  // the line wraps onto more rows as it types: follow it down
     if (n < len) { tx.insertAdjacentText("beforeend", "\u258C"); requestAnimationFrame(step); } else tx.mark_?.();
+  };
+  step();
+}
+// e2e_effect: like iSekur's terminal (e2e_glyph), 450ms. Incoming: noise settles into the text left to right with a little
+// scatter; your own: a band of noise sweeps over it. Only the text nodes change (spaces and the 🔒 stay), then they're put back
+const FX_CH = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+function cryptFx(tx, self) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const tw = document.createTreeWalker(tx, NodeFilter.SHOW_TEXT), nodes = [];
+  while (tw.nextNode()) if (!tw.currentNode.parentElement.closest(".badge")) nodes.push(tw.currentNode);
+  // each text node goes in a span for the effect (text and dim noise runs), and comes back as it was at the end
+  const parts = nodes.map(t => { const w = el("span"); t.replaceWith(w); return [t, w, [...t.data]]; });
+  const n = parts.reduce((a, [, , cs]) => a + cs.length, 0), seed = Math.random() * 2 ** 32 >>> 0, t0 = performance.now();
+  const hash = i => { let h = (Math.imul(i, 2654435761) ^ seed) >>> 0; h ^= h >>> 13; h = Math.imul(h, 0x5bd1e995) >>> 0; return (h ^ h >>> 15) >>> 0; };
+  const step = () => {
+    if (!tx.isConnected) return;
+    const now = performance.now(), p = (now - t0) / 450, w = Math.max(3, n / 4), pos = p * (n + w) - w, fr = Math.floor(now / 45);
+    if (p >= 1) return parts.forEach(([t, s]) => s.replaceWith(t));
+    let i = 0;
+    for (const [, span, cs] of parts) {
+      const out = []; let run = "", noisy = false;
+      const put = () => { if (run) out.push(noisy ? el("span", "fxn", run) : run); run = ""; };
+      for (const ch of cs) {
+        const h = hash(i++), on = ch !== " " && ch.length === 1 && (self ? i - 1 >= pos && i - 1 < pos + w : p < (i - 1 + (h % 100) / 25) / (n + 4));
+        if (on !== noisy) put(), noisy = on;
+        run += on ? FX_CH[(h + Math.imul(fr, 40503)) >>> 0 & 63] : ch;
+      }
+      put(); span.replaceChildren(...out);
+    }
+    requestAnimationFrame(step);
   };
   step();
 }

@@ -66,6 +66,9 @@ mem_levels = 70 85 95
 
 # Other people's messages type themselves out, letter by letter (/typing toggles it).
 typing_effect = off
+# /e2e lines (de)crypt themselves on screen for half a second, in place of
+# typing_effect for them; your own lines get the same as they go out.
+e2e_effect = on
 
 # Ring the terminal bell for private messages, mentions of your nick and
 # invites (most terminals then flash, bounce the dock icon or play a sound).

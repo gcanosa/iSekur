@@ -120,7 +120,25 @@ struct Line {
     unsigned long long id = 0;  // messages: what a plugin's isekur.embed points at (e.id of its message event); 0 = none
     std::string embeds = {};    // isekur.embed's JSON objects, comma separated: the webchat's previews under the line
     std::string said = {};      // what was said, when a plugin's show event changed text (lolcat); "" = text is it
+    bool e2e = false;           // /e2e: sent or opened with a key; the screens draw the 🔒, nobody can type it in
+    long long fx_at = 0;        // e2e_effect: when it started (de)crypting itself on screen (ms), 0 = shown at once
 };
+// e2e_effect: a line (de)crypts in E2E_FX_MS. Incoming: noise settles into the text, left to right with a little scatter;
+// your own: a band of noise sweeps over it. Text char i of n at now: the glyph to draw instead, or 0 to draw it as is.
+// The webchat's cryptFx does the same
+constexpr long long E2E_FX_MS = 450;
+inline uint32_t e2e_glyph(const Line& l, size_t i, size_t n, long long now) {
+    double p = (double)(now - l.fx_at) / E2E_FX_MS;
+    if (p >= 1 || n == 0) return 0;
+    uint32_t h = (uint32_t)(i * 2654435761u) ^ (uint32_t)l.fx_at;
+    h ^= h >> 13, h *= 0x5bd1e995u, h ^= h >> 15;
+    if (l.self) {
+        double w = std::max(3.0, n / 4.0), pos = p * (n + w) - w;
+        if (i < pos || i >= pos + w) return 0;
+    } else if (p >= (i + (h % 100) / 25.0) / (n + 4.0)) return 0;
+    static const char CH[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    return (uint32_t)CH[(h + (uint32_t)(now / 45) * 40503u) % 64];  // a new glyph ~22 times a second
+}
 // /typing: how many of a line's len visible characters show at now; ~30 a second, never over 2s a line
 inline size_t typed_chars(const Line& l, size_t len, long long now) {
     long long per = len ? std::min<long long>(33, 2000 / (long long)len) : 33;

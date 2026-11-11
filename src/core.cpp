@@ -382,6 +382,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"ignore", "Messages", 'n'}, {"mute", "Messages", 'n'}, {"notify", "Messages", 'n'},
     {"ctcp_version", "Messages", 'b'}, {"ctcp_time", "Messages", 'b'}, {"ctcp_ping", "Messages", 'b'},
     {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
+    {"e2e_effect", "Channels", 'b'},
     {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
     {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
@@ -832,8 +833,10 @@ void Core::select(Buffer* b) {
 
 void Core::add(Buffer* b, Line l) {
     if (!b) return;
-    // /typing: other people's messages type themselves out
-    if (!l.self && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) && opt_on(b->srv, "typing_effect", false))
+    // e2e_effect: an encrypted line (de)crypts itself, in place of /typing; /typing: other people's messages type themselves out
+    if (l.e2e && (l.kind == LK::MSG || l.kind == LK::ACTION) && opt_on(b->srv, "e2e_effect", true))
+        l.fx_at = l.fx_at ? l.fx_at : now_ms(), typing_until = std::max(typing_until, l.fx_at + E2E_FX_MS + 50);
+    else if (!l.self && (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) && opt_on(b->srv, "typing_effect", false))
         l.typed_at = now_ms(), typing_until = std::max(typing_until, l.typed_at + 2100);
     if (!plugin_depth) show(b, l);  // a plugin's string is what the screens show (lolcat); the log keeps what was said
     b->lines.push_back(std::move(l));
@@ -1040,7 +1043,7 @@ std::string log_fmt(const Line& l) {
     case LK::NOTICE: who = "-" + l.nick + "- "; break;
     default: who = "-!- "; break;
     }
-    return fmt_time(l.ts, "%Y-%m-%d %H:%M:%S") + " " + who + mirc_strip(l.text);
+    return fmt_time(l.ts, "%Y-%m-%d %H:%M:%S") + " " + who + (l.e2e ? "\xf0\x9f\x94\x92 " : "") + mirc_strip(l.text);
 }
 
 // One line written by log_line() back into a Line; false for headers/garbage.
@@ -1227,8 +1230,11 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
     for (auto& part : chunk(text, enc ? 250 : 400)) {
         std::string body = action ? "\x01" "ACTION " + part + "\x01" : part;
         s->send("PRIVMSG " + b->name + " :" + (enc ? "+iSE " + e2e_seal(key, body, chan ? irc_lower(b->name) : "") : body));
-        if (!s->caps.count("echo-message"))
-            add(b, Line{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? "\xf0\x9f\x94\x92 " + part : mask_services(b->name, part), true});
+        if (!s->caps.count("echo-message")) {
+            Line l{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? part : mask_services(b->name, part), true};
+            l.e2e = enc;
+            add(b, l);
+        }
     }
     s->typing_sent[s->lower(b->name)] = {now_ms(), false};  // a message ends typing, no "done" needed
 }

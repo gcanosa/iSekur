@@ -366,6 +366,11 @@ reads everything: to drop someone, change it. `/e2e off` in the channel turns it
 autojoin channel the key is saved in the config (`e2e_keys`, the scrypt key, not the password),
 so a restart doesn't ask again; the file is 0600, and whoever can read it can read the channel.
 
+The 🔒 on a line is drawn by iSekur, in the terminal and the webchat, so a 🔒 typed into a message
+can't pass for one. Encrypted lines also (de)crypt themselves on screen for half a second (yours
+as they go out, theirs as they come in), in place of `/typing` for those lines only;
+`/set e2e_effect off` turns it off.
+
 ![An encrypted channel: 🔒 on the tab and on every line, and a line sent with the wrong password](docs/e2e.png)
 
 Plugins: Lua 5.4 files in `plugins/` next to the config (`~/.config/isekur/plugins/<name>.lua`),

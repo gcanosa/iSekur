@@ -474,20 +474,28 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     }
     if (auto em = T.lay("event_marker", ""); !em.empty() && l.kind != LK::MSG && l.kind != LK::NOTICE)  // mirc: "*"
         marker = l.kind == LK::INFO && !b->srv && b->type != BT::SHELL ? "" : em;  // home tab's banner and welcome: bare
+    // the 🔒 (drawn, not in the text: a typed one can't pass for it) in a column of its own, opposite the time: at the
+    // right edge, or with timestamp_align = right at the left, in front of the nick column (a long nick gives it 2 cells)
+    Row lock;
+    if (l.e2e) cells(lock, "\xf0\x9f\x94\x92", body, false);
+    bool lock_left = l.e2e && ts_right && !table && nw > 2, lock_right = l.e2e && !ts_right;
+    bool lock_text = l.e2e && !lock_left && !lock_right;  // nick_width 0: no column to line up with
     Row nick;
     if (!table) {
     cells(nick, marker, ms, false);
-    if (nw > 0 && width(nick) > nw) {  // nick_width 0: no column, the nick as long as it is
-        while (!nick.empty() && width(nick) > nw - 1) nick.pop_back();
+    int room = nw - (lock_left ? 2 : 0);
+    if (nw > 0 && width(nick) > room) {  // nick_width 0: no column, the nick as long as it is
+        while (!nick.empty() && width(nick) > room - 1) nick.pop_back();
         nick.push_back({'+', T.get("separator"), 1});
     }
-    for (int pad = nw - width(nick); pad > 0; pad--) pre.push_back({' ', T.get("default"), 1});
+    if (lock_left) pre.insert(pre.end(), lock.begin(), lock.end());
+    for (int pad = room - width(nick); pad > 0; pad--) pre.push_back({' ', T.get("default"), 1});
     pre.insert(pre.end(), nick.begin(), nick.end());
     std::string sep = T.lay("separator", "│");
     if (!marker.empty() || !sep.empty()) cells(pre, sep.empty() ? " " : " " + sep + " ", T.get("separator"), false);
     }
 
-    int tsw = tsr.empty() ? 0 : width(tsr) + 1, indent = width(pre), avail = std::max(10, width_ - indent - tsw);
+    int tsw = tsr.empty() ? 0 : width(tsr) + 1, indent = width(pre), avail = std::max(10, width_ - indent - tsw - (lock_right ? 3 : 0));
     if (l.typed_at && !full) {  // /typing: the part typed so far, and the cursor
         size_t len = 0, n;
         for (unsigned char ch : mirc_strip(txt)) len += (ch & 0xc0) != 0x80;  // characters, not bytes
@@ -497,8 +505,20 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     Row body_cells;
     if (!l.badge.empty())  // iSekur's notices (INFO), a plugin's lines (its name)
         cells(body_cells, " " + l.badge + " ", l.badge_kind == 'i' ? note_style(T) : plugin_style(T), false), cells(body_cells, " ", body, false);
+    if (lock_text) cells(body_cells, "\xf0\x9f\x94\x92 ", body, false);
+    size_t fx0 = body_cells.size();
     cells(body_cells, txt, body);
     linkify(body_cells);
+    if (l.fx_at && !full) {  // e2e_effect: noise over the text's one-column glyphs; spaces and widths stay, so the wrap holds still
+        long long now = now_ms();
+        size_t n = body_cells.size() - fx0;
+        Style ns = sty(T, "e2e", "timestamp");
+        for (size_t k = 0; k < n; k++) {
+            Cell& ce = body_cells[fx0 + k];
+            if (ce.w != 1 || ce.cp == ' ') continue;
+            if (uint32_t g = e2e_glyph(l, k, n, now)) ce.cp = g, ce.st = ns;
+        }
+    }
 
     std::vector<Row> rows;
     Row cur = pre;
@@ -532,6 +552,11 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         Row& r0 = rows[0];
         for (int w = width(r0); w < width_ - (tsw - 1); w++) r0.push_back({' ', T.get("default"), 1});
         r0.insert(r0.end(), tsr.begin(), tsr.end());
+    }
+    if (lock_right) {
+        Row& r0 = rows[0];
+        for (int w = width(r0); w < width_ - 2; w++) r0.push_back({' ', T.get("default"), 1});
+        r0.insert(r0.end(), lock.begin(), lock.end());
     }
     // a plugin's link previews (isekur.embed), as the webchat's cards but text only: "▎ site · title", "▎ description",
     // a row each. Pictures and players are the webchat's alone. Untrusted text: no mIRC codes read in it

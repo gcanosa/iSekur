@@ -1337,7 +1337,8 @@ void Core::handle(Server* s, const Msg& m) {
             if (t && t->self && !self && !muted(b) && !replay && !snote) hl = true;  // a reply to you is a mention
             text = "\x1d\x03" "14\xe2\x86\xaa " + (t ? t->nick + ": " + reply_snippet(t->text) : std::string("an earlier message")) + "\x0f " + text;
         }
-        Line l{ts, kind, who, locked ? "\xf0\x9f\x94\x92 " + text : text, self, hl};
+        Line l{ts, kind, who, text, self, hl};
+        l.e2e = locked;
         if (auto id = m.tags.find("msgid"); id != m.tags.end()) l.msgid = id->second;
         l.id = lid;
         if (lid && embed_pend.first == lid) l.embeds = std::move(embed_pend.second), embed_pend = {};

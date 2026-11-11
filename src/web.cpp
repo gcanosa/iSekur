@@ -825,7 +825,7 @@ static std::string ts_fmt(const Core& c) { return ini_get(c.cfg, "general", "tim
 static std::string line_json(const Line& l, const std::string& fmt) {
     return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"tf\":" + json_str(fmt_time(l.ts, fmt)) + ",\"k\":\"" + KIND[(int)l.kind] +
            "\",\"n\":" + json_str(l.nick) + ",\"x\":" + json_str(l.text) +
-           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.badge.empty() ? "" : ",\"bd\":" + json_str(l.badge) + ",\"bk\":\"" + std::string(1, l.badge_kind) + "\"") +
+           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.e2e ? ",\"e\":1" : "") + (l.fx_at ? ",\"fx\":1" : "") + (l.badge.empty() ? "" : ",\"bd\":" + json_str(l.badge) + ",\"bk\":\"" + std::string(1, l.badge_kind) + "\"") +
            (l.color >= 0 ? ",\"c\":\"" + rgb_hex(l.color) + "\"" : "") + (l.id ? ",\"id\":" + std::to_string(l.id) : "") +
            (l.embeds.empty() ? "" : ",\"em\":[" + l.embeds + "]") + "}";
 }
