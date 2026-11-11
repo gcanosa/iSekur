@@ -1052,8 +1052,13 @@ function unreadMsgs(b) {
 }
 let sideQueued = false;  // a busy channel's lines redraw the tab list once a frame, not once a line
 function renderSideSoon() { if (!sideQueued) sideQueued = true, requestAnimationFrame(() => { sideQueued = false; renderSide(); }); }
+// a press on the list holds its redraw until after the click: a busy channel redrawing it between the button
+// going down and up replaced the tab under the pointer, so the browser fired no click and it took a second one
+let sideHeld = false;
+$("#side").addEventListener("pointerdown", e => { if (e.button === 0) sideHeld = true; });
+for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { if (sideHeld) setTimeout(() => { sideHeld = false; renderSide(); }); });
 function renderSide() {
-  if (dragId !== null) return;  // mid-drag: redrawn when it ends
+  if (dragId !== null || sideHeld) return;  // mid-drag: redrawn when it ends; held: after the click
   const side = $("#side");
   for (const c of [...side.children]) if (c !== sidetop) c.remove();  // the filter keeps its focus
   if (!sidetop.parentNode) side.append(sidetop);
