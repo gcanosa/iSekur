@@ -480,6 +480,7 @@ int main(int argc, char** argv) {
             c.ui_on = ui;
             if (ui) c.active_at = now;
             else c.screen_end();
+            if (ui && c.locked) c.plugin_emit("lock", nullptr, "");  // back to a locked iSekur: the screensaver plugin starts one again under the box (its on_lock)
         }
         probe.lap("session, webchat out, requests");
         if (now != last_sec) last_sec = now, c.dirty = true, guard("the clock tick", [&] { c.tick(now); });  // status bar clock, uptime seconds; pings, reconnects, away: all by the second
