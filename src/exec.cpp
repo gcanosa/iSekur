@@ -518,6 +518,7 @@ bool Core::lock_on() const {
 }
 
 void Core::unlock(const std::string& pass) {
+    active_at = last_input = time(nullptr);  // typing it is input: else the screensaver it was over comes right back (still idle)
     if (time(nullptr) < unlock_wait) {
         lock_msg = "!Too many tries: wait " + std::to_string(unlock_wait - time(nullptr)) + "s";
     } else if (check_password(pass, opt(nullptr, "lock_password_hash", ""))) {

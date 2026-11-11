@@ -3039,8 +3039,10 @@ print("loaded")
         assert(!pc.wake() && pc.locked && pc.screen_by == "screensaver");  // locked: it stays, the password box comes over it
         pc.unlock("nope");
         assert(pc.locked && pc.screen_by == "screensaver");
+        pc.active_at = pc.last_input = time(nullptr) - 3600;  // the password box didn't count as input: unlocking idle restarted it
         pc.unlock("pw");
         assert(!pc.locked && pc.screen_by.empty());  // the right one ends both
+        assert(time(nullptr) - pc.active_at < 2 && time(nullptr) - pc.last_input < 2);
         pc.cfg["general"].erase("lock"), pc.cfg["general"].erase("lock_password_hash"), pc.locked = false;
         pc.exec(ph, "/plugin remove screensaver");
         assert(pc.screen_by.empty());
