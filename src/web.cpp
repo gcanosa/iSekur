@@ -532,7 +532,7 @@ void Web::http(Client& cl) {
         cl.conn.out += "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
                        "Sec-WebSocket-Accept: " + b64(std::string((char*)sha, 20)) + "\r\n\r\n";
         // a browser coming back (not a reload or a dropped connection) is an attach: lock, like the terminal
-        if (!attached() && now - ws_seen > 30 && c.lock_on() && !c.locked) c.set_lock(true);
+        if (!attached() && now - ws_seen > 30 && c.lock_on() && !c.locked) c.set_lock(true, false);
         cl.ws = true, cl.ip = ip;
         if (!ws_ips.count(ip)) c.print(c.bufs.front().get(), LK::INFO, "\u25b6 Webchat attached: " + from);
         ws_ips[ip] = {ws_ips.count(ip) ? ws_ips[ip].first : now, now};

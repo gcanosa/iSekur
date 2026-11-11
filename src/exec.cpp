@@ -533,12 +533,12 @@ void Core::unlock(const std::string& pass) {
     notify(Ev::LOCK, nullptr);  // the webchat's box shows it too
 }
 
-void Core::set_lock(bool on) {
+void Core::set_lock(bool on, bool saver) {
     locked = on, lock_msg.clear(), dirty = true;
     crumb("lock", on ? "on" : "off");
     lock_anim = on ? 'l' : 'u', lock_anim_at = now_ms();
     notify(Ev::LOCK, nullptr);
-    if (on) plugin_emit("lock", nullptr, "");  // the screensaver plugin starts one under the password box
+    if (on && saver) plugin_emit("lock", nullptr, "");  // Alt+S, /lock, lock_idle: the screensaver plugin starts one under the password box
 }
 
 static bool save_general(Core& c, const std::map<std::string, std::string>& kv, Buffer* b) {

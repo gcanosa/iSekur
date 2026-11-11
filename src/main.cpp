@@ -322,7 +322,7 @@ int main(int argc, char** argv) {
     Tui tui(c);
     if (local && !tui.init(err)) { fprintf(stderr, "terminal: %s\n", err.c_str()); return 1; }
     c.tty = local;
-    if (local && c.lock_on()) c.set_lock(true);
+    if (local && c.lock_on()) c.set_lock(true, false);  // just the password: the screensaver waits for its idle time
     bool hinted = false;
     time_t tty_on = 0, tty_off = 0;  // the terminal's last attach and detach
 
@@ -330,6 +330,7 @@ int main(int argc, char** argv) {
     // when a terminal first shows it (usually an attach a moment after start); not in banner_mono
     long long anim0 = 0, screen_drawn = 0;
     bool anim_due = c.opt_on(nullptr, "banner_anim", true) && !c.opt_on(nullptr, "banner_mono", false);
+    bool ss_resume = false;  // locked under a screensaver when the last terminal or webchat left
     time_t last_sec = 0;
     std::vector<pollfd> fds;
     std::vector<Server*> polled;
@@ -438,7 +439,7 @@ int main(int argc, char** argv) {
                 const passwd* pw = getpwuid(geteuid());  // always us: the socket takes no one else
                 c.print(home, LK::INFO, "\u25b6 Attached: " + std::string(pw ? pw->pw_name : "?") + ", " + ses.who +
                                             (tty_off ? ", after " + fmt_dur((long)(tty_on - tty_off)) + " away" : ""));
-                if (c.lock_on()) c.set_lock(true);  // every attach asks again (the webchat too)
+                if (c.lock_on()) c.set_lock(true, false);  // every attach asks again (the webchat too)
                 if (!hinted) c.print(home, LK::INFO, "Alt+D (Option+D on a Mac) or /detach leaves iSekur running in the background"), hinted = true;
             }
         }
@@ -479,8 +480,9 @@ int main(int argc, char** argv) {
         if (bool ui = c.tty || web.attached(); ui != c.ui_on) {  // someone sits down: idle starts over; nobody left: no screensaver
             c.ui_on = ui;
             if (ui) c.active_at = now;
-            else c.screen_end();
-            if (ui && c.locked) c.plugin_emit("lock", nullptr, "");  // back to a locked iSekur: the screensaver plugin starts one again under the box (its on_lock)
+            else ss_resume = c.locked && !c.screen_by.empty(), c.screen_end();
+            // back to the screensaver nobody was left to see: the plugin starts one again under the box (its on_lock)
+            if (ui && std::exchange(ss_resume, false) && c.locked) c.plugin_emit("lock", nullptr, "");
         }
         probe.lap("session, webchat out, requests");
         if (now != last_sec) last_sec = now, c.dirty = true, guard("the clock tick", [&] { c.tick(now); });  // status bar clock, uptime seconds; pings, reconnects, away: all by the second

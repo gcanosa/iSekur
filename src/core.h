@@ -460,7 +460,7 @@ struct Core {
     // lock = on with lock_password_hash: the terminal and the webchat show only a password box at
     // startup, on every attach, after /lock and after lock_idle minutes without input (exec.cpp)
     bool locked = false;
-    void set_lock(bool on);
+    void set_lock(bool on, bool saver = true);  // saver: the screensaver plugin may start one under it (not for the start or an attach)
     // a plugin's screensaver (API 5): isekur.screen(fn, fps) covers the terminal and the webchat, fn draws each
     // frame with isekur.put into a grid; any key, click or mouse move on either side ends it (wake)
     std::string screen_by;  // the plugin drawing, "" = none
