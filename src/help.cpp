@@ -393,7 +393,8 @@ static const std::vector<CmdInfo> CMDS = {
      {"/attach vps", "/attach me@irc.example.org", "/attach -p 2222 me@irc.example.org", "/attach vps ~/.config/isekur/work.conf"}},
     {"lock", "Session", "[on|off]", "Lock the session (terminal and webchat) with a password",
      "/lock or Alt+S (Option+S on a Mac) locks now: the terminal and every webchat show only a password box, and the webchat "
-     "gets nothing of the session until it's typed (in either one). The first time it asks for "
+     "gets nothing of the session until it's typed (in either one); with the screensaver plugin on, a screensaver "
+     "goes on behind it. The first time it asks for "
      "a password (twice) and keeps it: from then on iSekur also locks at startup and on every "
      "--attach. /lock on sets or changes it (the current one first) without locking; /lock off "
      "asks for it and turns locking off. lock_idle = N locks after N minutes without typing "

@@ -538,6 +538,7 @@ void Core::set_lock(bool on) {
     crumb("lock", on ? "on" : "off");
     lock_anim = on ? 'l' : 'u', lock_anim_at = now_ms();
     notify(Ev::LOCK, nullptr);
+    if (on) plugin_emit("lock", nullptr, "");  // the screensaver plugin starts one under the password box
 }
 
 static bool save_general(Core& c, const std::map<std::string, std::string>& kv, Buffer* b) {

@@ -3043,6 +3043,15 @@ print("loaded")
         pc.unlock("pw");
         assert(!pc.locked && pc.screen_by.empty());  // the right one ends both
         assert(time(nullptr) - pc.active_at < 2 && time(nullptr) - pc.last_input < 2);
+        pc.exec(ph, "/plugin set screensaver lock off");  // locking (Alt+S, /lock, lock_idle): a screensaver comes up under the box
+        pc.lock_now(ph);
+        assert(pc.locked && pc.screen_by == "screensaver");
+        pc.unlock("pw");
+        assert(!pc.locked && pc.screen_by.empty());
+        pc.exec(ph, "/plugin set screensaver on_lock off");  // only the password box
+        pc.lock_now(ph);
+        assert(pc.locked && pc.screen_by.empty());
+        pc.unlock("pw");
         pc.cfg["general"].erase("lock"), pc.cfg["general"].erase("lock_password_hash"), pc.locked = false;
         pc.exec(ph, "/plugin remove screensaver");
         assert(pc.screen_by.empty());
