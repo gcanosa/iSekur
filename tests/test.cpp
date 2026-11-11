@@ -2104,6 +2104,25 @@ int main() {
         close(ws);
         core.listener = nullptr;
         web.stop();
+        {  // restarted, unlocked at the terminal, then a tab left open reconnects: no second lock password
+            Web w2(core);
+            assert(w2.start(werr));
+            core.cfg["general"]["lock"] = "on", core.cfg["general"]["lock_password_hash"] = hash_password("lk");
+            int fd = socket(AF_INET, SOCK_STREAM, 0);
+            sockaddr_in a{};
+            a.sin_family = AF_INET, a.sin_port = htons(18799), a.sin_addr.s_addr = htonl(0x7f000001);
+            std::string req = "GET /ws HTTP/1.1\r\nHost: x\r\nCookie: " + cookie + "\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n\r\n";
+            assert(connect(fd, (sockaddr*)&a, sizeof a) == 0 && write(fd, req.data(), req.size()) == (ssize_t)req.size());
+            for (int i = 0; i < 30; i++) {
+                std::vector<pollfd> pf;
+                w2.add_fds(pf);
+                poll(pf.data(), pf.size(), 10);
+                w2.process(pf), w2.flush();
+            }
+            assert(w2.attached() && !core.locked);
+            close(fd), w2.stop();
+            core.cfg["general"].erase("lock"), core.cfg["general"].erase("lock_password_hash");
+        }
         unlink("build/test-web.web.sessions");
         std::swap(core.cfg_path, path);
         core.max_lines = 150;  // /set scrollback: tabs keep that many

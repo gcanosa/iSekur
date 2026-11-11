@@ -280,6 +280,9 @@ bool Web::autostart(const Ini& cfg) {
 bool Web::start(std::string& err) {
     if (running()) return true;
     if (!start_(err)) { stop(); return false; }
+    // a tab left open reconnects after a restart (every 3s, a background one maybe a minute later): not a new attach.
+    // Starting locked covers it; else unlocking at the terminal first had the tab lock it all again, a second password
+    ws_seen = time(nullptr) + 90;
     return true;
 }
 
