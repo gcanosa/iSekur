@@ -1638,6 +1638,7 @@ function ssSize() {
   send({t: "ssize", w: Math.max(1, Math.floor(innerWidth / SS.cw)), h: Math.max(1, Math.floor(innerHeight / SS.ch))});
 }
 function ssOn(on) {
+  if (!on && !SS.on) return;  // a reconnect says so too: nothing to end, the lock box stays as it is
   SS.on = on; SS.w = 0;
   if (!on) lockUnpeek();
   $("#ss").classList.toggle("on", on);
@@ -1710,7 +1711,7 @@ function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
   ws.onmessage = onMsg;
   ws.onopen = () => bufs.clear();  // the snapshot brings them all again: tabs closed while away must not linger
-  ws.onclose = () => { ws = null; setTimeout(boot, 3000); };
+  ws.onclose = () => { ws = null; ssOn(false); setTimeout(boot, 3000); };  // no frames without it: not a frozen one; the reconnect starts it again if it's still on
 }
 
 async function boot() {

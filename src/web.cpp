@@ -923,7 +923,7 @@ std::string Web::lines_json(Buffer* b) {
 void Web::snapshot(Client& cl) {
     auto send = [&](const std::string& j) { cl.conn.out += ws_frame(j); };
     send(theme_json());
-    if (!c.screen_by.empty()) send("{\"t\":\"ss\",\"on\":true}");
+    send(std::string("{\"t\":\"ss\",\"on\":") + (c.screen_by.empty() ? "false" : "true") + "}");  // off too: a page back from a dropped connection may still show one
     if (c.locked) { send(lock_json()); return; }  // the rest once it's unlocked
     sent_nicks.clear();  // the next update of each goes out whole to everyone, whatever this one got
     for (auto& b : c.bufs) {
