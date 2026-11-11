@@ -244,6 +244,8 @@ dialog .btns .left { margin-right: auto; }
 /* a plugin's screensaver: its frames on black over everything, the lock window too; any key, click or move ends it */
 #ss { position: fixed; inset: 0; z-index: 200; width: 100%; height: 100%; background: #000; cursor: none; display: none; }
 #ss.on { display: block; }
+#lock.peek { z-index: 201; background: transparent; backdrop-filter: none; }  /* locked under a screensaver: the box over it */
+#lock.peek .wbtns .c { cursor: pointer; }
 @media (prefers-reduced-motion: reduce) { #lock, #lock *, #lock.open, #lock.open * { animation-duration: 1ms !important; animation-delay: 0s !important; } }
 #atext > div { animation: rise .5s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
@@ -1477,6 +1479,7 @@ for (const d of document.querySelectorAll("dialog, #login form, #lock .card")) {
   for (const k of ["c", "m", "z"]) { const b = document.createElement("span"); b.className = k; w.append(b); }
   if (d.tagName === "DIALOG") w.firstChild.title = "Close", w.firstChild.onclick = () => d.close();
   else w.classList.add("deco");
+  if (d.id === "lockf") w.firstChild.onclick = () => lockUnpeek();  // over a screensaver it puts the box away
   d.prepend(w);
 }
 
@@ -1606,6 +1609,7 @@ function onMsg(ev) {
 // drops what it had, and gets it all again on unlock (in the terminal or here)
 let locked = false;
 function lockMsg(m) {
+  if (m.peek !== undefined) SS.peekS = m.peek;  // lock_prompt_timeout
   const L = $("#lock"), restart = c => { L.classList.remove(c); void L.offsetWidth; L.classList.add(c); };
   if (m.on) {
     if (!locked) {
@@ -1635,6 +1639,7 @@ function ssSize() {
 }
 function ssOn(on) {
   SS.on = on; SS.w = 0;
+  if (!on) lockUnpeek();
   $("#ss").classList.toggle("on", on);
   if (on) ssSize();
   else if (locked) { const L = $("#lock"); L.classList.remove("on"); void L.offsetWidth; L.classList.add("on"); setTimeout(() => $("#lockp").focus(), 60); }
@@ -1666,8 +1671,31 @@ function ssPaint() {
   }
 }
 // someone's here: wakes a screensaver at once, else says so now and then (its idle time counts keys, clicks and moves)
+// locked under a screensaver: the password box over it, the screensaver goes on behind; Esc, its X, a click
+// beside it or lock_prompt_timeout seconds without a key put it away
+function lockPeek() {
+  const L = $("#lock");
+  clearTimeout(SS.peekT); if (SS.peekS !== 0) SS.peekT = setTimeout(lockUnpeek, (SS.peekS || 30) * 1000);
+  if (L.classList.contains("peek")) return;
+  L.classList.add("peek"); setTimeout(() => $("#lockp").focus(), 0);
+}
+function lockUnpeek() {
+  clearTimeout(SS.peekT);
+  const L = $("#lock");
+  if (!L.classList.contains("peek")) return;
+  L.classList.remove("peek"); $("#lockp").value = ""; $("#lockp").blur();
+}
+$("#lock").addEventListener("click", e => { if (e.target === e.currentTarget) lockUnpeek(); });
+$("#lockp").addEventListener("keydown", e => { if (e.key === "Escape" && $("#lock").classList.contains("peek")) e.preventDefault(), lockUnpeek(); });
 function ssPoke(e) {
   const now = Date.now();
+  if (SS.on && locked) {
+    if ($("#lock").classList.contains("peek")) { if (e.type === "keydown") lockPeek(); return; }  // the box is up: its keys and clicks
+    if (e.type === "pointermove" && Math.abs(e.movementX) + Math.abs(e.movementY) < 4) return;
+    e.preventDefault(); e.stopImmediatePropagation();
+    lockPeek();
+    return;
+  }
   if (SS.on) {
     if (e.type === "pointermove" && Math.abs(e.movementX) + Math.abs(e.movementY) < 4) return;  // a jiggle isn't someone
     e.preventDefault(); e.stopImmediatePropagation();

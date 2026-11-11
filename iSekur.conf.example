@@ -97,6 +97,9 @@ lock = off
 #lock_password_hash =
 # Lock by itself after this many minutes without typing (0 = never)
 lock_idle = 0
+# Locked under a screensaver, a key shows the password box over it: it goes away
+# again after this many seconds without a key (0 = only Esc or its X)
+lock_prompt_timeout = 30
 # /shell checks the login and password with this PAM service
 #pam_service = login
 

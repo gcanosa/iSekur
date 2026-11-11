@@ -397,7 +397,9 @@ static const std::vector<CmdInfo> CMDS = {
      "a password (twice) and keeps it: from then on iSekur also locks at startup and on every "
      "--attach. /lock on sets or changes it (the current one first) without locking; /lock off "
      "asks for it and turns locking off. lock_idle = N locks after N minutes without typing "
-     "(0, the default: never). Forgot it? Stop iSekur, set lock = off in the config and start "
+     "(0, the default: never). Locked under a screensaver, a key shows the password box over it and the "
+     "screensaver goes on: Esc or its X puts it away, so does lock_prompt_timeout seconds without a key "
+     "(30; 0: only Esc), the password ends both. Forgot it? Stop iSekur, set lock = off in the config and start "
      "it again. Three wrong tries wait a minute. While it's set, /exit asks for it as well, and so does "
      "changing what would let a hijacked session reach further: exec_web, dcc_web, dcc_dir, the [web] and [bnc] "
      "settings, and /bnc password. The config and logs are not encrypted by it.",

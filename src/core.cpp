@@ -389,7 +389,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
     {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
-    {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
+    {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_prompt_timeout", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
     {"exec_timeout", "Security", 'g'}, {"exec_web", "Security", 'g'}, {"fifo", "Session", 'g'}, {"fifo_path", "Session", 'g'},
     {"check_updates", "Updates", 'g'},
 };

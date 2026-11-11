@@ -522,6 +522,7 @@ void Core::unlock(const std::string& pass) {
         lock_msg = "!Too many tries: wait " + std::to_string(unlock_wait - time(nullptr)) + "s";
     } else if (check_password(pass, opt(nullptr, "lock_password_hash", ""))) {
         unlock_fails = 0, set_lock(false);
+        screen_end();  // the box was over a screensaver: that's done too
         return;
     } else if (++unlock_fails >= 3) {
         unlock_fails = 0, unlock_wait = time(nullptr) + 60;
@@ -557,7 +558,7 @@ void Core::screen_end() {
 
 bool Core::wake() {
     active_at = last_input = time(nullptr);  // a key, click or move is input too: autoaway's idle and lock_idle count it
-    if (screen_by.empty()) return false;
+    if (screen_by.empty() || locked) return false;  // locked: the screensaver stays, the password box comes over it
     screen_end();
     return true;
 }

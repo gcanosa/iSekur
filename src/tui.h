@@ -109,6 +109,7 @@ private:
     void close_box();
     void draw_lock(int W, int H, long long ms);  // the lock screen; ms: how far into Core::lock_anim
     std::u32string lock_in;  // the lock screen's password, apart from the input line
+    long long peek_at = 0;  // locked under a screensaver: the password box is over it since (last key), 0 = only the screensaver
     std::vector<uint8_t> pass_dots;  // how many dots each typed password character shows
     void mouse(int mod, int key, int x, int y);
     // /set alone: every setting in a window over the chat; categories left, keys right, a search on top

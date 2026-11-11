@@ -3033,10 +3033,14 @@ print("loaded")
         pc.exec(ph, "/screensaver");
         assert(said("there's no lock password yet") && !pc.locked);
         pc.wake();
-        pc.cfg["general"]["lock"] = "on", pc.cfg["general"]["lock_password_hash"] = "x";
+        pc.cfg["general"]["lock"] = "on", pc.cfg["general"]["lock_password_hash"] = hash_password("pw");
         pc.exec(ph, "/screensaver stars");
         assert(pc.locked && pc.screen_by == "screensaver");
-        assert(pc.wake() && pc.locked && pc.lock_anim == 'l');  // the lock box, under it, drops in
+        assert(!pc.wake() && pc.locked && pc.screen_by == "screensaver");  // locked: it stays, the password box comes over it
+        pc.unlock("nope");
+        assert(pc.locked && pc.screen_by == "screensaver");
+        pc.unlock("pw");
+        assert(!pc.locked && pc.screen_by.empty());  // the right one ends both
         pc.cfg["general"].erase("lock"), pc.cfg["general"].erase("lock_password_hash"), pc.locked = false;
         pc.exec(ph, "/plugin remove screensaver");
         assert(pc.screen_by.empty());

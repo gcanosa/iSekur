@@ -944,7 +944,8 @@ std::string Web::update_json() { return "{\"t\":\"update\",\"ver\":" + json_str(
 
 std::string Web::lock_json() {
     return std::string("{\"t\":\"lock\",\"on\":") + (c.locked ? "true" : "false") + ",\"msg\":" +
-           json_str(c.lock_msg.empty() ? "" : c.lock_msg.substr(c.lock_msg[0] == '!')) + "}";
+           json_str(c.lock_msg.empty() ? "" : c.lock_msg.substr(c.lock_msg[0] == '!')) +
+           ",\"peek\":" + std::to_string(std::max(0, atoi(c.opt(nullptr, "lock_prompt_timeout", "30").c_str()))) + "}";
 }
 
 std::string Web::split_json() {

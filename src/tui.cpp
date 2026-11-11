@@ -731,6 +731,7 @@ void Tui::draw() {
         crumb_state(st);
     }
     hits.clear(), crows.clear(), nl_x = -1;
+    if (!c.locked || c.screen_by.empty()) peek_at = 0;
     long long la = c.lock_anim ? now_ms() - c.lock_anim_at : 0;
     g_reveal = c.lock_anim == 'u' && la >= 350 ? std::min(1.0, (la - 350) / 550.0) : -1;
     g_cover = def, g_edge = sty(T, "menu_border", "separator"), g_edge.bg = def.bg;
@@ -741,6 +742,9 @@ void Tui::draw() {
             for (int y = 0; y < H; y++)
                 for (int x = 0; x < W; x++)
                     if (auto& sc = g[(size_t)y * W + x]; sc.ch) tb_set_cell(x, y, sc.ch, tbc(sc.fg ? sc.fg : 0x010101), tbc(0));
+        if (long long to = atoi(c.opt(nullptr, "lock_prompt_timeout", "30").c_str()) * 1000LL; peek_at && to > 0 && now_ms() - peek_at > to) peek_at = 0, lock_in.clear();
+        if (c.locked && peek_at) draw_lock(W, H, la);  // the password box over it: Esc or its X and the screensaver goes on
+        else tb_hide_cursor();
         present();
         return;
     }
@@ -1250,7 +1254,7 @@ void Tui::draw_lock(int W, int H, long long ms) {
         double t = ms / 450.0;
         dx = (int)std::lround(3 * std::sin(t * 6 * M_PI) * (1 - t)), red = true;
     } else if (open) lift = ms < 120 ? 1 : 2;
-    draw_dialog(W, H, "iSekur is locked", info, "password", true, lock_in, lock_in.size(), "Enter: unlock · Alt+D: detach", dx, dy);
+    draw_dialog(W, H, "iSekur is locked", info, "password", true, lock_in, lock_in.size(), peek_at ? "Enter: unlock · Esc: back to the screensaver" : "Enter: unlock · Alt+D: detach", dx, dy, peek_at ? 'L' : 0);
     if (y0 < 7) return;  // no room for the padlock
     Style def = T.get("default"), ps = red ? T.get("error") : open ? T.get("join") : sty(T, "menu_border", "separator");
     ps.bg = def.bg, ps.attr |= A_BOLD;
@@ -2463,6 +2467,10 @@ void Tui::on_readable() {
     bool enter = false, keyed = false;  // keyed: a key came (typing goes out only then, or on a tab change)
     while (tb_peek_event(&ev, 0) == TB_OK) {
         sync_input();  // a key may have switched tabs: the next one types into that tab's line
+        if ((ev.type == TB_EVENT_KEY || ev.type == TB_EVENT_MOUSE) && c.locked && !c.screen_by.empty() && !peek_at) {  // locked: the password box over the screensaver
+            c.wake(), peek_at = now_ms(), lock_in.clear(), c.dirty = true;
+            continue;
+        }
         if ((ev.type == TB_EVENT_KEY || ev.type == TB_EVENT_MOUSE) && c.wake()) { c.dirty = true; continue; }  // it only ends the screensaver
         keyed |= ev.type == TB_EVENT_KEY;
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
@@ -2529,6 +2537,10 @@ void Tui::key(int mod, int k, uint32_t ch) {
         auto it = keymap.find(keyspec(mod, k, ch));
         if (it != keymap.end() && it->second == "detach") { action("detach"); return; }
         if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) return;
+        if (peek_at) {  // over the screensaver: Esc puts the box away, a key keeps it up
+            if (k == TB_KEY_ESC) { peek_at = 0, lock_in.clear(); return; }
+            peek_at = now_ms();
+        }
         if (ch) lock_in += (char32_t)ch;
         else if (k == TB_KEY_SPACE) lock_in += U' ';
         else if ((k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2) && !lock_in.empty()) lock_in.pop_back();
@@ -2763,7 +2775,10 @@ void Tui::close_box() {
 }
 
 void Tui::mouse(int mod, int k, int x, int y) {
-    if (c.locked) return;
+    if (c.locked) {  // over the screensaver, the box's X puts it away
+        if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind == 'L' && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) peek_at = 0, lock_in.clear();
+        return;
+    }
     if (k == TB_KEY_MOUSE_RELEASE && (mod & TB_MOD_MOTION)) { hover_x = x, hover_y = y; return; }  // 1003: a move, no button held
     if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) { close_box(); return; }
     if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
