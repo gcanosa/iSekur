@@ -174,6 +174,25 @@ static int l_opt(lua_State* L) {  // opt(key, srv, target): channel, network, gl
     else lua_pushlstring(L, v.data(), v.size());
     return 1;
 }
+// set(key, value, srv): one of the plugin's own settings, for everywhere or (scope n/c) that network; nil or "" clears it.
+// Saved to the config like /plugin set. Never "enabled": a plugin doesn't turn itself on
+static int l_set(lua_State* L) {
+    Plugin* p = self(L);
+    std::string key = str_arg(L, 1);
+    auto o = p->opts.find(key);
+    if (o == p->opts.end()) luaL_error(L, "%s isn't one of this plugin's settings", key.c_str());
+    std::string val = lua_isnoneornil(L, 2) ? "" : one_line(lua_type(L, 2) == LUA_TBOOLEAN ? (lua_toboolean(L, 2) ? "on" : "off")
+                                                                                              : luaL_tolstring(L, 2, nullptr));
+    if (lua_type(L, 2) != LUA_TBOOLEAN && !lua_isnoneornil(L, 2)) lua_pop(L, 1);
+    if (val.size() > 4096) luaL_error(L, "value too long");
+    Server* s = o->second.scope == 'g' ? nullptr : srv_arg(L, 3);
+    if (!s && o->second.scope != 'g' && !lua_isnoneornil(L, 3)) luaL_error(L, "no network %s", lua_tostring(L, 3));  // not everywhere's by mistake
+    std::string sec = plugin_sec(p->name, s ? s->cfg.name : "");
+    p->c->cfg[sec][key] = val;
+    std::string err;
+    if (!p->c->cfg_path.empty() && !ini_save(p->c->cfg_path, Ini{{sec, {{key, val}}}}, err)) luaL_error(L, "%s", err.c_str());
+    return 0;
+}
 static int l_say(lua_State* L) {
     Server* s = live_srv(L, 1);
     std::string t = one_line(str_arg(L, 2));
@@ -669,7 +688,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
     for (const char* g : {"dofile", "loadfile", "load"}) lua_pushnil(L), lua_setglobal(L, g);  // ponytail: no load() at all, a text-only one if a plugin needs it
     lua_pushcfunction(L, l_lua_print), lua_setglobal(L, "print");
     static const luaL_Reg api[] = {
-        {"on", l_on}, {"command", l_command}, {"setting", l_setting}, {"opt", l_opt},
+        {"on", l_on}, {"command", l_command}, {"setting", l_setting}, {"opt", l_opt}, {"set", l_set},
         {"say", l_say}, {"send", l_send}, {"print", l_print}, {"exec", l_exec},
         {"store_get", l_store_get}, {"store_set", l_store_set}, {"store_keys", l_store_keys},
         {"active", l_active}, {"date", l_date}, {"is_chan", l_is_chan},

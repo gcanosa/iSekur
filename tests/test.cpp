@@ -2423,6 +2423,25 @@ end)
             assert(it != nm.end() && (it - 1)->first.empty());
             assert(nm.back() == std::make_pair(std::string("Two"), std::string("/whois x")) && nm.end() - it == 2);
         }
+        {  // API 10: isekur.set writes the plugin's own declared settings, per network, to the config; never enabled
+            FILE* f = fopen((dir + "/plugins/st.lua").c_str(), "w");
+            fputs(R"LUA(
+isekur.setting("allowed", "", "n", "nicks")
+isekur.command("st", "", function(a, srv)
+  isekur.set("allowed", "bob carol", srv)
+  print(isekur.opt("allowed", srv), isekur.opt("allowed"), pcall(isekur.set, "enabled", "on"),
+        pcall(isekur.set, "allowed", "x", "nonet"))
+end)
+)LUA", f), fclose(f);
+            sy.exec(ph, "/plugin enable st");
+            sy.exec(yb, "/st");
+            std::string out;
+            for (auto& l : sy.bufs) if (!l->lines.empty() && l->lines.back().text.find("bob carol") != std::string::npos) out = l->lines.back().text;
+            assert(out.find("bob carol  false false") != std::string::npos && out.find("no network nonet") != std::string::npos);
+            assert(ini_get(sy.cfg, "plugin.st@y", "allowed") == "bob carol");
+            Ini disk;
+            assert(ini_load(sy.cfg_path, disk) && ini_get(disk, "plugin.st@y", "allowed") == "bob carol");
+        }
         sy.plugins.clear();
         assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
     }
