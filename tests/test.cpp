@@ -1017,6 +1017,28 @@ int main() {
         assert(!bad);
     }
 
+    // conf_check: the template has no problems; each kind of mistake is found on its line, and only once
+    {
+        char d[] = "/tmp/isekur-cc-XXXXXX";
+        assert(mkdtemp(d));
+        std::string p = std::string(d) + "/c.conf";
+        std::ofstream(p) << fresh_config();  // what a first start writes
+        assert(conf_check(p).empty());
+        std::ofstream(p) << "x = 1\n[general]\nautoconect = on\nmouse = maybe\nscrollback = lots\ntimestamp_align = middle\n"
+                            "host = h\nmouse = on\njunk\n[server.a\n[server.ok]\ntls = on\nport = 66x7\nsasl_pass = enc:AAAA\n"
+                            "[web]\nprot = 1\n[weird]\na = b\n[plugin.x]\nany = 1\n; comment = x\n";
+        auto r = conf_check(p);
+        auto has = [&](int n, const std::string& w) {
+            for (auto& l : r) if (l.rfind("line " + std::to_string(n) + ":", 0) == 0 && l.find(w) != std::string::npos) return true;
+            return false;
+        };
+        assert(has(1, "outside") && has(3, "did you mean autoconnect") && has(4, "on or off") && has(5, "number") && has(6, "left, right"));
+        assert(has(7, "goes in a [server") && has(8, "set again") && has(9, "not a key") && has(10, "no closing ]"));
+        assert(has(13, "number") && has(14, "decrypted") && has(16, "did you mean port") && has(17, "unknown section"));
+        assert(r.size() == 13);  // tls = on, [plugin.x] and the comment are fine
+        std::filesystem::remove_all(d);
+    }
+
     // /server rename: the section in the file (comments kept), the tab, unsaved keys, server_order and the logs folder
     {
         assert(ini_rename("[a]\n# note\nk = 1\n[b]\n", "a", "z") == "[z]\n# note\nk = 1\n[b]\n");

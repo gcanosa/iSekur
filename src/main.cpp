@@ -116,7 +116,7 @@ static void crash_dumps(const std::string& path) {
 }
 
 static int usage() {
-    puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [-l|--list] [--web|--no-web] [--bnc] [--hash-password] [-v|--version]\n"
+    puts("usage: isekur [-c config] [-d|--daemon] [-a|--attach] [-l|--list] [--web|--no-web] [--bnc] [--hash-password] [--check] [-v|--version]\n"
          "  -c FILE          config file (default ~/.config/isekur/isekur.conf)\n"
          "  -d, --daemon     run headless in the background; attach with --attach or the webchat\n"
          "  -a, --attach     bring a detached iSekur (Alt+D, /detach, --daemon) back to this terminal;\n"
@@ -125,7 +125,8 @@ static int usage() {
          "  --web, --no-web  start the webchat or not, whatever [web] autostart says\n"
          "  --bnc            run headless in the background as a bouncer only (no terminal, no webchat;\n"
          "                   --web adds it): other IRC clients connect to [bnc]\n"
-         "  --hash-password  read a password and print a password_hash value ([web] or [bnc])");
+         "  --hash-password  read a password and print a password_hash value ([web] or [bnc])\n"
+         "  --check          list the config's problems (unknown keys, bad values...) and exit; 1 if any");
     return 1;
 }
 
@@ -215,7 +216,7 @@ struct Probe {
 int main(int argc, char** argv) {
     setlocale(LC_ALL, "");
     signal(SIGPIPE, SIG_IGN);
-    bool daemon = false, attach = false, list = false, bnc_mode = false;
+    bool daemon = false, attach = false, list = false, bnc_mode = false, check = false;
     int web_flag = -1;  // --web / --no-web; -1 = [web] autostart decides
     Core c;
     for (int i = 1; i < argc; i++) {
@@ -228,6 +229,7 @@ int main(int argc, char** argv) {
         else if (a == "--web") web_flag = 1;
         else if (a == "--no-web") web_flag = 0;
         else if (a == "--hash-password") return hash_pw_cmd();
+        else if (a == "--check") check = true;
         else if (a == "-v" || a == "--version") {
             puts(version_string().c_str());
             puts("A small, very colorful terminal IRC client with a built-in webchat\n"
@@ -242,6 +244,12 @@ int main(int argc, char** argv) {
     }
     bool own_cfg = !c.cfg_path.empty();
     if (c.cfg_path.empty()) c.cfg_path = default_config_path();
+    if (check) {  // the config's problems, without starting
+        auto p = conf_check(c.cfg_path);
+        for (auto& l : p) printf("%s: %s\n", c.cfg_path.c_str(), l.c_str());
+        if (p.empty()) printf("%s: no problems found\n", c.cfg_path.c_str());
+        return p.empty() ? 0 : 1;
+    }
     if (list) {  // the default config's folder, and -c's
         auto dir = [](const std::string& p) { return p.find('/') == std::string::npos ? std::string(".") : p.substr(0, p.rfind('/')); };
         return list_main({dir(default_config_path()), dir(c.cfg_path)}, default_config_path());

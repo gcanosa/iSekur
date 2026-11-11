@@ -11,6 +11,7 @@ isekur \- colorful terminal IRC client with a built-in webchat
 .RB [ \-\-web | \-\-no\-web ]
 .RB [ \-\-bnc ]
 .RB [ \-\-hash\-password ]
+.RB [ \-\-check ]
 .RB [ \-v | \-\-version ]
 .SH DESCRIPTION
 .B isekur
@@ -91,6 +92,13 @@ Read a password and print a
 .B password_hash
 line for the config
 .RB ( [web] " or " [bnc] ).
+.TP
+.B \-\-check
+List the config's problems by line (unknown sections and keys, a key in the wrong section,
+values the key doesn't take, a missing theme, keys set twice, passwords that can't be
+decrypted) and exit: 0 when there are none, 1 otherwise. Nothing is changed.
+.B /checkconf
+does the same from inside iSekur.
 .TP
 .BR \-v ", " \-\-version
 Print the version.

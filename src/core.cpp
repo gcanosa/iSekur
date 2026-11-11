@@ -67,6 +67,9 @@ void Core::load_config() {
         print(home, LK::ERROR, "No themes found (running uncoloured). Looked in: " + ds +
                                    ". Put the .theme files in one of these, or set [general] theme_dir");
     }
+    if (found)
+        if (auto p = conf_check(cfg_path); !p.empty())
+            info_note(home, std::to_string(p.size()) + (p.size() == 1 ? " problem" : " problems") + " in " + cfg_path + ": /checkconf lists them");
     print(home, LK::INFO, "");  // room before what comes next (webchat, connecting...)
     if (!found || opt_on(nullptr, "show_guide", false)) guide(home, "");  // a new config has show_guide = on
 
@@ -420,6 +423,126 @@ std::vector<std::pair<std::string, std::string>> conf_keys() {
     return out;
 }
 
+// a key iSekur reads in [sec] (KEYS by scope, the template's [web]/[bnc]/[keys]); [plugin.*] are the plugins' own
+static bool key_known(const std::string& sec, const std::string& key) {
+    if (sec.rfind("plugin.", 0) == 0 || state_key(sec, key)) return true;
+    if (sec == "general" || sec.rfind("server.", 0) == 0) {
+        const KeyInfo* ki = key_info(key);
+        return ki && ki->scope != (sec == "general" ? 'n' : 'g');
+    }
+    for (auto& [s2, k] : conf_keys())
+        if (s2 == sec && k == key) return true;
+    return false;
+}
+
+static size_t edit_dist(const std::string& a, const std::string& b) {
+    std::vector<size_t> d(b.size() + 1);
+    for (size_t j = 0; j <= b.size(); j++) d[j] = j;
+    for (size_t i = 1; i <= a.size(); i++) {
+        size_t diag = d[0];
+        d[0] = i;
+        for (size_t j = 1; j <= b.size(); j++) {
+            size_t up = d[j];
+            d[j] = std::min({d[j] + 1, d[j - 1] + 1, diag + (a[i - 1] != b[j - 1])});
+            diag = up;
+        }
+    }
+    return d[b.size()];
+}
+
+static std::string unknown_key(const std::string& sec, const std::string& key) {
+    bool g = sec == "general", srv = sec.rfind("server.", 0) == 0;
+    if ((g || srv) && key_info(key))
+        return key + (g ? " goes in a [server.<name>] section, not [general]: ignored here" : " goes in [general], not a network's section: ignored here");
+    std::string best;
+    size_t bd = 3;  // ponytail: 2 edits at most, closer than that it's a different word
+    auto near = [&](const std::string& k) { if (size_t d = edit_dist(key, k); d < bd) bd = d, best = k; };
+    if (g || srv) {
+        for (auto& k : KEYS) near(k.key);  // one of the other section's too: that one says where it goes next
+    } else
+        for (auto& [s2, k] : conf_keys())
+            if (s2 == sec) near(k);
+    return "unknown key " + key + " in [" + sec + "], ignored" + (best.empty() ? "" : " (did you mean " + best + "?)");
+}
+
+// what's wrong with key = v in [sec]: a value from a list, a theme, or the kind of value the template's default is
+// (on/off, a number). Empty: nothing
+static std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
+    static const std::map<std::string, std::vector<std::string>> CHOICES = {
+        {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
+        {"web_font", {"theme", "mono", "sans", "serif"}}, {"colors", {"auto", "truecolor", "256"}}};
+    static const Ini tmpl = ini_parse(conf_template);
+    bool srv = sec.rfind("server.", 0) == 0;
+    if (sec == "general" || srv) {
+        if (auto c = CHOICES.find(key); c != CHOICES.end()) {
+            if (std::find(c->second.begin(), c->second.end(), v) != c->second.end()) return "";
+            std::string l;
+            for (auto& o : c->second) l += (l.empty() ? "" : ", ") + o;
+            return key + " = " + v + ": takes " + l;
+        }
+        if (key == "theme") {
+            auto t = theme_names();
+            return std::find(t.begin(), t.end(), v) != t.end() ? "" : "theme " + v + " not found (/theme lists them)";
+        }
+    }
+    std::string d;  // the template's value: a network's key from its example networks, else [general]'s
+    for (auto& [s, kv] : tmpl)
+        if ((s == sec || (srv && (s == "general" || s.rfind("server.", 0) == 0))) && kv.count(key) && !kv.at(key).empty()) d = kv.at(key);
+    static const std::set<std::string> BOOL = {"on", "off", "true", "false", "yes", "no"};
+    if (BOOL.count(d)) return BOOL.count(v) || v == "1" || v == "0" ? "" : key + " = " + v + ": takes on or off";
+    bool num = !d.empty() && d.find_first_not_of("0123456789") == std::string::npos;
+    if (num && v.find_first_not_of("0123456789") != std::string::npos) return key + " = " + v + ": takes a number";
+    return "";
+}
+
+std::vector<std::string> conf_check(const std::string& path) {
+    std::ifstream f(path);
+    if (!f) return {"can't read " + path};
+    std::stringstream ss;
+    ss << f.rdbuf();
+    std::string was = theme_dir;  // its themes, as this file would load them
+    theme_dir = ini_get(ini_parse(ss.str()), "general", "theme_dir", "themes");
+    std::vector<std::string> out;
+    auto say = [&](int n, const std::string& m) { out.push_back("line " + std::to_string(n) + ": " + m); };
+    std::map<std::string, std::map<std::string, int>> seen;  // [sec] key -> the line setting it
+    std::string line, sec;
+    bool sec_ok = true;
+    for (int n = 1; std::getline(ss, line); n++) {
+        std::string t = trim(line);
+        if (t.empty() || t[0] == '#' || t[0] == ';') continue;
+        if (t[0] == '[') {
+            if (t.back() != ']') {
+                say(n, t + " has no closing ]: " + (sec.empty() ? "the keys below it are ignored" : "the keys below it go to [" + sec + "]"));
+                continue;
+            }
+            sec = trim(t.substr(1, t.size() - 2));
+            bool srv = sec.rfind("server.", 0) == 0;
+            sec_ok = sec == "general" || sec.rfind("plugin.", 0) == 0 || (srv && server_name_ok(sec.substr(7)));
+            for (auto& [s2, k] : conf_keys()) sec_ok |= !srv && s2 == sec;
+            if (!sec_ok) say(n, "unknown section [" + sec + "], its keys are ignored" + (srv ? " (a network's name takes letters, digits, . _ -)" : ""));
+            continue;
+        }
+        size_t eq = t.find('=');
+        if (eq == std::string::npos) { say(n, "not a key = value line, ignored: " + t); continue; }
+        std::string key = trim(t.substr(0, eq)), v = t.substr(eq + 1);
+        if (size_t sc = v.find(" ;"); sc != std::string::npos) v.erase(sc);  // as ini_parse reads it
+        v = trim(v);
+        if (sec.empty()) { say(n, key + " is outside any [section], ignored"); continue; }
+        if (!sec_ok) continue;  // its section said so already
+        if (auto it = seen[sec].find(key); it != seen[sec].end())
+            say(n, key + " is set again in [" + sec + "] (line " + std::to_string(it->second) + "): this one counts");
+        seen[sec][key] = n;
+        if (!key_known(sec, key)) { say(n, unknown_key(sec, key)); continue; }
+        if (v.empty()) continue;  // "key =": the default
+        if (cfg_secret(key) && v.rfind("enc:", 0) == 0) {
+            if (!cfg_secret_opens(path, v)) say(n, key + " can't be decrypted (secret.key next to the config is missing or another one): set it again");
+        } else if (std::string m = bad_value(sec, key, v); !m.empty())
+            say(n, m);
+    }
+    theme_dir = was;
+    return out;
+}
+
 // a [section]'s unsaved keys, written to the config now: the whole section's, since a /server one isn't in the file yet
 static bool save_section(Core& c, const std::string& sec, Buffer* b) {
     Ini part;
@@ -574,12 +697,12 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     ServerCfg sc;
     sc.name = name;
     sc.host = ini_get(cfg, sec, "host", sc.name);
-    sc.tls = ini_get(cfg, sec, "tls", "false") == "true";
+    sc.tls = is_on(ini_get(cfg, sec, "tls", "false"));
     sc.port = atoi(ini_get(cfg, sec, "port").c_str());
     if (sc.port <= 0 || sc.port > 65535) sc.port = sc.tls ? 6697 : 6667;  // port 0 or junk: the usual one
-    sc.tls_verify = ini_get(cfg, sec, "tls_verify", "true") == "true";
-    sc.autoconnect = ini_get(cfg, sec, "autoconnect", "true") == "true";
-    sc.auto_identify = ini_get(cfg, sec, "auto_identify", "true") == "true";
+    sc.tls_verify = is_on(ini_get(cfg, sec, "tls_verify", "true"));
+    sc.autoconnect = is_on(ini_get(cfg, sec, "autoconnect", "true"));
+    sc.auto_identify = is_on(ini_get(cfg, sec, "auto_identify", "true"));
     sc.encoding = ini_get(cfg, sec, "encoding");
     std::string enc = sc.encoding;
     if (to_lower(enc) == "utf-8" || enc == "utf8") sc.encoding.clear();  // the default, spelled out
@@ -947,6 +1070,8 @@ void Core::reload(Buffer* b) {
     for (auto& [sec, kv] : unsaved) n += kv.size();
     print(b, LK::INFO, "Reloaded " + cfg_path + (n ? " (" + std::to_string(n) + " unsaved /set changes kept on top)" : "") +
                            ". Server settings apply on the next /connect, [web] after /web restart");
+    if (auto p = conf_check(cfg_path); !p.empty())
+        info_note(b, std::to_string(p.size()) + (p.size() == 1 ? " problem" : " problems") + " in the config: /checkconf lists them");
 }
 
 void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden,
@@ -962,8 +1087,7 @@ void Core::ring(Server* s) {
 }
 
 bool Core::opt_on(const Server* s, const std::string& key, bool def) const {
-    std::string v = opt(s, key, def ? "on" : "off");
-    return v == "on" || v == "true" || v == "yes" || v == "1";
+    return is_on(opt(s, key, def ? "on" : "off"));
 }
 
 void mkdir_p(const std::string& path) {
@@ -1523,6 +1647,14 @@ void Core::exec(Buffer* b, const std::string& input) {
                                    (sv->cfg.autoconnect ? "" : "  (not at startup)"));
         return;
     }
+    if (cmd == "checkconf") {  // the file as it is on disk; unsaved /set changes aren't in it yet
+        auto p = conf_check(cfg_path);
+        for (auto& l : p) print(b, LK::ERROR, l);
+        print(b, LK::INFO, cfg_path + (p.empty() ? ": no problems found" : ": " + std::to_string(p.size()) + (p.size() == 1 ? " problem" : " problems") +
+                                                                        ". Fix them in the file and /reload, or with /set and /save"));
+        if (!unsaved.empty()) print(b, LK::INFO, "Unsaved changes aren't in the file yet: /save, then /checkconf checks them too");
+        return;
+    }
     if (cmd == "set") {  // /set [section.]key [value]; section defaults to general
         auto secret = secret_key;
         if (argv.empty()) {
@@ -1542,15 +1674,8 @@ void Core::exec(Buffer* b, const std::string& input) {
             else rename_server(b, sec.substr(7), val);
             return;
         }
-        // a key iSekur reads (KEYS, the template's [web]/[bnc]/[keys]); [plugin.*] are the plugins' own. One already
-        // in the config (a typo, an old key) can still be shown or cleared
-        bool known = sec.rfind("plugin.", 0) == 0 || (cfg.count(sec) && cfg.at(sec).count(key));
-        if (!known && (sec == "general" || sec.rfind("server.", 0) == 0)) {
-            const KeyInfo* ki = key_info(key);
-            known = ki && ki->scope != (sec == "general" ? 'n' : 'g');
-        } else if (!known)
-            for (auto& [s2, k] : conf_keys()) known |= s2 == sec && k == key;
-        if (!known) { print(b, LK::ERROR, "No setting " + argv[0] + ": /set lists them"); return; }
+        // one already in the config (a typo, an old key) can still be shown or cleared
+        if (!key_known(sec, key) && !(cfg.count(sec) && cfg.at(sec).count(key))) { print(b, LK::ERROR, "No setting " + argv[0] + ": /set lists them"); return; }
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
             if (sec == "general" && key == "timestamp") def = theme.lay("timestamp", "%H:%M") + ", the theme's";

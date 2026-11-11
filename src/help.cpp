@@ -319,6 +319,14 @@ static const std::vector<CmdInfo> CMDS = {
      "(nick_width), never (lock_idle, exec_timeout), no limit (paste_confirm), none (log_history, "
      "history_fetch); a port of 0 is the usual one.",
      {"/set", "/set theme neon", "/set server.sekurnet.autojoin #a,#b", "/set log on"}},
+    {"checkconf", "Settings", "", "List the config file's problems",
+     "Reads the config file as it is on disk and lists, by line, what iSekur would ignore or misread: unknown "
+     "sections and keys (a typo gets a \"did you mean\"), a key in the wrong section ([general] or a network's), "
+     "values that aren't one of the key's (on/off, a number, left/right...), a theme that isn't installed, "
+     "a key set twice, lines that aren't key = value, a [section without its ], and passwords secret.key can't "
+     "decrypt. It changes nothing. Startup and /reload say when there are problems; isekur --check does the "
+     "same from the shell. Unsaved /set changes aren't in the file yet: /save first.",
+     {"/checkconf"}},
     {"reload", "Settings", "", "Re-read the config file",
      "Applies an edited config without restarting: theme, keys, mouse, colors, bell, logging and "
      "the rest right away; server settings on the next /connect; [web] after /web restart. "

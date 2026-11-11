@@ -85,6 +85,13 @@ bool ini_load(const std::string& path, Ini& out) {
     return true;
 }
 
+bool cfg_secret_opens(const std::string& path, const std::string& enc) {
+    std::string key = cfg_key(path, false), p;
+    return !key.empty() && enc.rfind("enc:", 0) == 0 && e2e_open(key, enc.substr(4), p);
+}
+
+bool is_on(const std::string& v) { return v == "on" || v == "true" || v == "yes" || v == "1"; }
+
 // Rewrite `text` with the values in `changes`, keeping comments and order:
 // existing keys are replaced in place, new ones go at the end of their section.
 std::string ini_update(const std::string& text, const Ini& changes) {

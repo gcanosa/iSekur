@@ -683,6 +683,9 @@ const std::vector<KeyInfo>& setting_keys();
 const KeyInfo* key_info(const std::string& key);                 // nullptr: not one iSekur knows
 std::vector<std::pair<std::string, std::string>> conf_keys();   // iSekur.conf.example's [section] keys, commented or not
 bool server_name_ok(const std::string& n);  // letters, digits, . _ -
+std::vector<std::string> conf_check(const std::string& path);  // the config's problems, "line N: ..." (none: fine); only reads
+bool cfg_secret_opens(const std::string& path, const std::string& enc);  // an "enc:" value secret.key next to path decrypts
+bool is_on(const std::string& v);  // on, true, yes, 1
 std::string safe_name(const std::string& n);  // network name -> safe log file name
 bool parse_log_line(const std::string& s, Line& l);
 // /logs (logs.cpp): a file back into Lines (joins, parts... their own kinds again); cut: only its last 32 MB

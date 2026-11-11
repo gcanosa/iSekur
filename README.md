@@ -120,7 +120,8 @@ default (the example servers commented out, an empty value means the default), s
 it by hand, or change settings from inside the client with `/set theme neon`, `/set server.sekurnet.autojoin #a,#b`
 and write them back with `/save` (comments in the file are kept). Changes apply
 right away; server settings are used on the next `/connect`, `[web]` after `/web stop` + `/web start`. Run
-`./isekur --hash-password` to get the `[web] password_hash` value (or the `[bnc]` one).
+`./isekur --hash-password` to get the `[web] password_hash` value (or the `[bnc]` one). `./isekur --check` (or `/checkconf`
+inside) lists what's wrong in the file by line: typos in keys, keys in the wrong section, values a key doesn't take.
 
 The first start also opens the **first steps guide** (`*guide` tab): your nick, a first server,
 channels, keys, settings, the webchat and safety, on pages you turn with ← → or Prev/Next.
