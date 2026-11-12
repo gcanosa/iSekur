@@ -24,8 +24,8 @@
 html, body { height: 100%; margin: 0; }
 body { background: var(--bg); color: var(--fg); font: calc(var(--fsize, 14px) * var(--z, 1))/1.45 var(--mono); }
 button, input { font: inherit; color: inherit; }
-#login { display: none; height: 100%; align-items: center; justify-content: center; padding: 16px; }
-#login form { width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
+#login { display: none; position: fixed; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100dvh); overflow-y: auto; padding: 16px; }  /* like #app: the visible viewport, so the keyboard doesn't hide the box and iOS has nothing to pan to on each key */
+#login form { margin: auto; width: 100%; max-width: 340px; background: var(--panel); border: 1px solid var(--line);
   border-radius: 12px; padding: 28px; display: grid; gap: 12px; position: relative;
   box-shadow: 0 0 0 1px #0004, 0 20px 60px -20px var(--accent); }
 #login h1 { margin: 0 0 8px; font-size: calc(22px * var(--z, 1)); letter-spacing: .5px;
@@ -212,7 +212,7 @@ dialog .btns .left { margin-right: auto; }
 /* /lock: the whole page behind a padlock. on: drops in, the shackle snaps shut; fail: shakes red;
    open: the shackle springs up, then a hole grows from the middle and lets the session through */
 @property --r { syntax: "<percentage>"; inherits: false; initial-value: 0%; }
-#lock { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; padding: 16px;
+#lock { position: fixed; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100dvh); z-index: 50; display: none; place-items: center; padding: 16px;
   background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(16px) saturate(.5); }
 #lock.on { display: grid; animation: lockfade .3s ease both; }
 #lock .card { display: grid; gap: 12px; justify-items: center; width: min(340px, 100%); padding: 24px 28px 28px;
@@ -433,6 +433,12 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
   font: 600 12px/1.2 var(--mono); cursor: pointer; box-shadow: 0 2px 8px #0004; }  /* over the chat: its own text colors, readable in every theme */
 #zoom .zm:active { background: var(--accent); color: var(--on-accent, #111); }
 @media (pointer: coarse) { #zoom { display: flex; } }
+/* a phone: the page never moves (no rubber band showing a line under the status bar, nothing for iOS to pan on a keystroke); the lists scroll inside */
+@media (pointer: coarse) {
+  html { overflow: hidden; overscroll-behavior: none; }
+  body { position: fixed; inset: 0; overflow: hidden; overscroll-behavior: none; }
+  #msgs, #msgs2, #side, #nicks, #nicks2, dialog { overscroll-behavior: contain; }
+}
 #topic #menu { display: none; }  /* #topic button is more specific than #menu */
 #ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
