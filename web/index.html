@@ -67,7 +67,7 @@ button, input { font: inherit; color: inherit; }
 #side .tab .fold:hover { color: var(--fg); }
 #side .tab.active .fold { color: inherit; opacity: .7; }
 #side .tab.srv .x { display: none; }  /* its × only on hover: the name gets the room */
-#side .tab.srv:hover .x { display: inline; }
+@media (hover: hover) { #side .tab.srv:hover .x { display: inline; } }  /* only with a real hover: on iOS a tap on an element whose :hover shows something is taken as the hover, no click */
 #side .tab .more, #side .tab .fold { margin-left: auto; }
 #side .tab .more + .fold, #side .tab .more + .x, #side .tab .fold + .x { margin-left: 0; }
 /* /set web_unread_badge: the messages you haven't read, a small muted pill (a mention: the hilight color) */
@@ -76,12 +76,11 @@ button, input { font: inherit; color: inherit; }
 #side .tab.a3 .ub { color: var(--tab_hilight-fg, #ff6ac1); background: color-mix(in srgb, var(--tab_hilight-fg, #ff6ac1) 16%, transparent); }
 #side .tab .ub + .more, #side .tab .ub + .fold, #side .tab .ub + .x { margin-left: 0; }
 /* a network's row: its × takes the badge's place on hover, so the name keeps its room */
-#side .tab.srv:hover .ub { display: none; }
-#side .tab.srv:hover .ub + .fold { margin-left: auto; }
+@media (hover: hover) { #side .tab.srv:hover .ub { display: none; } #side .tab.srv:hover .ub + .fold { margin-left: auto; } }
 #side .tab.shell { color: var(--tab_shell-fg, var(--tab_home-fg, inherit)); }
 #side .tab .more { color: var(--muted); }
 #side .tab .x { margin-left: auto; flex-shrink: 0; padding: 0 4px; font-weight: 400; opacity: .4; visibility: hidden; }  /* the tab's own color, faded: fits every theme and the active tab's */
-#side .tab:hover .x { visibility: visible; }
+@media (hover: hover) { #side .tab:hover .x { visibility: visible; } }
 #side .tab .x:hover { opacity: 1; }
 #side .tab.active { background: var(--tab_active-bg, #ffffff12); color: var(--tab_active-fg, inherit); border-left-color: var(--accent); }
 #side .tab.a1:not(.active) { color: var(--tab_data-fg, #9aa0c0); }
@@ -1087,14 +1086,16 @@ function renderSideSoon() { if (!sideQueued) sideQueued = true, requestAnimation
 // it lets go on the click itself (after the tab's handler ran), not on pointerup: iOS fires the click in a later task than
 // the touch's pointerup, so a redraw right after pointerup replaced the tapped tab and the tap only highlighted it.
 // pointerup alone lets go after 500ms (nothing was clicked), pointercancel (a scroll) at once
-let sideHeld = false, sideT = 0;
-const sideLet = ms => { clearTimeout(sideT); sideT = setTimeout(() => { if (sideHeld) sideHeld = false, renderSide(); }, ms); };
+let sideHeld = false, sideDirty = false, sideT = 0;  // sideDirty: a redraw was asked for meanwhile (else the tab under the finger stays: iOS's second tap needs it)
+const sideLet = ms => { clearTimeout(sideT); sideT = setTimeout(() => { if (sideHeld) { sideHeld = false; if (sideDirty) renderSide(); } }, ms); };
 $("#side").addEventListener("pointerdown", e => { if (e.button === 0) sideHeld = true, clearTimeout(sideT); });
 addEventListener("pointerup", () => { if (sideHeld) sideLet(500); });
 addEventListener("pointercancel", () => { if (sideHeld) sideLet(0); });
 addEventListener("click", () => { if (sideHeld) sideLet(0); }, true);
 function renderSide() {
-  if (dragId !== null || sideHeld) return;  // mid-drag: redrawn when it ends; held: after the click
+  if (sideHeld) { sideDirty = true; return; }  // held: after the click
+  if (dragId !== null) return;  // mid-drag: redrawn when it ends
+  sideDirty = false;
   const side = $("#side");
   for (const c of [...side.children]) if (c !== sidetop) c.remove();  // the filter keeps its focus
   if (!sidetop.parentNode) side.append(sidetop);
