@@ -1084,9 +1084,15 @@ let sideQueued = false;  // a busy channel's lines redraw the tab list once a fr
 function renderSideSoon() { if (!sideQueued) sideQueued = true, requestAnimationFrame(() => { sideQueued = false; renderSide(); }); }
 // a press on the list holds its redraw until after the click: a busy channel redrawing it between the button
 // going down and up replaced the tab under the pointer, so the browser fired no click and it took a second one
-let sideHeld = false;
-$("#side").addEventListener("pointerdown", e => { if (e.button === 0) sideHeld = true; });
-for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { if (sideHeld) setTimeout(() => { sideHeld = false; renderSide(); }); });
+// it lets go on the click itself (after the tab's handler ran), not on pointerup: iOS fires the click in a later task than
+// the touch's pointerup, so a redraw right after pointerup replaced the tapped tab and the tap only highlighted it.
+// pointerup alone lets go after 500ms (nothing was clicked), pointercancel (a scroll) at once
+let sideHeld = false, sideT = 0;
+const sideLet = ms => { clearTimeout(sideT); sideT = setTimeout(() => { if (sideHeld) sideHeld = false, renderSide(); }, ms); };
+$("#side").addEventListener("pointerdown", e => { if (e.button === 0) sideHeld = true, clearTimeout(sideT); });
+addEventListener("pointerup", () => { if (sideHeld) sideLet(500); });
+addEventListener("pointercancel", () => { if (sideHeld) sideLet(0); });
+addEventListener("click", () => { if (sideHeld) sideLet(0); }, true);
 function renderSide() {
   if (dragId !== null || sideHeld) return;  // mid-drag: redrawn when it ends; held: after the click
   const side = $("#side");
