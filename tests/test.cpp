@@ -386,6 +386,23 @@ int main() {
         assert(!core.ignored(ts, "SpamBot!u@h"));  // another network's list, or a global one, isn't used
         core.cfg.erase("server.other"), core.cfg["general"].erase("ignore");
     }
+    {  // /ignore -t: until then, then not; the list shows the time left
+        assert(parse_span("90") == 5400 && parse_span("30m") == 1800 && parse_span("1d12h") == 129600 && parse_span("1w") == 604800);
+        assert(!parse_span("") && !parse_span("h") && !parse_span("1x") && !parse_span("-5") && !parse_span("2h 3"));
+        Buffer* sb = ts->status;
+        core.exec(sb, "/ignore -t 2h timed");
+        assert(core.ignored(ts, "timed!u@h") && ini_get(core.cfg, "server.t", "ignore").find("timed!*@*=") == 0);
+        core.exec(sb, "/ignore -t nonsense other");
+        assert(!core.ignored(ts, "other!u@h"));
+        core.cfg["server.t"]["ignore"] = "timed!*@*=" + std::to_string((long long)time(nullptr) - 5) + " keep!*@*";
+        assert(!core.ignored(ts, "timed!u@h") && core.ignored(ts, "keep!u@h"));  // ran out
+        core.exec(sb, "/ignore -t 1h timed");
+        core.exec(sb, "/ignore timed");  // again, no time: for good
+        assert(ini_get(core.cfg, "server.t", "ignore") == "keep!*@* timed!*@*");
+        core.exec(sb, "/unignore keep");
+        assert(ini_get(core.cfg, "server.t", "ignore") == "timed!*@*");
+        core.cfg["server.t"].erase("ignore");
+    }
     Buffer* chb = core.open(ts, BT::CHANNEL, "#c");
     chb->joined = true;
     auto feed = [&](const std::string& l) { Msg mm; assert(irc_parse(l, mm)); core.handle(ts, mm); };
@@ -469,6 +486,51 @@ int main() {
         feed(":me!u@h MODE me :+x\x02-w");
         assert(ts->umodes == "izTx");
         assert(ts->status->lines.back().text == "Your user mode is [+iwzT]");  // 221 at connect: status
+    }
+    {  // /bans: the 367s fill the list the window shows, the 368 ends it; a list nobody asked for prints as before
+        ts->chanmodes = "eIbq,k,l,imnpst";
+        core.ban_list(chb, 'b', 2);
+        assert(sent().find("MODE #c +b\r\n") != std::string::npos && ts->bl.loading);
+        feed(":srv 367 me #c *!*@bad.host alice!u@h 1700000000");
+        feed(":srv 367 me #c troll!*@* bob 1700000100");
+        assert(ts->bl.v.size() == 2 && ts->bl.loading);
+        feed(":srv 368 me #c :End of channel ban list");
+        assert(!ts->bl.loading && ts->bl.v[1].setter == "bob" && ts->bl.v[0].ts == 1700000000);
+        size_t nl = chb->lines.size();
+        feed(":srv 367 me #c typed!*@* bob 5");  // nobody asked: the generic line
+        assert(chb->lines.size() == nl + 1 && chb->lines.back().text.find("typed!*@*") != std::string::npos);
+        core.ban_list(chb, 'q', 2), sent();  // 728/729 name the mode
+        feed(":srv 728 me #c q m!*@* carol 1700000200");
+        feed(":srv 729 me #c q :End of channel quiet list");
+        assert(!ts->bl.loading && ts->bl.v.size() == 1 && ts->bl.v[0].mask == "m!*@*" && ts->bl.v[0].setter == "carol");
+        core.ban_list(chb, 'q', 0), sent();  // no window: printed, newest first
+        feed(":srv 728 me #c q old!*@* x 1000000000");
+        feed(":srv 728 me #c q new!*@* y 1700000000");
+        feed(":srv 729 me #c q :End");
+        assert(chb->lines.back().text.find("old!*@*") != std::string::npos && chb->lines[chb->lines.size() - 2].text.find("new!*@*") != std::string::npos);
+        core.ban_list(chb, 'b', 2), sent();  // no answer for 15 seconds: the window gets an error, not "Loading"
+        ts->bl.at -= 20;
+        core.chan_timers(ts, time(nullptr));
+        assert(!ts->bl.loading && !ts->bl.err.empty());
+        ts->chanmodes = "beI,k,l,imnpst";
+        nl = chb->lines.size();
+        core.ban_list(chb, 'q', 2);  // this server has no +q list
+        assert(sent().empty() && chb->lines.size() == nl + 1 && chb->lines.back().kind == LK::ERROR);
+        // changes take halfop or more
+        NickEntry& me = chb->nicks[ts->lower(ts->nick)];
+        me.nick = ts->nick, me.prefix = "";
+        assert(!core.ban_rank(chb));
+        core.exec(chb, "/ban troll");
+        core.ban_edit(chb, 'b', true, "troll");
+        assert(sent().empty());
+        me.prefix = "@";
+        assert(core.ban_rank(chb));
+        core.exec(chb, "/ban troll");
+        assert(sent() == "MODE #c +b troll!*@*\r\n");
+        core.ban_edit(chb, 'b', false, "troll!*@*");
+        assert(sent() == "MODE #c -b troll!*@*\r\nMODE #c +b\r\n" && ts->bl.loading);
+        ts->bl.loading = false, me.prefix = "";
+        chb->nicks.erase(ts->lower(ts->nick));
     }
     {  // 324/329: our join's MODE fills the title and prints, like a typed /mode; +k/+l track live
         feed(":me!u@h JOIN #mt");

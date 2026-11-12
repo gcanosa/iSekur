@@ -657,6 +657,24 @@ static Buffer* by_id(Core& c, int id) {
 
 static std::string line_json(const Line& l, const std::string& fmt);
 
+// /bans: the list the window shows. v: [mask, set by, when it was set, when our /tempban lifts it (0: never)]
+static std::string bans_json(Core& c, Buffer* b) {
+    Server* s = b->srv;
+    const BanList& bl = s->bl;
+    std::string kinds = ban_kinds(s);
+    std::string o = "{\"t\":\"bans\",\"buf\":" + std::to_string(b->id) + ",\"chan\":" + json_str(bl.chan) + ",\"mode\":\"" + bl.mode +
+                    "\",\"kinds\":" + json_str(kinds) + ",\"loading\":" + (bl.loading ? "1" : "0") + ",\"err\":" + json_str(bl.err) +
+                    ",\"can\":" + (c.ban_rank(b) ? "1" : "0") + ",\"now\":" + std::to_string((long long)time(nullptr)) + ",\"v\":[";
+    for (size_t i = 0; i < bl.v.size(); i++) {
+        long long until = 0;
+        if (bl.mode == 'b')
+            for (auto& t : s->tempbans)
+                if (t.mask == bl.v[i].mask && s->lower(t.chan) == s->lower(bl.chan)) until = t.until;
+        o += (i ? ",[" : "[") + json_str(bl.v[i].mask) + "," + json_str(bl.v[i].setter) + "," + std::to_string((long long)bl.v[i].ts) + "," + std::to_string(until) + "]";
+    }
+    return o + "]}";
+}
+
 void Web::ws_frames(Client& cl) {
     for (;;) {
         int op;
@@ -692,6 +710,11 @@ void Web::ws_frames(Client& cl) {
         if (!b) continue;
         if (m["t"] == "input") c.from_web = true, c.exec(b, m["text"]), c.from_web = false;
         else if (m["t"] == "lock") c.lock_now(b);  // Alt+S in the webchat
+        else if (m["t"] == "bans") {  // the ban list window: the list (mode b, e, I or q), or an add or a lift in it
+            char mode = m["mode"].empty() ? 'b' : m["mode"][0];
+            if (m["op"] == "add" || m["op"] == "del") c.ban_edit(b, mode, m["op"] == "add", m["mask"]);
+            else c.ban_list(b, mode, 2);
+        }
         else if (m["t"] == "readall") c.mark_all_read();  // Cmd+R / Alt+R in the webchat
         else if (m["t"] == "typing") c.typed(b, m["text"]);  // +typing from the browser's input line
         else if (m["t"] == "read" && b->activity) { b->activity = 0; c.dirty = true; c.notify(Ev::BUFFER, b); }
@@ -1098,6 +1121,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
     case Ev::LOCK: case Ev::SCREEN: break;  // above
     case Ev::UPDATE: broadcast(update_json()); break;
+    case Ev::BANS: broadcast(bans_json(c, b)); break;
     case Ev::EMBED:  // a plugin's preview under a line already sent: the line's whole list again
         if (known.count(b->id)) broadcast("{\"t\":\"embed\",\"buf\":" + std::to_string(b->id) + ",\"id\":" + std::to_string(l->id) +
                                           ",\"em\":[" + l->embeds + "]}");

@@ -1,6 +1,7 @@
 // Channel operator shortcuts: mass modes, lockdown, kick+ban, temp bans,
 // channel stats and topic rotation.
 #include <algorithm>
+#include <cstring>
 #include <functional>
 #include "core.h"
 
@@ -184,8 +185,97 @@ void Core::kickban(Server* s, Buffer* b, const KickBan& kb, const std::string& u
                            " minutes. iSekur lifts the ban, so it has to be running then");
 }
 
+// ---- /bans: the lists of a channel (bans b, exceptions e, invite exceptions I, quiets q) -------------------
+std::string ban_kinds(const Server* s) {
+    std::string a = s->chanmodes.substr(0, s->chanmodes.find(',')), k;
+    for (char m : std::string("beIq"))
+        if (a.find(m) != std::string::npos) k += m;
+    return k;
+}
+
+// halfop or more may change them (an IRC operator too: some servers let them override)
+bool Core::ban_rank(const Buffer* b) const {
+    const Server* s = b->srv;
+    if (!s) return false;
+    auto me = b->nicks.find(s->lower(s->nick));
+    return (me != b->nicks.end() && rank_ok(s, me->second.prefix, '%')) || s->umodes.find('o') != std::string::npos;
+}
+
+void Core::ban_list(Buffer* b, char mode, int ui) {
+    Server* s = b->srv;
+    if (!s || b->type != BT::CHANNEL || !b->joined || s->state != SS::CONNECTED) {
+        print(b, LK::ERROR, "The lists are those of a channel you are in: use it in its tab");
+        return;
+    }
+    std::string kinds = ban_kinds(s);
+    if (kinds.find(mode) == std::string::npos) {
+        print(b, LK::ERROR, std::string("This server has no +") + mode + " list" + (kinds.empty() ? "" : " (it has: " + kinds + ")"));
+        return;
+    }
+    s->bl = BanList{};
+    s->bl.chan = b->name, s->bl.mode = mode, s->bl.loading = true, s->bl.win = ui != 0, s->bl.at = time(nullptr);
+    s->send(std::string("MODE ") + b->name + " +" + mode);
+    if (ui == 1) bans_win = true, bans_buf = b->id;
+    dirty = true;
+    notify(Ev::BANS, b);
+}
+
+void Core::ban_edit(Buffer* b, char mode, bool add, const std::string& mask) {
+    Server* s = b->srv;
+    if (!s || b->type != BT::CHANNEL || !b->joined) return;
+    if (!ban_rank(b)) { print(b, LK::ERROR, "You need to be a channel operator or halfop to change this list"); return; }
+    std::string m = mask.find_first_of("!@*:") == std::string::npos ? mask + "!*@*" : mask;  // a bare nick: nick!*@*
+    if (!strchr("beIq", mode) || m.empty() || m.find_first_of(" \r\n") != std::string::npos) return;
+    s->send(std::string("MODE ") + b->name + (add ? " +" : " -") + mode + " " + m);
+    s->send(std::string("MODE ") + b->name + " +" + mode);  // the list again, with the change in
+    s->bl.err.clear(), s->bl.v.clear(), s->bl.loading = true, s->bl.at = time(nullptr);
+    notify(Ev::BANS, b);
+}
+
+// the replies to a list we asked for belong to its window (or are printed as a table when they are in);
+// a /mode +b typed by hand has nobody waiting: false, the generic numeric shows it
+bool Core::ban_reply(Server* s, const Msg& m) {
+    static const std::map<std::string, std::pair<char, bool>> num = {  // reply -> list mode, is it the end
+        {"367", {'b', false}}, {"368", {'b', true}}, {"348", {'e', false}}, {"349", {'e', true}},
+        {"346", {'I', false}}, {"347", {'I', true}}, {"728", {'q', false}}, {"729", {'q', true}}};
+    BanList& bl = s->bl;
+    if (!bl.loading) return false;
+    Buffer* b = find(s, bl.chan);
+    if (!b) return false;
+    if (m.cmd == "482") {  // not allowed to see it: it ends the wait too
+        if (s->lower(m.p(1)) != s->lower(bl.chan)) return false;
+        bl.loading = false, bl.err = m.p(2);
+        notify(Ev::BANS, b);
+        return bl.win;  // with a window it shows the error; else the generic line does
+    }
+    auto it = num.find(m.cmd);
+    if (it == num.end() || it->second.first != bl.mode || s->lower(m.p(1)) != s->lower(bl.chan)) return false;
+    size_t o = bl.mode == 'q' ? 3 : 2;  // 728/729 name the mode: "me #chan q mask setter time"
+    if (!it->second.second) {
+        bl.v.push_back({m.p(o), m.p(o + 1), (time_t)atoll(m.p(o + 2).c_str())});
+        return true;
+    }
+    bl.loading = false;
+    if (!bl.win) {  // nobody has a window: the lines, newest first
+        std::vector<BanEntry> v = bl.v;
+        std::stable_sort(v.begin(), v.end(), [](const BanEntry& a, const BanEntry& z) { return a.ts > z.ts; });
+        static const std::map<char, std::string> what = {{'b', "bans"}, {'e', "exceptions"}, {'I', "invite exceptions"}, {'q', "quiets"}};
+        print(b, LK::INFO, std::to_string(v.size()) + " " + what.at(bl.mode) + " on " + bl.chan);
+        time_t now = time(nullptr);
+        for (auto& e : v)
+            print(b, LK::INFO, "  " + e.mask + "  by " + e.setter.substr(0, e.setter.find('!')) +
+                                   (e.ts > 0 ? ", " + fmt_dur((long)(now - e.ts)) + " ago" : ""));
+    }
+    notify(Ev::BANS, b);
+    return true;
+}
+
 // once a second-ish from tick(), while s is connected
 void Core::chan_timers(Server* s, time_t now) {
+    if (s->bl.loading && now - s->bl.at > 15) {  // no end to the list: an error shown somewhere else, or a server that doesn't say
+        s->bl.loading = false, s->bl.err = "The server did not send the list";
+        if (Buffer* b = find(s, s->bl.chan)) notify(Ev::BANS, b);
+    }
     for (size_t i = 0; i < s->tempbans.size();) {
         TempBan& t = s->tempbans[i];
         Buffer* b = find(s, t.chan);
@@ -242,8 +332,10 @@ std::vector<std::pair<std::string, std::string>> Core::nick_menu(Buffer* b, cons
     add("CTCP Version", "/ctcp " + nick + " VERSION");
     add("CTCP Ping", "/ctcp " + nick + " PING");
     add("CTCP Time", "/ctcp " + nick + " TIME");
-    auto masks = split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' ');
-    bool ign = std::find(masks.begin(), masks.end(), nick + "!*@*") != masks.end();
+    bool ign = false;
+    time_t until, now = time(nullptr);
+    for (auto& e : split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' '))
+        if (ign_mask(e, &until) == nick + "!*@*" && (!until || until > now)) ign = true;
     add("", "");
     add(ign ? "Unignore" : "Ignore", (ign ? "/unignore " : "/ignore ") + nick);
     std::vector<std::pair<std::string, std::string>> pm;  // the plugins on there add theirs (pmguard: Allow PMs)
@@ -329,6 +421,7 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
     m.push_back({muted(b) ? "Unmute channel" : "Mute channel", muted(b) ? "/mute off" : "/mute on"});
     m.push_back({"Clear", "/clear"});
     m.push_back({e2e_on(b) ? "Turn off E2E" : "Turn on E2E...", e2e_on(b) ? "/e2e off" : "/e2e " + b->name});
+    if (b->joined) m.push_back({"Ban list...", "/bans"});
     m.push_back({in_aj ? "Remove from autojoin" : "Add to autojoin", in_aj ? "/autojoin del" : "/autojoin add"});
     m.push_back({"", ""});
     m.push_back({"Close", b->joined ? "?Leave " + b->name + " and close its tab?\n/close" : "/close"});

@@ -46,7 +46,7 @@ that mirrors your live session in a browser, bouncer style.
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
 - Highlights on your nick plus your own words (`/hilight add isekur`, `*` globs), and quit/part messages you can set (`quit_message`, `part_message`)
 - `/grep [-all] text` searches the scrollback
-- Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`
+- Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`, and `/bans`: the ban list in a window (terminal and webchat)
 - `/help` with colors, details and examples; commands complete with Tab as you type
 - Lua plugins, sandboxed, from a checked catalog (`/plugin install`), on everywhere or per network or channel; auto-away is one (`/plugin install autoaway`)
 - Catch-up from IRCv3 chathistory on join
@@ -280,7 +280,7 @@ dropped instead of showing up as garbage.
 
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
 `/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
-`/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/logs [text]` (the log browser, below), `/web [start|stop|status]`, `/bnc [start|stop|restart|status|password]`,
+`/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [-t time] [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/logs [text]` (the log browser, below), `/web [start|stop|status]`, `/bnc [start|stop|restart|status|password]`,
 `/clear`, `/back` (clears away), `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected, and for the lock password when one is set). Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).
 
@@ -302,6 +302,8 @@ Channel op shortcuts: `/massop`, `/massdeop`, `/massvoice`, `/massdevoice`,
 `/masskick [-yes] [reason]` (asks first), `/lockdown` (+mntsi) and `/unlock` (-msi),
 `/kickban nick [reason]` (bans `*!*@host`), `/tempban nick minutes [reason]` (lifted by iSekur when
 the time is up), `/chanstats`, and `/topicrotate minutes topic | topic ...` (`off` stops it).
+`/ban` alone or `/bans [b|e|I|q]` opens the channel's ban list (or exceptions, invite exceptions, quiets) in a window: who set
+each, how long ago, sortable and filterable, with Unban and Add for halfops and ops (also the channel tab's menu: Ban list...).
 
 Shell commands: `/exec ls -la` (alias `/sh`, in bash or zsh: your login shell when it is one of them) streams the output into the cmd tab without blocking
 the chat; `/exec -o uptime` says it in the current channel or query (longer than `paste_confirm`

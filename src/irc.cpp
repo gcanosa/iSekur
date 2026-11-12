@@ -171,8 +171,11 @@ int Core::drain() {
 bool Core::ignored(const Server* s, const std::string& prefix) const {
     if (prefix.find('!') == std::string::npos) return false;  // servers are never ignored
     std::string who = irc_lower(prefix);
-    for (auto& mask : split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' '))
-        if (fnmatch(irc_lower(mask).c_str(), who.c_str(), 0) == 0) return true;
+    time_t now = time(nullptr), until;
+    for (auto& e : split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' ')) {
+        std::string mask = ign_mask(e, &until);
+        if ((!until || until > now) && fnmatch(irc_lower(mask).c_str(), who.c_str(), 0) == 0) return true;
+    }
     return false;
 }
 
@@ -1431,6 +1434,7 @@ void Core::handle(Server* s, const Msg& m) {
         }
     }
 
+    if (ban_reply(s, m)) return;  // a /bans list coming in
     // generic numerics: route to a channel buffer if the reply names one
     if (cmd.size() == 3 && isdigit((unsigned char)cmd[0])) {
         Buffer* b = nullptr;

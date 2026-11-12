@@ -712,6 +712,7 @@ void Tui::draw() {
     if (c.keys_win) c.keys_win = false, kw = KeysWin{}, kw.open = true;
     if (c.plugin_win) c.plugin_win = false, pw = PlugWin{}, pw.open = true;
     if (c.logs_win) c.logs_win = false, logs_init();
+    if (c.bans_win) c.bans_win = false, bw = BanWin{}, bw.open = true, bw.buf = c.bans_buf;
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.theme;
     Style def = T.get("default");
@@ -1102,6 +1103,11 @@ void Tui::draw() {
     }
     if (lw.open) {  // /logs: the log browser
         draw_logs(W, H);
+        present();
+        return;
+    }
+    if (bw.open) {  // /ban, /bans: the list box
+        draw_bans(W, H);
         present();
         return;
     }
@@ -2223,6 +2229,219 @@ void Tui::theme_mouse(int k, int x, int y) {
     if (d) theme_key(d > 0 ? TB_KEY_ARROW_DOWN : TB_KEY_ARROW_UP, 0);
 }
 
+
+// ---- /ban, /bans: the list box ----------------------------------------------------------------------------
+struct BanRow { const BanEntry* e; time_t until; };  // until: when our /tempban lifts it (0: never)
+
+// the rows the box shows: the filter's matches, in the sort order (t newest first, m mask, s who set it)
+static std::vector<BanRow> ban_view(const Server* s, char sort, bool rev, const std::string& q) {
+    std::vector<BanRow> v;
+    for (auto& e : s->bl.v) {
+        if (!q.empty() && lower(e.mask + " " + e.setter).find(q) == std::string::npos) continue;
+        time_t until = 0;
+        for (auto& t : s->tempbans)
+            if (s->bl.mode == 'b' && t.mask == e.mask && s->lower(t.chan) == s->lower(s->bl.chan)) until = t.until;
+        v.push_back({&e, until});
+    }
+    auto who = [](const BanEntry* e) { return lower(e->setter.substr(0, e->setter.find('!'))); };
+    std::stable_sort(v.begin(), v.end(), [&](const BanRow& a, const BanRow& z) {
+        bool lt = sort == 'm' ? lower(a.e->mask) < lower(z.e->mask) : sort == 's' ? who(a.e) < who(z.e) : a.e->ts > z.e->ts;
+        bool gt = sort == 'm' ? lower(z.e->mask) < lower(a.e->mask) : sort == 's' ? who(z.e) < who(a.e) : z.e->ts > a.e->ts;
+        return rev ? gt : lt;
+    });
+    return v;
+}
+
+static std::string ban_ago(long s) { return s < 60 ? "<1m" : s < 3600 ? std::to_string(s / 60) + "m" : s < 86400 ? std::to_string(s / 3600) + "h" : std::to_string(s / 86400) + "d"; }
+static const char* ban_kind_name(char k) { return k == 'e' ? "Exceptions" : k == 'I' ? "Invites" : k == 'q' ? "Quiets" : "Bans"; }
+static const char* ban_noun(char k) { return k == 'e' ? "exception" : k == 'I' ? "invite exception" : k == 'q' ? "quiet" : "ban"; }
+
+//   ┌ Bans · #linux ─────────────────────────────────────────────────────┐
+//   │  Bans   Exceptions   Invites                                       │
+//   │ filter:                                                            │
+//   │ Mask ▼                                    Set by         Set       │
+//   │ ────────────────────────────────────────────────────────────────── │
+//   │ ▸ *!*@bad.host                            alice          3d ago    │
+//   │   troll!*@*  (lifts in 9m)                bob            2h ago    │
+//   │ 2 bans · u unban · a add ...                                       │
+void Tui::draw_bans(int W, int H) {
+    const Theme& T = c.theme;
+    Buffer* b = nullptr;
+    for (auto& x : c.bufs)
+        if (x->id == bw.buf) b = x.get();
+    if (!b || !b->srv) { bw.open = false, c.dirty = true; return; }
+    Server* s = b->srv;
+    const BanList& bl = s->bl;
+    bool mine = s->lower(bl.chan) == s->lower(b->name), can = c.ban_rank(b);
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), es = T.get("error");
+    for (Style* st : {&ls, &dim, &es}) st->bg = bs.bg;
+    hs.attr |= A_BOLD;
+    std::string q = to_utf8(bw.q);
+    auto v = mine ? ban_view(s, bw.sort, bw.rev, lower(q)) : std::vector<BanRow>{};
+    int n = (int)v.size(), idx = -1;
+    for (int i = 0; i < n; i++)
+        if (v[(size_t)i].e->mask == bw.sel) idx = i;
+    if (idx < 0 && n) idx = 0, bw.sel = v[0].e->mask;
+    if (!n) bw.sel.clear();
+    bw.rows = std::max(1, std::min({std::max(n, 1), H - 10, 16}));
+    bw.w = std::min(W - 2, 80), bw.x0 = (W - bw.w) / 2;
+    int bh = bw.rows + 8, y0 = std::max(0, (H - bh) / 2 - 1), x1 = bw.x0 + bw.w, inner = bw.w - 4;
+    bw.tab_y = y0 + 1, bw.filter_y = y0 + 2, bw.head_y = y0 + 3, bw.list_y = y0 + 5;
+    if (idx >= 0 && idx < bw.top) bw.top = idx;
+    if (idx >= bw.top + bw.rows) bw.top = idx - bw.rows + 1;
+    bw.top = std::max(0, std::min(bw.top, std::max(0, n - bw.rows)));
+    for (int yy = y0; yy < y0 + bh; yy++) fill(yy, bw.x0, x1, bs);
+    for (int xx = bw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls), cell(xx, y0 + 4, U'─', ls);
+    for (int yy = y0; yy < y0 + bh; yy++) cell(bw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
+    cell(bw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(bw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
+    cell(bw.x0, y0 + 4, U'├', ls), cell(x1 - 1, y0 + 4, U'┤', ls);
+    if (auto cb = box_title(T, bw.x0, x1 - 1, y0, ban_kind_name(bl.mode) + (" · " + b->name), hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'b'};
+    // the lists this server has, one is open
+    bw.kinds = ban_kinds(s), bw.tabs.clear();
+    int tx = bw.x0 + 2;
+    for (char kd : bw.kinds) {
+        std::string label = std::string(" ") + ban_kind_name(kd) + " ";
+        int ex = text(tx, bw.tab_y, x1 - 2, label, kd == bl.mode ? sel : bs, false);
+        bw.tabs.push_back({tx, ex});
+        tx = ex + 1;
+    }
+    int fx = text(bw.x0 + 2, bw.filter_y, x1 - 2, "filter: ", hs, false);
+    fill(bw.filter_y, fx, x1 - 2, fs);
+    int ex = text(fx, bw.filter_y, x1 - 2, q.empty() && !bw.filtering ? "" : q, fs, false);
+    if (q.empty() && !bw.filtering) text(fx, bw.filter_y, x1 - 2, "/ to filter by mask or who set it", Style{dim.fg, fs.bg, 0}, false);
+    // the columns: mask, set by, set
+    const int setter_w = 14, age_w = 9;
+    bw.mask_w = inner - setter_w - age_w - 2;
+    int sx = bw.x0 + 2 + bw.mask_w + 1, ax = sx + setter_w + 1;
+    auto arrow = [&](char col) { return bw.sort == col ? (bw.rev ? " ▲" : " ▼") : ""; };
+    text(bw.x0 + 2, bw.head_y, sx - 1, std::string("Mask") + arrow('m'), hs, false);
+    text(sx, bw.head_y, ax - 1, std::string("Set by") + arrow('s'), hs, false);
+    text(ax, bw.head_y, x1 - 2, std::string("Set") + arrow('t'), hs, false);
+    time_t now = time(nullptr);
+    for (int i = 0; i < bw.rows && bw.top + i < n; i++) {
+        const BanRow& r = v[(size_t)(bw.top + i)];
+        bool on = bw.top + i == idx;
+        Style st = on ? sel : bs, dm = on ? sel : dim;
+        int y = bw.list_y + i;
+        fill(y, bw.x0 + 1, x1 - 1, st);
+        int mx = text(bw.x0 + 2, y, bw.x0 + 2 + bw.mask_w, (on ? "▸ " : "  ") + r.e->mask, st, false);
+        if (r.until && mx + 1 < sx - 1) text(mx + 1, y, sx - 1, "(lifts in " + ban_ago((long)(r.until - now)) + ")", dm, false);
+        text(sx, y, ax - 1, r.e->setter.substr(0, r.e->setter.find('!')), dm, false);
+        if (r.e->ts > 0) text(ax, y, x1 - 2, ban_ago((long)(now - r.e->ts)) + " ago", dm, false);
+    }
+    int sy = bw.list_y + bw.rows;
+    if (!mine) text(bw.x0 + 2, sy, x1 - 2, "Another window is using the list: r loads this one", es, false);
+    else if (bl.loading) text(bw.x0 + 2, sy, x1 - 2, "Loading…", dim, false);
+    else if (!bl.err.empty()) text(bw.x0 + 2, sy, x1 - 2, bl.err, es, false);
+    else {
+        std::string what = std::to_string(n) + " " + ban_noun(bl.mode) + (n == 1 ? "" : "s");
+        if (n != (int)bl.v.size()) what += " of " + std::to_string(bl.v.size());
+        text(bw.x0 + 2, sy, x1 - 2, what + (can ? "" : " · read only: changing a list takes halfop or more"), dim, false);
+    }
+    text(bw.x0 + 2, sy + 1, x1 - 2,
+         can ? "↑↓ · u unban · a add · r reload · s sort · Tab list · / filter · Esc close" : "↑↓ · r reload · s sort · Tab list · / filter · Esc close",
+         dim, false);
+    if (bw.filtering) tb_set_cursor(ex, bw.filter_y);
+    else tb_hide_cursor();
+    if (!bw.ask.empty())
+        draw_dialog(W, H, std::string(bl.mode == 'b' ? "Unban" : "Remove"), wrap_words((bl.mode == 'b' ? "Unban " : "Remove ") + bw.ask + " on " + b->name + "?", 44), "", false, U"", 0, "y: yes · n or Esc: no", 0, 0, 'u');
+    if (bw.adding)
+        draw_dialog(W, H, std::string("Add to the ") + ban_noun(bl.mode) + " list", wrap_words("A nick gives nick!*@*; or a mask like *!*@host.", 44), "Mask or nick", false, bw.ed,
+                    bw.ed.size(), "Enter: add · Esc: cancel", 0, 0, 'm');
+}
+
+void Tui::bans_key(int k, uint32_t ch) {
+    Buffer* b = nullptr;
+    for (auto& x : c.bufs)
+        if (x->id == bw.buf) b = x.get();
+    if (!b || !b->srv) { bw.open = false; return; }
+    Server* s = b->srv;
+    const char mode = s->bl.mode;
+    bool can = c.ban_rank(b);
+    if (ch == ' ') k = TB_KEY_SPACE, ch = 0;  // termbox gives Space as a character
+    bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
+    auto edit = [&](std::u32string& t) {
+        if (bs) { if (!t.empty()) t.pop_back(); }
+        else if (k == TB_KEY_SPACE) t += U' ';
+        else if (ch) t += ch;
+    };
+    if (!bw.ask.empty()) {  // unban it? (y/n)
+        std::string m = bw.ask;
+        bw.ask.clear();
+        if (ch == 'y' || ch == 'Y') c.ban_edit(b, mode, false, m);
+        return;
+    }
+    if (bw.adding) {
+        if (k == TB_KEY_ESC) bw.adding = false;
+        else if (k == TB_KEY_ENTER) {
+            std::string m = trim(to_utf8(bw.ed));
+            bw.adding = false;
+            if (!m.empty()) c.ban_edit(b, mode, true, m);
+        } else if (k != TB_KEY_SPACE) edit(bw.ed);  // a mask has no spaces
+        return;
+    }
+    if (bw.filtering) {
+        if (k == TB_KEY_ESC) bw.q.clear(), bw.filtering = false;
+        else if (k == TB_KEY_ENTER) bw.filtering = false;
+        else edit(bw.q), bw.top = 0;
+        return;
+    }
+    auto v = s->lower(s->bl.chan) == s->lower(b->name) ? ban_view(s, bw.sort, bw.rev, lower(to_utf8(bw.q))) : std::vector<BanRow>{};
+    int n = (int)v.size(), idx = -1;
+    for (int i = 0; i < n; i++)
+        if (v[(size_t)i].e->mask == bw.sel) idx = i;
+    auto go = [&](int to) { if (n) bw.sel = v[(size_t)std::max(0, std::min(n - 1, to))].e->mask; };
+    auto kind = [&](size_t to) {
+        if (to < bw.kinds.size()) c.ban_list(b, bw.kinds[to], 3), bw.sel.clear(), bw.top = 0;
+    };
+    if (k == TB_KEY_ESC || ch == 'q') bw.open = false;
+    else if (k == TB_KEY_ARROW_DOWN) go(idx + 1);
+    else if (k == TB_KEY_ARROW_UP) go(idx - 1);
+    else if (k == TB_KEY_PGDN) go(idx + bw.rows);
+    else if (k == TB_KEY_PGUP) go(idx - bw.rows);
+    else if (k == TB_KEY_HOME) go(0);
+    else if (k == TB_KEY_END) go(n - 1);
+    else if ((ch == 'u' || k == TB_KEY_ENTER || k == TB_KEY_DELETE) && can && idx >= 0) bw.ask = bw.sel;
+    else if (ch == 'a' && can) bw.adding = true, bw.ed.clear();
+    else if (ch == 'r') c.ban_list(b, mode, 3);
+    else if (ch == 's') bw.sort = bw.sort == 't' ? 'm' : bw.sort == 'm' ? 's' : 't', bw.rev = false;
+    else if (k == TB_KEY_TAB) kind((bw.kinds.find(mode) + 1) % std::max<size_t>(1, bw.kinds.size()));
+    else if (ch == '/') bw.filtering = true;
+}
+
+// a click picks a list, a column to sort by, or a row (again, or a double click: unban); the wheel moves
+void Tui::bans_mouse(int k, int x, int y) {
+    if (!bw.ask.empty() || bw.adding) return;
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { bans_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
+    if (k != TB_KEY_MOUSE_LEFT || x <= bw.x0 || x >= bw.x0 + bw.w - 1) return;
+    Buffer* b = nullptr;
+    for (auto& e : c.bufs)
+        if (e->id == bw.buf) b = e.get();
+    if (!b || !b->srv) return;
+    Server* s = b->srv;
+    if (y == bw.tab_y) {
+        for (size_t i = 0; i < bw.tabs.size(); i++)
+            if (x >= bw.tabs[i].first && x < bw.tabs[i].second && bw.kinds[i] != s->bl.mode) c.ban_list(b, bw.kinds[i], 3), bw.sel.clear(), bw.top = 0;
+        return;
+    }
+    if (y == bw.filter_y) { bw.filtering = true; return; }
+    int sx = bw.x0 + 2 + bw.mask_w + 1, ax = sx + 15;
+    if (y == bw.head_y) {
+        char col = x < sx ? 'm' : x < ax ? 's' : 't';
+        bw.rev = col == bw.sort && !bw.rev, bw.sort = col;
+        return;
+    }
+    int i = y - bw.list_y;
+    if (i < 0 || i >= bw.rows || bw.filtering) return;
+    auto v = s->lower(s->bl.chan) == s->lower(b->name) ? ban_view(s, bw.sort, bw.rev, lower(to_utf8(bw.q))) : std::vector<BanRow>{};
+    if (bw.top + i >= (int)v.size()) return;
+    long long now = now_ms();
+    bool again = bw.sel == v[(size_t)(bw.top + i)].e->mask && now - bw.click_ms < 500;
+    bw.sel = v[(size_t)(bw.top + i)].e->mask, bw.click_ms = now;
+    if (again) bans_key(TB_KEY_ENTER, 0);
+}
+
 // a click picks a category or a key (again, or a double click: edits it); the wheel moves
 void Tui::settings_mouse(int k, int x, int y) {
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) {
@@ -2476,7 +2695,7 @@ void Tui::on_readable() {
         if ((ev.type == TB_EVENT_KEY || ev.type == TB_EVENT_MOUSE) && c.wake()) { c.dirty = true; continue; }  // it only ends the screensaver
         keyed |= ev.type == TB_EVENT_KEY;
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || lw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || lw.open || bw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -2493,7 +2712,7 @@ void Tui::on_readable() {
     bool moved = id != typed_id;
     typed_id = id;
     // only after keys here (or a tab change): a mouse move or a resize must not say "done" while you type in the webchat
-    if (c.active && (keyed || moved)) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open || lw.open ? "" : to_utf8(input));
+    if (c.active && (keyed || moved)) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open || lw.open || bw.open ? "" : to_utf8(input));
 }
 
 bool Tui::action(const std::string& a) {
@@ -2556,6 +2775,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (kw.open) { keys_key(k, ch); return; }
     if (pw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) plugin_key(k, ch); return; }
     if (lw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) logs_key(k, ch); return; }
+    if (bw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) bans_key(k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
         int n = (int)menu.items.size(), d = k == TB_KEY_ARROW_DOWN ? 1 : k == TB_KEY_ARROW_UP ? -1 : 0;
         if (d) {
@@ -2765,6 +2985,9 @@ void Tui::close_box() {
     case 'k': kw.open = false; break;
     case 'g': pw.open = false; break;
     case 'l': lw.open = false; break;
+    case 'b': bw.open = false; break;
+    case 'u': bw.ask.clear(); break;
+    case 'm': bw.adding = false; break;
     case 'C': lw.focus = lw.back; break;
     case 'P': pw.ask.clear(); break;
     case 'A': pw.about.clear(); break;
@@ -2788,6 +3011,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
     if (pw.open) { if (!(mod & TB_MOD_MOTION)) plugin_mouse(k, x, y); return; }
     if (lw.open) { if (!(mod & TB_MOD_MOTION)) logs_mouse(k, x, y); return; }
+    if (bw.open) { if (!(mod & TB_MOD_MOTION)) bans_mouse(k, x, y); return; }
     if (kw.open) {  // the wheel scrolls, a click outside closes
         if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) keys_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
         else if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1)) kw.open = false;

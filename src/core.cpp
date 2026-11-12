@@ -1753,26 +1753,47 @@ void Core::exec(Buffer* b, const std::string& input) {
                                "  - /save writes it to the config");
         return;
     }
-    if (cmd == "ignore" || cmd == "unignore") {  // masks: nick or nick!user@host globs, per network
+    if (cmd == "ignore" || cmd == "unignore") {  // masks: nick or nick!user@host globs, per network; -t time: for a while
         if (!s) { print(b, LK::ERROR, "Ignores are per network: use it in one of its tabs"); return; }
         std::string sec = "server." + s->cfg.name;
-        auto masks = split(ini_get(cfg, sec, "ignore"), ' ');
+        time_t now = time(nullptr), span = 0;
+        auto tf = std::find(argv.begin(), argv.end(), "-t");
+        if (cmd == "ignore" && tf != argv.end()) {
+            span = tf + 1 == argv.end() ? 0 : parse_span(*(tf + 1));
+            if (!span) { print(b, LK::ERROR, "Usage: /ignore -t time mask  (time: 30m, 2h, 1d12h, 1w; a bare number is minutes)"); return; }
+            argv.erase(tf, tf + 2);
+        }
+        std::vector<std::string> masks;  // the live entries: one that ran out is dropped here
+        for (auto& e : split(ini_get(cfg, sec, "ignore"), ' ')) {
+            time_t until;
+            ign_mask(e, &until);
+            if (!until || until > now) masks.push_back(e);
+        }
         if (argv.empty()) {
-            print(b, LK::INFO, masks.empty() ? "Ignore list on " + s->cfg.name + " is empty" : "Ignoring on " + s->cfg.name + ": " + ini_get(cfg, sec, "ignore"));
+            std::string shown;
+            for (auto& e : masks) {
+                time_t until;
+                shown += (shown.empty() ? "" : " ") + ign_mask(e, &until) + (until ? " (" + fmt_dur((long)(until - now)) + " left)" : "");
+            }
+            print(b, LK::INFO, masks.empty() ? "Ignore list on " + s->cfg.name + " is empty" : "Ignoring on " + s->cfg.name + ": " + shown);
             return;
         }
         std::string mask = argv[0];
         if (mask.find('!') == std::string::npos && mask.find('@') == std::string::npos) mask += "!*@*";
-        auto it = std::find(masks.begin(), masks.end(), mask);
-        if (cmd == "ignore" && it == masks.end()) masks.push_back(mask);
+        auto it = std::find_if(masks.begin(), masks.end(), [&](const std::string& e) { return ign_mask(e) == mask; });
         if (cmd == "unignore") {
             if (it == masks.end()) { print(b, LK::ERROR, mask + " is not ignored"); return; }
             masks.erase(it);
+        } else {  // again: the new time (or for good) replaces the old
+            std::string e = mask + (span ? "=" + std::to_string((long long)(now + span)) : "");
+            if (it == masks.end()) masks.push_back(e);
+            else *it = e;
         }
         std::string joined;
         for (auto& m : masks) joined += (joined.empty() ? "" : " ") + m;
         cfg[sec]["ignore"] = unsaved[sec]["ignore"] = joined;
-        print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " on " + s->cfg.name + " (/save to keep)");
+        print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " on " + s->cfg.name +
+                               (span ? " for " + fmt_dur((long)span) : "") + " (/save to keep)");
         return;
     }
     if (cmd == "hilight") {  // /hilight [add|del] word: words highlighted besides your nick, * matches anything, per network
@@ -2334,6 +2355,13 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (chanop(b, cmd, args)) return;
+    if (cmd == "bans") {  // /bans [b|e|I|q]: the channel's list in a window
+        std::string k = argv.empty() ? "b" : argv[0];
+        if (k.size() != 1 || !strchr("beIq", k[0])) { print(b, LK::ERROR, "Usage: /bans [b|e|I|q]  (bans, exceptions, invite exceptions, quiets)"); return; }
+        if (!need()) return;
+        ban_list(b, k[0], tty && !from_web ? 1 : 0);
+        return;
+    }
     // one-user mode shortcuts in a channel tab: /op bob alice, /ban spammer, /unban *!*@evil.host
     static const std::map<std::string, std::string> quick = {
         {"op", "+o"}, {"deop", "-o"}, {"voice", "+v"}, {"devoice", "-v"},
@@ -2345,8 +2373,12 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::vector<std::string> who;
         for (auto& w : argv)
             if (!w.empty()) who.push_back(qm->second[1] == 'b' && w.find_first_of("!@*") == std::string::npos ? w + "!*@*" : w);  // a bare nick bans nick!*@*
+        if (!who.empty() && qm->second[1] == 'b' && !ban_rank(b)) {
+            print(b, LK::ERROR, "You need to be a channel operator or halfop to change the ban list");
+            return;
+        }
         if (who.empty()) {
-            if (cmd == "ban") s->send("MODE " + b->name + " +b");  // the ban list
+            if (cmd == "ban") ban_list(b, 'b', tty && !from_web ? 1 : 0);  // the ban list: a window in the terminal
             else print(b, LK::ERROR, "Usage: /" + cmd + (qm->second[1] == 'b' ? " nick|mask ..." : " nick ..."));
             return;
         }

@@ -222,6 +222,15 @@ enum class SS { DISCONNECTED, CONNECTING, REGISTERING, CONNECTED };
 // /kickban and /tempban; waits in kb_wait while USERHOST looks the host up
 struct KickBan { std::string chan, nick, reason; int minutes = 0; };
 struct TempBan { std::string chan, mask; time_t until; };
+// /bans: a channel's ban (b), exception (e), invite exception (I) or quiet (q) list, fetched for a window
+struct BanEntry { std::string mask, setter; time_t ts = 0; };
+struct BanList {
+    std::string chan, err;
+    char mode = 'b';
+    std::vector<BanEntry> v;
+    bool loading = false, win = false;  // win: a window shows it (else the lines are printed when it is in)
+    time_t at = 0;                      // when it was asked for
+};
 
 // /e2e session with one nick (e2e.cpp); keys live in memory only
 struct E2E {
@@ -324,6 +333,7 @@ struct Server {
     int max_modes = 3;                      // 005 MODES: mode changes per MODE line
     std::deque<KickBan> kb_wait;            // one per USERHOST sent, answered in order
     std::vector<TempBan> tempbans;          // lifted by Core::chan_timers
+    BanList bl;                             // the list /bans fetched last
     std::string whois;  // irc_lower(nick) between its 311 and 318: the lines get a frame
     struct ListEntry { std::string chan; int users; std::string topic; };
     std::vector<ListEntry> list;  // /list: the 322s, kept after the 323 so /list sort redraws them
@@ -383,7 +393,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -550,6 +560,12 @@ struct Core {
     void guide(Buffer* from, const std::string& arg);  // help.cpp: the *guide tab; "", N, next, prev, on, off, close
     int guide_page = 0;
     bool chanop(Buffer* b, const std::string& cmd, const std::string& args);  // false: not one
+    bool ban_rank(const Buffer* b) const;  // halfop or more in b, or an IRC operator: may change its lists
+    void ban_list(Buffer* b, char mode, int ui);  // ask for b's list; ui: 0 print it, 1 open the terminal's window, 2 the webchat's, 3 the open terminal window reloads
+    void ban_edit(Buffer* b, char mode, bool add, const std::string& mask);  // +/- mode mask, then the list again
+    bool ban_reply(Server* s, const Msg& m);  // 367/368, 348/349, 346/347, 728/729 of a list we asked for (false: nobody did)
+    bool bans_win = false;  // /bans in the terminal: the TUI opens its window at bans_buf
+    int bans_buf = 0;
     void kickban(Server* s, Buffer* b, const KickBan& kb, const std::string& userhost);
     void chan_timers(Server* s, time_t now);  // /tempban expiry, /topicrotate
     std::vector<std::pair<std::string, std::string>> nick_menu(Buffer* b, const std::string& nick) const;  // label, command
@@ -659,6 +675,9 @@ std::string fmt_time(time_t t, const std::string& fmt);
 std::string human_bytes(unsigned long long n);  // 512M, 3.2G
 std::string ssh_dest(const std::string& ssh_g);  // exec.cpp: `ssh -G` output -> "user@hostname:port"
 std::string fmt_dur(long secs);
+std::string ban_kinds(const Server* s);  // chanops.cpp: the list modes this server has of "beIq" (bans, exceptions, invite exceptions, quiets)
+long long parse_span(const std::string& w);  // config.cpp: 90 (minutes), 30m, 2h, 1d12h, 1w -> seconds; 0 when it isn't one
+std::string ign_mask(const std::string& entry, time_t* until = nullptr);  // config.cpp: an ignore entry "mask" or "mask=epoch" -> mask; until: 0 = for good
 std::string typing_text(const std::vector<std::string>& nicks);  // tui.cpp: the status bar's +typing segment  // tui.cpp: 3d4h22m, 47m12s, 9s
 std::string status_info_json(const Core& c);  // tui.cpp: the status_info items for the webchat, [[[text, fg, bg], ...], ...]
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"

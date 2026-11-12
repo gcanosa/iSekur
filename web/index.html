@@ -249,11 +249,24 @@ dialog .btns .left { margin-right: auto; }
 @media (prefers-reduced-motion: reduce) { #lock, #lock *, #lock.open, #lock.open * { animation-duration: 1ms !important; animation-delay: 0s !important; } }
 #atext > div { animation: rise .5s ease-out both; }
 @keyframes rise { from { opacity: 0; transform: translateY(6px); } }
+/* /ban, /bans: a channel's lists in a window; a row is the mask, who set it, how long ago */
+#dbans { width: min(640px, calc(100vw - 32px)); }
+#dbans [hidden] { display: none !important; }  /* the tabs and buttons have display rules of their own */
+#bhead, #blist .r { grid-template-columns: minmax(0, 1fr) 9em 7em; }
+#bhead { display: grid; gap: 10px; padding: 0 6px; font-size: calc(12px * var(--z, 1)); }
+#bhead button { background: none; border: 0; padding: 2px 0; cursor: pointer; color: var(--muted); font: inherit; font-weight: 700; text-align: left; }
+#bhead button:hover, #bhead button.on { color: var(--fg); }
+#blist { max-height: min(46vh, 400px); }
+#blist .r { cursor: default; }
+#blist .r.on { background: var(--menu_sel-bg, var(--tab_active-bg, #ffffff14)); color: var(--menu_sel-fg, var(--fg)); }
+#blist .r.on .m, #blist .r.on .tmp { color: inherit; }
+#blist .n { font-family: var(--mono, monospace); }
+#blist .tmp { color: var(--accent); margin-left: 8px; }
 /* /plugin: the installed plugins and the catalog's, a tab each; Configure: its options at one scope */
 #dplug { width: min(720px, calc(100vw - 32px)); }
-#plugtabs { display: flex; gap: 4px; }
-#plugtabs button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; color: var(--muted); font-size: calc(13px * var(--z, 1)); }
-#plugtabs button.on { color: var(--fg); border-color: var(--accent); background: var(--accent-veil, #ffffff0d); }
+#plugtabs, #bkinds { display: flex; gap: 4px; }
+#plugtabs button, #bkinds button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; color: var(--muted); font-size: calc(13px * var(--z, 1)); }
+#plugtabs button.on, #bkinds button.on { color: var(--fg); border-color: var(--accent); background: var(--accent-veil, #ffffff0d); }
 #pluglist { max-height: min(48vh, 420px); }
 #plugcfg { display: grid; gap: 8px; }
 #plugcfg .top { display: flex; align-items: center; gap: 10px; font-size: calc(13px * var(--z, 1)); color: var(--muted); }
@@ -653,12 +666,12 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
   border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 3px 5px; font: inherit; outline: none; }
 .win-95 :is(dialog, #lock) select:not([multiple]) { appearance: none; padding-right: 22px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v14H0z' fill='%23fff'/%3E%3Cpath d='M15 0h1v16H0v-1h15z' fill='%23000'/%3E%3Cpath d='M14 1h1v14H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center / 16px 16px, #fff; }
-.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, #srvnew, #plugtabs button) { background: #c0c0c0; color: #000;
+.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, #srvnew, #plugtabs button, #bkinds button) { background: #c0c0c0; color: #000;
   border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
   font: 400 calc(12px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
 .win-95 :is(dialog .btns button, #lock button) { min-width: 75px; }
 .win-95 :is(dialog .btns button.go, #lock button) { box-shadow: 0 0 0 1px #000, inset -1px -1px #808080, inset 1px 1px #dfdfdf; }  /* the default button */
-.win-95 #plugtabs button.on { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; background: #dfdfdf; font-weight: bold; }
+.win-95 :is(#plugtabs, #bkinds) button.on { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; background: #dfdfdf; font-weight: bold; }
 .win-95 :is(dialog .btns button, #lock button, .flist .r .b button):active { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; padding: 5px 11px 3px 13px; }
 .win-95 :is(dialog .btns button, #lock button, .flist .r .b button):focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
 .win-95 dialog input[type=checkbox], .win-95 #setlist .sw i { appearance: none; box-sizing: border-box; width: 13px; height: 13px; margin: 0; flex: none;
@@ -672,7 +685,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #setnav { margin-right: 0; }
 .win-95 :is(#setnav button, #thlist button, .flist .r, #srvlist button) { border-radius: 0; padding: 2px 6px; }
 .win-95 :is(#setnav button, #thlist button, #srvlist button):hover { background: none; }
-.win-95 :is(#setnav button.on, #thlist button.on, #srvlist button.on), .win-95 #setnav button.on .c { background: #000080; color: #fff; }
+.win-95 :is(#setnav button.on, #thlist button.on, #srvlist button.on, #blist .r.on), .win-95 #setnav button.on .c { background: #000080; color: #fff; }
 .win-95 #setlist .sec { color: #000; font-weight: 700; letter-spacing: 0; text-transform: none; border-bottom: 1px solid #808080; box-shadow: 0 1px #fff; }
 .win-95 #abox a { color: #00f; }
 .win-95 #abanner { font-family: var(--mono); }  /* box drawing lines up only in a monospaced font, not the dialog's Tahoma */
@@ -762,6 +775,15 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="thlist" role="listbox" aria-label="Themes"></div>
   <div class="hint">↑↓ or a click previews · Enter keeps · Esc goes back</div>
   <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok">Keep</button></div>
+</form></dialog>
+<dialog id="dbans"><form method="dialog">
+  <h2 id="dbans-h">Bans</h2>
+  <div id="bkinds" role="tablist"></div>
+  <input id="bq" placeholder="Filter by mask or who set it..." autocomplete="off" aria-label="Filter the list">
+  <div id="bhead"></div>
+  <div class="flist" id="blist" role="listbox" aria-label="The list"></div>
+  <div class="hint" id="bmsg"></div>
+  <div class="btns"><button type="button" id="bref" class="left">Refresh</button><button type="button" id="badd">Add…</button><button type="button" id="bdel">Unban</button><button class="go" value="ok">Close</button></div>
 </form></dialog>
 <dialog id="dkeys"><form method="dialog">
   <h2>Keys</h2>
@@ -1593,6 +1615,8 @@ function onMsg(ev) {
     renderSugg();
   } else if (m.t === "logs" || m.t === "logread" || m.t === "logfind") {
     logMsg(m);
+  } else if (m.t === "bans") {
+    if (m.buf === bBuf && m.mode === bMode) { bans = m; bansAt = Date.now(); if (dbans.open) renderBans(); }
   } else if (m.t === "plugins") {
     plug = m; if (dplug.open) renderPlugins();
   } else if (m.t === "note") {
@@ -1831,6 +1855,7 @@ function askBox({title = "iSekur", text = "", label = "", value = "", hidden = f
   (label ? i : $("#dask-ok")).focus();
   return new Promise(res => { askDone = v => { askDone = null; res(v); }; });
 }
+$("#dask-i").onkeydown = e => { if (e.key === "Enter") { e.preventDefault(); dask.close("ok"); } };  // Enter in the field answers it (the form's first submit button is Cancel)
 dask.onclose = () => { if (askDone) askDone(dask.returnValue === "ok" ? ($("#dask-l").hidden ? "" : $("#dask-i").value) : null); };
 // iSekur asking for something in a tab (/oper, /e2e, the lock password, a login): the question box, the answer goes
 // back as that tab's input, "" cancels
@@ -2333,6 +2358,68 @@ document.addEventListener("keydown", e => {  // the document's: a clicked calend
 });
 // 🧩 /plugin: the installed plugins and the catalog's (a tab each); Configure sets a plugin's options at one scope.
 // Everything goes out as /plugin lines; the window asks again every second while it's open (a catalog fetch, an install)
+// /ban, /bans: a channel's ban list (b), exceptions (e), invite exceptions (I) or quiets (q). Who set each and how long ago;
+// the click on a column sorts it, the filter matches mask or setter; Add and Unban need halfop or more (m.can)
+const dbans = $("#dbans"); let bans = null, bansAt = 0, bBuf = 0, bMode = "b", bSel = "", bSort = "t", bRev = false;
+const B_KIND = {b: ["Bans", "ban", "Unban"], e: ["Exceptions", "ban exception", "Remove"], I: ["Invites", "invite exception", "Remove"], q: ["Quiets", "quiet", "Remove"]};
+const bAgo = s => s < 60 ? "<1m" : s < 3600 ? Math.floor(s / 60) + "m" : s < 86400 ? Math.floor(s / 3600) + "h" : Math.floor(s / 86400) + "d";
+function bansAsk(mode) { bMode = mode; bans = null; bSel = ""; send({t: "bans", buf: bBuf, mode}); renderBans(); }
+function openBans(mode = "b", buf = active) {
+  $("#side").classList.remove("open"); bBuf = buf; bSort = "t"; bRev = false; $("#bq").value = "";
+  dbans.returnValue = ""; dbans.showModal(); bansAsk(mode); $("#bq").focus();
+}
+function bList() {
+  const q = $("#bq").value.trim().toLowerCase(), key = {m: r => r[0].toLowerCase(), s: r => r[1].toLowerCase(), t: r => -r[2]}[bSort];  // t: newest first
+  const l = (bans ? bans.v : []).filter(r => !q || (r[0] + " " + r[1]).toLowerCase().includes(q));
+  return l.sort((a, z) => { const x = key(a), y = key(z); return (x < y ? -1 : x > y ? 1 : 0) * (bRev ? -1 : 1); });
+}
+function bansBtns() {
+  const can = !!bans && !!bans.can && !bans.loading;
+  $("#badd").hidden = $("#bdel").hidden = !bans || !bans.can;
+  $("#bdel").textContent = B_KIND[bMode][2]; $("#bdel").disabled = !can || !bSel;
+  $("#bmsg").textContent = bans && !bans.can ? "You need halfop or more to change this list." : "↑↓ select · Enter " + B_KIND[bMode][2].toLowerCase() + "s the selected one · click a column to sort";
+}
+function renderBans() {
+  const k = B_KIND[bMode], l = bList(), now = bans ? bans.now + (Date.now() - bansAt) / 1000 : 0, kinds = bans ? bans.kinds : "b";
+  if (bans && !bans.loading && l.length && !l.some(r => r[0] === bSel)) bSel = l[0][0];  // the first, as in the terminal
+  $("#dbans-h").textContent = k[0] + (bans ? " · " + bans.chan : "");
+  $("#bkinds").hidden = kinds.length < 2;
+  $("#bkinds").innerHTML = kinds.split("").map(c => `<button type="button" role="tab" data-k="${c}" class="${c === bMode ? "on" : ""}">${B_KIND[c][0]}</button>`).join("");
+  $("#bhead").innerHTML = [["m", "Mask"], ["s", "Set by"], ["t", "Set"]].map(([c, n]) => `<button type="button" data-s="${c}" class="${c === bSort ? "on" : ""}">${n}${c === bSort ? (bRev ? " ▲" : " ▼") : ""}</button>`).join("");
+  $("#blist").innerHTML = !bans || bans.loading ? '<div class="none">Loading…</div>' : bans.err ? `<div class="none">${escH(bans.err)}</div>`
+    : !l.length ? `<div class="none">${bans.v.length ? "Nothing matches" : "No " + k[1] + "s on " + escH(bans.chan)}</div>`
+    : l.map(r => `<div class="r${r[0] === bSel ? " on" : ""}" role="option" aria-selected="${r[0] === bSel}" data-m="${escH(r[0])}"><span class="n" title="${escH(r[0])}">${escH(r[0])}${r[3] ? `<small class="tmp">lifts in ${bAgo(r[3] - now)}</small>` : ""}</span><span class="m" title="${escH(r[1])}">${escH(r[1].split("!")[0])}</span><span class="m" title="${r[2] ? new Date(r[2] * 1000).toLocaleString() : ""}">${r[2] ? bAgo(now - r[2]) + " ago" : ""}</span></div>`).join("");
+  bansBtns();
+}
+async function bansDel() {
+  if (!bSel || !bans || !bans.can) return;
+  const v = B_KIND[bMode][2];
+  if (await askBox({title: v, text: v + " " + bSel + " on " + bans.chan + "?", ok: v}) !== null) send({t: "bans", buf: bBuf, mode: bMode, op: "del", mask: bSel});
+}
+function bansMove(d) {
+  const l = bList(), i = l.findIndex(r => r[0] === bSel);
+  if (!l.length) return;
+  bSel = l[Math.max(0, Math.min(l.length - 1, i < 0 ? 0 : i + d))][0]; renderBans();
+  $("#blist .r.on")?.scrollIntoView({block: "nearest"});
+}
+$("#bkinds").onclick = e => { const b = e.target.closest("button"); if (b && b.dataset.k !== bMode) bansAsk(b.dataset.k); };
+$("#bhead").onclick = e => { const b = e.target.closest("button"); if (!b) return; bRev = b.dataset.s === bSort && !bRev; bSort = b.dataset.s; renderBans(); };
+$("#blist").onclick = e => {  // only the classes change: a re-render would swallow the second click of a double click
+  const r = e.target.closest(".r"); if (!r) return;
+  bSel = r.dataset.m; document.querySelectorAll("#blist .r").forEach(x => x.classList.toggle("on", x === r)); bansBtns();
+};
+$("#blist").ondblclick = e => { if (e.target.closest(".r")) bansDel(); };
+$("#bq").oninput = renderBans;
+$("#bq").onkeydown = e => {
+  const d = {ArrowDown: 1, ArrowUp: -1, PageDown: 8, PageUp: -8}[e.key];
+  if (d) { e.preventDefault(); bansMove(d); } else if (e.key === "Enter") { e.preventDefault(); bansDel(); }
+};
+$("#bref").onclick = () => bansAsk(bMode);
+$("#bdel").onclick = bansDel;
+$("#badd").onclick = async () => {
+  const v = await askBox({title: "Add to the " + B_KIND[bMode][1] + " list", text: "A nick gives nick!*@*; or a mask like *!*@host.", label: "Mask or nick", ok: "Add"});
+  if (v && v.trim()) send({t: "bans", buf: bBuf, mode: bMode, op: "add", mask: v.trim()});
+};
 const dplug = $("#dplug"); let plug = null, plugTab = "inst", plugCfg = "", plugScope = "", plugMark = -1, plugTimer = 0;
 const plugAsk = () => send({t: "plugins", buf: active});
 function openPlugins() {
@@ -2904,6 +2991,8 @@ $("#input").onsubmit = async e => {
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
   if (/^\/about\s*$/i.test(v)) { openAbout(); return; }
   if (/^\/keys\s*$/i.test(v)) { openKeys(); return; }
+  const bn = /^\/(?:ban|bans(?:\s+([beIq]))?)\s*$/.exec(v.trim());
+  if (bn && b.type === "channel" && b.joined) { openBans(bn[1] || "b"); return; }  // like the terminal: the list in a window
   if (/^\/plugins?\s*$/i.test(v)) { openPlugins(); return; }
   const lg = /^\/logs(?:\s+(.*))?$/i.exec(v.trim());
   if (lg) { openLogs(lg[1] || ""); return; }  // like the terminal: the log browser  // like the terminal: the plugin window  // like the terminal: the key list  // a dialog here, not a tab
@@ -3166,6 +3255,7 @@ function showMenu(m) {
         const mb = menuBuf;
         askBox({title: label.replace(/\.\.\.$/, ""), text: cmd.slice(1, nl), ok: label.replace(/\.\.\.$/, "")}).then(v => { if (v !== null) send({t: "input", buf: mb, text: cmd.slice(nl + 1)}); });
       } else if (/^\/servers \S/.test(cmd)) { srvWant = cmd.slice(9); $("#addsrv").click(); }  // Edit network: the Servers window, on it
+      else if (cmd === "/bans") openBans("b", menuBuf);  // the list's window
       else if (/[ :]$/.test(cmd)) { $("#line").value = cmd; $("#line").focus(); }  // you finish it
       else send({t: "input", buf: menuBuf, text: cmd});
     };

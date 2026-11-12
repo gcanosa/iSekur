@@ -279,6 +279,26 @@ std::vector<std::string> split(const std::string& s, char sep) {
     return v;
 }
 
+long long parse_span(const std::string& w) {
+    static const long long mult[] = {1, 60, 3600, 86400, 604800};
+    long long t = 0, n = -1;
+    for (char c : w) {
+        if (isdigit((unsigned char)c)) n = (n < 0 ? 0 : n) * 10 + (c - '0');
+        else if (const char* u = c ? strchr("smhdw", c) : nullptr; u && n >= 0) t += n * mult[u - "smhdw"], n = -1;
+        else return 0;
+        if (n > 100000000 || t > 100000000LL * 604800) return 0;
+    }
+    return n < 0 ? t : t + n * 60;  // a bare number (or one after the units) is minutes
+}
+
+// ponytail: "=epoch" can't be part of a mask (no = in nicks or hosts), so it needs no escaping
+std::string ign_mask(const std::string& e, time_t* until) {
+    size_t eq = e.rfind('=');
+    bool timed = eq != std::string::npos && eq + 1 < e.size() && e.find_first_not_of("0123456789", eq + 1) == std::string::npos;
+    if (until) *until = timed ? (time_t)atoll(e.c_str() + eq + 1) : 0;
+    return timed ? e.substr(0, eq) : e;
+}
+
 long long now_ms() {
     timeval tv;
     gettimeofday(&tv, nullptr);

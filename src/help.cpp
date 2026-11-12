@@ -197,8 +197,14 @@ static const std::vector<CmdInfo> CMDS = {
     {"voice", "Channel ops", "nick ...", "Give voice", "In the channel's tab.", {"/voice alice bob"}},
     {"devoice", "Channel ops", "nick ...", "Take voice", "In the channel's tab.", {"/devoice alice"}},
     {"ban", "Channel ops", "[nick|mask ...]", "Ban, or list the bans",
-     "In the channel's tab. A bare nick bans nick!*@*; /kickban finds the host. /ban alone lists the bans.",
+     "In the channel's tab. A bare nick bans nick!*@*; /kickban finds the host. /ban alone opens the ban list "
+     "(/bans). Changing bans takes halfop or more.",
      {"/ban", "/ban troll", "/ban *!*@bad.host"}},
+    {"bans", "Channel ops", "[b|e|I|q]", "The channel's ban list in a window",
+     "Who set each ban and how long ago, sortable and filterable; add or lift one from the window (halfop or more). "
+     "b is the default; e lists the ban exceptions, I the invite exceptions, q the quiets, on servers that have them. "
+     "Without a window (no terminal or webchat attached) the list is printed.",
+     {"/bans", "/bans e"}},
     {"unban", "Channel ops", "mask ...", "Lift a ban", "In the channel's tab; the mask as /ban lists it.", {"/unban *!*@bad.host"}},
     {"massop", "Channel ops", "", "Op everyone in the channel",
      "Gives +o to everyone who isn't an op yet, several per MODE line (as many as the server's "
@@ -340,11 +346,12 @@ static const std::vector<CmdInfo> CMDS = {
      "Without arguments, lists them. Each network has its own list (hilight_words in its [server.name] "
      "section). Matching ignores case and takes whole words; * matches anything (isekur*). /save keeps the list.",
      {"/hilight", "/hilight add isekur", "/hilight add ger*", "/hilight del isekur"}},
-    {"ignore", "Settings", "[mask]", "Ignore a nick or mask on this network, or list its ignores",
+    {"ignore", "Settings", "[-t time] [mask]", "Ignore a nick or mask on this network, or list its ignores",
      "Each network has its own list (ignore in its [server.name] section): the same nick elsewhere is "
      "often someone else. A bare nick becomes nick!*@*. Ignored users' messages, notices, invites and "
-     "CTCPs are dropped. /save keeps the list.",
-     {"/ignore", "/ignore spammer", "/ignore *!*@*.evil.host"}},
+     "CTCPs are dropped. With -t the ignore ends by itself after that time (30m, 2h, 1d12h, 1w; a bare "
+     "number is minutes); ignoring the mask again changes it. /save keeps the list.",
+     {"/ignore", "/ignore spammer", "/ignore -t 2h spammer", "/ignore *!*@*.evil.host"}},
     {"unignore", "Settings", "mask", "Stop ignoring a mask",
      "On this network. Use the mask exactly as /ignore lists it.",
      {"/unignore spammer!*@*"}},

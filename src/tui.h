@@ -215,6 +215,25 @@ private:
     void draw_logs(int W, int H);
     void logs_key(int k, uint32_t ch);
     void logs_mouse(int k, int x, int y);
+    // /ban, /bans: a channel's ban list (or exceptions, invite exceptions, quiets) in a box: who set each ban and when.
+    // Letters are commands (u unban, a add, r reload, s sort, Tab the next list, / filter)
+    struct BanWin {
+        bool open = false, filtering = false, adding = false;
+        int buf = 0;                  // the channel's tab
+        char sort = 't';              // t newest first, m mask, s who set it
+        bool rev = false;
+        std::string sel;              // the selected mask (it stays through a reload)
+        std::string ask;              // unban this one? (y/n)
+        std::u32string q, ed;         // the filter; the mask being added
+        int top = 0, rows = 0, x0 = 0, w = 0, list_y = 0, head_y = 0, tab_y = 0, filter_y = 0, mask_w = 0;
+        std::vector<std::pair<int, int>> tabs;  // each list kind's columns, in Server::chanmodes order
+        std::string kinds;
+        long long click_ms = 0;
+    };
+    BanWin bw;
+    void draw_bans(int W, int H);
+    void bans_key(int k, uint32_t ch);
+    void bans_mouse(int k, int x, int y);
     void draw_keys(int W, int H);
     void keys_key(int k, uint32_t ch);
     bool action(const std::string& a);

@@ -151,7 +151,7 @@ tls       = true
 tls_verify = true            ; false only for self-signed test servers
 autojoin  = #isekur-test     ; #a,#b,#private key  (/autojoin add|del edits it)
 hilight_words =              ; this network only, besides your nick: whole words, any case, * globs: isekur ger*
-ignore    =                  ; this network only: spammer!*@* *!*@*.bad.host, or /ignore and /save
+ignore    =                  ; this network only: spammer!*@* *!*@*.bad.host, or /ignore and /save (/ignore -t 2h mask: mask=<epoch> until then)
 mute      =                  ; channels here that never hilight or alert: #busy #bots (/mute or the tab's menu)
 notify    =                  ; nicks to watch: "bob is online" / "went offline" (/notify add|del, MONITOR or ISON)
 ; send_typing = off          ; this network's own +typing choice (default: the one in [general])
