@@ -19,8 +19,10 @@ that mirrors your live session in a browser, bouncer style.
     github-dark, everforest, ayu, nightfox, night-owl, material, contrast-dark (high contrast)
   - light: tokyonight-day, catppuccin-latte, gruvbox-light, rose-pine-dawn, solarized-light, github-light, one-light,
     kanagawa-lotus, nord-light, everforest-light, ayu-light, dayfox, light-owl, material-lighter, contrast-light (high contrast)
+  - soft contrast, for late hours: ember, midnight, moss, dusk (dark), dawn, paper, fog, sage (light)
   - mirc / mirc-dark: the classic mIRC look
   - mono / mono-light: no colors at all, greys only (nicks one grey, mIRC color codes in messages shown plain)
+  - every theme file names every key a theme can set, live or as a `# key = ...` example with what it does and what happens unset, so copying any one is a full template for your own (`/set theme_dir ~/mythemes`)
 - TLS with certificate verification, IRC over WebSocket (`/server wss://irc.sekurnet.org/ws`), plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join, account-tag, chghost, setname,
   STS (a server that asks for TLS gets it, and keeps getting it), labeled-response, standard replies,
