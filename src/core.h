@@ -211,6 +211,7 @@ struct Buffer {
 // ---- servers ---------------------------------------------------------------
 struct ServerCfg {
     std::string name, host;
+    std::string ws;  // IRC over WebSocket at this path ("/", "/irc"), from a ws:// or wss:// host; "" = plain IRC
     int port = 6667;
     bool tls = false, tls_verify = true, autoconnect = true, auto_identify = true;  // auto_identify: SASL / NickServ on connect
     std::string nick, altnick, user, realname, pass;

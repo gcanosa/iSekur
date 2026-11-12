@@ -312,14 +312,17 @@ void Core::connect(Server* s) {
     // STS: a server that asked for TLS gets TLS, verified, on its port: now (the upgrade) or until the policy runs out
     auto pol = sts.find(irc_lower(s->cfg.host));
     if (pol != sts.end() && pol->second.second <= time(nullptr)) sts.erase(pol), sts_save(), pol = sts.end();
-    if (!s->cfg.tls && !s->twitch()) {
+    if (!s->cfg.tls && !s->twitch() && s->cfg.ws.empty()) {  // STS is for plain IRC ports: a ws:// server has none
         if (s->sts_port) tls = 1, port = s->sts_port, why = ", STS";
         else if (pol != sts.end()) tls = 1, port = pol->second.first, why = ", STS policy";
     }
     s->conn.px = {};
+    s->conn.ws = s->cfg.ws;
     plugin_emit("connect", s, "");  // a proxy plugin calls isekur.proxy(srv, url) here
+    std::string how = tls ? "TLS" + why : "";
+    if (!s->cfg.ws.empty()) how += (how.empty() ? "WebSocket " : ", WebSocket ") + s->cfg.ws;
     print(s->status, LK::INFO,
-          "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (tls ? " (TLS" + why + ")" : "") +
+          "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (how.empty() ? "" : " (" + how + ")") +
               (s->conn.px.kind ? " via " + proxy_desc(s->conn.px) : ""));
     if (!s->conn.connect(s->cfg.host, port, tls, s->cfg.cert, s->cfg.key)) {
         s->state = SS::CONNECTING;  // so disconnect() schedules a retry
@@ -641,7 +644,7 @@ void Core::handle(Server* s, const Msg& m) {
             if (more) return;
             // STS: over plain text, reconnect with TLS on its port now; over verified TLS, remember it for duration
             auto sv = s->cap_vals.find("sts");
-            if (sv != s->cap_vals.end() && !s->twitch()) {
+            if (sv != s->cap_vals.end() && !s->twitch() && s->cfg.ws.empty()) {
                 std::map<std::string, std::string> kv;
                 for (auto& p : split(sv->second, ',')) kv[p.substr(0, p.find('='))] = p.find('=') == std::string::npos ? "" : p.substr(p.find('=') + 1);
                 int port = atoi(kv["port"].c_str());

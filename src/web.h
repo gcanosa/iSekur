@@ -90,10 +90,6 @@ private:
 std::string hash_password(const std::string& pw);
 bool gen_selfsigned(const std::string& crt, const std::string& key, std::string& err);  // the webchat's and the BNC's own certificate
 bool check_password(const std::string& pw, const std::string& stored);
-std::string ws_frame(const std::string& payload, int opcode = 1);
-// decodes one client frame from buf; returns bytes consumed, 0 = need more, -1 = bad.
-// Without `fin`, a frame that isn't the last of its message is bad.
-long ws_parse(const std::string& buf, int& opcode, std::string& payload, bool* fin = nullptr);
 std::string json_str(const std::string& s);
 // the browser's address: the proxy's X-Forwarded-For (its last hop) when the peer is this machine, else the peer
 std::string client_ip(const std::string& peer, const std::string& xff);

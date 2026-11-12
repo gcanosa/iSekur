@@ -16,7 +16,9 @@ static const std::vector<CmdInfo> CMDS = {
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick). An IPv6 address works bare or "
-     "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). The server is remembered "
+     "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). A ws:// or wss:// URL as the host "
+     "is IRC over WebSocket (IRCv3), for a network that only listens that way or sits behind an HTTPS proxy: the scheme "
+     "says TLS, the URL the port (443 or 80 without one) and the path, -noverify still applies. The server is remembered "
      "like /set does, so /save keeps it for the next start. Naming a server you already have "
      "reconnects it. Twitch chat works too: /server irc.chat.twitch.tv 6697 -tls -name twitch -nick "
      "yourlogin, then /set server.twitch.password oauth:yourtoken and /connect twitch; /join #streamer "
@@ -27,7 +29,7 @@ static const std::vector<CmdInfo> CMDS = {
      "its [server.<name>] in the config (saved at once, comments kept), its tab, its logs folder and kept history follow, "
      "no reconnect needed (the name is only yours). Without the names it asks, for the tab you're in; the settings window's "
      "name row and r do the same.",
-     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify",
+     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "

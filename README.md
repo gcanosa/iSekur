@@ -21,7 +21,7 @@ that mirrors your live session in a browser, bouncer style.
     kanagawa-lotus, nord-light, everforest-light, ayu-light, dayfox, light-owl, material-lighter, contrast-light (high contrast)
   - mirc / mirc-dark: the classic mIRC look
   - mono / mono-light: no colors at all, greys only (nicks one grey, mIRC color codes in messages shown plain)
-- TLS with certificate verification, plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
+- TLS with certificate verification, IRC over WebSocket (`/server wss://irc.sekurnet.org/ws`), plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join, account-tag, chghost, setname,
   STS (a server that asks for TLS gets it, and keeps getting it), labeled-response, standard replies,
   CASEMAPPING, WHOX (accounts, real names and bots in the nick list), bot mode, UTF8ONLY (a stray Latin-1 byte is re-encoded, not refused), MONITOR (`/notify`),

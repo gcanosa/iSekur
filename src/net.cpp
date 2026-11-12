@@ -15,6 +15,8 @@
 #include <sys/wait.h>
 #include <openssl/err.h>
 #include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <openssl/sha.h>
 #include <openssl/ssl.h>
 #include <openssl/x509v3.h>
 
@@ -123,12 +125,16 @@ bool public_addr(const sockaddr* sa) {
     return !(zero || (b[0] & 0xfe) == 0xfc || (b[0] == 0xfe && (b[1] & 0xc0) == 0x80) || b[0] == 0xff);  // ::, ::1, fc00::/7, fe80::/10, ff00::/8
 }
 
-// https://host[:port]/path (or http://, tls false) -> host, port, path; false: not that
-static bool split_https(const std::string& url, std::string& host, std::string& port, std::string& path, bool* tls = nullptr) {
-    bool plain = url.size() > 8 && !strncasecmp(url.c_str(), "http://", 7);
-    if (plain ? !tls : url.size() < 9 || strncasecmp(url.c_str(), "https://", 8)) return false;
+std::string b64(const std::string& s);  // config.cpp
+
+// https://host[:port]/path (or http://, tls false) -> host, port, path; false: not that. ps / ts: the plain and TLS schemes (ws:// wss://)
+static bool split_https(const std::string& url, std::string& host, std::string& port, std::string& path, bool* tls = nullptr,
+                        const char* ps = "http://", const char* ts = "https://") {
+    size_t pl = strlen(ps), tl = strlen(ts);
+    bool plain = url.size() > pl + 1 && !strncasecmp(url.c_str(), ps, pl);
+    if (plain ? !tls : url.size() < tl + 1 || strncasecmp(url.c_str(), ts, tl)) return false;
     if (tls) *tls = !plain;
-    size_t at = plain ? 7 : 8, e = url.find_first_of("/?#", at);
+    size_t at = plain ? pl : tl, e = url.find_first_of("/?#", at);
     std::string hp = url.substr(at, e == std::string::npos ? std::string::npos : e - at);
     path = e == std::string::npos ? "/" : url.substr(e);
     path = path.substr(0, path.find('#'));
@@ -148,6 +154,62 @@ static bool split_https(const std::string& url, std::string& host, std::string& 
     if (port.empty() || port.find_first_not_of("0123456789") != std::string::npos) return false;
     for (char ch : path) if ((unsigned char)ch <= ' ') return false;  // no request smuggling through the path
     return !host.empty() && host.find_first_of(" \r\n/\\") == std::string::npos;
+}
+
+bool ws_url(const std::string& url, std::string& host, int& port, std::string& path, bool& tls) {
+    std::string p;
+    if (!split_https(url, host, p, path, &tls, "ws://", "wss://")) return false;
+    port = atoi(p.c_str());
+    return port > 0 && port < 65536;
+}
+
+// ---- WebSocket framing -----------------------------------------------------
+std::string ws_frame(const std::string& p, int op, bool mask) {
+    std::string f(1, (char)(0x80 | op));
+    size_t n = p.size();
+    int m = mask ? 0x80 : 0;
+    if (n < 126) f += (char)(m | n);
+    else if (n < 65536) f += (char)(m | 126), f += (char)(n >> 8), f += (char)(n & 255);
+    else {
+        f += (char)(m | 127);
+        for (int k = 7; k >= 0; k--) f += (char)((uint64_t)n >> (k * 8) & 255);
+    }
+    if (!mask) return f + p;
+    unsigned char key[4];
+    RAND_bytes(key, sizeof key);
+    f.append((char*)key, 4);
+    for (size_t k = 0; k < n; k++) f += (char)(p[k] ^ key[k % 4]);
+    return f;
+}
+
+long ws_parse(const std::string& b, int& op, std::string& payload, bool* fin, bool from_client) {
+    if (b.size() < 2) return 0;
+    unsigned char b0 = (unsigned char)b[0], b1 = (unsigned char)b[1];
+    if (!!(b1 & 0x80) != from_client) return -1;     // clients must mask, servers must not
+    if (!(b0 & 0x80) && (!fin || (b0 & 0x08))) return -1;  // control frames are never split
+    if (fin) *fin = b0 & 0x80;
+    op = b0 & 0x0f;
+    uint64_t len = b1 & 0x7f;
+    size_t pos = 2;
+    if (len == 126) {
+        if (b.size() < 4) return 0;
+        len = (uint64_t)(unsigned char)b[2] << 8 | (unsigned char)b[3];
+        pos = 4;
+    } else if (len == 127) {
+        if (b.size() < 10) return 0;
+        len = 0;
+        for (int k = 0; k < 8; k++) len = len << 8 | (unsigned char)b[2 + k];
+        pos = 10;
+    }
+    if (len > (1 << 20)) return -1;
+    size_t ml = from_client ? 4 : 0;
+    if (b.size() < pos + ml + len) return 0;
+    payload.assign(b, pos + ml, (size_t)len);
+    if (from_client) {
+        const char* mask = &b[pos];
+        for (size_t k = 0; k < payload.size(); k++) payload[k] ^= mask[k % 4];
+    }
+    return (long)(pos + ml + len);
 }
 
 std::string https_fetch_err(const std::string& url) {
@@ -304,6 +366,96 @@ bool Conn::start_tls() {
     return true;
 }
 
+// the upgrade request, once the connection is open; `out` waits (the PASS / CAP / NICK / USER) until the 101
+bool Conn::ws_begin() {
+    unsigned char k[16];
+    if (RAND_bytes(k, sizeof k) != 1) { err = "WebSocket: " + ssl_errstr(); return false; }
+    ws_key = b64(std::string((char*)k, sizeof k));
+    std::string h = thost.find(':') == std::string::npos ? thost : "[" + thost + "]";
+    if (tport != (tls ? 443 : 80)) h += ":" + std::to_string(tport);
+    // ponytail: no Origin header; a server that checks it (Ergo allowed-origins) refuses us. Both ircv3 subprotocols, the server picks
+    wsout = "GET " + ws + " HTTP/1.1\r\nHost: " + h + "\r\nUser-Agent: iSekur\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
+            "Sec-WebSocket-Key: " + ws_key + "\r\nSec-WebSocket-Version: 13\r\n"
+            "Sec-WebSocket-Protocol: text.ircv3.net, binary.ircv3.net\r\n\r\n";
+    ws_st = 1;
+    return true;
+}
+
+// raw bytes in wsin: the server's answer to the upgrade, then frames. Each message's lines go to `in`, with the \n IRC has and
+// WebSocket leaves out. false: why in err
+bool Conn::ws_pull(std::string& in) {
+    if (ws_st == 1) {
+        if (wsin.size() >= 5 && strncasecmp(wsin.c_str(), "HTTP/", 5)) {  // an IRC port answers our GET with its own lines and waits for more
+            err = "WebSocket: not a WebSocket port (it answered " + wsin.substr(0, std::min(wsin.find_first_of("\r\n"), (size_t)40)) + ")";
+            return false;
+        }
+        size_t e = wsin.find("\r\n\r\n");
+        if (e == std::string::npos) {
+            if (wsin.size() <= 16384) return true;
+            err = "WebSocket: no answer to the upgrade";
+            return false;
+        }
+        std::string head = wsin.substr(0, e + 2), low = head;  // ends at the last header's \r\n
+        wsin.erase(0, e + 4);
+        for (char& ch : low) ch = (char)tolower((unsigned char)ch);
+        auto hdr = [&](const char* name) {
+            size_t i = low.find(std::string("\r\n") + name + ":");
+            if (i == std::string::npos) return std::string();
+            i += strlen(name) + 3;
+            std::string v = head.substr(i, head.find("\r\n", i) - i);
+            v.erase(0, v.find_first_not_of(" \t"));
+            return v.substr(0, v.find_last_not_of(" \t") + 1);
+        };
+        if (low.compare(0, 12, "http/1.1 101")) {
+            err = "WebSocket: " + head.substr(0, std::min(head.find("\r\n"), (size_t)80));  // "HTTP/1.1 403 Forbidden"
+            return false;
+        }
+        unsigned char sha[20];
+        std::string k2 = ws_key + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+        SHA1((const unsigned char*)k2.data(), k2.size(), sha);
+        if (hdr("sec-websocket-accept") != b64(std::string((char*)sha, 20))) {
+            err = "WebSocket: the server's answer isn't for our request (a proxy in the way?)";
+            return false;
+        }
+        ws_bin = hdr("sec-websocket-protocol") == "binary.ircv3.net";  // none or text.ircv3.net: text
+        ws_st = 2;
+    }
+    for (;;) {
+        int op;
+        bool fin;
+        std::string p;
+        long n = ws_parse(wsin, op, p, &fin, false);
+        if (n == 0) return true;
+        if (n < 0) { err = "WebSocket: bad frame"; return false; }
+        wsin.erase(0, (size_t)n);
+        if (op == 8) { err = "WebSocket closed by the server"; return false; }
+        if (op == 9) { wsout += ws_frame(p, 10, true); continue; }
+        if (op == 10) continue;
+        if (op < 8) {  // data: a message may arrive as a frame plus continuations (op 0)
+            if ((op == 0) != (wsfrag_op != 0)) { err = "WebSocket: bad fragment"; return false; }
+            if (op) wsfrag_op = op;
+            if ((wsfrag += p).size() > (1 << 20)) { err = "input flood"; return false; }
+            if (!fin) continue;
+            wsfrag_op = 0, p.swap(wsfrag), wsfrag.clear();
+        }
+        if (p.empty()) continue;
+        in += p;
+        if (p.back() != '\n') in += '\n';
+    }
+}
+
+// our lines, whole, into wsout: one masked frame each, without the \r\n
+void Conn::ws_wrap() {
+    size_t at = 0, nl;
+    while ((nl = out.find('\n', at)) != std::string::npos) {
+        size_t e = nl;
+        while (e > at && out[e - 1] == '\r') e--;
+        if (e > at) wsout += ws_frame(out.substr(at, e - at), ws_bin ? 2 : 1, true);
+        at = nl + 1;
+    }
+    out.erase(0, at);
+}
+
 bool Conn::accept_from(int lfd, SSL_CTX* sctx) {
     sockaddr_storage ss;
     socklen_t len = sizeof ss;
@@ -331,7 +483,11 @@ short Conn::events() const {
     case CONNECTING: return POLLOUT;
     case PROXY: return POLLIN;
     case HANDSHAKE: return want_write ? POLLOUT : POLLIN;
-    case OPEN: return POLLIN | ((!out.empty() && !write_wants_read) || want_write || read_wants_write ? POLLOUT : 0);
+    case OPEN: {
+        // a WebSocket: `out` is only ours to send once the upgrade is through, and then only whole lines (else POLLOUT spins)
+        bool more = ws.empty() ? !out.empty() : !wsout.empty() || (ws_st == 2 && out.find('\n') != std::string::npos);
+        return POLLIN | ((more && !write_wants_read) || want_write || read_wants_write ? POLLOUT : 0);
+    }
     default: return 0;
     }
 }
@@ -378,6 +534,7 @@ bool Conn::pump(short rev, std::string& in) {
         st = OPEN;
     }
     if (st != OPEN) return true;
+    if (!ws.empty() && !ws_st && !ws_begin()) return false;
     if (rev & (POLLIN | POLLHUP | POLLERR) || (read_wants_write && (rev & POLLOUT)) || (ssl && SSL_pending(ssl))) {
         read_wants_write = false;
         char buf[16384];
@@ -397,16 +554,19 @@ bool Conn::pump(short rev, std::string& in) {
                 if (n < 0 && (errno == EAGAIN || errno == EINTR)) break;
                 if (n <= 0) { err = n ? strerror(errno) : ssh_pid > 0 ? ssh_said() : "connection closed"; return false; }
             }
-            in.append(buf, (size_t)n);
+            if (ws.empty()) in.append(buf, (size_t)n);
+            else if (wsin.append(buf, (size_t)n), !ws_pull(in)) return false;  // per read: wsin stays small, erase() moves little
             if (in_cap && in.size() >= in_cap) break;
             if (in.size() > (1 << 20)) { err = "input flood"; return false; }
         }
     }
     want_write = write_wants_read = false;
-    while (!out.empty()) {
+    if (ws_st == 2) ws_wrap();
+    std::string& w = ws.empty() ? out : wsout;
+    while (!w.empty()) {
         ssize_t n;
         if (ssl) {
-            n = SSL_write(ssl, out.data(), (int)out.size());
+            n = SSL_write(ssl, w.data(), (int)w.size());
             if (n <= 0) {
                 int e = SSL_get_error(ssl, (int)n);
                 if (e == SSL_ERROR_WANT_WRITE) { want_write = true; break; }
@@ -415,13 +575,13 @@ bool Conn::pump(short rev, std::string& in) {
                 return false;
             }
         } else {
-            n = write(fd, out.data(), out.size());
+            n = write(fd, w.data(), w.size());
             if (n < 0 && (errno == EAGAIN || errno == EINTR)) break;
             if (n < 0) { err = strerror(errno); return false; }
         }
-        out.erase(0, (size_t)n);
+        w.erase(0, (size_t)n);
     }
-    return !(closing && out.empty());
+    return !(closing && out.empty() && wsout.empty());
 }
 
 bool Conn::pending() const { return st == OPEN && ssl && SSL_pending(ssl) > 0; }
@@ -435,6 +595,7 @@ void Conn::close() {
     res.reset();
     st = NONE;
     want_write = closing = read_wants_write = write_wants_read = false;
+    ws_st = wsfrag_op = 0, ws_bin = false, wsin.clear(), wsout.clear(), wsfrag.clear();
 }
 
 int listen_tcp(const std::string& bind, int port, std::string& err) {

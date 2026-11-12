@@ -23,6 +23,7 @@
 #include "web.h"
 #include "bnc.h"
 #include "net.h"
+#include <openssl/sha.h>
 
 static std::string client_frame(const std::string& p) {  // masked, like a browser
     std::string f = ws_frame(p);
@@ -159,6 +160,21 @@ int main() {
     assert(ws_parse(part, op, p) == -1);  // callers that don't handle fragments
     assert(ws_parse(part, op, p, &fin) == (long)part.size() && !fin && op == 1 && p == "frag");
     assert(ws_parse(ping, op, p, &fin) == -1);
+    {  // a client's frames (masked) and a server's (not): each side refuses the other's
+        std::string m = ws_frame("PING :x", 1, true), mb = ws_frame(big, 2, true), sf = ws_frame("hi");
+        assert(ws_parse(m, op, p) == (long)m.size() && op == 1 && p == "PING :x");
+        assert(ws_parse(mb, op, p) == (long)mb.size() && op == 2 && p == big);
+        assert(ws_parse(m, op, p, nullptr, false) == -1 && ws_parse(sf, op, p) == -1);
+        assert(ws_parse(sf, op, p, nullptr, false) == (long)sf.size() && p == "hi");
+        std::string h, path;
+        int port;
+        bool wtls;
+        assert(ws_url("wss://irc.sekurnet.org/ws", h, port, path, wtls) && h == "irc.sekurnet.org" && port == 443 && path == "/ws" && wtls);
+        assert(ws_url("ws://[::1]:8080", h, port, path, wtls) && h == "::1" && port == 8080 && path == "/" && !wtls);
+        assert(ws_url("WSS://h:7000/a?b=c#d", h, port, path, wtls) && h == "h" && port == 7000 && path == "/a?b=c" && wtls);
+        for (const char* bad : {"irc.sekurnet.org", "wss://", "wss://h:99999/", "wss://h:/", "wss://u:p@h/", "wss://h/a b", "https://h/", "ws:/h"})
+            assert(!ws_url(bad, h, port, path, wtls));
+    }
 
     assert(json_str("a\"b\\\n\xe9") == "\"a\\\"b\\\\\\u000a\xc3\xa9\"");
     // attach / webchat audit lines
@@ -1549,6 +1565,79 @@ int main() {
 #endif
 
     assert(ctcp_version().rfind(version_string() + " :: ", 0) == 0 && version_string().find(ISEKUR_VERSION) != std::string::npos);
+
+    {  // wss://host/path as a server's host; and IRC over WebSocket through Conn, against a server written here
+        core.cfg["server.w"]["host"] = "wss://irc.sekurnet.org:8443/ws";
+        ServerCfg wc = core.server_cfg("w");
+        assert(wc.host == "irc.sekurnet.org" && wc.port == 8443 && wc.tls && wc.ws == "/ws");
+        core.cfg["server.w"]["host"] = "ws://irc.sekurnet.org";
+        wc = core.server_cfg("w");
+        assert(wc.port == 80 && !wc.tls && wc.ws == "/");
+        core.cfg["server.w"]["host"] = "irc.sekurnet.org";
+        wc = core.server_cfg("w");
+        assert(wc.ws.empty() && wc.port == 6667);
+
+        std::string derr;
+        int lfd = listen_tcp("127.0.0.1", 0, derr);
+        assert(lfd >= 0);
+        sockaddr_in la{};
+        socklen_t ll = sizeof la;
+        getsockname(lfd, (sockaddr*)&la, &ll);
+        Conn c;
+        c.ws = "/irc";
+        assert(c.connect("127.0.0.1", ntohs(la.sin_port), 0, "", ""));
+        c.out = "NICK me\r\nUSER me 0 * :me\r\n";  // queued before the upgrade: waits for it
+        int peer = -1;
+        std::string in, said;  // in: the lines iSekur got; said: raw bytes the server got
+        bool ok = true;
+        auto step = [&] {
+            std::vector<pollfd> pf{{c.fd, c.events(), 0}};
+            poll(pf.data(), 1, 10);
+            ok = c.pump(pf[0].revents, in);
+            if (peer < 0 && (peer = accept(lfd, nullptr, nullptr)) >= 0) fcntl(peer, F_SETFL, O_NONBLOCK);
+            char b[4096];
+            ssize_t n = peer < 0 ? -1 : read(peer, b, sizeof b);
+            if (n > 0) said.append(b, (size_t)n);
+        };
+        for (int i = 0; i < 500 && said.find("\r\n\r\n") == std::string::npos; i++) step();
+        size_t he = said.find("\r\n\r\n");
+        assert(he != std::string::npos && he + 4 == said.size());  // the request, and not a byte of IRC before the 101
+        assert(said.rfind("GET /irc HTTP/1.1\r\nHost: 127.0.0.1:", 0) == 0 && said.find("Sec-WebSocket-Protocol: text.ircv3.net") != std::string::npos);
+        size_t ks = said.find("Sec-WebSocket-Key: ") + 19;
+        std::string k2 = said.substr(ks, said.find("\r\n", ks) - ks) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+        unsigned char sha[20];
+        SHA1((const unsigned char*)k2.data(), k2.size(), sha);
+        std::string f1 = ws_frame("ab"), f2 = ws_frame("cd");
+        f1[0] = 0x01, f2[0] = (char)0x80;  // text "ab" without FIN, then its continuation
+        std::string reply = "HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " +
+                            b64(std::string((char*)sha, 20)) + "\r\nSec-WebSocket-Protocol: text.ircv3.net\r\n\r\n" +
+                            ws_frame("PING :z") + ws_frame("pingdata", 9) + f1 + f2;  // lines right behind the headers
+        said.clear();
+        assert(write(peer, reply.data(), reply.size()) == (ssize_t)reply.size());
+        for (int i = 0; i < 500 && (in.size() < 13 || said.size() < 60); i++) step();
+        assert(ok && in == "PING :z\nabcd\n");
+        std::vector<std::string> msgs;
+        for (size_t at = 0; at < said.size();) {  // what iSekur sent: masked frames, one per line, no \r\n; the pong (queued on the read) first
+            int op;
+            std::string p;
+            long n = ws_parse(said.substr(at), op, p);
+            if (n <= 0) break;
+            msgs.push_back(std::to_string(op) + p), at += (size_t)n;
+        }
+        assert(msgs == (std::vector<std::string>{"10pingdata", "1NICK me", "1USER me 0 * :me"}));
+        c.out += "PRIVMSG #a :hi\r\n";
+        said.clear();
+        for (int i = 0; i < 500 && said.empty(); i++) step();
+        int op;
+        std::string p;
+        assert(ws_parse(said, op, p) == (long)said.size() && op == 1 && p == "PRIVMSG #a :hi");
+        std::string closeframe = ws_frame("", 8);
+        assert(write(peer, closeframe.data(), closeframe.size()) == (ssize_t)closeframe.size());
+        for (int i = 0; i < 500 && ok; i++) step();
+        assert(!ok && c.err.find("WebSocket closed") != std::string::npos);
+        c.close();
+        close(peer), close(lfd);
+    }
 
     {  // /dcc: an offer, then a real download from a loopback sender
         std::string derr;

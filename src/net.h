@@ -42,6 +42,9 @@ struct Conn {
     size_t ai = 0;
     int tls = 0;  // client: 0 plain, 1 tls+verify, 2 tls no verify
     std::string cert, key;
+    // set before connect() like px, close() keeps it: not empty = IRC over WebSocket (IRCv3 text/binary.ircv3.net) at this
+    // path, once the TCP / TLS / proxy is up. `out` stays plain IRC lines, `in` gets them back: the framing is in pump()
+    std::string ws;
 
     ~Conn() { close(); }
     // Start connecting; DNS runs on a thread so the UI never blocks.
@@ -59,6 +62,13 @@ struct Conn {
 private:
     std::string thost, pin;  // the target behind the proxy, the proxy's answer so far
     int tport = 0, pstep = 0;
+    int ws_st = 0;  // 0 not started, 1 upgrade sent, 2 frames
+    bool ws_bin = false;  // the server picked binary.ircv3.net: our messages go out as binary frames
+    int wsfrag_op = 0;
+    std::string ws_key, wsin, wsout, wsfrag;  // wsout: what goes on the wire (the request, then masked frames) in place of `out`
+    bool ws_begin();
+    bool ws_pull(std::string& in);
+    void ws_wrap();
     int ssh_pid = -1, ssh_err = -1;  // ssh -W: its pid, its stderr
     std::string ssh_said();
     bool proxy_send();
@@ -69,6 +79,14 @@ private:
 };
 
 std::string ssl_errstr();
+// WebSocket framing (RFC 6455). mask: a client's frames are masked (4 random bytes).
+std::string ws_frame(const std::string& payload, int opcode = 1, bool mask = false);
+// decodes one frame from buf; returns bytes consumed, 0 = need more, -1 = bad. from_client: the frame must be masked (we are the
+// server), else it must not be (we are the client). Without `fin`, a frame that isn't the last of its message is bad.
+long ws_parse(const std::string& buf, int& opcode, std::string& payload, bool* fin = nullptr, bool from_client = true);
+// ws://host[:port]/path or wss://: bare host (no [] around an IPv6), port (80 / 443 when none), path ("/" when none), tls.
+// false: not that, or a path with spaces or control characters
+bool ws_url(const std::string& url, std::string& host, int& port, std::string& path, bool& tls);
 int listen_tcp(const std::string& bind, int port, std::string& err);
 // blocking, for a thread, both on fetch_once's verified TLS and 10s connect / 15s read timeouts; for iSekur's own fixed hosts, so
 // without the private-address guard https_fetch has. The headers of GET https://host/path (a release's Location), "" on any failure

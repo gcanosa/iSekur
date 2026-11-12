@@ -156,46 +156,6 @@ std::map<std::string, std::string> json_flat(const std::string& s) {
     return m;
 }
 
-// ---- WebSocket framing -----------------------------------------------------
-std::string ws_frame(const std::string& p, int op) {
-    std::string f(1, (char)(0x80 | op));
-    size_t n = p.size();
-    if (n < 126) f += (char)n;
-    else if (n < 65536) f += (char)126, f += (char)(n >> 8), f += (char)(n & 255);
-    else {
-        f += (char)127;
-        for (int k = 7; k >= 0; k--) f += (char)((uint64_t)n >> (k * 8) & 255);
-    }
-    return f + p;
-}
-
-long ws_parse(const std::string& b, int& op, std::string& payload, bool* fin) {
-    if (b.size() < 2) return 0;
-    unsigned char b0 = (unsigned char)b[0], b1 = (unsigned char)b[1];
-    if (!(b1 & 0x80)) return -1;                     // clients must mask
-    if (!(b0 & 0x80) && (!fin || (b0 & 0x08))) return -1;  // control frames are never split
-    if (fin) *fin = b0 & 0x80;
-    op = b0 & 0x0f;
-    uint64_t len = b1 & 0x7f;
-    size_t pos = 2;
-    if (len == 126) {
-        if (b.size() < 4) return 0;
-        len = (uint64_t)(unsigned char)b[2] << 8 | (unsigned char)b[3];
-        pos = 4;
-    } else if (len == 127) {
-        if (b.size() < 10) return 0;
-        len = 0;
-        for (int k = 0; k < 8; k++) len = len << 8 | (unsigned char)b[2 + k];
-        pos = 10;
-    }
-    if (len > (1 << 20)) return -1;
-    if (b.size() < pos + 4 + len) return 0;
-    const char* mask = &b[pos];
-    payload.assign(b, pos + 4, (size_t)len);
-    for (size_t k = 0; k < payload.size(); k++) payload[k] ^= mask[k % 4];
-    return (long)(pos + 4 + len);
-}
-
 // ---- self-signed certificate -----------------------------------------------
 bool gen_selfsigned(const std::string& crt, const std::string& key, std::string& err) {
     EVP_PKEY* pk = nullptr;

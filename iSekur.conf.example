@@ -145,7 +145,7 @@ dcc_web   = off
 # One [server.<name>] section per network. All of them connect at startup
 # unless autoconnect = false.
 [server.sekurnet]
-host      = irc.sekurnet.org
+host      = irc.sekurnet.org   ; or wss://irc.sekurnet.org/ws: IRC over WebSocket (ws:// plain); the URL sets tls, port (443 / 80) and path
 port      = 6697                ; empty or 0: 6697 with tls, 6667 without
 tls       = true
 tls_verify = true            ; false only for self-signed test servers

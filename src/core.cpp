@@ -700,6 +700,12 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.tls = is_on(ini_get(cfg, sec, "tls", "false"));
     sc.port = atoi(ini_get(cfg, sec, "port").c_str());
     if (sc.port <= 0 || sc.port > 65535) sc.port = sc.tls ? 6697 : 6667;  // port 0 or junk: the usual one
+    {  // host = wss://host[:port]/path: IRC over WebSocket. The scheme says TLS, the URL the port; tls_verify still applies
+        std::string wh;
+        int wp;
+        bool wtls;
+        if (ws_url(sc.host, wh, wp, sc.ws, wtls)) sc.host = wh, sc.port = wp, sc.tls = wtls;
+    }
     sc.tls_verify = is_on(ini_get(cfg, sec, "tls_verify", "true"));
     sc.autoconnect = is_on(ini_get(cfg, sec, "autoconnect", "true"));
     sc.auto_identify = is_on(ini_get(cfg, sec, "auto_identify", "true"));
@@ -1887,7 +1893,10 @@ void Core::exec(Buffer* b, const std::string& input) {
             host = host.substr(1, e == std::string::npos ? std::string::npos : e - 1);
         }
         // no -name: the host is the name, and what a [server.x] can't have (an address's :) turns to -
-        std::string name = host;
+        std::string name = host, wh, wpath;
+        int wport;
+        bool wtls;
+        if (ws_url(host, wh, wport, wpath, wtls)) name = wh;  // wss://irc.sekurnet.org/ws: named irc.sekurnet.org
         for (char& ch : name) if (!server_name_ok(std::string(1, ch))) ch = '-';
         bool tls = false, verify = true;
         for (size_t i = 1; i < argv.size(); i++) {
