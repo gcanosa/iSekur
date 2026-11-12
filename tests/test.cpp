@@ -6,6 +6,8 @@
 #include <filesystem>
 #include <sys/time.h>
 #include <fstream>
+#include <regex>
+#include <set>
 #include <sstream>
 #include <csignal>
 #include <cstring>
@@ -286,6 +288,28 @@ int main() {
             said |= l.kind == LK::ERROR && l.text.find("No themes found") != std::string::npos && l.text.find("/nonexistent") != std::string::npos;
         assert(said && nt.theme.el.empty());
         unlink(conf.c_str()), rmdir(d);
+    }
+
+    {  // every shipped theme names every key some theme sets, live or as a "# key = ..." example: a new key reaches them all
+        std::map<std::string, std::set<std::string>> named;  // theme -> its "section.key"s, commented ones too
+        std::set<std::string> live;                          // "section.key" set for real by any theme
+        for (auto& e : std::filesystem::directory_iterator("themes")) {
+            if (e.path().extension() != ".theme") continue;
+            std::ifstream in(e.path());
+            std::string l, sec;
+            std::smatch m;
+            while (std::getline(in, l)) {
+                if (std::regex_search(l, m, std::regex("^\\[(\\w+)\\]"))) sec = m[1];
+                else if (std::regex_search(l, m, std::regex("^(#\\s*)?(\\w+)\\s*="))) {
+                    named[e.path().stem().string()].insert(sec + "." + m[2].str());
+                    if (!m[1].matched) live.insert(sec + "." + m[2].str());
+                }
+            }
+        }
+        assert(named.size() > 40 && !live.empty());
+        for (auto& [t, ks] : named)
+            for (auto& k : live)
+                if (!ks.count(k)) fprintf(stderr, "theme %s doesn't name %s (set it, or add \"# key = ...\")\n", t.c_str(), k.c_str()), assert(false);
     }
 
     Core core;

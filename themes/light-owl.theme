@@ -45,6 +45,8 @@ notice         = #ac7f00 #fbfbfb bold
 action         = #994cc3 #fbfbfb italic
 info           = #0c969b #fbfbfb
 error          = #de3d3b #fbfbfb bold
+# event        = #0c969b #fbfbfb    nick, mode and topic lines; unset: info's
+# hilight_line = #c41a80 #fbfbfb    webchat only: a highlighted line's background; unset: a faint pink tint
 
 [nicks]
 palette = #de3d3b #d26b19 #ac7f00 #08916a #0c969b #4876d6 #994cc3 #c41a80
@@ -55,3 +57,8 @@ nicklist_width = 18
 nick_width     = 12
 separator      = │
 timestamp      = %H:%M
+# nick_brackets = <>    wrap the nick in the chat: <nick>; unset: the bare nick
+# event_marker = *    marks join, part, nick, mode... lines; unset: --> <-- --
+# font         = ui-monospace, monospace    the webchat's font stack; unset: ui-monospace and friends
+# window       = mac    dialog window buttons: mac | win95; unset: the title on the border
+# mirc_colors  = on    off: mIRC color codes in messages show as plain text
