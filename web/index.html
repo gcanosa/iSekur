@@ -696,6 +696,10 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #ctx :is(.hd, .it) { padding: 3px 20px 3px 8px; }
 .win-95 #ctx .hd { padding-left: 31px; }
 .win-95 #ctx .it:hover { background: #000080; color: #fff; }
+@media (pointer: coarse) {  /* a finger: roomier menu rows; no text selection or callout from the long press that opens a nick's or a tab's menu */
+  #ctx .it, .win-95 #ctx .it { padding-top: 9px; padding-bottom: 9px; }
+  #nicks .u, #nicks2 .u, #side .tab { -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+}
 /* the bottom and topic bar buttons as toolbar buttons: beveled gray, Windows 2000 style icons (.px) instead of the line ones */
 .px { display: none; }
 .win-95 :is(#foot, #topic) button svg:not(.px) { display: none; }
@@ -3273,6 +3277,22 @@ function showMenu(m) {
   box.style.top = Math.max(0, Math.min(menuAt[1], innerHeight - box.offsetHeight - 4)) + "px";
 }
 document.addEventListener("click", e => { if (!e.target.closest("#ctx")) closeMenu(); });
+// iOS Safari sends no contextmenu on a long press (Android does): after 500ms still, make one, so every right-click menu
+// (a nick, a tab, a #channel) opens on a phone. If one was opened, the click that follows the release is dropped
+let lpT = 0, lpX = 0, lpY = 0, lpOpen = false, lpUntil = 0;
+document.addEventListener("pointerdown", e => {
+  clearTimeout(lpT); lpOpen = false;
+  if (e.pointerType !== "touch" || !e.isPrimary) return;
+  lpX = e.clientX, lpY = e.clientY;
+  lpT = setTimeout(() => {  // the element now under the finger: the list may have been redrawn since
+    const t = document.elementFromPoint(lpX, lpY);
+    lpOpen = !!t && !t.dispatchEvent(new MouseEvent("contextmenu", {bubbles: true, cancelable: true, clientX: lpX, clientY: lpY}));  // false: someone opened a menu
+  }, 500);
+});
+document.addEventListener("pointermove", e => { if (e.pointerType === "touch" && Math.hypot(e.clientX - lpX, e.clientY - lpY) > 10) clearTimeout(lpT); });
+for (const ev of ["pointerup", "pointercancel"]) document.addEventListener(ev, () => { clearTimeout(lpT); if (lpOpen) lpUntil = Date.now() + 500, lpOpen = false; });
+document.addEventListener("click", e => { if (Date.now() < lpUntil) e.preventDefault(), e.stopImmediatePropagation(); }, true);
+document.addEventListener("contextmenu", e => { clearTimeout(lpT); if (e.isTrusted && lpOpen) e.preventDefault(), e.stopImmediatePropagation(); }, true);  // the browser's own after ours: one menu
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
 boot();
 </script>
