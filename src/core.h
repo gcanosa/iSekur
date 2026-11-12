@@ -494,6 +494,11 @@ struct Core {
     void lock_cmd(Buffer* b, const std::string& args);
     void lock_now(Buffer* b);  // the lock key (Alt+S): locks if a password is set, else says how
     void unlock(const std::string& pass);
+    // every check of the lock password (the box, /lock, a guarded /set, /exit): "" when right, else the line to show
+    // ("Wrong password: <then>" or the wait). 3 wrong in a row: 60s with no tries, so a webchat can't guess it
+    std::string lock_try(const std::string& pass, const std::string& then);
+    int lock_fails = 0;
+    time_t lock_wait = 0;
     bool asking(const Buffer* b) const { return b && pass_buf == b && !pass_web; }  // the TUI's dialog is up on b
     bool twitch_handle(Server* s, const Msg& m, time_t ts);  // Twitch-only commands; true: handled
     void twitch_cmd(Buffer* b, const std::string& arg);  // /twitch [token]

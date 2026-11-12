@@ -1508,7 +1508,7 @@ static bool lock_ok = false;
 static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::string& what) {
     if (!c.lock_on() || lock_ok) return false;
     c.ask_pass(b, "lock password", [&c, b, line](const std::string& p) {
-        if (!check_password(p, c.opt(nullptr, "lock_password_hash", ""))) { c.print(b, LK::ERROR, "Wrong password: it stays as it was"); return; }
+        if (auto e = c.lock_try(p, "it stays as it was"); !e.empty()) { c.print(b, LK::ERROR, e); return; }
         lock_ok = true, c.exec(b, line), lock_ok = false;
     }, true, "Lock password", {"Changing " + what + ": the lock password first"});
     return true;
@@ -1845,7 +1845,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (lock_on() && !exit_ok) {
             std::string line = in;
             ask_pass(b, "lock password", [this, b, line](const std::string& p) {
-                if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: iSekur keeps running"); return; }
+                if (auto e = lock_try(p, "iSekur keeps running"); !e.empty()) { print(b, LK::ERROR, e); return; }
                 exit_ok = true, exec(b, line), exit_ok = false;
             }, true, "Exit", {"Locking is on: the lock password closes iSekur", "Alt+D detaches instead"});
             return;

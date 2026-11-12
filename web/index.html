@@ -425,8 +425,10 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 #topic button { background: none; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; display: inline-flex; align-items: center; }  /* line icons in the theme's text color, like the menus' */
 /* logout: an icon, its name on hover (right away, not the browser's late tooltip), under it and inside the page */
 #logout { position: relative; color: var(--fg); display: inline-flex; align-items: center; align-self: stretch; }
-#logout:hover::after, #logout:focus-visible::after { content: "Logout"; position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; white-space: nowrap;
+#logout::after { position: absolute; top: calc(100% + 6px); right: 0; z-index: 20; white-space: nowrap;  /* shown only with a content: */
   background: var(--menu-bg, var(--panel)); color: var(--menu-fg, var(--fg)); border: 1px solid var(--line); border-radius: 6px; padding: 3px 8px; font-size: calc(12px * var(--z, 1)); }
+#logout:focus-visible::after { content: "Logout"; }
+@media (hover: hover) { #logout:hover::after { content: "Logout"; } }  /* outside it iOS takes the first tap as the hover: logout needed two */
 /* text size, touch screens only (desktop has ctrl +/-): per device, over the theme's/web_font_size */
 #zoom { display: none; position: fixed; top: calc(var(--toph, 44px) + 6px); right: 14px; z-index: 4; flex-direction: column; gap: 4px; }  /* under logout; the open side/users panels (5) cover it */
 #zoom .zm { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; width: 38px; padding: 4px 0;
@@ -502,7 +504,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .inline.tsright .l .ts::after { content: none; }
 /* /set timestamp_hover on: the time hidden (its column kept), in quick under the mouse, out slowly */
 .tshover .l .ts { opacity: 0; transition: opacity 1.5s ease-out; }
-.tshover .l:hover .ts { opacity: 1; transition: opacity .15s ease-in; }
+.tshover .l:is(:hover, :active) .ts { opacity: 1; transition: opacity .15s ease-in; }  /* :active: a finger held on the line */
 .inline .l.hl .nk { border-radius: 0; }
 .l.hdr .tx { cursor: pointer; }
 /* previews a plugin put under a line (isekur.embed, the preview plugin): a link card, a picture, a player. Quiet, in the
@@ -532,6 +534,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .em video[data-played] { aspect-ratio: auto; background: #000; }
 .em .x { align-self: center; background: none; border: 0; color: var(--muted); cursor: pointer; padding: 0 4px; font: inherit; opacity: 0; }
 .l:hover .em .x, .em .x:focus-visible { opacity: 1; }
+@media (hover: none) { .em .x { opacity: .6; } }  /* no mouse to hover with: always there to tap */
 .win-95 :is(.em-card, .em-pic img, .em video) { border-radius: 0; }
 /* the plugin's size setting: small (above), medium, large */
 .em-card.md img { height: 64px; max-width: 128px; } .em-card.lg img { height: 88px; max-width: 176px; }

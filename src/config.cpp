@@ -55,10 +55,11 @@ static std::string cfg_key(const std::string& path, bool create) {
     std::string kp = path.substr(0, path.rfind('/') + 1) + "secret.key", k;
     std::ifstream f(kp, std::ios::binary);
     if (f) k.assign(std::istreambuf_iterator<char>(f), {});
+    // O_EXCL: a key that is there but not 32 bytes is never replaced, the "enc:" values in the config need that one
     if (k.size() == 32 || !create) return k.size() == 32 ? k : "";
     unsigned char r[32];
-    RAND_bytes(r, sizeof r);
-    int fd = open(kp.c_str(), O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (RAND_bytes(r, sizeof r) != 1) return "";
+    int fd = open(kp.c_str(), O_WRONLY | O_CREAT | O_EXCL, 0600);
     if (fd < 0 || write(fd, r, sizeof r) != (ssize_t)sizeof r) { if (fd >= 0) close(fd); return ""; }
     close(fd);
     return std::string((char*)r, sizeof r);

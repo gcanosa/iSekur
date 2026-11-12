@@ -510,25 +510,28 @@ void Core::shell_line(Buffer* b, const std::string& l) {
 // ---- /lock: a master password for the terminal and the webchat -------------
 // ponytail: hides the session (the webchat gets none of it while locked); the config
 // and logs are not encrypted by it
-static int unlock_fails = 0;
-static time_t unlock_wait = 0;
-
 bool Core::lock_on() const {
     return opt_on(nullptr, "lock", false) && !opt(nullptr, "lock_password_hash", "").empty();
 }
 
+std::string Core::lock_try(const std::string& pass, const std::string& then) {
+    time_t now = time(nullptr);
+    if (now < lock_wait) return "Too many tries: wait " + std::to_string(lock_wait - now) + "s";
+    if (check_password(pass, opt(nullptr, "lock_password_hash", ""))) { lock_fails = 0; return ""; }
+    if (++lock_fails < 3) return "Wrong password" + (then.empty() ? "" : ": " + then);
+    lock_fails = 0, lock_wait = now + 60;
+    return "Wrong password. Too many tries: wait 60s";
+}
+
 void Core::unlock(const std::string& pass) {
     active_at = last_input = time(nullptr);  // typing it is input: else the screensaver it was over comes right back (still idle)
-    if (time(nullptr) < unlock_wait) {
-        lock_msg = "!Too many tries: wait " + std::to_string(unlock_wait - time(nullptr)) + "s";
-    } else if (check_password(pass, opt(nullptr, "lock_password_hash", ""))) {
-        unlock_fails = 0, set_lock(false);
+    std::string e = lock_try(pass, "");
+    if (e.empty()) {
+        set_lock(false);
         screen_end();  // the box was over a screensaver: that's done too
         return;
-    } else if (++unlock_fails >= 3) {
-        unlock_fails = 0, unlock_wait = time(nullptr) + 60;
-        lock_msg = "!Wrong password. Too many tries: wait 60s";
-    } else lock_msg = "!Wrong password";
+    }
+    lock_msg = "!" + e;
     lock_anim = 'f', lock_anim_at = now_ms(), dirty = true;
     notify(Ev::LOCK, nullptr);  // the webchat's box shows it too
 }
@@ -590,13 +593,13 @@ void Core::lock_cmd(Buffer* b, const std::string& args) {
         };
         if (!lock_on()) { set_new(); return; }
         ask_pass(b, "current password", [this, b, set_new](const std::string& p) {
-            if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: it stays as it was"); return; }
+            if (auto e = lock_try(p, "it stays as it was"); !e.empty()) { print(b, LK::ERROR, e); return; }
             set_new();
         }, true, title, {"Changing it: the current one first"});
     } else if (args == "off") {
         if (!lock_on()) { print(b, LK::INFO, "Locking is already off"); return; }
         ask_pass(b, "password", [this, b](const std::string& p) {
-            if (!check_password(p, opt(nullptr, "lock_password_hash", ""))) { print(b, LK::ERROR, "Wrong password: locking stays on"); return; }
+            if (auto e = lock_try(p, "locking stays on"); !e.empty()) { print(b, LK::ERROR, e); return; }
             if (save_general(*this, {{"lock", "off"}, {"lock_password_hash", ""}}, b)) print(b, LK::INFO, "Locking off");
         }, true, title, {"The current one, to turn locking off"});
     } else print(b, LK::ERROR, "Usage: /lock [on|off]");

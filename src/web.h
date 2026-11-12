@@ -24,6 +24,7 @@ struct Web {
     bool running() const { return lfd >= 0; }
     bool attached() const;  // a logged-in browser is connected
     std::string stat_json();  // the status line: per network umodes, lag and away, status_info
+    std::map<std::string, std::pair<int, time_t>> fails;  // failed logins: ip (or "via <proxy peer>") -> (count, locked until)
 
 private:
     struct Client {
@@ -51,7 +52,6 @@ private:
     std::string sessions_path;
     void load_sessions();
     void save_sessions();
-    std::map<std::string, std::pair<int, time_t>> fails;      // ip -> (count, locked until)
 
     bool start_(std::string& err);
     void http(Client& cl);

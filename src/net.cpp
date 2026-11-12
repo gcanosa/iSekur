@@ -190,6 +190,8 @@ long ws_parse(const std::string& b, int& op, std::string& payload, bool* fin, bo
     if (fin) *fin = b0 & 0x80;
     op = b0 & 0x0f;
     uint64_t len = b1 & 0x7f;
+    // no extension is ever agreed (RSV bits), no reserved opcodes, control frames carry 125 bytes at most
+    if ((b0 & 0x70) || (op > 2 && op < 8) || op > 10 || (op >= 8 && len > 125)) return -1;
     size_t pos = 2;
     if (len == 126) {
         if (b.size() < 4) return 0;

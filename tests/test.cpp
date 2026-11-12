@@ -162,6 +162,12 @@ int main() {
     assert(ws_parse(part, op, p) == -1);  // callers that don't handle fragments
     assert(ws_parse(part, op, p, &fin) == (long)part.size() && !fin && op == 1 && p == "frag");
     assert(ws_parse(ping, op, p, &fin) == -1);
+    {  // RSV bits (no extension agreed), reserved opcodes, a control frame over 125 bytes: refused
+        std::string rsv = client_frame("x"), op3 = client_frame("x"), bigping = ws_frame(std::string(126, 'x'), 9, true);
+        rsv[0] = (char)0xc1, op3[0] = (char)0x83;
+        assert(ws_parse(rsv, op, p) == -1 && ws_parse(op3, op, p) == -1 && ws_parse(bigping, op, p) == -1);
+        assert(ws_parse(ws_frame(std::string(125, 'x'), 9, true), op, p) > 0 && op == 9);
+    }
     {  // a client's frames (masked) and a server's (not): each side refuses the other's
         std::string m = ws_frame("PING :x", 1, true), mb = ws_frame(big, 2, true), sf = ws_frame("hi");
         assert(ws_parse(m, op, p) == (long)m.size() && op == 1 && p == "PING :x");
@@ -267,6 +273,12 @@ int main() {
         assert(ini_load(path, back) && back["server.x"]["sasl_pass"] == "s3cret" && back["web"]["password_hash"] == "$hash");
         unlink((std::string(d) + "/secret.key").c_str());
         assert(ini_load(path, back) && back["server.x"]["sasl_pass"].empty());  // no key: as if unset
+        { FILE* k = fopen((std::string(d) + "/secret.key").c_str(), "w"); fputs("short", k), fclose(k); }  // a damaged key: kept, not replaced
+        Ini ch3;
+        ch3["server.x"]["sasl_pass"] = "x";
+        assert(!ini_save(path, ch3, err));
+        { FILE* k = fopen((std::string(d) + "/secret.key").c_str(), "r"); char kb[16] = ""; assert(fread(kb, 1, sizeof kb, k) == 5); fclose(k); }
+        unlink((std::string(d) + "/secret.key").c_str());
         unlink(path.c_str()), rmdir(d);
     }
 
@@ -386,11 +398,19 @@ int main() {
         for (const char* line : {"/set dcc_dir /etc", "/set server.t.dcc_dir /etc", "/set dcc_web on", "/set web.user x", "/set web.html /etc/passwd", "/set bnc.password_hash x", "/bnc password"}) {
             core.exec(home, line);
             assert(core.pass_buf == home);
+            core.lock_fails = 0;  // each line's own first try; the throttle is checked below
             core.exec(home, "nope");
             assert(!core.pass_buf && home->lines.back().text == "Wrong password: it stays as it was");
         }
         assert(ini_get(core.cfg, "general", "dcc_dir").empty() && ini_get(core.cfg, "general", "dcc_web").empty() && ini_get(core.cfg, "web", "user").empty() &&
                ini_get(core.cfg, "bnc", "password_hash").empty());
+        core.lock_fails = 0;
+        for (int i = 0; i < 2; i++) core.exec(home, "/set dcc_dir /etc"), core.exec(home, "nope");
+        core.exec(home, "/set dcc_dir /etc"), core.exec(home, "nope");  // the 3rd wrong one in a row: a minute with no tries
+        assert(home->lines.back().text == "Wrong password. Too many tries: wait 60s");
+        core.exec(home, "/set dcc_dir /etc"), core.exec(home, "pw");  // even the right one waits (a webchat can't guess it)
+        assert(home->lines.back().text.rfind("Too many tries: wait ", 0) == 0 && ini_get(core.cfg, "general", "dcc_dir").empty());
+        core.lock_wait = 0;
         core.exec(home, "/set dcc_dir /etc"), core.exec(home, "pw");  // the right one, and the line runs
         assert(core.cfg["general"]["dcc_dir"] == "/etc" && !core.pass_buf);
         core.exec(home, "/set dcc_dir"), core.exec(home, "/set nick_width 12");  // reading one, or a setting that isn't guarded, asks nothing
@@ -1685,6 +1705,8 @@ int main() {
         assert(core.dccs.size() == 1 && core.dccs[0]->file == "hi there.txt" && core.dccs[0]->host == "127.0.0.1");
         feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND x ::1 0 5 tok\x01");  // passive: not taken
         assert(core.dccs.size() == 1);
+        feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND w.txt 2130706433 4294967297 5\x01");  // atoi made that port 1
+        assert(core.dccs.size() == 1 && nb->lines.back().text.rfind("Bad DCC SEND", 0) == 0);
         core.exec(chb, "/dcc get bob");
         Dcc* d = core.dccs[0].get();
         assert(d->st == Dcc::RUN && d->path == "build/dcctest/hi there.txt");
@@ -1783,6 +1805,10 @@ int main() {
         core.cfg["general"]["dcc_ip"] = "127.0.0.1";
         core.exec(chb, "/dcc send bob nope.txt");
         assert(core.dccs.back().get() == d && sent().empty());  // no such file: nothing offered
+        core.cfg["general"]["dcc_ports"] = "5000-";  // half a range: said, not "no free port"
+        core.exec(chb, "/dcc send bob r.txt");
+        assert(core.dccs.back().get() == d && chb->lines.back().text.find("isn't a port or a range") != std::string::npos);
+        core.cfg["general"].erase("dcc_ports");
         core.exec(chb, "/dcc send bob r.txt");
         Dcc* o = core.dccs.back().get();
         std::string offer = sent();
@@ -2224,6 +2250,18 @@ int main() {
         size_t ck = login.find("isekur_sid=");
         assert(login.rfind("HTTP/1.1 200", 0) == 0 && ck != std::string::npos);
         std::string cookie = login.substr(ck, login.find(';', ck) - ck);
+        {  // a new X-Forwarded-For each try (an ssh tunnel passes the browser's as is): the 127.0.0.1 peer still locks, after 20
+            auto bad = [&](int i) {
+                std::string body = "{\"user\":\"u\",\"pass\":\"no\"}";
+                auto [fd, r] = talk("POST /login HTTP/1.1\r\nHost: x\r\nX-Forwarded-For: 10.0.0." + std::to_string(i) +
+                                        "\r\nContent-Length: " + std::to_string(body.size()) + "\r\n\r\n" + body, 1);
+                close(fd);
+                return r;
+            };
+            for (int i = 1; i <= 20; i++) assert(bad(i).rfind("HTTP/1.1 401", 0) == 0);
+            assert(bad(21).rfind("HTTP/1.1 429", 0) == 0);
+            web.fails.clear();
+        }
         {  // a Cookie header with a segment of only spaces answered with a crash (substr at npos): it's just no session
             for (const char* odd : {"a=b; ;c=d", "a=b; ", ";", " ; ; ", "isekur_sid="}) {
                 auto [fd, r] = talk(std::string("GET /session HTTP/1.1\r\nHost: x\r\nCookie: ") + odd + "\r\n\r\n", 1);

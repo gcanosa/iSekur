@@ -449,10 +449,14 @@ void Web::http(Client& cl) {
         else respond(cl.conn, 401, "Unauthorized", "application/json", "{}");
     } else if (method == "POST" && path == "/login") {
         if (!same_origin) { respond(cl.conn, 403, "Forbidden", "text/plain", "bad origin"); return; }
-        auto& f = fails[ip];
-        if (f.second > now) {
+        // through a proxy or an ssh tunnel (a 127.0.0.1 peer) the address is X-Forwarded-For, which an ssh tunnel takes
+        // from the browser as is: a new one each try would never lock. So that peer counts every try too, more loosely
+        std::string via = ip != cl.conn.host ? "via " + cl.conn.host : "";
+        auto until = [&](const std::string& k) { auto it = fails.find(k); return it == fails.end() ? 0 : it->second.second; };
+        time_t locked = std::max(until(ip), via.empty() ? 0 : until(via));
+        if (locked > now) {
             respond(cl.conn, 429, "Too Many Requests", "application/json",
-                    "{\"wait\":" + std::to_string(f.second - now) + "}");
+                    "{\"wait\":" + std::to_string(locked - now) + "}");
             return;
         }
         auto form = json_flat(body);
@@ -461,7 +465,7 @@ void Web::http(Client& cl) {
         bool user_ok = u.size() == user.size() && CRYPTO_memcmp(u.data(), user.data(), u.size()) == 0;
         bool pass_ok = check_password(form["pass"], pass_hash);
         if (user_ok && pass_ok) {
-            fails.erase(ip);
+            fails.erase(ip), fails.erase(via);
             token = random_hex(32);
             sessions[sha256_hex(token)] = now + SESSION_TTL;
             save_sessions();
@@ -471,8 +475,14 @@ void Web::http(Client& cl) {
                     "Set-Cookie: isekur_sid=" + token + "; Path=/; HttpOnly; SameSite=Strict" +
                         (secure ? "; Secure" : "") + "; Max-Age=" + std::to_string(SESSION_TTL) + "\r\n");
         } else {
-            if (++f.first >= 5) f.second = now + std::min<time_t>(3600, 60L << std::min(f.first - 5, 6));
-            c.print(c.bufs.front().get(), LK::ERROR, "\u2715 Webchat login failed: " + from + (f.second > now ? ", locked out " + fmt_dur((long)(f.second - now)) : ""));
+            auto fail = [&](const std::string& k, int free) {
+                auto& f = fails[k];
+                if (++f.first >= free) f.second = now + std::min<time_t>(3600, 60L << std::min(f.first - free, 6));
+            };
+            fail(ip, 5);
+            if (!via.empty()) fail(via, 20);
+            locked = std::max(until(ip), via.empty() ? 0 : until(via));
+            c.print(c.bufs.front().get(), LK::ERROR, "\u2715 Webchat login failed: " + from + (locked > now ? ", locked out " + fmt_dur((long)(locked - now)) : ""));
             respond(cl.conn, 401, "Unauthorized", "application/json", "{}");
         }
         if (fails.size() > 1000)  // forget old unlocked offenders

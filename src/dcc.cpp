@@ -170,7 +170,7 @@ void Core::dcc_ctcp(Server* s, const std::string& nick, const std::string& arg) 
         print(where(*this, s), LK::INFO, "DCC " + type + " from " + nick + " (iSekur only takes files, DCC SEND)");
         return;
     }
-    int port = ok && w.size() > 1 && digits(w[1]) ? atoi(w[1].c_str()) : -1;
+    int port = ok && w.size() > 1 && digits(w[1]) && w[1].size() <= 5 ? atoi(w[1].c_str()) : -1;  // atoi of "4294967297" was 1
     if (port < 0 || port > 65535) {
         print(where(*this, s), LK::ERROR, "Bad DCC SEND from " + nick + ": " + arg);
         return;
@@ -269,6 +269,7 @@ static int dcc_listen(Core& c, Server* s, std::string& ip, int& port, std::strin
     std::string ports = c.opt(s, "dcc_ports", ""), bind = ip.find(':') != std::string::npos ? "::" : "0.0.0.0";
     int lo = ports.empty() ? 0 : atoi(ports.c_str()), hi = lo;
     if (ports.find('-') != std::string::npos) hi = atoi(ports.c_str() + ports.find('-') + 1);
+    if (hi < lo) { err = "dcc_ports " + ports + " isn't a port or a range like 5000-5010"; return -1; }
     for (int p = lo; p <= hi && p <= 65535; p++) {
         int fd = listen_tcp(bind, p, err);
         if (fd < 0) continue;
