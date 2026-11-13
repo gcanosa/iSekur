@@ -113,7 +113,7 @@ button, input { font: inherit; color: inherit; }
 #side .tab.pick { background: color-mix(in srgb, var(--fg) 9%, transparent); }
 #sidebtn { display: block; margin: -4px 0 0 auto; background: none; border: 0; color: var(--muted); cursor: pointer; font-size: calc(18px * var(--z, 1)); line-height: 1; padding: 2px 6px; }
 #sidebtn:hover { color: var(--fg); }
-@media (min-width: 761px) {
+@media (min-width: 761px) and (pointer: fine), (min-width: 761px) and (pointer: none), (min-width: 761px) and (min-height: 501px) {
   #app.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "side input input"; }
   #app.noside #side > :not(#sidetop), #app.noside #tabq { display: none; }
   #app.noside #sidetop { padding: 0; }
@@ -128,7 +128,7 @@ dialog, #ctx, #lock .card { --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: v
   --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); }
 dialog { background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: var(--dlg-sel-bg, #ffffff14); --tab_active-fg: var(--dlg-sel-fg, #d6d8e6);
-  --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); }
+  --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(var(--vvh, 100dvh) - 48px); }
 dialog::backdrop { background: #0009; }
 dialog form { display: grid; gap: 10px; padding: 18px 20px; }
 dialog h2 { margin: 0 0 4px; font-size: calc(15px * var(--z, 1)); color: var(--dlg-title, var(--accent)); }
@@ -191,7 +191,7 @@ dialog .btns .left { margin-right: auto; }
 #dpab dd { margin: 0; overflow-wrap: anywhere; }
 #dpab dd a { color: var(--accent2); }
 #dpab p { font-size: calc(13px * var(--z, 1)); line-height: 1.45; margin: 12px 0 0; opacity: .85; }  /* label.ck's display: flex would show a hidden one */
-@media (max-width: 760px) { #srvbody { grid-template-columns: 1fr; } #srvside { border-right: 0; padding-right: 0; } #srvlist { max-height: 140px; } }
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) { #srvbody { grid-template-columns: 1fr; } #srvside { border-right: 0; padding-right: 0; } #srvlist { max-height: 140px; } }
 #abox { font-size: calc(13px * var(--z, 1)); line-height: 1.4; position: relative; }
 /* a newer release: a badge in the About box's top right corner, to the downloads */
 #aupd { position: absolute; top: 0; right: 0; display: flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--accent);
@@ -399,8 +399,8 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 #setlist .sec { grid-column: 1 / -1; color: var(--accent2); font-size: calc(11px * var(--z, 1)); text-transform: uppercase; letter-spacing: 1px; padding: 10px 0 2px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
 #setlist .sec:first-child { padding-top: 0; }
 #setlist .none { grid-column: 1 / -1; color: var(--muted); padding: 12px 0; }
-@media (max-width: 760px) {
-  #setbody { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: 65vh; }
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
+  #setbody { grid-template-columns: 1fr; grid-template-rows: auto 1fr; height: min(65vh, calc(var(--vvh, 100dvh) - 250px)); min-height: 110px; }  /* the rest of the dialog stays on a phone on its side */
   #setnav { flex-direction: row; overflow-x: auto; border-right: 0; border-bottom: 1px solid var(--line); padding: 0 0 6px; }
   #setnav button { flex: none; }
 }
@@ -435,6 +435,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
   font: 600 12px/1.2 var(--mono); cursor: pointer; box-shadow: 0 2px 8px #0004; }  /* over the chat: its own text colors, readable in every theme */
 #zoom .zm:active { background: var(--accent); color: var(--on-accent, #111); }
 @media (pointer: coarse) { #zoom { display: flex; } }
+@media (pointer: coarse) and (max-height: 500px) { #zoom { flex-direction: row; } }  /* a phone on its side: side by side, or the column runs into the status line */
 /* a phone: the page never moves (no rubber band showing a line under the status bar, nothing for iOS to pan on a keystroke); the lists scroll inside */
 @media (pointer: coarse) {
   html { overflow: hidden; overscroll-behavior: none; }
@@ -454,7 +455,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 /* /split, per browser: a second pane; the focused one (typing, users, topic) is #msgs, the other #msgs2.
    .flip puts #msgs on the right, so the panes stay where they are when the focus moves */
 #msgs2 { grid-area: msgs2; display: none; cursor: pointer; }
-@media (min-width: 761px) {
+@media (min-width: 761px) and (pointer: fine), (min-width: 761px) and (pointer: none), (min-width: 761px) and (min-height: 501px) {
   #app.split { grid-template-columns: var(--treew, 220px) minmax(0, var(--sa, 1fr)) auto minmax(0, var(--sb, 1fr)) auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "foot input input input input"; }
   #app.split.flip { grid-template-areas: "side topic topic topic topic" "side msgs2 nicks2 msgs nicks" "side status status status status" "foot input input input input"; }
   #app.split.noside { grid-template-columns: 34px minmax(0, var(--sa, 1fr)) auto minmax(0, var(--sb, 1fr)) auto; grid-template-areas: "side topic topic topic topic" "side msgs nicks msgs2 nicks2" "side status status status status" "side input input input input"; }
@@ -569,7 +570,7 @@ a.chan { cursor: context-menu; text-decoration: underline; }
 :is(#nicks, #nicks2) .away { opacity: .45; }
 :is(#nicks, #nicks2) .bot { font-style: italic; }
 :is(#nicks, #nicks2) div.u.sel { background: var(--dlg-sel-bg, var(--menu_sel-bg, var(--tab_active-bg, var(--accent)))); color: var(--dlg-sel-fg, var(--menu_sel-fg, var(--tab_active-fg, #111))); opacity: 1; }  /* the theme's readable menu pick, like the right-click menu's */
-@media (min-width: 761px) { #nicks.off, #nicks2.off { display: none !important; } }
+@media (min-width: 761px) and (pointer: fine), (min-width: 761px) and (pointer: none), (min-width: 761px) and (min-height: 501px) { #nicks.off, #nicks2.off { display: none !important; } }
 #nicks2 { grid-area: nicks2; display: none; }
 #status { grid-area: status; background: var(--status-bg, var(--panel)); color: var(--status-fg, var(--muted)); padding: 3px 14px; font-size: calc(12px * var(--z, 1)); border-top: 1px solid var(--line); }
 #status { display: flex; gap: 12px; align-items: center; }
@@ -632,10 +633,15 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 /* a NickServ password being typed: the line's text goes invisible and this copy, with *s, sits over it */
 #line.secret { color: transparent; caret-color: var(--input-fg, var(--fg)); }
 #mask { position: absolute; pointer-events: none; overflow: hidden; white-space: pre; border: 1px solid transparent; padding: 8px 10px; color: var(--input-fg, var(--fg)); display: none; }
-@media (max-width: 760px) {
+@media (max-width: 760px), (pointer: coarse) and (max-height: 500px) {
   #app { grid-template-columns: 1fr; grid-template-areas: "topic" "msgs" "status" "input"; }
   /* the overlays sit under the topic bar, so ☰ and 👥 stay there to close them; a tap outside closes them too */
-  #topic { position: relative; z-index: 7; padding-top: max(8px, env(safe-area-inset-top)); }
+  #topic { position: relative; z-index: 7; padding-top: max(8px, env(safe-area-inset-top)); padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+  /* a phone on its side: the notch is left or right (0 when upright), keep the text out from under it */
+  #msgs { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
+  #status { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+  #side { padding-left: env(safe-area-inset-left); } #nicks { padding-right: env(safe-area-inset-right); }
+  #zoom { right: max(14px, calc(env(safe-area-inset-right) + 4px)); }
   #side { display: none; grid-area: msgs; justify-self: start; width: 70%; min-height: 0; z-index: 5; box-shadow: 0 0 40px #000; }  /* over the messages only: the status line and the input stay visible */
   #side.open { display: block; padding-bottom: 56px; }
   #foot { display: none; }
@@ -851,6 +857,9 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 <script>
 "use strict";
 const $ = s => document.querySelector(s);
+// the phone layout: a narrow window, or a phone turned sideways (short and touch; a tablet is taller). Every
+// "@media" for the phone/desktop layouts says the same: (max-width: 760px), (pointer: coarse) and (max-height: 500px)
+const narrow = matchMedia("(max-width: 760px), (pointer: coarse) and (max-height: 500px)");
 const bufs = new Map(); let order = [], active = 0, ws = null, theme = {nicks: []};
 let hist = [], hpos = 0;  // the active tab's sent lines (Up/Down)
 const hists = new Map();  // every tab's, by id
@@ -1403,7 +1412,7 @@ function select(id, follow) {
   const b = bufs.get(id);
   if (b.act) { b.act = 0; send({t: "read", buf: id}); }
   renderSide(); renderTopic(); renderNicks(); renderMsgs();
-  if (matchMedia("(min-width: 761px)").matches) $("#line").focus();
+  if (!narrow.matches) $("#line").focus();
 }
 
 function send(o) { if (ws && ws.readyState === 1) ws.send(JSON.stringify(o)); }
@@ -1670,7 +1679,7 @@ function lockMsg(m) {
   } else if (locked) {
     locked = false; $("#lockerr").textContent = "";
     L.classList.remove("fail"); L.classList.add("open"); $("#lockp").blur();
-    setTimeout(() => { if (!locked) L.className = ""; if (!locked && matchMedia("(min-width: 761px)").matches) $("#line").focus(); }, 1000);
+    setTimeout(() => { if (!locked) L.className = ""; if (!locked && !narrow.matches) $("#line").focus(); }, 1000);
   }
 }
 // the screensaver: the server draws a grid of cells (the plugin's frame) at the size this page asks for
@@ -1810,7 +1819,6 @@ function sideFold(off) {
 sidebtn.onclick = () => { const off = !$("#app").classList.contains("noside"); sideFold(off); try { localStorage.setItem("side", off ? "0" : "1"); } catch (e) {} };
 try { sideFold(localStorage.getItem("side") === "0"); } catch (e) { sideFold(false); }
 // desktop: hide/show the list (remembered); phone: open/close the overlay
-const narrow = matchMedia("(max-width: 760px)");
 // phone: #app follows the visible viewport: iOS keeps the page height when the keyboard opens and pans the page up to the
 // focused input (visualViewport.offsetTop), which hid the topic bar and left a white gap under the input line. So #app is
 // fixed at the viewport's top (--vvt) with its height (--vvh), and the overlays start under the topic bar (--toph).
