@@ -439,7 +439,12 @@ std::vector<std::string> theme_names() {
     return {names.begin(), names.end()};
 }
 
-bool load_theme(const std::string& name, Theme& out, std::string& err) {
+std::string theme_name(const std::string& v) {
+    return v.size() > 6 && v.compare(v.size() - 6, 6, ".theme") == 0 ? v.substr(0, v.size() - 6) : v;
+}
+
+bool load_theme(const std::string& given, Theme& out, std::string& err) {
+    std::string name = theme_name(given);
     auto dirs = theme_dirs();
     Ini ini;
     bool ok = false;

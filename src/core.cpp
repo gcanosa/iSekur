@@ -482,7 +482,7 @@ static std::string bad_value(const std::string& sec, const std::string& key, con
         }
         if (key == "theme") {
             auto t = theme_names();
-            return std::find(t.begin(), t.end(), v) != t.end() ? "" : "theme " + v + " not found (/theme lists them)";
+            return std::find(t.begin(), t.end(), theme_name(v)) != t.end() ? "" : "theme " + v + " not found (/theme lists them)";
         }
     }
     std::string d;  // the template's value: a network's key from its example networks, else [general]'s
@@ -1694,6 +1694,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         // a password typed into a *password_hash key is kept as its hash
         if (key.size() >= 13 && key.compare(key.size() - 13, 13, "password_hash") == 0 && !val.empty() && val.rfind("pbkdf2$", 0) != 0)
             val = hash_password(val);
+        if (sec == "general" && key == "theme") val = theme_name(val);  // "dracula.theme" is saved as "dracula"
         if (!unsaved[sec].count(key)) set_was[sec][key] = cfg[sec][key];
         // back to what it was (the webchat's Close undoing a switch): nothing to save. Keys made unsaved by
         // /ignore, /hilight... have no set_was: they stay unsaved

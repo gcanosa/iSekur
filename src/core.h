@@ -63,6 +63,7 @@ bool load_theme(const std::string& name, Theme& out, std::string& err);
 Style note_style(const Theme& t);  // the INFO badge on iSekur's own notices: [colors] note, else made from hilight
 Style plugin_style(const Theme& t);  // a plugin's badge: [colors] plugin, else made from tab_active
 std::vector<std::string> theme_names();  // installed themes, sorted
+std::string theme_name(const std::string& v);  // "dracula.theme" -> "dracula": theme = takes either
 std::vector<std::string> theme_dirs();   // where themes are looked for, in order
 extern bool mirc_colors;  // the theme's [layout] mirc_colors (off: mono, colour codes in text show as plain text)
 

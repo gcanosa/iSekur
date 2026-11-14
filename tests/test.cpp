@@ -1418,6 +1418,14 @@ int main() {
         // /set key "": back to the default; theme "" is the default theme, not "theme '' not found"
         core.exec(home, "/set theme \"\"");
         assert(core.theme.name == "default" && home->lines.back().text.find("(default)") != std::string::npos);
+        // theme = takes the file name too: "dracula.theme" loads dracula, is kept as "dracula", and checks clean
+        core.exec(home, "/set theme dracula.theme");
+        assert(core.theme.name == "dracula" && ini_get(core.cfg, "general", "theme") == "dracula");
+        {
+            Theme t; std::string e;
+            assert(load_theme("dracula.theme", t, e) && t.name == "dracula" && theme_name("x.theme") == "x" && theme_name(".theme") == ".theme");
+        }
+        core.exec(home, "/set theme \"\"");
         // every /set key takes "" and 0 without breaking what reads it; port 0 is the usual port
         {
             Ini keep = core.cfg;
