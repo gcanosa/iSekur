@@ -45,9 +45,18 @@ static const std::vector<CmdInfo> CMDS = {
      {"/connect", "/connect sekurnet"}},
     {"servers", "Connection", "[name]", "Manage your servers",
      "The terminal: the settings window at the first server (or the one you name; Edit network in a server tab's menu does that), where c connects the selected one, r renames it, x deletes "
-     "it (it asks first) and n adds one; its keys edit it. The webchat: the Servers window (the server-rack button). Elsewhere it "
+     "it (it asks first), n adds one and p adds a login preset (X, Q, eggdrop, IdleRPG); its keys edit it, On connect has the user modes and /perform's commands. The webchat: the Servers window (the server-rack button). Elsewhere it "
      "lists them. A network still on a legacy charset: /set server.sekurnet.encoding iso-8859-9 (any iconv name), used from its next connect.",
      {"/servers", "/servers sekurnet"}},
+    {"perform", "Connection", "[add <command> | set N <command> | del N | move N M | preset <name>]", "Commands run when the server connects",
+     "Without arguments, lists this server's on-connect commands (passwords as ********). They run in order once "
+     "connected, after the user modes (umodes = +ix) and before autojoin; $nick is your nick. add / set / del / move "
+     "change the list and write it to the config at once, encrypted (perform in [server.x], \"&&\" between the commands). "
+     "preset asks what a login needs and adds it: undernet (X), quakenet (Q), eggdrop (ident), idlerpg. "
+     "X and Q also add +x, and with join_wait on (the default) the channels are joined once the hidden host is set "
+     "(10s at most). Also in /servers (Enter on perform, p: a preset) and the webchat's Servers window.",
+     {"/perform", "/perform preset undernet", "/perform add /msg MyBot ident s3cret", "/perform add /oper me s3cret", "/perform del 2",
+      "/set server.sekurnet.umodes +i"}},
     {"autoconnect", "Connection", "[on|off]", "Connect this server when iSekur starts",
      "Without arguments, says whether this tab's server connects at startup. on / off change it and write it to "
      "the config at once ([server.<name>] autoconnect). Also in a server tab's right-click menu.",

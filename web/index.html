@@ -155,6 +155,17 @@ dialog label { display: grid; gap: 4px; font-size: calc(12px * var(--z, 1)); col
 dialog label.ck { display: flex; align-items: center; gap: 8px; color: var(--fg); font-size: calc(13px * var(--z, 1)); }
 dialog input:not([type=checkbox]) { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--fg); min-width: 0; }
 dialog input:focus { outline: none; border-color: var(--accent); }
+/* perform's commands: one per line, the passwords in them hidden until Show */
+dialog textarea, dialog .oncon select { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 9px; color: var(--fg); min-width: 0; font: inherit; font-size: calc(13px * var(--z, 1)); }
+dialog textarea { resize: vertical; font-family: var(--mono, ui-monospace, monospace); width: 100%; box-sizing: border-box; }
+dialog textarea:focus { outline: none; border-color: var(--accent); }
+dialog textarea[readonly] { cursor: default; }
+dialog textarea.chg { border-color: var(--accent2); }
+.perf { display: grid; gap: 4px; }
+.perf .peek { justify-self: end; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 3px 10px; cursor: pointer; font: inherit; font-size: calc(12px * var(--z, 1)); }
+.oncon { border-top: 1px solid var(--line); padding-top: 8px; }
+.oncon[open] { display: grid; gap: 8px; }
+.oncon summary { cursor: pointer; font-size: calc(12px * var(--z, 1)); color: var(--fg); font-weight: 700; }
 dialog .row2 { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
 dialog .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 dialog .btns button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
@@ -677,10 +688,10 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #lock h1 { font: 700 calc(14px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; color: #000; }
 .win-95 .wbtns:not(#login .wbtns) { top: 6px; right: 6px; }  /* on the title bar */
 .win-95 :is(dialog label, dialog .hint, dialog label.ck, #dfiles h3) { color: #000; font-size: calc(12px * var(--z, 1)); letter-spacing: 0; text-transform: none; }
-.win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
+.win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select, textarea) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
   border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 3px 5px; font: inherit; outline: none; }
 .win-95 :is(dialog, #lock) select:not([multiple]) { appearance: none; padding-right: 22px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v14H0z' fill='%23fff'/%3E%3Cpath d='M15 0h1v16H0v-1h15z' fill='%23000'/%3E%3Cpath d='M14 1h1v14H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center / 16px 16px, #fff; }
-.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, #srvnew, #plugtabs button, #bkinds button) { background: #c0c0c0; color: #000;
+.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, #srvnew, #plugtabs button, #bkinds button, .perf .peek) { background: #c0c0c0; color: #000;
   border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
   font: 400 calc(12px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
 .win-95 :is(dialog .btns button, #lock button) { min-width: 75px; }
@@ -774,6 +785,12 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <label class="ck"><input type="checkbox" name="tls" checked> SSL/TLS</label>
   <label class="ck"><input type="checkbox" name="verify" checked> Verify the certificate (off for self-signed servers)</label>
   <label class="ck"><input type="checkbox" name="auto" checked> Connect at startup</label>
+  <details class="oncon" id="srvadv"><summary>Advanced: on connect (user modes, logins to X, Q, bots)</summary>
+  <div class="row2"><label>User modes<input name="umodes" placeholder="+ix" autocomplete="off" spellcheck="false"></label>
+  <label>Preset<select name="preset" title="Adds the login line (and +x for X and Q)"><option value="">Add...</option><option value="undernet">Undernet X</option><option value="quakenet">QuakeNet Q</option><option value="eggdrop">Eggdrop</option><option value="idlerpg">IdleRPG</option></select></label></div>
+  <label id="srvperf">Commands, one per line, run before autojoin ($nick: your nick)</label>
+  <label class="ck"><input type="checkbox" name="jwait" checked> With +x and a login: join once the host is hidden (10s at most)</label>
+  </details>
   <label class="ck" id="srvsavebox"><input type="checkbox" name="save" checked> Save it to the config (/save)</label>
   <div class="hint" id="srvhint"></div>
   </div>
@@ -1917,6 +1934,13 @@ function srvRows(list) {  // [section, key, value, default, ...] rows -> one obj
   }
   return [...by.values()].sort((a, z) => a.name.localeCompare(z.name));
 }
+const srvPB = perfBox("", null); $("#srvperf").append(srvPB.wrap);
+fs.preset.onchange = async () => {
+  const r = await perfPreset(fs.preset.value); fs.preset.value = "";
+  if (!r) return;
+  srvPB.add(r.line);
+  if (r.cloak) fs.umodes.value = umodeWithX(fs.umodes.value.trim());
+};
 function srvTab(name) { for (const b of bufs.values()) if (b.type === "status" && b.net === name) return b; return null; }
 function renderSrv() {
   const L = $("#srvlist"); L.textContent = "";
@@ -1944,7 +1968,10 @@ function srvPick(name) {
     fs.host.value = o.host || ""; fs.port.value = o.port || ""; fs.name.value = o.name; fs.nick.value = o.nick || "";
     fs.autojoin.value = (o.autojoin || "").split(",").map(x => x.trim()).filter(Boolean).join(", ");
     fs.tls.checked = isOn(o.tls); fs.verify.checked = isOn(o.tls_verify ?? "true"); fs.auto.checked = isOn(o.autoconnect ?? "true");
+    fs.umodes.value = o.umodes || ""; fs.jwait.checked = isOn(o.join_wait ?? "on");
   }
+  $("#srvadv").open = !!(o && (o.umodes || o.perform || !isOn(o.join_wait ?? "on")));  // basic setup: closed unless this network uses it
+  srvPB.reset(o ? o.perform : "");
   fs.verify.disabled = !fs.tls.checked;
   renderSrv();
 }
@@ -1959,9 +1986,11 @@ function srvApply() {
   }
   const want = {host: fs.host.value.trim(), port: fs.port.value.trim(), nick: fs.nick.value.trim(),
     autojoin: fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(","),
-    tls: fs.tls.checked ? "true" : "false", tls_verify: fs.verify.checked ? "true" : "false", autoconnect: fs.auto.checked ? "true" : "false"};
+    tls: fs.tls.checked ? "true" : "false", tls_verify: fs.verify.checked ? "true" : "false", autoconnect: fs.auto.checked ? "true" : "false",
+    umodes: fs.umodes.value.trim(), perform: srvPB.get(), join_wait: fs.jwait.checked ? "on" : "off"};
   for (const [k, v] of Object.entries(want)) {
-    const was = ["tls", "tls_verify", "autoconnect"].includes(k) ? (isOn(o[k] ?? (k === "tls" ? "false" : "true")) ? "true" : "false") : (o[k] || "").split(",").map(x => x.trim()).filter(Boolean).join(",");
+    const was = k === "join_wait" ? (isOn(o[k] ?? "on") ? "on" : "off") : k === "perform" ? performLines(o[k]).join(" && ") : k === "umodes" ? o[k] || "" :
+      ["tls", "tls_verify", "autoconnect"].includes(k) ? (isOn(o[k] ?? (k === "tls" ? "false" : "true")) ? "true" : "false") : (o[k] || "").split(",").map(x => x.trim()).filter(Boolean).join(",");
     if (v === was) continue;
     send({t: "input", buf: active, text: "/set server." + o.name + "." + k + " " + (v === "" ? '""' : v)}), n++;
   }
@@ -1996,6 +2025,9 @@ dsrv.onclose = () => {
   const sec = "server." + (name || host), aj = fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(",");
   if (aj) send({t: "input", buf: active, text: "/set " + sec + ".autojoin " + aj});
   if (!fs.auto.checked) send({t: "input", buf: active, text: "/set " + sec + ".autoconnect false"});
+  if (fs.umodes.value.trim()) send({t: "input", buf: active, text: "/set " + sec + ".umodes " + fs.umodes.value.trim()});
+  if (srvPB.get()) send({t: "input", buf: active, text: "/set " + sec + ".perform " + srvPB.get()});
+  if (!fs.jwait.checked) send({t: "input", buf: active, text: "/set " + sec + ".join_wait off"});
   if (fs.save.checked) send({t: "input", buf: active, text: "/save"});
 };
 // ⇅ : /dcc transfers (also in the status line) and, with dcc_web on, dcc_dir's files to download
@@ -2733,6 +2765,9 @@ function renderSettings(list) {
       for (const c of choices.includes(now) || !now ? choices : [now, ...choices]) sel.append(new Option(c, c, false, c === now));  // a /set value not in the list stays shown
       sel.onchange = () => live(sel.value);
       Object.assign(row, {el: sel, get: () => sel.value, orig: now});
+    } else if (k === "perform") {  // its commands one per line, like the Servers window
+      const pb = perfBox(v, () => pb.ta.classList.toggle("chg", pb.get() !== row.orig));
+      Object.assign(row, {el: pb.wrap, get: pb.get, orig: performLines(v).join(" && ")});
     } else {
       const inp = document.createElement("input");
       if (+secret) { inp.type = "password"; inp.placeholder = v ? "******** (set; type to change)" : "(not set)"; inp.autocomplete = "new-password"; }
@@ -2866,13 +2901,18 @@ function suggest(s) {
 // and input_secret() in src/core.cpp: only the password, nicks, channels and emails stay readable
 function servicesSecret(tgt, t) {
   const ns = /^nickserv/i.test(tgt), cs = /^chanserv/i.test(tgt);
-  if (!ns && !cs) return [-1];
+  if (/^[#&!+]/.test(tgt)) return [-1];  // a channel: "login" there is just a word
   const w = [...t.matchAll(/\S+/g)].map(m => [m.index, m.index + m[0].length]);
   if (!w.length) return [-1];
   if (t.endsWith(" ")) w.push([t.length, t.length]);
   const up = k => k < w.length ? t.slice(w[k][0], w[k][1]).toUpperCase() : "";
   const word = (k, one) => k >= w.length ? [-1] : [w[k][0], one && k + 1 < w.length ? w[k][1] : t.length];
   const v = up(0);
+  if (!ns && !cs) {  // X, Q, eggdrops, IdleRPG (perform): LOGIN|AUTH <user> <pw>, IDENT <pw> [nick]
+    if (v === "LOGIN" || v === "AUTH") return w.length > 2 ? word(2) : [-1];
+    if (v === "IDENT") return word(1, true);
+    return [-1];
+  }
   if (ns) {
     if (v === "IDENTIFY" || v === "ID") return w.length > 1 ? word(w.length - 1) : [-1];
     if (v === "REGISTER") return word(1, true);
@@ -2887,10 +2927,55 @@ function servicesSecret(tgt, t) {
 }
 function inputSecret(name, v) {
   if (v[0] !== "/") return servicesSecret(name, v);
+  const op = /^\/oper +\S+ +(?=\S)/i.exec(v);  // /oper <name> <pw>
+  if (op) { const e = v.indexOf(" ", op[0].length); return [op[0].length, e < 0 ? v.length : e]; }
+  const pf = /^\/perform +(add +|set +\S+ +)/i.exec(v);  // /perform add|set N <command>: that command's password
+  if (pf) { const [p, e] = inputSecret(name, v.slice(pf[0].length)); return p < 0 ? [-1] : [pf[0].length + p, pf[0].length + e]; }
   const m = /^\/(msg|query) +(\S+) /i.exec(v);
   if (!m) return [-1];
   const [p, e] = servicesSecret(m[2], v.slice(m[0].length));
   return p < 0 ? [-1] : [m[0].length + p, m[0].length + e];
+}
+// perform = "/a && /b" (like perform_lines in src/core.cpp); a line with its password as ********
+function performLines(v) { return (v || "").split("&&").map(x => x.trim()).filter(Boolean).map(c => c[0] === "/" ? c : "/" + c); }  // a declaration: the Servers window's box is made before this line runs
+function performMask(l) { const [p, e] = inputSecret("", l); return p < 0 ? l : l.slice(0, p) + "********" + l.slice(e); }
+const umodeAdds = (u, m) => { let sg = "+"; for (const c of u || "") if (c === "+" || c === "-") sg = c; else if (c === m && sg === "+") return true; return false; };
+function umodeWithX(u) {
+  if (umodeAdds(u, "x")) return u;
+  const at = Math.max(u.lastIndexOf("+"), u.lastIndexOf("-"));
+  return !u ? "+x" : u + (at >= 0 && u[at] === "-" ? "+x" : "x");
+}
+// the commands in a textarea: the passwords as ******** (read-only) until Show; get(): the config's "a && b"
+function perfBox(v, onchg) {
+  let real = performLines(v).join("\n"), peek = false;
+  const ta = el("textarea"); ta.rows = 3; ta.spellcheck = false; ta.autocomplete = "off"; ta.setAttribute("autocapitalize", "off");
+  ta.placeholder = "/msg x@channels.undernet.org login user pass\n/msg MyBot ident pass";
+  const secret = () => real.split("\n").some(l => inputSecret("", l)[0] >= 0);
+  const sb = btn("Show", () => { peek = !peek; show(); }); sb.className = "peek";
+  function show() {
+    const hide = !peek && secret();
+    ta.readOnly = hide; ta.value = hide ? real.split("\n").map(performMask).join("\n") : real;
+    ta.title = hide ? "Passwords hidden: Show to edit" : "";
+    sb.textContent = peek ? "Hide passwords" : "Show"; sb.hidden = !peek && !secret();
+  }
+  ta.oninput = () => { real = ta.value; if (!peek && secret()) { peek = true; sb.textContent = "Hide passwords"; sb.hidden = false; } if (onchg) onchg(); };
+  const wrap = el("div", "perf"); wrap.append(ta, sb);
+  const get = () => performLines(real.split("\n").join(" && ")).join(" && ");
+  show();
+  return {wrap, ta, get, add(l) { real = (real.trim() ? real.replace(/\n*$/, "\n") : "") + l; show(); if (onchg) onchg(); }, reset(v) { real = performLines(v).join("\n"); peek = false; show(); }};
+}
+// the presets: ask what the line needs (like /perform preset); null: cancelled
+const PRESETS = {undernet: {t: "Undernet X login", tgt: "x@channels.undernet.org", verb: "login", user: true},
+  quakenet: {t: "QuakeNet Q login", tgt: "Q@CServe.quakenet.org", verb: "AUTH", user: true},
+  eggdrop: {t: "Eggdrop ident", verb: "ident"}, idlerpg: {t: "IdleRPG login", verb: "LOGIN", user: true}};
+async function perfPreset(name) {
+  const p = PRESETS[name]; if (!p) return null;
+  const text = (p.tgt ? "Sent to " + p.tgt : "Sent to the bot") + " each time this network connects" +
+    (p.tgt ? ", and +x hides your host before the channels are joined." : ", before the channels are joined.") + " Saved encrypted in the config.";
+  const bot = p.tgt || (await askBox({title: p.t, text, label: "Bot's nick"}) || "").trim(); if (!bot) return null;
+  const user = p.user ? (await askBox({title: p.t, text, label: "Username"}) || "").trim() : ""; if (p.user && !user) return null;
+  const pw = await askBox({title: p.t, text, label: "Password", hidden: true}); if (!pw) return null;
+  return {line: "/msg " + bot + " " + p.verb + (p.user ? " " + user : "") + " " + pw, cloak: !!p.tgt};
 }
 // the *s over the input line while a password is typed in it
 function renderMask() {

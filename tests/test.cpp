@@ -1242,6 +1242,57 @@ int main() {
     ts->sasl_ok = true;
     feed(":srv 001 me :Welcome");
     assert(sent().find("NickServ") == std::string::npos);
+    {  // on connect: umodes, then perform (in order, $nick), then autojoin; +x with a login waits for 396
+        assert((perform_lines(" /msg a b && msg c d &&") == std::vector<std::string>{"/msg a b", "/msg c d"}) && perform_join({"/a", "/b"}) == "/a && /b");
+        assert(perform_show("/msg x@channels.undernet.org login me pw && /msg Bot ident pw2 me && /join #a") ==
+               "/msg x@channels.undernet.org login me ******** && /msg Bot ident ******** me && /join #a");
+        assert(mask_services("#c", "login me pw") == "login me pw" && mask_services("Q@CServe.quakenet.org", "AUTH me pw") == "AUTH me ********");
+        assert(raw_redact("PRIVMSG x@channels.undernet.org :login me pw") == "PRIVMSG x@channels.undernet.org :login me ***");
+        assert(input_secret("#c", "/perform add /msg Bot ident pw") == 28 && input_secret("#c", "/perform set 2 /msg Q AUTH me pw") == 30);
+        assert(input_secret("#c", "/oper me opw") == 9 && input_secret("#c", "/oper me") == std::string::npos && perform_show("/oper me opw") == "/oper me ********");
+        assert(umode_adds("+i-w+x", 'x') && !umode_adds("+i-x", 'x') && umode_adds("ix", 'x'));
+        assert(cfg_secret("perform") && !secret_key("perform"));
+        ts->sasl_ok = false, ts->cfg.nickserv_pass.clear();
+        ts->cfg.umodes = "+ix", ts->cfg.perform = {"/msg x@channels.undernet.org login $nick pw", "/quote PING :p"};
+        feed(":srv 001 me :Welcome");
+        std::string o = sent();
+        assert(o.rfind("MODE me +ix\r\nPRIVMSG x@channels.undernet.org :login me pw\r\nPING :p\r\n", 0) == 0 && o.find("JOIN") == std::string::npos && ts->join_hold);
+        feed(":me!u@h PRIVMSG x@channels.undernet.org :login me pw");  // its echo: masked, in the server tab, no query
+        assert(!core.find(ts, "x@channels.undernet.org") && ts->status->lines.back().text == "login me ********");
+        feed(":srv 396 me hidden.users.undernet.org :is now your hidden host");
+        assert(!ts->join_hold && sent().rfind("JOIN #c\r\n", 0) == 0);
+        feed(":srv 001 me :Welcome"), sent();  // no 396: joined 10s on
+        core.tick(time(nullptr) + 11);
+        assert(!ts->join_hold && sent().find("JOIN #c\r\n") != std::string::npos);
+        ts->cfg.join_wait = false;
+        feed(":srv 001 me :Welcome");
+        assert(!ts->join_hold && sent().find("JOIN #c\r\n") != std::string::npos);
+        ts->cfg.umodes.clear(), ts->cfg.perform.clear(), ts->cfg.join_wait = true;
+        // /perform: the list in the config at once, and the echo of a login is masked
+        std::string path = "build/test-perform.conf";
+        bool had_key = access("build/secret.key", F_OK) == 0;
+        remove(path.c_str());
+        std::swap(core.cfg_path, path);
+        core.exec(chb, "/perform add /msg MyBot ident hunter9");
+        core.exec(chb, "/perform add join #extra");
+        core.exec(chb, "/perform move 2 1");
+        assert((ts->cfg.perform == std::vector<std::string>{"/join #extra", "/msg MyBot ident hunter9"}));
+        Ini disk;
+        assert(ini_load(core.cfg_path, disk) && ini_get(disk, "server.t", "perform") == "/join #extra && /msg MyBot ident hunter9");
+        std::ifstream raw(core.cfg_path);
+        std::string file((std::istreambuf_iterator<char>(raw)), {});
+        assert(file.find("hunter9") == std::string::npos && file.find("perform = enc:") != std::string::npos);  // sealed on disk
+        core.exec(chb, "/perform del 1");
+        assert(ts->cfg.perform.size() == 1 && chb->lines.back().text.find("hunter9") == std::string::npos);
+        core.exec(chb, "/perform");
+        assert(chb->lines.back().text == "  1. /msg MyBot ident ********");
+        core.exec(chb, "/perform del 1");
+        std::swap(core.cfg_path, path);
+        remove(path.c_str());
+        if (!had_key) remove("build/secret.key");
+        core.cfg["server.t"].erase("perform"), core.unsaved.erase("server.t");
+        sent();
+    }
     core.exec(home, "/autojoin");  // no server in the cmd tab
     {  // snap: the open channel tabs, with keys, written to the config right away
         std::string path = "build/test-snap.conf";

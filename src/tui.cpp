@@ -1116,8 +1116,11 @@ void Tui::draw() {
         present();
         return;
     }
-    if (sw.open) {  // /set: the settings window has the keys
+    if (sw.open) {  // /set: the settings window has the keys (a question over it: perform's delete)
         draw_settings(W, H);
+        if (!confirm.empty())
+            draw_dialog(W, H, confirm_title.empty() ? "iSekur" : confirm_title, wrap_words(confirm.substr(0, confirm.find('\n')), 44), "",
+                        false, U"", 0, "y: yes · n or Esc: no", 0, 0, 'c');
         present();
         return;
     }
@@ -1409,8 +1412,37 @@ void Tui::draw_settings(int W, int H) {
     for (auto* r : rows) kw = std::max(kw, (int)r->key.size());
     kw = std::min(kw + 3, 26);
     int vx = kx + kw, vmax = x1 - 1;
-    if (rows.empty()) text(kx, ly, vmax, "No key matches \u201c" + to_utf8(sw.q) + "\u201d (Esc clears the search)", dim, false);
-    for (int i = 0; i < n && sw.top + i < (int)lines.size(); i++) {
+    const Core::SetRow* pr = rows.empty() ? nullptr : rows[(size_t)sw.sel];
+    bool plist = sw.plist && pr && pr->key == "perform";
+    if (plist) {  // perform's commands, the passwords in them as ********; the last row adds one
+        auto pl = perform_lines(pr->val);
+        sw.psel = std::max(0, std::min(sw.psel, (int)pl.size()));
+        text(kx, ly, vmax, pr->head + " \u00b7 perform: run in order once connected, before autojoin", secst, false);
+        int top = std::max(0, sw.psel - (n - 3));
+        for (int i = 0; i + 1 < n && top + i <= (int)pl.size(); i++) {
+            int j = top + i, yy = ly + 1 + i;
+            bool on = j == sw.psel, last = j == (int)pl.size();
+            if (on) fill(yy, kx - 1, vmax + 1, sel);
+            int ex = text(kx + 1, yy, vmax, last ? "+  " : std::to_string(j + 1) + ". ", on ? sel : dim, false);
+            if (on && sw.editing) {  // typed in clear, but the password as \u2022s
+                fill(yy, ex, vmax, fs);
+                std::u32string shown = sw.ed;
+                std::string u = to_utf8(sw.ed);
+                if (size_t e, p = input_secret("", u, &e); p != std::string::npos) {
+                    size_t a = from_utf8(u.substr(0, p)).size(), z = e == std::string::npos ? shown.size() : from_utf8(u.substr(0, e)).size();
+                    for (size_t q = a; q < z && q < shown.size(); q++) shown[q] = U'\u2022';
+                }
+                int avail = vmax - ex - 1, off = std::max(0, (int)sw.ecur - avail);
+                text(ex, yy, vmax, to_utf8(shown.substr((size_t)off)), fs, false);
+                tb_set_cursor(ex + (int)sw.ecur - off, yy);
+                continue;
+            }
+            text(ex, yy, vmax, last ? (pl.empty() ? "add a command (or p: a preset for X, Q, an eggdrop, IdleRPG)" : "add a command") : perform_show(pl[(size_t)j]),
+                 on ? sel : last ? dim : val, false);
+        }
+    }
+    if (!plist && rows.empty()) text(kx, ly, vmax, "No key matches \u201c" + to_utf8(sw.q) + "\u201d (Esc clears the search)", dim, false);
+    for (int i = 0; !plist && i < n && sw.top + i < (int)lines.size(); i++) {
         auto& L = lines[(size_t)(sw.top + i)];
         int yy = ly + i;
         if (!L.r) { text(kx, yy, vmax, L.head, secst, false); continue; }
@@ -1454,7 +1486,10 @@ void Tui::draw_settings(int W, int H) {
     // what happened, or what the keys do
     const Core::SetRow* hr = rows.empty() ? nullptr : rows[(size_t)std::max(0, std::min(sw.sel, (int)rows.size() - 1))];
     bool on_srv = !set_server(sw.cat, sw.focus == 1 ? hr : nullptr).empty();
-    std::string hint = sw.editing     ? "Enter: set it · Esc: cancel · empty = the default"
+    std::string hint = plist && sw.editing ? "Enter: keep it · Esc: cancel · $nick: your nick · /msg x@channels.undernet.org login user pass"
+                       : plist ? "\u2191\u2193: move · Enter e: edit · a: add · d: delete · [ ]: up/down · p: preset · s: save · Esc \u2190: back"
+                       : sw.editing     ? "Enter: set it · Esc: cancel · empty = the default"
+                       : hr && hr->key == "perform" && sw.focus == 1 ? "Enter: its commands · p: a preset (X, Q, eggdrop, IdleRPG) · s: save · q: close"
                        : sw.searching ? "type to search · Enter or \u2193: to the list · Esc: clear it"
                        : on_srv ? "c: connect · r: rename · x: delete server · n: new server · e Enter: edit · s: save · q: close"
                        : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · n: new server · /: search · q Esc: close"
@@ -1470,6 +1505,56 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     int ci = set_view(all, lower(to_utf8(sw.q)), sw.cat, cats, counts, rows);
     const Core::SetRow* r = rows.empty() ? nullptr : rows[(size_t)std::max(0, std::min(sw.sel, (int)rows.size() - 1))];
     bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
+    if (sw.plist && !(r && r->key == "perform")) sw.plist = false;
+    // perform's list: every change is one /set of the whole list (s saves it, like the rest here)
+    auto pl = sw.plist ? perform_lines(r->val) : std::vector<std::string>{};
+    auto pset = [&](const std::vector<std::string>& v, const std::string& said) {
+        std::string j = perform_join(v);
+        c.exec(c.active, "/set " + full_key(*r) + " " + (j.empty() ? "\"\"" : j));
+        sw.msg = said + "  (not saved yet: s)";
+    };
+    if (sw.plist && sw.editing) {
+        if (k == TB_KEY_ESC) { sw.editing = false; return; }
+        if (k == TB_KEY_ENTER) {
+            std::string v = trim(to_utf8(sw.ed));
+            sw.editing = false;
+            if (v.empty()) return;
+            if (v[0] != '/') v = "/" + v;
+            if (v.find("&&") != std::string::npos) { sw.msg = "One command per row (&& separates them in the config)"; return; }
+            bool add = sw.psel >= (int)pl.size();
+            if (add) pl.push_back(v), sw.psel = (int)pl.size() - 1;
+            else pl[(size_t)sw.psel] = v;
+            pset(pl, (add ? "Added " : "Changed ") + perform_show(v));
+            return;
+        }
+    }
+    if (sw.plist && !sw.editing) {
+        sw.msg.clear();
+        int np = (int)pl.size();
+        if (k == TB_KEY_ESC || k == TB_KEY_ARROW_LEFT || ch == 'q') { sw.plist = false; return; }
+        if (k == TB_KEY_ARROW_UP) sw.psel = std::max(0, sw.psel - 1);
+        else if (k == TB_KEY_ARROW_DOWN) sw.psel = std::min(np, sw.psel + 1);
+        else if (k == TB_KEY_HOME) sw.psel = 0;
+        else if (k == TB_KEY_END) sw.psel = np;
+        else if (ch == 'a' || ((k == TB_KEY_ENTER || ch == 'e') && sw.psel >= np)) sw.psel = np, sw.editing = true, sw.ed.clear(), sw.ecur = 0;
+        else if ((k == TB_KEY_ENTER || ch == 'e') && sw.psel < np) sw.editing = true, sw.ed = from_utf8(pl[(size_t)sw.psel]), sw.ecur = sw.ed.size();
+        else if ((ch == 'd' || k == TB_KEY_DELETE) && sw.psel < np) {  // asks first: y/n over the window
+            std::string gone = perform_show(pl[(size_t)sw.psel]);
+            pl.erase(pl.begin() + sw.psel);
+            std::string j = perform_join(pl);
+            confirm = "Delete command " + std::to_string(sw.psel + 1) + " (" + gone + ") from " + r->sec.substr(7) +
+                      "'s on-connect commands?\n/set " + full_key(*r) + " " + (j.empty() ? "\"\"" : j);
+            confirm_title = "Delete command";
+        } else if ((ch == '[' || ch == ']') && sw.psel < np) {
+            int to = sw.psel + (ch == '[' ? -1 : 1);
+            if (to < 0 || to >= np) return;
+            std::swap(pl[(size_t)sw.psel], pl[(size_t)to]);
+            sw.psel = to;
+            pset(pl, "Moved to " + std::to_string(to + 1));
+        } else if (ch == 's' || k == TB_KEY_CTRL_S) c.exec(c.active, "/save"), sw.msg = "Saved to " + c.cfg_path;
+        else if (ch == 'p') settings_preset(r->sec.substr(7));
+        return;
+    }
     if (sw.editing) {
         if (k == TB_KEY_ESC) { sw.editing = false; return; }
         if (k == TB_KEY_ENTER && r) {
@@ -1524,6 +1609,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
                    {"host [port] [-tls] [-noverify] [-name name] [-nick nick]", "e.g. irc.sekurnet.org 6697 -tls -name sekurnet"});
         return;
     }
+    if (ch == 'p' && !srv.empty()) { settings_preset(srv); return; }
     if (ch == 'e') k = TB_KEY_ENTER, ch = 0;
     if (ch == 'd') k = TB_KEY_DELETE, ch = 0;
     if ((k == TB_KEY_SPACE || ch == ' ') && sw.focus == 1 && r && !r->choices.empty()) {  // on <-> off, the next theme: right away
@@ -1553,12 +1639,26 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     else if (k == TB_KEY_PGUP) sw.sel = std::max(0, sw.sel - page);
     else if (k == TB_KEY_HOME) sw.sel = 0;
     else if (k == TB_KEY_END) sw.sel = std::max(0, n - 1);
+    else if (k == TB_KEY_ENTER && r && r->key == "perform") sw.plist = true, sw.psel = 0;
     else if (k == TB_KEY_ENTER && r) sw.editing = true, sw.ed = r->secret ? U"" : from_utf8(r->val), sw.ecur = sw.ed.size();
     else if (k == TB_KEY_DELETE && r && r->key == "name" && r->sec.rfind("server.", 0) == 0) sw.msg = "A server needs a name: r renames it, x deletes it";
     else if (k == TB_KEY_DELETE && r) {
         c.exec(c.active, "/set " + full_key(*r) + " \"\"");
         sw.msg = full_key(*r) + (r->shared ? " uses Global's again" : " is back to its default") + "  (not saved yet: s)";
     }
+}
+
+// p on a network: the presets in a menu, in that network's tab (the dialogs that follow ask there)
+void Tui::settings_preset(const std::string& srv) {
+    for (auto& sv : c.servers)
+        if (sv->cfg.name == srv) {
+            sw.open = false;
+            c.select(sv->status);
+            menu = Menu{std::max(0, tb_width() / 2 - 14), std::max(0, tb_height() / 2 - 4), 0, srv + " on connect",
+                        {{"Undernet: log in to X, +x", "/perform preset undernet"}, {"QuakeNet: log in to Q, +x", "/perform preset quakenet"},
+                         {"Eggdrop: ident to the bot", "/perform preset eggdrop"}, {"IdleRPG: log in to the bot", "/perform preset idlerpg"}}};
+            return;
+        }
 }
 
 // ---- the theme picker (/theme alone) -------------------------------------------
@@ -2448,7 +2548,7 @@ void Tui::settings_mouse(int k, int x, int y) {
         if (!sw.editing) settings_key(0, k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0), settings_key(0, k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
         return;
     }
-    if (k != TB_KEY_MOUSE_LEFT || sw.editing) return;
+    if (k != TB_KEY_MOUSE_LEFT || sw.editing || sw.plist) return;  // perform's list: the keys
     if (y == sw.y0 + 1) { sw.searching = true; return; }  // the search line
     int i = y - sw.list_y;
     if (i < 0 || i >= sw.h - 6 || x <= sw.x0 || x >= sw.x0 + sw.w - 1) return;
@@ -2769,7 +2869,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         else if (k == TB_KEY_ENTER) c.unlock(to_utf8(lock_in)), lock_in.clear();
         return;
     }
-    if (sw.open) { settings_key(mod, k, ch); return; }
+    if (sw.open && confirm.empty()) { settings_key(mod, k, ch); return; }
     if (tw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) theme_key(k, ch); return; }
     if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
     if (kw.open) { keys_key(k, ch); return; }
@@ -3231,7 +3331,9 @@ void Tui::submit() {
         paste = line;
         return;
     }
-    bool secret = input_secret(c.active->name, line) != std::string::npos;  // a password: not kept for Up
+    // a password: not kept for Up (perform's lines often have one)
+    bool secret = input_secret(c.active->name, line) != std::string::npos || line.rfind("/perform ", 0) == 0 ||
+                  (line.rfind("/set ", 0) == 0 && line.find(".perform ") != std::string::npos);
     if (!secret && (hist.empty() || hist.back() != line)) hist.push_back(line);
     if (hist.size() > 500) hist.erase(hist.begin());
     hpos = hist.size();

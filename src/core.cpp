@@ -288,7 +288,7 @@ size_t services_secret(const std::string& tgt, const std::string& text, size_t* 
     if (end) *end = npos;
     std::string t = irc_lower(tgt);  // also NickServ@services.libera.chat
     bool ns = t.rfind("nickserv", 0) == 0, cs = t.rfind("chanserv", 0) == 0;
-    if (!ns && !cs) return npos;
+    if (!t.empty() && strchr("#&!+", t[0])) return npos;  // a channel: "login" there is just a word
     std::vector<std::pair<size_t, size_t>> w;  // the words; a trailing space starts an empty one (the next, being typed)
     for (size_t i = 0; i < text.size();) {
         if (text[i] == ' ') { i++; continue; }
@@ -308,6 +308,12 @@ size_t services_secret(const std::string& tgt, const std::string& text, size_t* 
         return w[k].first;
     };
     std::string verb = up(0);
+    if (!ns && !cs) {  // X, Q, eggdrops, IdleRPG (perform's presets): LOGIN|AUTH <user> <pw>, IDENT <pw> [nick]
+        // ponytail: any nick, so "auth me in" to a friend shows "auth me ********" in our own echo
+        if (verb == "LOGIN" || verb == "AUTH") return w.size() > 2 ? word(2, false) : npos;
+        if (verb == "IDENT") return word(1, true);
+        return npos;
+    }
     if (ns) {
         if (verb == "IDENTIFY" || verb == "ID") return w.size() > 1 ? word(w.size() - 1, false) : npos;
         if (verb == "REGISTER") return word(1, true);
@@ -331,6 +337,21 @@ std::string mask_services(const std::string& tgt, const std::string& text) {
 size_t input_secret(const std::string& buf, const std::string& line, size_t* end) {
     if (line.empty() || line[0] != '/') return services_secret(buf, line, end);
     std::string l = irc_lower(line);
+    if (l.rfind("/oper ", 0) == 0) {  // /oper <name> <pw>
+        size_t at = line.find_first_not_of(' ', 5);
+        at = at == std::string::npos ? at : line.find_first_not_of(' ', std::min(line.size(), line.find(' ', at)));
+        if (end) *end = at == std::string::npos ? at : line.find(' ', at);
+        return at;
+    }
+    if (l.rfind("/perform ", 0) == 0) {  // /perform add|set N <command>: that command's password
+        auto w = split(l, ' ');
+        size_t skip = w.size() > 1 && w[1] == "add" ? 2 : w.size() > 2 && w[1] == "set" ? 3 : 0, at = 0;
+        for (size_t i = 0; skip && i < skip; i++) at = line.find_first_not_of(' ', line.find(' ', line.find_first_not_of(' ', at)));
+        if (!skip || at == std::string::npos) return std::string::npos;
+        size_t p = input_secret(buf, line.substr(at), end);
+        if (end && *end != std::string::npos) *end += at;
+        return p == std::string::npos ? p : p + at;
+    }
     size_t n = l.rfind("/msg ", 0) == 0 ? 5 : l.rfind("/query ", 0) == 0 ? 7 : 0;
     if (!n) return std::string::npos;
     size_t t = line.find_first_not_of(' ', n), e = t == std::string::npos ? t : line.find(' ', t);
@@ -359,6 +380,7 @@ std::vector<Core::Setting> Core::settings() const {
             bool set = !ini_get(cfg, sec, k).empty();
             std::string val = !set && v.empty() ? "(not set)"
                               : secret_key(k) && !v.empty() ? "********"
+                              : k == "perform"              ? perform_show(v)
                                                             : v;
             if (!set && !v.empty()) val += "  (default)";
             if (unsaved.count(sec) && unsaved.at(sec).count(k)) val += "  (unsaved)";
@@ -375,6 +397,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'},
     {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
+    {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
     {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
     {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'},
@@ -605,7 +628,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         std::map<std::string, std::string> uses = {
             {"name", d.name}, {"host", d.host}, {"port", std::to_string(d.port)}, {"tls", d.tls ? "true" : "false"},
             {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"},
-            {"auto_identify", d.auto_identify ? "true" : "false"}, {"encoding", d.encoding.empty() ? "utf-8" : d.encoding}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}};
+            {"auto_identify", d.auto_identify ? "true" : "false"}, {"encoding", d.encoding.empty() ? "utf-8" : d.encoding}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}, {"join_wait", d.join_wait ? "on" : "off"}};
         for (auto& k : KEYS) {
             if (k.scope == 'g') continue;
             auto u = uses.find(k.key);
@@ -725,6 +748,9 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.nickserv_pass = ini_get(cfg, sec, "nickserv_pass");
     for (auto& e : split(ini_get(cfg, sec, "autojoin"), ','))
         if (auto w = split(e, ' '); !w.empty()) sc.autojoin.push_back(w[0] + (w.size() > 1 ? " " + w[1] : ""));
+    sc.umodes = ini_get(cfg, sec, "umodes");
+    sc.perform = perform_lines(ini_get(cfg, sec, "perform"));
+    sc.join_wait = is_on(ini_get(cfg, sec, "join_wait", "on"));
     return sc;
 }
 
@@ -1271,6 +1297,36 @@ void Core::plug_print(Buffer* b, LK k, const std::string& text, const std::strin
     add(b ? b : bufs.front().get(), l);
 }
 
+std::vector<std::string> perform_lines(const std::string& v) {
+    std::vector<std::string> out;
+    for (size_t at = 0; at <= v.size();) {
+        size_t e = v.find("&&", at);
+        if (e == std::string::npos) e = v.size();
+        if (std::string c = trim(v.substr(at, e - at)); !c.empty()) out.push_back(c[0] == '/' ? c : "/" + c);
+        at = e + 2;
+    }
+    return out;
+}
+std::string perform_join(const std::vector<std::string>& v) {
+    std::string o;
+    for (auto& c : v) o += (o.empty() ? "" : " && ") + c;
+    return o;
+}
+std::string perform_show(const std::string& v) {
+    std::vector<std::string> l = perform_lines(v);
+    for (auto& c : l)
+        if (size_t e, p = input_secret("", c, &e); p != std::string::npos && p < c.size())
+            c = c.substr(0, p) + "********" + (e == std::string::npos ? "" : c.substr(e));
+    return perform_join(l);
+}
+bool umode_adds(const std::string& modes, char m) {
+    char sign = '+';
+    for (char ch : modes)
+        if (ch == '+' || ch == '-') sign = ch;
+        else if (ch == m && sign == '+') return true;
+    return false;
+}
+
 // /rawlog: what a line shows with its secret blanked: PASS, OPER's password, SASL payloads,
 // REGISTER, and what follows the first word to NickServ/ChanServ (IDENTIFY pw, also echoed back)
 std::string raw_redact(const std::string& line) {
@@ -1296,9 +1352,13 @@ std::string raw_redact(const std::string& line) {
         return a.empty() ? line : line.substr(0, at) + " ***";
     if (w == "PRIVMSG" || w == "NOTICE") {
         std::string t = irc_lower(a.substr(0, a.find('@')));
-        if (t != "nickserv" && t != "chanserv") return line;
         size_t colon = line.find(" :", at);
         if (colon == std::string::npos) return line;
+        if (t != "nickserv" && t != "chanserv") {  // X, Q, a bot: only the password (services_secret)
+            std::string tx = line.substr(colon + 2);
+            size_t e, p = services_secret(a, tx, &e);
+            return p == std::string::npos ? line : line.substr(0, colon + 2) + tx.substr(0, p) + "***" + (e == std::string::npos ? "" : tx.substr(e));
+        }
         size_t sp = line.find(' ', colon + 2);
         return sp == std::string::npos ? line : line.substr(0, sp) + " ***";
     }
@@ -1686,7 +1746,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             std::string def = ini_get(defaults, sec, key);
             if (sec == "general" && key == "timestamp") def = theme.lay("timestamp", "%H:%M") + ", the theme's";
             if (sec == "general" && key == "nick_width") def = theme.lay("nick_width", "12") + ", the theme's";
-            print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
+            print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : key == "perform" && !ini_get(cfg, sec, key).empty() ? perform_show(ini_get(cfg, sec, key)) : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }
         // a grabbed session can't switch /exec on, or point the webchat at other folders or logins, without the lock password
@@ -1749,7 +1809,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             else bnc_req_buf = b, bnc_req = on ? BncReq::START : BncReq::STOP;
         }
         dirty = true;
-        std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : val;  // "": back to the default
+        std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : key == "perform" ? perform_show(val) : val;  // "": back to the default
         if (saved_now) { print(b, LK::INFO, argv[0] + " = " + shown + "  (saved)"); return; }
         print(b, LK::INFO, argv[0] + " = " + shown +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
@@ -2288,6 +2348,79 @@ void Core::exec(Buffer* b, const std::string& input) {
         s->send("JOIN " + ch + (argv.size() > 1 ? " " + argv[1] : ""));
         for (auto& c1 : split(ch, ',')) s->join_focus.insert(s->lower(c1));
         if (argv.size() > 1) s->chan_keys[s->lower(ch)] = argv[1];
+        return;
+    }
+    if (cmd == "perform") {  // /perform [add <command> | set N <command> | del N | move N M | preset <name>]: run on connect
+        std::string sec = "server." + s->cfg.name, net = s->cfg.name, sub = argv.empty() ? "" : argv[0];
+        to_lower(sub);
+        auto pl = s->cfg.perform;
+        int n = argv.size() > 1 ? atoi(argv[1].c_str()) : 0;
+        bool has_n = n >= 1 && n <= (int)pl.size();
+        auto keep = [&](const std::string& said) {  // written now, like /autojoin
+            cfg[sec]["perform"] = unsaved[sec]["perform"] = perform_join(pl);
+            s->cfg.perform = pl;
+            if (save_section(*this, sec, b)) print(b, LK::INFO, said + " (saved)");
+        };
+        if (sub.empty()) {
+            if (pl.empty()) print(b, LK::INFO, "Nothing runs when " + net + " connects: /perform add /msg Bot ident pass, or /perform preset undernet|quakenet|eggdrop|idlerpg");
+            else print(b, LK::INFO, "On connect to " + net + (s->cfg.umodes.empty() ? "" : " (user modes " + s->cfg.umodes + ")") + ", before autojoin:");
+            for (size_t i = 0; i < pl.size(); i++) print(b, LK::INFO, "  " + std::to_string(i + 1) + ". " + perform_show(pl[i]));
+            return;
+        }
+        std::string c = sub == "add" ? rest(1) : sub == "set" ? rest(2) : "";
+        if (!c.empty() && c[0] != '/') c = "/" + c;
+        if (c.find("&&") != std::string::npos) { print(b, LK::ERROR, "One command at a time (&& separates them in the config)"); return; }
+        if (sub == "add" && !c.empty()) { pl.push_back(c); keep("Added to " + net + "'s on-connect commands: " + perform_show(c)); return; }
+        if (sub == "set" && has_n && !c.empty()) { pl[(size_t)n - 1] = c; keep(net + "'s on-connect command " + argv[1] + ": " + perform_show(c)); return; }
+        if (sub == "del" && has_n) { pl.erase(pl.begin() + n - 1); keep("Removed " + net + "'s on-connect command " + argv[1]); return; }
+        if (sub == "move" && has_n && argv.size() > 2) {
+            int to = std::max(1, std::min((int)pl.size(), atoi(argv[2].c_str())));
+            std::string m = pl[(size_t)n - 1];
+            pl.erase(pl.begin() + n - 1), pl.insert(pl.begin() + to - 1, m);
+            keep(net + "'s on-connect command " + argv[1] + " is now " + std::to_string(to));
+            return;
+        }
+        if (sub == "preset" && argv.size() > 1) {  // asks for what the line needs, adds it; X and Q also set +x
+            struct P { const char *name, *title, *tgt, *verb; bool user; };
+            static const P presets[] = {
+                {"undernet", "Undernet X login", "x@channels.undernet.org", "login", true},
+                {"quakenet", "QuakeNet Q login", "Q@CServe.quakenet.org", "AUTH", true},
+                {"eggdrop", "Eggdrop ident", "", "ident", false},
+                {"idlerpg", "IdleRPG login", "", "LOGIN", true},
+            };
+            std::string want = argv[1];
+            to_lower(want);
+            const P* p = nullptr;
+            for (auto& x : presets) if (want == x.name) p = &x;
+            if (!p) { print(b, LK::ERROR, "No preset " + argv[1] + ": undernet, quakenet, eggdrop or idlerpg"); return; }
+            std::vector<std::string> info = {std::string("Sent to ") + (*p->tgt ? p->tgt : "the bot"), "each time " + net + " connects, before autojoin.",
+                                             *p->tgt ? "+x hides your host before the joins." : "", "Saved encrypted in the config."};
+            if (info[2].empty()) info.erase(info.begin() + 2);
+            auto finish = [this, b, net, p](const std::string& bot, const std::string& user, const std::string& pw) {
+                if (pw.empty()) return;
+                exec(b, "/perform add /msg " + bot + " " + p->verb + (p->user ? " " + user : "") + " " + pw);
+                Server* sv = nullptr;
+                for (auto& x : servers) if (x->cfg.name == net) sv = x.get();
+                if (!sv || !*p->tgt || umode_adds(sv->cfg.umodes, 'x')) return;
+                std::string u = sv->cfg.umodes;
+                size_t sg = u.find_last_of("+-");
+                u += u.empty() ? "+x" : sg != std::string::npos && u[sg] == '-' ? "+x" : "x";
+                std::string sc = "server." + net;
+                cfg[sc]["umodes"] = unsaved[sc]["umodes"] = sv->cfg.umodes = u;
+                if (save_section(*this, sc, b)) print(b, LK::INFO, net + "'s user modes on connect: " + u + " (saved)");
+            };
+            auto ask_pw = [this, b, p, info, finish](const std::string& bot, const std::string& user) {
+                ask_pass(b, "password", [finish, bot, user](const std::string& pw) { finish(bot, user, pw); }, true, p->title, info);
+            };
+            auto ask_user = [this, b, p, info, ask_pw](const std::string& bot) {
+                if (!p->user) { ask_pw(bot, ""); return; }
+                ask_pass(b, "username", [ask_pw, bot](const std::string& u) { if (!u.empty()) ask_pw(bot, u); }, false, p->title, info);
+            };
+            if (*p->tgt) ask_user(p->tgt);
+            else ask_pass(b, "bot's nick", [ask_user](const std::string& bot) { if (!bot.empty()) ask_user(bot); }, false, p->title, info);
+            return;
+        }
+        print(b, LK::ERROR, "Usage: /perform [add <command> | set N <command> | del N | move N M | preset undernet|quakenet|eggdrop|idlerpg]");
         return;
     }
     if (cmd == "autojoin") {  // /autojoin [add|del] [#chan [key]]: the server's autojoin list

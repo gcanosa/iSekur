@@ -49,7 +49,8 @@ Ini ini_parse(const std::string& text) {
 // as "enc:" + AES-256-GCM with a random key in secret.key next to it (0600); hashes stay as they are.
 // ponytail: whoever can read both files can read the passwords: it keeps them out of a glance,
 // a backup of the config alone, or a paste. A master password is the upgrade.
-bool cfg_secret(const std::string& k) { return secret_key(k) && k.find("hash") == std::string::npos; }
+// perform too: its lines log in to X, Q and bots ("login user pw"), so the whole list is sealed
+bool cfg_secret(const std::string& k) { return k == "perform" || (secret_key(k) && k.find("hash") == std::string::npos); }
 
 static std::string cfg_key(const std::string& path, bool create) {
     std::string kp = path.substr(0, path.rfind('/') + 1) + "secret.key", k;

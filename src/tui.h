@@ -123,11 +123,14 @@ private:
         int x0 = 0, y0 = 0, w = 0, h = 0, nav_w = 0, list_y = 0;  // where it was drawn, for the mouse
         long long click_ms = 0;
         bool to_servers = false;                   // /servers: opens at the first server's category
+        bool plist = false;                        // Enter on perform: its commands, one per row (editing: one of them)
+        int psel = 0;                              // ...the one chosen (its size: the "add a command" row)
     };
     SetWin sw;
     void draw_settings(int W, int H);
     void settings_key(int mod, int k, uint32_t ch);
     void settings_mouse(int k, int x, int y);
+    void settings_preset(const std::string& srv);  // p: perform's presets for that network, in a menu
     // /theme alone: the installed themes in a box, a filter on top; moving previews them (the webchat too)
     struct ThemeWin {
         bool open = false;

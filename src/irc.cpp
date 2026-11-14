@@ -397,6 +397,26 @@ void Core::on_readable(Server* s, short rev, long long until) {
     if (!ok) disconnect(s, s->conn.err);
 }
 
+void Core::autojoin_now(Server* s) {
+    s->join_hold = 0;
+    s->join_focus.clear();  // a refused /join from before doesn't make its autojoin take focus
+    std::vector<std::string> chans;  // autojoin, then the channel tabs still open (reconnects)
+    for (auto& e : s->cfg.autojoin) {
+        auto w = split(e, ' ');
+        if (w.size() > 1) s->chan_keys[s->lower(w[0])] = w[1];
+        chans.push_back(w[0]);
+    }
+    for (auto& b : bufs)
+        if (b->srv == s && b->type == BT::CHANNEL &&
+            std::find_if(chans.begin(), chans.end(), [&](const std::string& c) { return s->lower(c) == s->lower(b->name); }) == chans.end())
+            chans.push_back(b->name);
+    for (auto& ch : chans) {
+        if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
+        auto k = s->chan_keys.find(s->lower(ch));
+        s->send("JOIN " + ch + (k != s->chan_keys.end() ? " " + k->second : ""));
+    }
+}
+
 void Core::tick(time_t now) {
     plugins_poll();
     plugin_emit("tick", nullptr, "");
@@ -417,6 +437,10 @@ void Core::tick(time_t now) {
                 s->ping_sent_ms = now_ms();
                 s->send_now("PING :LAG" + std::to_string(s->ping_sent_ms));
                 s->ping_at = now + 30;
+            }
+            if (s->join_hold && now >= s->join_hold) {
+                info_note(s->status, "No hidden host 10s after connecting (did the login work?): joining the channels anyway");
+                autojoin_now(s);
             }
             chan_timers(s, now);
             mark_read(s, now);
@@ -713,17 +737,17 @@ void Core::handle(Server* s, const Msg& m) {
         // ponytail: IDENTIFY goes out right before the JOINs, so a +r channel can still beat
         // NickServ; SASL has no such race. Wait for the 900/NOTICE if that bites.
         if (s->cfg.auto_identify && !s->cfg.nickserv_pass.empty() && !s->sasl_ok) s->send("PRIVMSG NickServ :IDENTIFY " + s->cfg.nickserv_pass), s->ident_at = time(nullptr);
-        s->join_focus.clear();  // a refused /join from before doesn't make its autojoin take focus
-        std::vector<std::string> chans;  // autojoin, then the channel tabs still open (reconnects)
-        for (auto& e : s->cfg.autojoin) {
-            auto w = split(e, ' ');
-            if (w.size() > 1) s->chan_keys[s->lower(w[0])] = w[1];
-            chans.push_back(w[0]);
+        // the network's own: user modes, then its commands (X / Q / bot logins), then autojoin
+        if (!s->cfg.umodes.empty()) s->send("MODE " + s->nick + " " + s->cfg.umodes);
+        s->perform_to.clear();
+        for (auto c : s->cfg.perform) {
+            for (size_t at; (at = c.find("$nick")) != std::string::npos;) c.replace(at, 5, s->nick);
+            if (auto w = split(c, ' '); w.size() > 2 && irc_lower(w[0]) == "/msg") s->perform_to.insert(s->lower(w[1].substr(0, w[1].find('@')))), s->ident_at = time(nullptr);
+            exec(s->status, c);
+            if (s->state != SS::CONNECTED) return;  // a /disconnect, /quit in the list
         }
-        for (auto& b : bufs)
-            if (b->srv == s && b->type == BT::CHANNEL &&
-                std::find_if(chans.begin(), chans.end(), [&](const std::string& c) { return s->lower(c) == s->lower(b->name); }) == chans.end())
-                chans.push_back(b->name);
+        // +x with a login: the channels see the hidden host only once X / Q set it (396), or 10s on
+        s->join_hold = s->cfg.join_wait && umode_adds(s->cfg.umodes, 'x') && !s->cfg.perform.empty() ? time(nullptr) + 10 : 0;
         // ZNC playback module: with the cap ZNC holds the backlog back until asked; ask for
         // what came after the newest line we have (the same second again: the replay check drops it)
         if (s->caps.count("znc.in/playback")) {
@@ -734,14 +758,11 @@ void Core::handle(Server* s, const Msg& m) {
                         if (it->kind == LK::MSG || it->kind == LK::ACTION || it->kind == LK::NOTICE) { last = std::max(last, it->ts); break; }
             s->send("PRIVMSG *playback :PLAY * " + std::to_string(last));
         }
-        for (auto& ch : chans) {
-            if (s->twitch()) ch = irc_lower(ch);  // Twitch ignores a JOIN #Name
-            auto k = s->chan_keys.find(s->lower(ch));
-            s->send("JOIN " + ch + (k != s->chan_keys.end() ? " " + k->second : ""));
-        }
+        if (!s->join_hold) autojoin_now(s);
         notify(Ev::BUFFER, s->status);
         return;
     }
+    if (cmd == "396" && s->join_hold) s->join_hold = 0, autojoin_now(s);  // the hidden host is on: join now (then printed as usual)
     if (cmd == "005") {
         std::string toks;  // the tokens shown, minus the trailing ":are supported by this server"
         for (size_t i = 1; i + 1 < m.params.size(); i++) toks += (toks.empty() ? "" : " ") + m.params[i];
@@ -1314,7 +1335,8 @@ void Core::handle(Server* s, const Msg& m) {
             if (self) text = mask_services(tgt, text);
             b = find(s, peer);
             // our automatic IDENTIFY and what NickServ says to it: the server tab, not a new NickServ tab
-            bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && s->lower(peer) == "nickserv";
+            std::string pl = s->lower(peer.substr(0, peer.find('@')));  // x@channels.undernet.org answers as X
+            bool ident = s->ident_at && time(nullptr) - s->ident_at < 30 && (pl == "nickserv" || s->perform_to.count(pl));
             // a notice without a query: the server tab (like WeeChat), or the tab of the /command it answers
             if (!b && notice && !ident) b = typed_buf();
             if (!b) b = ident || notice ? s->status : (opened = true, open(s, BT::QUERY, peer));

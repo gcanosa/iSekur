@@ -32,6 +32,9 @@ that mirrors your live session in a browser, bouncer style.
   and account registration (`/register`, `/verify`)
 - Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel, `/autojoin snap` saves every open channel), SASL or
   `nickserv_pass` to identify on connect (`auto_identify = false` turns that off)
+- Per server, on connect: user modes (`umodes = +ix`) and commands run before autojoin (`/perform`), for X on
+  Undernet, Q on QuakeNet, eggdrops, IdleRPG or anything else; `/perform preset undernet` asks for the login and adds
+  it (with +x, and the channels wait for the hidden host). Saved encrypted; also in `/servers` and the webchat's Servers window
 - Webchat over HTTPS + WebSocket with login, PBKDF2 password hash and login lockout.
 - The webchat installs as an app (PWA: home screen or dock, notifications on Android and on an installed
   iPhone webchat). That needs a trusted certificate (`cert`/`key` in `[web]`, e.g. Let's Encrypt or

@@ -219,6 +219,9 @@ struct ServerCfg {
     std::string encoding;  // legacy charset of this network (iconv name), "" = UTF-8
     std::string sasl_user, sasl_pass, sasl_mech, cert, key, nickserv_pass;
     std::vector<std::string> autojoin;  // "#chan" or "#chan key"
+    std::string umodes;                 // sent as MODE <nick> umodes after 001 ("+ix")
+    std::vector<std::string> perform;   // commands run after 001, before autojoin ("/msg x@... login u p")
+    bool join_wait = true;              // umodes adds x and perform is set: autojoin waits for 396 (hidden host), 10s at most
 };
 enum class SS { DISCONNECTED, CONNECTING, REGISTERING, CONNECTED };
 // /kickban and /tempban; waits in kb_wait while USERHOST looks the host up
@@ -325,6 +328,7 @@ struct Server {
     std::set<std::string> who_auto;        // channels whose WHO we asked for on join: the replies aren't shown
     std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
     time_t ison_at = 0;
+    time_t join_hold = 0;                  // join_wait: autojoin waits for 396 until then (0: not waiting)
     bool motd_done = false;                // the first 376/422 of this connection: /notify starts
     bool markread_off = false;             // draft/read-marker refused (not logged in): quiet until 900
     int ison_wait = 0;                     // our ISONs not yet answered: their 303s aren't shown
@@ -353,6 +357,7 @@ struct Server {
     std::string to_self;  // echo-message: a message to our own nick comes twice (echo + delivery); the first one's msgid or text
     time_t to_self_at = 0;
     time_t ident_at = 0;   // our automatic NickServ IDENTIFY: its echo and NickServ's answers go to the server tab for a while
+    std::set<std::string> perform_to;  // ...and so do perform's /msg logins: lower(nick) of who they went to (x, q, a bot)
     bool tag_ok(const std::string& tag) const;  // a client tag (no +) isn't in 005 CLIENTTAGDENY, and message-tags is on
     int typed_in = 0;      // the buffer id a /command for this server was last typed in: its replies go there
     time_t typed_at = 0;
@@ -539,6 +544,7 @@ struct Core {
     void sts_save();
     void notify_cmd(Buffer* b, const std::string& args);  // /notify [add|del] nick: MONITOR (or ISON) watch list
     void notify_start(Server* s);       // after 001: MONITOR + the list
+    void autojoin_now(Server* s);       // after 001 (or the hidden host, join_wait): the autojoin channels and open tabs
     void notify_seen(Server* s, const std::string& nick, bool on, const std::string& host = "");
     void typed(Buffer* b, const std::string& input);  // the input line changed: +typing=active / done (send_typing)
     void mark_read(Server* s, time_t now);  // draft/read-marker: MARKREAD for the tabs on screen
@@ -721,4 +727,9 @@ bool log_match(const Line& l, const LogQuery& q);
 std::vector<LogHit> log_search(const std::vector<LogFile>& files, const std::vector<size_t>& which, const LogQuery& q,
                                size_t max, bool* more = nullptr);
 std::string log_fmt(const Line& l);  // a Line as one log row
+// perform = "/cmd a && /cmd b": the commands one by one, and back ("&&": " ;" starts a comment in the file)
+std::vector<std::string> perform_lines(const std::string& v);
+std::string perform_join(const std::vector<std::string>& v);
+bool umode_adds(const std::string& modes, char m);  // "+i-w+x" adds x
+std::string perform_show(const std::string& v);  // the same with the passwords in it as ********
 std::string raw_redact(const std::string& line);  // /rawlog: a line with its password or SASL payload blanked
