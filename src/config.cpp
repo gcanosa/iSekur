@@ -40,7 +40,10 @@ Ini ini_parse(const std::string& text) {
         std::string val = line.substr(eq + 1);
         size_t sc = val.find(" ;");  // inline comment; '#' can't be one: #chan, #rrggbb
         if (sc != std::string::npos) val.erase(sc);
-        ini[sec][trim(line.substr(0, eq))] = trim(val);
+        std::string k = trim(line.substr(0, eq)), v = trim(val), &cur = ini[sec][k];
+        // perform = one command per line, as many lines as you like: "a && b" here (perform_lines splits it)
+        if (k == "perform" && !cur.empty()) { if (!v.empty()) cur += " && " + v; }
+        else cur = v;
     }
     return ini;
 }
@@ -49,8 +52,18 @@ Ini ini_parse(const std::string& text) {
 // as "enc:" + AES-256-GCM with a random key in secret.key next to it (0600); hashes stay as they are.
 // ponytail: whoever can read both files can read the passwords: it keeps them out of a glance,
 // a backup of the config alone, or a paste. A master password is the upgrade.
-// perform too: its lines log in to X, Q and bots ("login user pw"), so the whole list is sealed
+// perform too: in the file one command per line, each line with a password (a login, ident, /oper) sealed on its own
 bool cfg_secret(const std::string& k) { return k == "perform" || (secret_key(k) && k.find("hash") == std::string::npos); }
+std::vector<std::string> perform_parts(const std::string& v) {
+    std::vector<std::string> out;
+    for (size_t at = 0; at <= v.size();) {
+        size_t e = std::min(v.find("&&", at), v.size());
+        if (std::string p = trim(v.substr(at, e - at)); !p.empty()) out.push_back(p);
+        at = e + 2;
+    }
+    return out;
+}
+bool cfg_seal(const std::string& k, const std::string& v) { return cfg_secret(k) && (k != "perform" || perform_secret(v)); }
 
 static std::string cfg_key(const std::string& path, bool create) {
     std::string kp = path.substr(0, path.rfind('/') + 1) + "secret.key", k;
@@ -77,7 +90,22 @@ bool ini_load(const std::string& path, Ini& out) {
     for (auto& [sec, kv] : out)
         for (auto& [k, v] : kv)
             if (!cfg_secret(k) || v.empty()) continue;
-            else if (v.rfind("enc:", 0) != 0) plain[sec][k] = v;
+            else if (k == "perform") {  // each line: open the sealed ones; rewrite when one is sealed or plain the wrong way
+                std::string all;
+                bool reshape = false, lost = false;
+                for (auto& p : perform_parts(v)) {
+                    std::string d = p;
+                    if (p.rfind("enc:", 0) == 0) {
+                        if (key.empty()) key = cfg_key(path, false);
+                        if (!e2e_open(key, p.substr(4), d)) { lost = true; continue; }  // no secret.key: as if unset
+                        reshape |= !perform_secret(d) || d.find("&&") != std::string::npos;  // a whole list sealed in one line (the first perform build)
+                    } else reshape |= perform_secret(d);
+                    all += (all.empty() ? "" : " && ") + d;
+                }
+                v = all;
+                if (reshape && !lost) plain[sec][k] = v;  // never drop a line that didn't open
+            }
+            else if (v.rfind("enc:", 0) != 0) { if (cfg_seal(k, v)) plain[sec][k] = v; }
             else {
                 if (key.empty()) key = cfg_key(path, false);
                 std::string p;
@@ -96,6 +124,14 @@ bool is_on(const std::string& v) { return v == "on" || v == "true" || v == "yes"
 
 // Rewrite `text` with the values in `changes`, keeping comments and order:
 // existing keys are replaced in place, new ones go at the end of their section.
+// k = v as written: perform's "a && b" as one perform = line per command
+static std::string ini_lines(const std::string& k, const std::string& v) {
+    if (k != "perform") return k + " = " + v;
+    std::string o;
+    for (auto& p : perform_parts(v)) o += (o.empty() ? "" : "\n") + k + " = " + p;
+    return o.empty() ? k + " = " : o;
+}
+
 std::string ini_update(const std::string& text, const Ini& changes) {
     std::string out, sec, line;
     std::set<std::pair<std::string, std::string>> done;
@@ -114,7 +150,7 @@ std::string ini_update(const std::string& text, const Ini& changes) {
         std::string tail = out.substr(cut);
         out.resize(cut);
         for (auto& [k, v] : it->second)
-            if (done.insert({sname, k}).second) out += k + " = " + v + "\n";
+            if (done.insert({sname, k}).second) out += ini_lines(k, v) + "\n";
         out += tail;
     };
     std::set<std::string> seen;
@@ -130,8 +166,8 @@ std::string ini_update(const std::string& text, const Ini& changes) {
             auto it = changes.find(sec);
             if (it != changes.end() && it->second.count(k)) {
                 size_t sc = line.find(" ;", line.find('='));  // keep the line's comment, aligned as it was
-                std::string kv = k + " = " + it->second.at(k), note = sc == std::string::npos ? "" : line.substr(sc + 1);
-                if (!note.empty()) kv += std::string(sc + 1 > kv.size() ? sc + 1 - kv.size() : 1, ' ') + note;
+                std::string kv = ini_lines(k, it->second.at(k)), note = sc == std::string::npos ? "" : line.substr(sc + 1);
+                if (!note.empty() && kv.find('\n') == std::string::npos) kv += std::string(sc + 1 > kv.size() ? sc + 1 - kv.size() : 1, ' ') + note;
                 if (done.insert({sec, k}).second) out += kv + "\n";
                 continue;  // duplicate keys collapse into the first one
             }
@@ -255,7 +291,17 @@ bool ini_save(const std::string& path, const Ini& changes, std::string& err) {
     std::string key;
     for (auto& [sec, kv] : sealed)
         for (auto& [k, v] : kv)
-            if (cfg_secret(k) && !v.empty() && v.rfind("enc:", 0) != 0) {
+            if (k == "perform") {  // one command per line in the file: only the lines with a password are sealed
+                std::string o;
+                for (auto& p : perform_parts(v)) {
+                    if (perform_secret(p) && p.rfind("enc:", 0) != 0) {
+                        if (key.empty() && (key = cfg_key(path, true)).empty()) { err = "can't write secret.key next to " + path; return false; }
+                        p = "enc:" + e2e_seal(key, p);
+                    }
+                    o += (o.empty() ? "" : " && ") + p;
+                }
+                v = o;
+            } else if (cfg_seal(k, v) && !v.empty() && v.rfind("enc:", 0) != 0) {
                 if (key.empty() && (key = cfg_key(path, true)).empty()) { err = "can't write secret.key next to " + path; return false; }
                 v = "enc:" + e2e_seal(key, v);
             }

@@ -22,6 +22,8 @@
 using Ini = std::map<std::string, std::map<std::string, std::string>>;
 bool secret_key(const std::string& k);  // passwords and hashes: never shown
 bool cfg_secret(const std::string& k);  // passwords sent back as typed: "enc:" in the file (config.cpp)
+bool cfg_seal(const std::string& k, const std::string& v);
+std::vector<std::string> perform_parts(const std::string& v);  // "a && b" -> a, b as they are (perform_lines also adds the /)  // ...this value of it: perform only when a line has a password
 // "IDENTIFY pass" (and REGISTER, GHOST...) to NickServ/ChanServ as it is shown and logged: "IDENTIFY ********"
 std::string mask_services(const std::string& tgt, const std::string& text);
 // where that password starts, or npos; *end: where it ends (npos: the end of the text)
@@ -727,9 +729,10 @@ bool log_match(const Line& l, const LogQuery& q);
 std::vector<LogHit> log_search(const std::vector<LogFile>& files, const std::vector<size_t>& which, const LogQuery& q,
                                size_t max, bool* more = nullptr);
 std::string log_fmt(const Line& l);  // a Line as one log row
-// perform = "/cmd a && /cmd b": the commands one by one, and back ("&&": " ;" starts a comment in the file)
+// perform: "/cmd a && /cmd b" in memory and /set, one perform = line per command in the file (config.cpp)
 std::vector<std::string> perform_lines(const std::string& v);
 std::string perform_join(const std::vector<std::string>& v);
+bool perform_secret(const std::string& v);  // a line with a password in it (a login, ident, /oper)
 bool umode_adds(const std::string& modes, char m);  // "+i-w+x" adds x
 std::string perform_show(const std::string& v);  // the same with the passwords in it as ********
 std::string raw_redact(const std::string& line);  // /rawlog: a line with its password or SASL payload blanked

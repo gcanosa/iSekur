@@ -1287,6 +1287,31 @@ int main() {
         core.exec(chb, "/perform");
         assert(chb->lines.back().text == "  1. /msg MyBot ident ********");
         core.exec(chb, "/perform del 1");
+        {  // one perform = line per command; only a line with a password is sealed, and a list sealed whole (0.5.2) opens up again
+            std::string err;
+            auto text = [&]() { std::ifstream f(core.cfg_path); return std::string((std::istreambuf_iterator<char>(f)), {}); };
+            assert(!perform_secret("/mode me +T && /msg me test test!") && perform_secret("/join #a && /msg Q AUTH me pw"));
+            assert(!cfg_seal("perform", "/mode me +T") && cfg_seal("perform", "/oper me pw") && cfg_seal("sasl_pass", "x"));
+            Ini plain;
+            plain["server.t"]["perform"] = "/mode me +T && /msg me test test!";
+            assert(ini_save(core.cfg_path, plain, err) && text().find("perform = /mode me +T\nperform = /msg me test test!\n") != std::string::npos);
+            plain["server.t"]["perform"] = "/mode me +T && /msg Bot ident pw";
+            assert(ini_save(core.cfg_path, plain, err) && text().find("perform = /mode me +T\nperform = enc:") != std::string::npos &&
+                   text().find("ident pw") == std::string::npos && text().find("test test!") == std::string::npos);  // the old lines collapse into the new ones
+            Ini two;
+            assert(ini_load(core.cfg_path, two) && ini_get(two, "server.t", "perform") == "/mode me +T && /msg Bot ident pw");
+            assert((ini_parse("[s]\nperform = /a\nperform =\nperform = /b ; note\n")["s"]["perform"] == "/a && /b"));
+            // what the last build wrote for a perform without a password (Koragg's): readable again on load, in the file too
+            std::ifstream kf("build/secret.key", std::ios::binary);
+            std::string key((std::istreambuf_iterator<char>(kf)), {});
+            assert(key.size() == 32);
+            Ini old;
+            old["server.t"]["perform"] = "enc:" + e2e_seal(key, "/mode me +T && /msg me test test!");
+            std::ofstream(core.cfg_path) << "[server.t]\nperform = " << old["server.t"]["perform"] << "\n";
+            Ini back;
+            assert(ini_load(core.cfg_path, back) && ini_get(back, "server.t", "perform") == "/mode me +T && /msg me test test!");
+            assert(text().find("perform = /mode me +T\nperform = /msg me test test!\n") != std::string::npos && text().find("enc:") == std::string::npos);
+        }
         std::swap(core.cfg_path, path);
         remove(path.c_str());
         if (!had_key) remove("build/secret.key");

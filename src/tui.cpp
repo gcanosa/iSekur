@@ -1520,7 +1520,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
             sw.editing = false;
             if (v.empty()) return;
             if (v[0] != '/') v = "/" + v;
-            if (v.find("&&") != std::string::npos) { sw.msg = "One command per row (&& separates them in the config)"; return; }
+            if (v.find("&&") != std::string::npos) { sw.msg = "One command per row, without && in it"; return; }
             bool add = sw.psel >= (int)pl.size();
             if (add) pl.push_back(v), sw.psel = (int)pl.size() - 1;
             else pl[(size_t)sw.psel] = v;

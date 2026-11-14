@@ -552,7 +552,7 @@ std::vector<std::string> conf_check(const std::string& path) {
         v = trim(v);
         if (sec.empty()) { say(n, key + " is outside any [section], ignored"); continue; }
         if (!sec_ok) continue;  // its section said so already
-        if (auto it = seen[sec].find(key); it != seen[sec].end())
+        if (auto it = seen[sec].find(key); it != seen[sec].end() && key != "perform")  // perform: one line per command
             say(n, key + " is set again in [" + sec + "] (line " + std::to_string(it->second) + "): this one counts");
         seen[sec][key] = n;
         if (!key_known(sec, key)) { say(n, unknown_key(sec, key)); continue; }
@@ -1298,13 +1298,8 @@ void Core::plug_print(Buffer* b, LK k, const std::string& text, const std::strin
 }
 
 std::vector<std::string> perform_lines(const std::string& v) {
-    std::vector<std::string> out;
-    for (size_t at = 0; at <= v.size();) {
-        size_t e = v.find("&&", at);
-        if (e == std::string::npos) e = v.size();
-        if (std::string c = trim(v.substr(at, e - at)); !c.empty()) out.push_back(c[0] == '/' ? c : "/" + c);
-        at = e + 2;
-    }
+    std::vector<std::string> out = perform_parts(v);
+    for (auto& c : out) if (c[0] != '/') c = "/" + c;
     return out;
 }
 std::string perform_join(const std::vector<std::string>& v) {
@@ -1318,6 +1313,11 @@ std::string perform_show(const std::string& v) {
         if (size_t e, p = input_secret("", c, &e); p != std::string::npos && p < c.size())
             c = c.substr(0, p) + "********" + (e == std::string::npos ? "" : c.substr(e));
     return perform_join(l);
+}
+bool perform_secret(const std::string& v) {
+    for (auto& c : perform_lines(v))
+        if (input_secret("", c) != std::string::npos) return true;
+    return false;
 }
 bool umode_adds(const std::string& modes, char m) {
     char sign = '+';
@@ -2369,7 +2369,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         std::string c = sub == "add" ? rest(1) : sub == "set" ? rest(2) : "";
         if (!c.empty() && c[0] != '/') c = "/" + c;
-        if (c.find("&&") != std::string::npos) { print(b, LK::ERROR, "One command at a time (&& separates them in the config)"); return; }
+        if (c.find("&&") != std::string::npos) { print(b, LK::ERROR, "One command at a time, without && in it (it separates them in /set)"); return; }
         if (sub == "add" && !c.empty()) { pl.push_back(c); keep("Added to " + net + "'s on-connect commands: " + perform_show(c)); return; }
         if (sub == "set" && has_n && !c.empty()) { pl[(size_t)n - 1] = c; keep(net + "'s on-connect command " + argv[1] + ": " + perform_show(c)); return; }
         if (sub == "del" && has_n) { pl.erase(pl.begin() + n - 1); keep("Removed " + net + "'s on-connect command " + argv[1]); return; }

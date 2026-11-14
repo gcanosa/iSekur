@@ -51,7 +51,7 @@ static const std::vector<CmdInfo> CMDS = {
     {"perform", "Connection", "[add <command> | set N <command> | del N | move N M | preset <name>]", "Commands run when the server connects",
      "Without arguments, lists this server's on-connect commands (passwords as ********). They run in order once "
      "connected, after the user modes (umodes = +ix) and before autojoin; $nick is your nick. add / set / del / move "
-     "change the list and write it to the config at once, encrypted (perform in [server.x], \"&&\" between the commands). "
+     "change the list and write it to the config at once: one perform = line per command in [server.x], encrypted when it has a password in it (a login, ident, /oper). "
      "preset asks what a login needs and adds it: undernet (X), quakenet (Q), eggdrop (ident), idlerpg. "
      "X and Q also add +x, and with join_wait on (the default) the channels are joined once the hidden host is set "
      "(10s at most). Also in /servers (Enter on perform, p: a preset) and the webchat's Servers window.",

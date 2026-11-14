@@ -168,9 +168,11 @@ notify    =                  ; nicks to watch: "bob is online" / "went offline" 
 ; nickserv_pass = secret     ; /msg NickServ IDENTIFY on connect, for networks without SASL
 ; e2e_keys  =                ; written by /e2e #chan for autojoin channels (the key, not the password)
 ; umodes    = +ix            ; user modes set right after connecting (MODE yournick +ix)
-; perform   = /msg x@channels.undernet.org login user pass && /msg MyBot ident pass
-;                            ; commands run on connect, before autojoin, "&&" between them ($nick: your nick);
-;                            ; saved as enc:... like the passwords. /perform add|del|preset edits it
+; perform   = /msg x@channels.undernet.org login user pass
+; perform   = /mode $nick +T  ; commands run on connect in this order, before autojoin, one perform = line
+;                            ; each ($nick: your nick); a line with a password (a login, ident, /oper)
+;                            ; is saved as enc:... like the passwords, the others as typed.
+;                            ; /perform add|del|preset edits them
 ; join_wait = on             ; with +x in umodes and a perform: join once the hidden host is set (10s at most)
 
 # Twitch chat is IRC too: the password is an OAuth token (chat:read chat:edit),
