@@ -543,9 +543,10 @@ int main() {
     {  // user modes: letters only (a stray byte after them showed in the status bar)
         feed(":srv 221 me :+iwzT\x01");
         assert(ts->umodes == "iwzT");
+        assert(ts->status->lines.back().text == "Your user mode is [+iwzT]");  // 221 at connect: status
         feed(":me!u@h MODE me :+x\x02-w");
         assert(ts->umodes == "izTx");
-        assert(ts->status->lines.back().text == "Your user mode is [+iwzT]");  // 221 at connect: status
+        assert(ts->status->lines.back().text == "Mode change [+x-w] for user me, your user mode is now [+izTx]");  // a change: there too
     }
     {  // /bans: the 367s fill the list the window shows, the 368 ends it; a list nobody asked for prints as before
         ts->chanmodes = "eIbq,k,l,imnpst";

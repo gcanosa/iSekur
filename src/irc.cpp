@@ -1011,6 +1011,10 @@ void Core::handle(Server* s, const Msg& m) {
                     if (add && at == std::string::npos) s->umodes += ch;
                     if (!add && at != std::string::npos) s->umodes.erase(at, 1);
                 }
+                // in the server tab, whoever set it (a /mode, umodes on connect, the server, services)
+                std::string mc = m.p(1);
+                mc.erase(std::remove_if(mc.begin(), mc.end(), [](char ch) { return ch != '+' && ch != '-' && !isalpha((unsigned char)ch); }), mc.end());
+                print(s->status, LK::INFO, "Mode change [" + mc + "] for user " + s->nick + (s->umodes.empty() ? "" : ", your user mode is now [+" + s->umodes + "]"));
                 dirty = true;
             }
             return;
