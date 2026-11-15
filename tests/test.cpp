@@ -3492,6 +3492,13 @@ print("loaded")
         assert(pc.locked && pc.screen_by == "screensaver");
         pc.unlock("pw");
         assert(!pc.locked && pc.screen_by.empty());
+        pc.set_lock(true, false);  // an attach: only the box; Esc on it starts one, once
+        assert(pc.locked && pc.screen_by.empty());
+        pc.lock_saver();
+        assert(pc.locked && pc.screen_by == "screensaver");
+        pc.lock_saver();
+        assert(pc.screen_by == "screensaver");
+        pc.unlock("pw");
         pc.exec(ph, "/plugin set screensaver on_lock off");  // only the password box
         pc.lock_now(ph);
         assert(pc.locked && pc.screen_by.empty());

@@ -615,6 +615,10 @@ void Core::screen_end() {
     notify(Ev::SCREEN, nullptr);
 }
 
+void Core::lock_saver() {
+    if (locked && screen_by.empty()) plugin_emit("lock", nullptr, "");
+}
+
 bool Core::wake() {
     active_at = last_input = time(nullptr);  // a key, click or move is input too: autoaway's idle and lock_idle count it
     if (screen_by.empty() || locked) return false;  // locked: the screensaver stays, the password box comes over it

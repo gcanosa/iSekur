@@ -1903,7 +1903,14 @@ async function bioCreate(m) {
     bioNote(e.name === "InvalidStateError" ? "This device is set up already" : e.name === "NotAllowedError" ? bioWord + " was cancelled: nothing set up" : bioWord + ": " + e.message);
   }
 }
-$("#lockp").addEventListener("keydown", e => { if (e.key === "Escape" && $("#lock").classList.contains("peek")) e.preventDefault(), lockUnpeek(); });
+// Esc: over a screensaver it puts the box away; on the bare box with nothing typed it starts one (as Alt+S)
+$("#lockp").addEventListener("keydown", e => {
+  if (e.key !== "Escape") return;
+  e.preventDefault();
+  if ($("#lock").classList.contains("peek")) lockUnpeek();
+  else if (!e.target.value && !SS.on) send({t: "saver"});
+  else e.target.value = "";
+});
 function ssPoke(e) {
   const now = Date.now();
   if (SS.on && locked) {

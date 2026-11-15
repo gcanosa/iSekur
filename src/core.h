@@ -494,6 +494,7 @@ struct Core {
                    bool operator!=(const SCell& o) const { return ch != o.ch || fg != o.fg || ox != o.ox || oy != o.oy; } };
     bool screen_frame(int w, int h, const char* ui, std::vector<SCell>& g);  // plugin.cpp; false: none (or it failed and ended)
     void screen_end();
+    void lock_saver();  // locked, Esc on the bare password box: the screensaver plugin starts one under it (as Alt+S does)
     bool wake();  // someone's here; true: it ended a screensaver (the key that woke it goes no further)
     // the lock screen's animation, in the terminal (the webchat plays its own off the same events):
     // 'l' it locks, 'f' a wrong password, 'u' it unlocks; 0 when none is running

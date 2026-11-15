@@ -716,6 +716,7 @@ void Web::ws_frames(Client& cl) {
         if (c.locked) {  // only the password (or Face ID): nothing else of the session goes in or out
             if (m["t"] == "unlock") c.unlock(m["pass"]);
             else if (m["t"] == "bio_chal" || m["t"] == "bio_unlock") bio(cl, m, nullptr);
+            else if (m["t"] == "saver") c.lock_saver();  // Esc on the bare box
             continue;
         }
         Buffer* b = by_id(c, atoi(m["buf"].c_str()));

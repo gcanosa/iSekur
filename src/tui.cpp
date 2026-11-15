@@ -1270,7 +1270,7 @@ void Tui::draw_lock(int W, int H, long long ms) {
         double t = ms / 450.0;
         dx = (int)std::lround(3 * std::sin(t * 6 * M_PI) * (1 - t)), red = true;
     } else if (open) lift = ms < 120 ? 1 : 2;
-    draw_dialog(W, H, "iSekur is locked", info, "password", true, lock_in, lock_in.size(), peek_at ? "Enter: unlock · Esc: back to the screensaver" : "Enter: unlock · Alt+D: detach", dx, dy, peek_at ? 'L' : 0);
+    draw_dialog(W, H, "iSekur is locked", info, "password", true, lock_in, lock_in.size(), peek_at ? "Enter: unlock · Esc: back to the screensaver" : c.plugin_hooks("lock", nullptr, "") ? "Enter: unlock · Esc: screensaver · Alt+D: detach" : "Enter: unlock · Alt+D: detach", dx, dy, peek_at ? 'L' : 0);
     if (y0 < 7) return;  // no room for the padlock
     Style def = T.get("default"), ps = red ? T.get("error") : open ? T.get("join") : sty(T, "menu_border", "separator");
     ps.bg = def.bg, ps.attr |= A_BOLD;
@@ -2877,6 +2877,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         if (ch) lock_in += (char32_t)ch;
         else if (k == TB_KEY_SPACE) lock_in += U' ';
         else if ((k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2) && !lock_in.empty()) lock_in.pop_back();
+        else if (k == TB_KEY_ESC && lock_in.empty()) c.lock_saver();  // nothing typed: the screensaver, as Alt+S
         else if (k == TB_KEY_ESC || k == TB_KEY_CTRL_U) lock_in.clear();
         else if (k == TB_KEY_ENTER) c.unlock(to_utf8(lock_in)), lock_in.clear();
         return;
