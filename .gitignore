@@ -21,3 +21,4 @@ plans/
 
 # a checkout of github.com/gcanosa/isekur-plugins (the catalog) for make test; CI puts it here
 isekur-plugins/
+tags
