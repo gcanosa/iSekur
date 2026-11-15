@@ -152,6 +152,13 @@ static void fill(int y, int x0, int x1, Style st) {
     for (int x = x0; x < x1; x++) cell(x, y, ' ', st);
 }
 
+// a window nearly as wide as the screen (x0..x1, x1 past its edge): blank the 1-2 columns beside it, rows y0..y1-1,
+// or the chat under it peeks out there as stray letters
+static void gutters(int W, int x0, int x1, int y0, int y1, Style st) {
+    if (x0 > 2 && W - x1 > 2) return;
+    for (int y = y0; y < y1; y++) fill(y, 0, x0, st), fill(y, x1, W, st);
+}
+
 // A box's top row (x0, x1: its corners): the title, and the theme's window buttons like the webchat's dialogs.
 // window = mac: red, yellow and green dots before the title; win95 (mirc): a navy title bar, white bold title,
 // gray _ □ × at the right. Other themes: the title on the border
@@ -1345,6 +1352,7 @@ void Tui::draw_settings(int W, int H) {
     int bw = std::min(W - 2, 110), bh = std::min(H - 2, 34);
     if (bw < 40 || bh < 10) { text(0, H - 1, W, "The terminal is too small for the settings window (Esc closes it)", T.get("error"), false); return; }
     int x0 = (W - bw) / 2, y0 = (H - bh) / 2, x1 = x0 + bw - 1, y1 = y0 + bh - 1;
+    gutters(W, x0, x1 + 1, y0, y1 + 1, T.get("default"));
     for (int yy = y0; yy <= y1; yy++) fill(yy, x0, x1 + 1, bs);
     for (int xx = x0; xx <= x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y1, U'─', ls);
     for (int yy = y0; yy <= y1; yy++) cell(x0, yy, U'│', ls), cell(x1, yy, U'│', ls);
@@ -1821,6 +1829,7 @@ void Tui::draw_keys(int W, int H) {
     int bh = kw.rows + 3, y0 = std::max(0, (H - bh) / 2 - 1), x1 = kw.x0 + kw.w, capx = kw.x0 + 3,
         descx = capx + std::min(need, std::max(12, kw.w - 5 - dw)) + 2;
     kw.list_y = y0 + 1;
+    gutters(W, kw.x0, x1, y0, y0 + bh, T.get("default"));
     for (int yy = y0; yy < y0 + bh; yy++) fill(yy, kw.x0, x1, bs);
     for (int xx = kw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(kw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
@@ -2016,6 +2025,7 @@ void Tui::draw_plugins(int W, int H) {
     if (pw.sel >= n) pw.sel = std::max(0, n - 1);
     if (pw.sel < pw.top) pw.top = pw.sel;
     if (pw.sel >= pw.top + pw.rows) pw.top = pw.sel - pw.rows + 1;
+    gutters(W, pw.x0, x1, y0, y0 + bh, T.get("default"));
     for (int yy = y0; yy < y0 + bh; yy++) fill(yy, pw.x0, x1, bs);
     for (int xx = pw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls), cell(xx, sep_y, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(pw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
@@ -2392,6 +2402,7 @@ void Tui::draw_bans(int W, int H) {
     if (idx >= 0 && idx < bw.top) bw.top = idx;
     if (idx >= bw.top + bw.rows) bw.top = idx - bw.rows + 1;
     bw.top = std::max(0, std::min(bw.top, std::max(0, n - bw.rows)));
+    gutters(W, bw.x0, x1, y0, y0 + bh, T.get("default"));
     for (int yy = y0; yy < y0 + bh; yy++) fill(yy, bw.x0, x1, bs);
     for (int xx = bw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls), cell(xx, y0 + 4, U'─', ls);
     for (int yy = y0; yy < y0 + bh; yy++) cell(bw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
@@ -3603,6 +3614,7 @@ void Tui::draw_logs(int W, int H) {
     int h = H, x1 = lw.x0 + lw.w, y0 = lw.y0, tw = std::min(30, lw.w / 3);
     lw.body_y = y0 + 3, lw.rows = h - 6, lw.xd = lw.x0 + 1 + tw;
     int sep2 = y0 + h - 3, hint_y = y0 + h - 2;
+    gutters(W, lw.x0, x1, y0, y0 + h, T.get("default"));
     for (int yy = y0; yy < y0 + h; yy++) fill(yy, lw.x0, x1, bs);
     for (int xx = lw.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + h - 1, U'─', ls), cell(xx, y0 + 2, U'─', ls), cell(xx, sep2, U'─', ls);
     for (int yy = y0; yy < y0 + h; yy++) cell(lw.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
