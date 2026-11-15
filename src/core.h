@@ -332,6 +332,7 @@ struct Server {
     std::set<std::string> who_auto;        // channels whose WHO we asked for on join: the replies aren't shown
     std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
     time_t ison_at = 0;
+    std::string ison_asked;                // the nicks the last ISON asked about
     time_t join_hold = 0;                  // join_wait: autojoin waits for 396 until then (0: not waiting)
     bool motd_done = false;                // the first 376/422 of this connection: /notify starts
     bool markread_off = false;             // draft/read-marker refused (not logged in): quiet until 900
@@ -561,6 +562,10 @@ struct Core {
     void sts_save();
     void notify_cmd(Buffer* b, const std::string& args);  // /notify [add|del] nick: MONITOR (or ISON) watch list
     void notify_start(Server* s);       // after 001: MONITOR + the list
+    std::vector<std::string> watch_list(Server* s);  // /notify's nicks and the open queries'
+    bool on_notify(Server* s, const std::string& nick);
+    void query_watch(Server* s, const std::string& nick, bool add);  // a query opens / closes: watch its nick (or stop)
+    bool query_offline(Buffer* b);      // a query whose nick is offline: says so, true = don't send
     void autojoin_now(Server* s);
     int alias_depth = 0;                // an alias running an alias...: 10 deep at most       // after 001 (or the hidden host, join_wait): the autojoin channels and open tabs
     void notify_seen(Server* s, const std::string& nick, bool on, const std::string& host = "");

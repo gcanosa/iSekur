@@ -897,6 +897,39 @@ int main() {
         core.exec(chb, "/whois x"), sent();
         feed(":srv 401 me x :No such nick");
         assert(chb->lines.back().text.find("No such nick") != std::string::npos);
+        {  // a message to a query (a webchat tap on a nick, the terminal in #other): "no such nick" lands in the query
+            Buffer* q = core.open(ts, BT::QUERY, "gone");
+            core.exec(q, "hello?"), sent();
+            feed(":srv 401 me gone :No such nick/channel");
+            assert(q->lines.back().text.find("No such nick") != std::string::npos && other->lines.empty());
+            core.close(q);
+        }
+        {  // an open query watches its nick (MONITOR): offline, it says so and doesn't send
+            ts->motd_done = true, ts->isupport["MONITOR"] = "100";
+            Buffer* q = core.open(ts, BT::QUERY, "gone");
+            assert(sent() == "MONITOR + gone\r\n");
+            feed(":srv 731 me :gone");
+            assert(q->lines.back().text == "gone is offline" && ts->status->lines.back().text.find("gone") == std::string::npos);
+            core.exec(q, "hello?");
+            assert(sent().empty() && q->lines.back().text == "gone is offline: not sent");
+            feed(":srv 730 me :gone!u@h");
+            assert(q->lines.back().text == "gone is online");
+            core.exec(q, "hello!");
+            assert(sent() == "PRIVMSG gone :hello!\r\n");
+            feed(":gone!u@h QUIT :bye");  // its "has quit" is enough, then nothing goes
+            feed(":srv 731 me :gone");
+            assert(q->lines.back().text.find("has quit") != std::string::npos);
+            core.exec(q, "x"), assert(sent().empty());
+            core.close(q);
+            assert(sent() == "MONITOR - gone\r\n" && !ts->online.count("gone"));
+            ts->isupport.erase("MONITOR");  // no MONITOR: ISON asks, the reply says
+            q = core.open(ts, BT::QUERY, "gone");
+            assert(ts->ison_at);
+            ts->send("ISON gone"), ts->ison_asked = " gone", ts->ison_wait++, sent();
+            feed(":srv 303 me :");
+            assert(q->lines.back().text == "gone is offline");
+            core.close(q), sent(), ts->motd_done = false, ts->ison_at = 0;
+        }
         ts->typed_at = 0;  // long ago (an autojoin): not the active #other
         feed(":srv 474 me #b :Cannot join channel (+b)");
         assert(ts->status->lines.back().text.find("(+b)") != std::string::npos && other->lines.empty());
@@ -2757,7 +2790,7 @@ int main() {
         v->ison_at = 1, v->ping_at = time(nullptr) + 100, v->last_rx = time(nullptr);
         core.upd_at = time(nullptr) + 86400;  // no update check thread (its HTTPS would outlive the test)
         core.tick(time(nullptr));
-        assert(vs().find("ISON alice\r\n") != std::string::npos);
+        assert(vs().find("ISON alice dave\r\n") != std::string::npos);  // dave's query is open: watched too
         size_t sn = v->status->lines.size();
         vf(":srv 303 me :alice");
         assert(v->online["alice"] && v->ison_wait == 0 && v->status->lines.size() == sn + 1);

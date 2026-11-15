@@ -445,12 +445,12 @@ void Core::tick(time_t now) {
             chan_timers(s, now);
             mark_read(s, now);
             // /notify without MONITOR: ISON once a minute, from the end of the MOTD on
-            std::string watch = ini_get(cfg, "server." + s->cfg.name, "notify");
-            if (s->ison_at && now >= s->ison_at && !watch.empty() && !s->isupport.count("MONITOR")) {
+            auto watch = s->ison_at && now >= s->ison_at && !s->isupport.count("MONITOR") ? watch_list(s) : std::vector<std::string>();
+            if (!watch.empty()) {
                 std::string l;
-                for (auto& n : split(watch, ' '))
+                for (auto& n : watch)
                     if (!n.empty() && l.size() + n.size() < 400) l += " " + n;
-                s->send("ISON" + l);
+                s->send("ISON" + l), s->ison_asked = l;
                 s->ison_wait++, s->ison_at = now + 60;
             }
         }
@@ -958,6 +958,7 @@ void Core::handle(Server* s, const Msg& m) {
             bool in = b->nicks.erase(s->lower(m.nick)) ||
                       (b->type == BT::QUERY && s->lower(b->name) == s->lower(m.nick));
             if (!in) continue;
+            if (b->type == BT::QUERY && !on_notify(s, m.nick)) s->online[s->lower(m.nick)] = false;  // its "has quit" says it: no "is offline" after
             line(b, LK::QUIT, m.nick, m.nick + " (" + host_of(m) + ") has quit (" + m.p(0) + ")");
             notify(Ev::BUFFER, b);
         }
@@ -988,7 +989,10 @@ void Core::handle(Server* s, const Msg& m) {
                 b->nicks.erase(it);
                 b->nicks[s->lower(nn)] = e;
             }
-            if (query) b->name = nn;
+            if (query) {
+                query_watch(s, m.nick, false), b->name = nn, query_watch(s, nn, true);
+                s->online[s->lower(nn)] = true;  // it just spoke
+            }
             line(b, LK::NICK, m.nick,
                  me ? "You are now known as " + nn : m.nick + " is now known as " + nn, me);
             shown |= b == active;
@@ -1173,7 +1177,8 @@ void Core::handle(Server* s, const Msg& m) {
         s->ison_wait--;
         std::set<std::string> on;
         for (auto& n : split(m.p(1), ' ')) on.insert(s->lower(n));
-        for (auto& n : split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' '))
+        // ponytail: the nicks of the last ISON asked; two in flight (a minute apart) would mix them
+        for (auto& n : split(s->ison_asked, ' '))
             if (!n.empty()) notify_seen(s, n, on.count(s->lower(n)) > 0);
         return;
     }
@@ -1467,7 +1472,9 @@ void Core::handle(Server* s, const Msg& m) {
     // generic numerics: route to a channel buffer if the reply names one
     if (cmd.size() == 3 && isdigit((unsigned char)cmd[0])) {
         Buffer* b = nullptr;
-        if (m.params.size() > 2 && s->is_chan(m.p(1))) b = find(s, m.p(1));
+        // or a nick with its query open (401 no such nick: they're gone; 301 away), whichever tab was active
+        if (m.params.size() > 2) b = find(s, m.p(1));
+        if (cmd == "401" && b && b->type == BT::QUERY && !on_notify(s, b->name)) s->online[s->lower(b->name)] = false;  // not sent again until it's back
         bool motd = cmd == "372" || cmd == "375" || cmd == "376" || cmd == "422";
         // not in that channel (join failures 471/473/474/475/477...): where it was typed, else the server tab
         bool chan = m.params.size() > 2 && s->is_chan(m.p(1));

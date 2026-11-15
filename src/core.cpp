@@ -878,6 +878,7 @@ Buffer* Core::open(Server* s, BT t, const std::string& name) {
         if (bufs[i]->srv == s && s) pos = i + 1;
     bufs.insert(bufs.begin() + (long)pos, std::move(b));
     if (s && t != BT::STATUS) load_history(bp);
+    if (t == BT::QUERY) query_watch(s, name, true);
     if (!active) active = bp;
     dirty = true;
     notify(Ev::BUFFER, bp);
@@ -904,6 +905,7 @@ void Core::close(Buffer* b, const std::string& part_msg) {
         s->send("PART " + b->name + (s->twitch() || msg.empty() ? "" : " :" + msg));  // Twitch has no part messages
         print(s->status, LK::INFO, "You left " + b->name);
     }
+    if (s && b->type == BT::QUERY) query_watch(s, b->name, false);
     if (pass_buf == b) pass_buf = nullptr, pass_done = nullptr;
     if (s && b->name == "*raw" && b->type == BT::QUERY) s->raw_hook = nullptr;  // /rawlog stops with its tab
     bool drop_server = s && b->type == BT::STATUS;
@@ -1448,6 +1450,7 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
     if (!s || b->type == BT::STATUS || b->name == "*channels" || b->name == "*snotices" || b->name == "*raw") {  // ours; *status (ZNC) is a real query
         print(b, LK::ERROR, "Not a channel or query window"); return; }
     if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
+    if (query_offline(b)) return;
     // /e2e: "+iSE " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes
     // (a channel also has its name as AAD, so the 400 bytes count it: long names get less text)
     bool enc = e2e_on(b), chan = b->type == BT::CHANNEL;
@@ -1468,6 +1471,7 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
 // draft/multiline-concat parts (cut on UTF-8 boundaries, nothing dropped)
 void Core::say_multi(Buffer* b, const std::vector<std::string>& lines) {
     Server* s = b->srv;
+    if (query_offline(b)) return;
     std::string ref = "m" + std::to_string(now_ms());
     s->send("BATCH +" + ref + " draft/multiline " + b->name);
     for (auto& l : lines) {
@@ -1502,7 +1506,7 @@ void Core::typed(Buffer* b, const std::string& input) {
 // /notify: [server.X] notify = nicks, watched with MONITOR (or ISON once a minute where there's none)
 void Core::notify_start(Server* s) {
     s->online.clear();
-    std::vector<std::string> watch = split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' ');
+    std::vector<std::string> watch = watch_list(s);
     if (watch.empty()) return;
     if (!s->isupport.count("MONITOR")) { s->ison_at = time(nullptr); return; }
     int lim = atoi(s->isupport["MONITOR"].c_str());
@@ -1518,12 +1522,53 @@ void Core::notify_start(Server* s) {
     s->send("MONITOR + " + l);
 }
 
+std::vector<std::string> Core::watch_list(Server* s) {
+    std::vector<std::string> w;
+    for (auto& n : split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' '))
+        if (!n.empty()) w.push_back(n);
+    for (auto& b : bufs)
+        if (b->srv == s && b->type == BT::QUERY && !b->name.empty() && b->name[0] != '*' && !on_notify(s, b->name)) w.push_back(b->name);
+    return w;
+}
+
+bool Core::on_notify(Server* s, const std::string& nick) {
+    for (auto& n : split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' '))
+        if (s->lower(n) == s->lower(nick)) return true;
+    return false;
+}
+
+void Core::query_watch(Server* s, const std::string& nick, bool add) {
+    if (!s || nick.empty() || nick[0] == '*' || s->twitch() || on_notify(s, nick)) return;
+    if (!add) s->online.erase(s->lower(nick));
+    if (s->state != SS::CONNECTED || !s->motd_done) return;  // notify_start watches it once connected
+    if (s->isupport.count("MONITOR")) s->send(std::string("MONITOR ") + (add ? "+ " : "- ") + nick);
+    else if (add) s->ison_at = time(nullptr);  // the next tick asks
+}
+
+bool Core::query_offline(Buffer* b) {
+    Server* s = b->srv;
+    if (!s || b->type != BT::QUERY) return false;
+    auto it = s->online.find(s->lower(b->name));
+    if (it == s->online.end() || it->second) return false;
+    print(b, LK::ERROR, b->name + " is offline: not sent");
+    return true;
+}
+
 void Core::notify_seen(Server* s, const std::string& nick, bool on, const std::string& host) {
     std::string k = s->lower(nick);
     auto it = s->online.find(k);
     bool known = it != s->online.end();
     if (known && it->second == on) return;
     s->online[k] = on;
+    if (!on_notify(s, nick)) {  // only an open query's: told there, quietly (offline when it opens too)
+        Buffer* q = find(s, nick);
+        bool quit_shows = false;  // in a channel with us: its QUIT says it, which may come after this (SekurIRCd)
+        for (auto& b : bufs)
+            if (!on && known && b->srv == s && b->nicks.count(k)) quit_shows = true;
+        if (q && q->type == BT::QUERY && (known || !on) && !quit_shows) print(q, LK::INFO, on ? nick + " is online" : nick + " is offline");
+        if (q) notify(Ev::BUFFER, q);
+        return;
+    }
     if (!known && !on) return;  // offline when we started watching: nothing happened
     std::string t = on ? "\x02" + nick + "\x02 is online" + (host.empty() ? "" : " (" + host + ")") : nick + " went offline";
     add(s->status, Line{time(nullptr), LK::INFO, "", t, false, on});  // online: a hilight, copied to window 1
