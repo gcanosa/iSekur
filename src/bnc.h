@@ -33,6 +33,7 @@ private:
         std::string in, ip, nick, user, pass, net;
         std::set<std::string> caps;  // what it asked for, of OFFER (bnc.cpp)
         std::map<std::string, std::string> chans;  // lowered name -> name: the channels it was told it's in: PARTed when the network drops
+        std::map<std::string, std::string> mon;    // its MONITOR list on its network: lowered -> nick
         bool reg = false, capneg = false;
         bool sasl_wait = false, sasl_ok = false;  // SASL EXTERNAL: sent "+" and waits for our answer; the certificate matched
         time_t since = 0, rx = 0, pinged = 0;
@@ -75,4 +76,8 @@ private:
     bool motd(Client& cl, const std::string& extra);  // bnc.motd in the config's folder, if there     // a line from *isekur
     void gone(Client& cl, const std::string& why);
     void sync(Client& cl, Server* s);  // tell it the network connected or dropped, once
+    // MONITOR: one list per client, merged with iSekur's own (/notify, open queries) for the network's one list
+    void monitor(Client& cl, Server* s, const Msg& m, const std::string& labt);
+    void mon_merge(Server* s);  // the clients' lists into s->bnc_watch
+    void mon_drop(Client& cl, const std::vector<std::string>& nicks);  // off its list; off the network's if nothing else watches them
 };

@@ -1524,10 +1524,12 @@ void Core::notify_start(Server* s) {
 
 std::vector<std::string> Core::watch_list(Server* s) {
     std::vector<std::string> w;
-    for (auto& n : split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' '))
-        if (!n.empty()) w.push_back(n);
+    std::set<std::string> seen;
+    auto add = [&](const std::string& n) { if (!n.empty() && seen.insert(s->lower(n)).second) w.push_back(n); };
+    for (auto& n : split(ini_get(cfg, "server." + s->cfg.name, "notify"), ' ')) add(n);
     for (auto& b : bufs)
-        if (b->srv == s && b->type == BT::QUERY && !b->name.empty() && b->name[0] != '*' && !on_notify(s, b->name)) w.push_back(b->name);
+        if (b->srv == s && b->type == BT::QUERY && !b->name.empty() && b->name[0] != '*') add(b->name);
+    for (auto& [k, n] : s->bnc_watch) add(n);
     return w;
 }
 
@@ -1539,8 +1541,11 @@ bool Core::on_notify(Server* s, const std::string& nick) {
 
 void Core::query_watch(Server* s, const std::string& nick, bool add) {
     if (!s || nick.empty() || nick[0] == '*' || s->twitch() || on_notify(s, nick)) return;
+    if (!add && s->bnc_watch.count(s->lower(nick))) return;  // a BNC client still watches it
     if (!add) s->online.erase(s->lower(nick));
-    if (s->state != SS::CONNECTED || !s->motd_done) return;  // notify_start watches it once connected
+    if (s->state != SS::CONNECTED || !s->motd_done) return;
+    if (auto it = s->online.find(s->lower(nick)); add && it != s->online.end() && !it->second)  // known already (a BNC client watches it): no news will come
+        if (Buffer* q = find(s, nick)) print(q, LK::INFO, nick + " is offline");  // notify_start watches it once connected
     if (s->isupport.count("MONITOR")) s->send(std::string("MONITOR ") + (add ? "+ " : "- ") + nick);
     else if (add) s->ison_at = time(nullptr);  // the next tick asks
 }
@@ -1606,8 +1611,14 @@ void Core::notify_cmd(Buffer* b, const std::string& args) {
     for (auto& n : list) v += (v.empty() ? "" : " ") + n;
     for (auto& n : changed) c += (c.empty() ? "" : ",") + n;
     cfg[sec]["notify"] = unsaved[sec]["notify"] = v;
+    std::string drop;  // off MONITOR: the removed ones nothing else watches (an open query, a BNC client)
+    if (!add) {
+        auto w = watch_list(s);
+        for (auto& n : changed)
+            if (std::none_of(w.begin(), w.end(), [&](const std::string& x) { return s->lower(x) == s->lower(n); })) drop += (drop.empty() ? "" : ",") + n;
+    }
     if (s->state == SS::CONNECTED && s->motd_done) {
-        if (s->isupport.count("MONITOR")) s->send(std::string("MONITOR ") + (add ? "+ " : "- ") + c);
+        if (s->isupport.count("MONITOR") && (add || !drop.empty())) s->send(std::string("MONITOR ") + (add ? "+ " + c : "- " + drop));
         else if (add) s->ison_at = time(nullptr);
     }
     if (save_section(*this, sec, b))

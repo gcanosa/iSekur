@@ -2171,6 +2171,26 @@ int main() {
         bnc.from_server(ts, ":me!m@h JOIN #c");
         got = io(fd, "", "JOIN");
         assert(got.find("*** Connected to t") != std::string::npos && got.find(":me!m@h JOIN #c") != std::string::npos);
+        {  // MONITOR (WeeChat's /notify): the client's own list here, merged with iSekur's for the network's one list
+            int flood = ts->flood_ms;
+            ts->isupport["MONITOR"] = "100", ts->motd_done = true, ts->flood_ms = 0, ts->conn.out.clear();
+            core.cfg["server.t"]["notify"] = "alice";  // iSekur's own /notify
+            io(fd, "MONITOR + alice,bob\r\n", "~");
+            assert(ts->conn.out == "MONITOR + alice,bob\r\n" && ts->bnc_watch.count("bob"));
+            bnc.from_server(ts, ":srv 730 me :alice!a@h,bob!b@h,zed!z@h");  // zed is someone else's
+            got = io(fd, "", "730");
+            assert(got.find(":srv 730 me :alice!a@h,bob!b@h\r\n") != std::string::npos);
+            bnc.from_server(ts, ":srv 731 me :zed");  // nobody's here: not sent on
+            got = io(fd, "MONITOR L\r\n", " 733 ");
+            assert(got.find(" 731 ") == std::string::npos && got.find(":isekur 732 me :alice,bob\r\n") != std::string::npos);
+            ts->conn.out.clear(), ts->online["bob"] = true;
+            got = io(fd, "MONITOR S\r\n", " 730 ");  // bob from what iSekur knows, alice asked again
+            assert(got.find(":isekur 730 me :bob\r\n") != std::string::npos && ts->conn.out == "MONITOR + alice\r\n");
+            ts->conn.out.clear();
+            io(fd, "MONITOR C\r\n", "~");  // only bob leaves the network's list: alice is iSekur's
+            assert(ts->conn.out == "MONITOR - bob\r\n" && ts->bnc_watch.empty() && !ts->online.count("bob"));
+            core.cfg["server.t"].erase("notify"), ts->isupport.erase("MONITOR"), ts->motd_done = false, ts->online.clear(), ts->flood_ms = flood;
+        }
         // what it says goes through iSekur: upstream, and into the tab
         ts->conn.out.clear();
         io(fd, "PRIVMSG #c :hi there\r\nMODE #c\r\n", "\n");

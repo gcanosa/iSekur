@@ -278,6 +278,11 @@ void Bnc::process(const std::vector<pollfd>& v) {
         if (now - cl.rx >= 90 && now - cl.pinged >= 90) send(cl, std::string("PING :") + SRV), cl.pinged = now;
         if (s) sync(cl, s);  // else on no network yet
     }
+    for (Client* d : dead) {  // its MONITOR list goes with it (before the erase: mon_merge walks the clients)
+        std::vector<std::string> mine;
+        for (auto& [k, n] : d->mon) mine.push_back(n);
+        if (!mine.empty()) mon_drop(*d, mine);
+    }
     clients.erase(std::remove_if(clients.begin(), clients.end(),
                                  [&](auto& cl) {
                                      if (std::find(dead.begin(), dead.end(), cl.get()) == dead.end()) return false;
@@ -370,6 +375,7 @@ void Bnc::line(Client& cl, const std::string& raw) {
         return;
     }
     if (cmd == "CHATHISTORY") { history(cl, s, m, labt); return; }  // ours, never upstream
+    if (cmd == "MONITOR" && s->isupport.count("MONITOR")) { monitor(cl, s, m, labt); return; }  // its own list, kept here
     if (s->state != SS::CONNECTED) {
         send(cl, std::string(":") + SRV + " NOTICE " + cl.nick + " :*** " + cl.net + " is not connected: not sent");
         return;
@@ -559,6 +565,11 @@ bool Bnc::motd(Client& cl, const std::string& extra) {
 
 // onto network s (from none, or from another: its channels PARTed); none: *isekur says why and what to do
 void Bnc::attach(Client& cl, Server* s, const std::string& why) {
+    if (!cl.mon.empty() && (!s || s->cfg.name != cl.net)) {  // its list was the old network's
+        std::vector<std::string> mine;
+        for (auto& [k, n] : cl.mon) mine.push_back(n);
+        mon_drop(cl, mine);
+    }
     for (auto& [k, ch] : cl.chans) send(cl, ":" + cl.nick + " PART " + ch + " :Leaving " + cl.net);
     cl.chans.clear();
     auto num = [&](const char* code, const std::string& rest) { send(cl, std::string(":") + SRV + " " + code + " " + cl.nick + " " + rest); };
@@ -686,6 +697,23 @@ void Bnc::from_server(Server* s, const std::string& line) {
     // (a client iSekur uses 777 too: its WHOX of a channel ours isn't asking about goes through)
     if ((cmd == "354" && m.p(1) == "777" && s->who_auto.count(s->lower(m.p(2)))) || (cmd == "315" && s->who_auto.count(s->lower(m.p(1))))) return;
     if (cmd == "303" && s->ison_wait > 0) return;
+    if (cmd == "730" || cmd == "731" || cmd == "734") {  // MONITOR: each client hears of the nicks on its own list only
+        auto who = split(cmd == "734" ? m.p(2) : m.last(), ',');
+        for (auto& cl : clients) {
+            if (!cl->reg || cl->net != s->cfg.name) continue;
+            std::string l;
+            for (auto& w : who)
+                if (!w.empty() && cl->mon.count(s->lower(w.substr(0, w.find('!'))))) {
+                    l += (l.empty() ? "" : ",") + w;
+                    if (cmd == "734") cl->mon.erase(s->lower(w));  // the list was full: not on it
+                }
+            if (l.empty()) continue;
+            send(*cl, ":" + m.prefix + " " + cmd + " " + cl->nick + (cmd == "734" ? " " + m.p(1) + " " + l + " :" + m.last() : " :" + l));
+        }
+        if (cmd == "734") mon_merge(s);
+        return;
+    }
+    if (cmd == "732" || cmd == "733") return;  // a list iSekur never asks for; a client's is answered here
     std::string out = line[0] == '@' ? line.substr(line.find_first_not_of(' ', line.find(' '))) : line;  // tags: send() puts back the asked for
     // JOIN with or without extended-join's account and realname ("*" and "" when the network didn't say)
     std::string join_ext = cmd == "JOIN" ? ":" + m.prefix + " JOIN " + m.p(0) + " " + (m.params.size() >= 3 ? m.p(1) : "*") + " :" + m.p(2) : "";
@@ -719,6 +747,80 @@ void Bnc::from_server(Server* s, const std::string& line) {
         bool mine = to && cl.get() == to->cl;
         send(*cl, l, ts, mine && ref.empty() ? tags + (tags.empty() ? "" : ";") + "label=" + escape_tag(to->label) : tags, mine ? ref : "");
     }
+}
+
+void Bnc::mon_merge(Server* s) {
+    s->bnc_watch.clear();
+    for (auto& cl : clients)
+        if (cl->net == s->cfg.name) s->bnc_watch.insert(cl->mon.begin(), cl->mon.end());
+}
+
+void Bnc::mon_drop(Client& cl, const std::vector<std::string>& nicks) {
+    Server* s = cl.net.empty() ? nullptr : server(cl.net);
+    if (!s) { cl.mon.clear(); return; }
+    for (auto& n : nicks) cl.mon.erase(s->lower(n));
+    mon_merge(s);
+    auto w = c.watch_list(s);
+    std::set<std::string> still;
+    for (auto& n : w) still.insert(s->lower(n));
+    std::string off;
+    for (auto& n : nicks)
+        if (!still.count(s->lower(n))) off += (off.empty() ? "" : ",") + n, s->online.erase(s->lower(n));
+    if (!off.empty() && s->state == SS::CONNECTED && s->motd_done) s->send("MONITOR - " + off);
+}
+
+// MONITOR + - C L S (IRCv3): the network keeps one list for the connection, shared by iSekur and every client,
+// so each client's is kept here; the network gets the changes the merged list makes, a client the replies for its nicks
+void Bnc::monitor(Client& cl, Server* s, const Msg& m, const std::string& labt) {
+    std::string sub = m.p(0);
+    for (auto& ch : sub) ch = (char)toupper((unsigned char)ch);
+    std::vector<std::string> nicks;
+    for (auto& n : split(m.p(1), ','))
+        if (!n.empty()) nicks.push_back(n);
+    auto num = [&](const std::string& code, const std::string& rest) { send(cl, std::string(":") + SRV + " " + code + " " + cl.nick + " " + rest, 0, labt); };
+    bool live = s->state == SS::CONNECTED && s->motd_done;
+    if (sub == "+") {
+        int lim = atoi(s->isupport["MONITOR"].c_str());
+        std::string add, full;
+        for (auto& n : nicks) {
+            if (lim > 0 && !cl.mon.count(s->lower(n)) && (int)cl.mon.size() >= lim) { full += (full.empty() ? "" : ",") + n; continue; }
+            cl.mon[s->lower(n)] = n, add += (add.empty() ? "" : ",") + n;
+        }
+        mon_merge(s);
+        if (!full.empty()) num("734", std::to_string(lim) + " " + full + " :Monitor list is full");
+        if (!add.empty() && live) s->send("MONITOR + " + add);  // already watched too: the network answers with where they are
+        else if (!labt.empty()) send(cl, std::string(":") + SRV + " ACK", 0, labt);
+        return;
+    }
+    if (sub == "-" || sub == "C") {
+        if (sub == "C") { nicks.clear(); for (auto& [k, n] : cl.mon) nicks.push_back(n); }
+        mon_drop(cl, nicks);
+        if (!labt.empty()) send(cl, std::string(":") + SRV + " ACK", 0, labt);
+        return;
+    }
+    if (sub == "L") {
+        std::string l;
+        for (auto& [k, n] : cl.mon) {
+            if (!l.empty() && l.size() + n.size() > 400) num("732", ":" + l), l.clear();
+            l += (l.empty() ? "" : ",") + n;
+        }
+        if (!l.empty()) num("732", ":" + l);
+        num("733", ":End of MONITOR list");
+        return;
+    }
+    if (sub == "S") {  // from what iSekur knows; the ones it doesn't, the network says
+        std::string on, off, ask;
+        for (auto& [k, n] : cl.mon) {
+            auto it = s->online.find(k);
+            std::string& to = it == s->online.end() ? ask : it->second ? on : off;
+            to += (to.empty() ? "" : ",") + n;
+        }
+        if (!on.empty()) num("730", ":" + on);
+        if (!off.empty()) num("731", ":" + off);
+        if (!ask.empty() && live) s->send("MONITOR + " + ask);
+        return;
+    }
+    num("421", "MONITOR :Unknown MONITOR subcommand " + sub);  // ponytail: not quite the spec's error, there is none
 }
 
 // the client that sent this line we see echoed, if one did (say() may have cut it in parts: those match in turn)

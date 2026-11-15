@@ -331,6 +331,7 @@ struct Server {
     std::set<std::string> join_focus;      // lower(chan) of our /join: its JOIN takes focus; autojoin's don't
     std::set<std::string> who_auto;        // channels whose WHO we asked for on join: the replies aren't shown
     std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
+    std::map<std::string, std::string> bnc_watch;  // the BNC clients' MONITOR lists, merged (bnc.cpp): lowered -> nick
     time_t ison_at = 0;
     std::string ison_asked;                // the nicks the last ISON asked about
     time_t join_hold = 0;                  // join_wait: autojoin waits for 396 until then (0: not waiting)
