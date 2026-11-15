@@ -668,6 +668,12 @@ int main() {
     assert(sent() == "KICK #other r1 :bye\r\n");
     core.exec(chb, "/mode +m");
     assert(sent() == "MODE #c +m\r\n");
+    core.exec(ts->status, "/mode -x");  // outside a channel: your own modes, not the server tab's name
+    assert(sent() == "MODE me -x\r\n");
+    core.exec(chb, "/umode +i");  // from any tab
+    core.exec(chb, "/umode");
+    core.exec(ts->status, "/mode #c +t");  // a target given: as typed
+    assert(sent() == "MODE me +i\r\nMODE me\r\nMODE #c +t\r\n");
     core.exec(chb, "/invite alice");
     assert(sent() == "INVITE alice #c\r\n");
     core.exec(home, "/op a");  // not a channel tab

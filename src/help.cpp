@@ -501,7 +501,11 @@ static const std::vector<CmdInfo> CMDS = {
      {"/back"}},
     {"mode", "Server", "[target] modes [args]", "Change channel or user modes",
      "In a channel's tab the channel is the target when you start with + or -, and /mode "
-     "alone shows its modes.", {"/mode +m", "/mode #chan +o alice", "/mode #chan +b *!*@bad.host"}},
+     "alone shows its modes. Elsewhere (the server tab, a query) it's you: /mode +x sets your own modes, like /umode.",
+     {"/mode +m", "/mode #chan +o alice", "/mode #chan +b *!*@bad.host", "/mode -x"}},
+    {"umode", "Server", "[modes]", "Change your own user modes",
+     "Sends MODE yournick modes from any tab; alone it shows your user modes. umodes = +ix in a "
+     "[server.x] sets them on every connect.", {"/umode +x", "/umode -w+i", "/umode"}},
     {"kick", "Server", "[#channel] nick [reason]", "Kick a user",
      "In a channel's tab the channel can be left out. /kickban kicks and bans in one go.",
      {"/kick troll bye", "/kick #chan troll bye"}},

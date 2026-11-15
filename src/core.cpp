@@ -2539,6 +2539,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         else if (cmd == "mode" && (args.empty() || args[0] == '+' || args[0] == '-')) args = b->name + (args.empty() ? "" : " " + args), argv = split(args, ' ');
         else if (cmd == "invite" && argv.size() == 1) args += " " + b->name, argv = split(args, ' ');
     }
+    // your own modes: /umode +x anywhere, /mode +x outside a channel's tab (the server tab's name isn't a target)
+    if (s && (cmd == "umode" || (cmd == "mode" && b->type != BT::CHANNEL && (args.empty() || args[0] == '+' || args[0] == '-'))))
+        cmd = "mode", args = s->nick + (args.empty() ? "" : " " + args), argv = split(args, ' ');
     if (cmd == "raw" || cmd == "quote") { s->send(args); return; }
     if (cmd == "ctcp") {  // /ctcp nick VERSION|TIME|PING|...
         if (argv.size() < 2) { print(b, LK::ERROR, "Usage: /ctcp target VERSION|TIME|PING [args]"); return; }
