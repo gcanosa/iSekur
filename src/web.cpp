@@ -91,6 +91,47 @@ bool check_password(const std::string& pw, const std::string& stored) {
     return CRYPTO_memcmp(out, want.data(), want.size()) == 0;
 }
 
+// ---- Face ID (WebAuthn) ----------------------------------------------------
+std::string b64url(const std::string& s) {
+    std::string o = b64(s);
+    for (auto& ch : o) ch = ch == '+' ? '-' : ch == '/' ? '_' : ch;
+    while (!o.empty() && o.back() == '=') o.pop_back();
+    return o;
+}
+
+// ponytail: ES256 only (what iOS, Android and macOS make); RS256 (Windows Hello) when someone needs it
+std::string webauthn_check(const std::string& type, const std::string& cdj, const std::string& ad, const std::string& chal,
+                           const std::string& origin, const std::string& spki, const std::string& sig, uint32_t* count) {
+    auto c = json_flat(cdj);
+    if (c["type"] != type) return "not a " + type;
+    if (chal.empty() || c["challenge"] != b64url(chal)) return "an old or unknown challenge";
+    if (origin.empty() || c["origin"] != origin) return "from another page (" + c["origin"] + ")";
+    // the passkey belongs to the page's host name (its "relying party")
+    std::string host = origin.substr(origin.find("://") + 3);
+    host = host.substr(0, host.find(':'));
+    unsigned char rp[32];
+    SHA256((const unsigned char*)host.data(), host.size(), rp);
+    if (ad.size() < 37 || memcmp(ad.data(), rp, 32) != 0) return "for another host name";
+    unsigned char flags = (unsigned char)ad[32];
+    if (!(flags & 0x01) || !(flags & 0x04)) return "without Face ID (no user verification)";
+    if (count) *count = (uint32_t)(unsigned char)ad[33] << 24 | (uint32_t)(unsigned char)ad[34] << 16 | (uint32_t)(unsigned char)ad[35] << 8 | (unsigned char)ad[36];
+    const unsigned char* p = (const unsigned char*)spki.data();
+    EVP_PKEY* k = spki.empty() ? nullptr : d2i_PUBKEY(nullptr, &p, (long)spki.size());
+    if (!k || EVP_PKEY_base_id(k) != EVP_PKEY_EC) { EVP_PKEY_free(k), ERR_clear_error(); return "not an ES256 key"; }
+    bool ok = type != "webauthn.get";  // setting up: the key is only read; unlocking: the signature
+    if (!ok) {
+        unsigned char h[32];
+        SHA256((const unsigned char*)cdj.data(), cdj.size(), h);
+        std::string msg = ad + std::string((char*)h, 32);
+        EVP_MD_CTX* md = EVP_MD_CTX_new();
+        ok = md && EVP_DigestVerifyInit(md, nullptr, EVP_sha256(), nullptr, k) == 1 &&
+             EVP_DigestVerify(md, (const unsigned char*)sig.data(), sig.size(), (const unsigned char*)msg.data(), msg.size()) == 1;
+        EVP_MD_CTX_free(md);
+    }
+    EVP_PKEY_free(k), ERR_clear_error();  // a failed check leaves errors queued: not for the next SSL_get_error
+    return ok ? "" : "a bad signature";
+}
+
 // ---- JSON (just enough) ----------------------------------------------------
 std::string json_str(const std::string& s) {
     std::string o = "\"";
@@ -503,7 +544,7 @@ void Web::http(Client& cl) {
                        "Sec-WebSocket-Accept: " + b64(std::string((char*)sha, 20)) + "\r\n\r\n";
         // a browser coming back (not a reload or a dropped connection) is an attach: lock, like the terminal
         if (!attached() && now - ws_seen > 30 && c.lock_on() && !c.locked) c.set_lock(true, false);
-        cl.ws = true, cl.ip = ip;
+        cl.ws = true, cl.ip = ip, cl.origin = origin, cl.ua = ua;
         if (!ws_ips.count(ip)) c.print(c.bufs.front().get(), LK::INFO, "\u25b6 Webchat attached: " + from);
         ws_ips[ip] = {ws_ips.count(ip) ? ws_ips[ip].first : now, now};
         snapshot(cl);
@@ -672,12 +713,14 @@ void Web::ws_frames(Client& cl) {
             ss_w = std::clamp(atoi(m["w"].c_str()), 0, 500), ss_h = std::clamp(atoi(m["h"].c_str()), 0, 250), ss_last.clear();
             continue;
         }
-        if (c.locked) {  // only the password: nothing else of the session goes in or out
+        if (c.locked) {  // only the password (or Face ID): nothing else of the session goes in or out
             if (m["t"] == "unlock") c.unlock(m["pass"]);
+            else if (m["t"] == "bio_chal" || m["t"] == "bio_unlock") bio(cl, m, nullptr);
             continue;
         }
         Buffer* b = by_id(c, atoi(m["buf"].c_str()));
         if (!b) continue;
+        if (m["t"].rfind("bio_", 0) == 0) { bio(cl, m, b); continue; }
         if (m["t"] == "input") c.from_web = true, c.exec(b, m["text"]), c.from_web = false;
         else if (m["t"] == "lock") c.lock_now(b);  // Alt+S in the webchat
         else if (m["t"] == "bans") {  // the ban list window: the list (mode b, e, I or q), or an add or a lift in it
@@ -937,9 +980,113 @@ void Web::snapshot(Client& cl) {
 std::string Web::update_json() { return "{\"t\":\"update\",\"ver\":" + json_str(c.update_ver) + "}"; }
 
 std::string Web::lock_json() {
-    return std::string("{\"t\":\"lock\",\"on\":") + (c.locked ? "true" : "false") + ",\"msg\":" +
+    return std::string("{\"t\":\"lock\",\"on\":") + (c.locked ? "true" : "false") + ",\"bio\":" + (c.locked && c.bio_on() ? "true" : "false") + ",\"msg\":" +
            json_str(c.lock_msg.empty() ? "" : c.lock_msg.substr(c.lock_msg[0] == '!')) +
            ",\"peek\":" + std::to_string(std::max(0, atoi(c.opt(nullptr, "lock_prompt_timeout", "30").c_str()))) + "}";
+}
+
+// ---- Face ID: the devices (settings, Security) and the lock box's answer -----
+// the browser makes the passkey and answers the challenges; only its public key comes here (Core::passkeys)
+std::string Web::bio_list_json() {
+    std::string o = std::string("{\"t\":\"bio_list\",\"on\":") + (c.opt_on(nullptr, "lock_biometric", false) ? "true" : "false") +
+                    ",\"lock\":" + (c.lock_on() ? "true" : "false") + ",\"list\":[";
+    for (auto& k : c.passkeys())
+        o += std::string(o.back() == '[' ? "" : ",") + "{\"id\":" + json_str(k.id) + ",\"name\":" + json_str(k.name) +
+             ",\"on\":" + (k.on ? "true" : "false") + ",\"added\":" + std::to_string((long long)k.added) + "}";
+    return o + "]}";
+}
+
+void Web::bio(Client& cl, std::map<std::string, std::string>& m, Buffer* b) {
+    auto send = [&](const std::string& j) { cl.conn.out += ws_frame(j); };
+    auto err = [&](const std::string& e) { send("{\"t\":\"bio_err\",\"msg\":" + json_str(e) + "}"); };
+    auto& ks = c.passkeys();
+    auto find = [&](const std::string& id) {
+        auto it = std::find_if(ks.begin(), ks.end(), [&](const Core::Passkey& k) { return k.id == id; });
+        return it == ks.end() ? nullptr : &*it;
+    };
+    auto challenge = [&](bool is_new) {
+        unsigned char r[32];
+        RAND_bytes(r, sizeof r);
+        cl.bio_chal.assign((char*)r, sizeof r), cl.bio_until = time(nullptr) + 300, cl.bio_new = is_new;
+        return b64(cl.bio_chal);
+    };
+    auto take = [&](bool is_new) {  // the challenge, once: a second answer to it is refused
+        std::string ch = cl.bio_chal;
+        bool ok = !ch.empty() && cl.bio_new == is_new && time(nullptr) <= cl.bio_until;
+        cl.bio_chal.clear();
+        return ok ? ch : "";
+    };
+    const std::string& t = m["t"];
+    if (t == "bio_chal") {  // the lock box: a challenge, and which devices may answer it
+        if (!c.bio_on()) return send("{\"t\":\"bio_chal\",\"ids\":[]}");
+        std::string ids = "[";
+        for (auto& k : ks) if (k.on) ids += (ids.size() > 1 ? "," : "") + json_str(k.id);
+        send("{\"t\":\"bio_chal\",\"chal\":\"" + challenge(false) + "\",\"ids\":" + ids + "]}");
+    } else if (t == "bio_unlock") {
+        Core::Passkey* k = find(m["id"]);
+        std::string ch = take(false), why;
+        if (ch.empty()) return c.unlock_by("Took too long: try again");  // not a wrong try: the page asks for a new challenge
+        uint32_t count = 0;
+        std::string e = c.lock_count([&] {
+            if (!c.bio_on() || !k || !k->on) return why = "not a device that's on", false;
+            why = webauthn_check("webauthn.get", unb64(m["cdj"]), unb64(m["ad"]), ch, cl.origin, unb64(k->key), unb64(m["sig"]), &count);
+            // a counter that went back means a copied key; 0 and 0: one that doesn't count (iOS passkeys)
+            if (why.empty() && (count || k->count) && count <= k->count) why = "an old signature count";
+            return why.empty();
+        }, "That didn't unlock it", "type the password");
+        if (!why.empty()) c.print(c.bufs.front().get(), LK::ERROR, "✕ Face ID unlock refused: " + why + " (" + cl.ip + ")");
+        if (e.empty()) {
+            k->count = count, c.passkeys_save(c.bufs.front().get());
+            c.print(c.bufs.front().get(), LK::INFO, "Unlocked with Face ID: " + k->name + " (" + cl.ip + ")");
+        }
+        c.unlock_by(e);
+    } else if (t == "bio_list") {
+        send(bio_list_json());
+    } else if (t == "bio_new") {  // set up this device: the lock password, then a challenge to make the passkey with
+        if (!c.lock_on()) return err("No lock password yet: /lock sets one");
+        if (auto e = c.lock_try(m["pass"], "nothing was set up"); !e.empty()) return err(e);
+        std::string ex = "[";
+        for (auto& k : ks) ex += (ex.size() > 1 ? "," : "") + json_str(k.id);
+        unsigned char uid[32];
+        SHA256((const unsigned char*)c.cfg_path.data(), c.cfg_path.size(), uid);  // the same user for every device of this iSekur
+        send("{\"t\":\"bio_new\",\"chal\":\"" + challenge(true) + "\",\"user\":\"" + b64(std::string((char*)uid, 16)) +
+             "\",\"name\":" + json_str(cl.ua.find(" on ") != std::string::npos ? cl.ua.substr(cl.ua.find(" on ") + 4) : cl.ua.empty() ? "device" : cl.ua) + ",\"ids\":" + ex + "]}");
+    } else if (t == "bio_add") {
+        std::string id = m["id"], key = m["key"], ch = take(true);
+        if (id.empty() || unb64(id).empty() || find(id)) return err("That device is already set up");
+        if (m["alg"] != "-7") return err("This device's key isn't ES256: iSekur can't check it");
+        if (auto e = webauthn_check("webauthn.create", unb64(m["cdj"]), unb64(m["ad"]), ch, cl.origin, unb64(key), "", nullptr); !e.empty())
+            return err("Not set up: " + e);
+        std::string name = trim(m["name"]).substr(0, 60);
+        bool first = ks.empty();
+        ks.push_back({id, key, name.empty() ? "device" : name, true, 0, time(nullptr)});
+        if (!c.passkeys_save(b)) { ks.pop_back(); return err("Couldn't save it: see the server tab"); }
+        if (first && !c.opt_on(nullptr, "lock_biometric", false)) {  // the first device: Face ID on, saved like /lock's keys
+            Ini part;
+            c.cfg["general"]["lock_biometric"] = part["general"]["lock_biometric"] = "on", c.unsaved["general"].erase("lock_biometric");
+            std::string se;
+            if (!ini_save(c.cfg_path, part, se)) c.print(b, LK::ERROR, se);
+        }
+        c.print(b, LK::INFO, "Face ID set up: " + ks.back().name + " can unlock the webchat (" + cl.ip + ")");
+        send("{\"t\":\"bio_ok\",\"id\":" + json_str(id) + "}");
+        send(bio_list_json());
+    } else if (t == "bio_set" || t == "bio_name") {  // a device on or off, renamed: no password, it only unlocks
+        Core::Passkey* k = find(m["id"]);
+        if (!k) return err("No such device");
+        std::string name = trim(m["name"]).substr(0, 60);
+        if (t == "bio_set") k->on = m["on"] == "true" || m["on"] == "1";
+        else if (!name.empty()) k->name = name;
+        c.passkeys_save(b);
+        send(bio_list_json());
+    } else if (t == "bio_del") {
+        Core::Passkey* k = find(m["id"]);
+        if (!k) return err("No such device");
+        if (auto e = c.lock_try(m["pass"], "the device stays"); !e.empty()) return err(e);
+        std::string was = k->name;
+        ks.erase(ks.begin() + (k - ks.data()));
+        if (c.passkeys_save(b)) c.print(b, LK::INFO, "Face ID device removed: " + was);
+        send(bio_list_json());
+    }
 }
 
 std::string Web::split_json() {

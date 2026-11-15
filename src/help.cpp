@@ -418,7 +418,7 @@ static const std::vector<CmdInfo> CMDS = {
      "ssh host isekur --list shows which run there. "
      "While ssh connects (10s at most) the input line is iSekur's: Enter sends it to ssh, Ctrl+C gives up. Terminal only: never from the webchat.",
      {"/attach vps", "/attach me@irc.example.org", "/attach -p 2222 me@irc.example.org", "/attach vps ~/.config/isekur/work.conf"}},
-    {"lock", "Session", "[on|off]", "Lock the session (terminal and webchat) with a password",
+    {"lock", "Session", "[on|off|devices [del name]]", "Lock the session (terminal and webchat) with a password",
      "/lock or Alt+S (Option+S on a Mac) locks now: the terminal and every webchat show only a password box, and the webchat "
      "gets nothing of the session until it's typed (in either one); with the screensaver plugin on, a screensaver "
      "goes on behind it. The first time it asks for "
@@ -430,8 +430,14 @@ static const std::vector<CmdInfo> CMDS = {
      "(30; 0: only Esc), the password ends both. Forgot it? Stop iSekur, set lock = off in the config and start "
      "it again. Three wrong tries wait a minute. While it's set, /exit asks for it as well, and so does "
      "changing what would let a hijacked session reach further: exec_web, dcc_web, dcc_dir, the [web] and [bnc] "
-     "settings, and /bnc password. The config and logs are not encrypted by it.",
-     {"/lock", "/lock on", "/lock off", "/set lock_idle 15"}},
+     "settings, and /bnc password, lock_biometric too. The config and logs are not encrypted by it. "
+     "In the webchat, Face ID (Touch ID on a Mac, a fingerprint on Android) can unlock instead: the settings window's "
+     "Security, lock_biometric's devices, \"Set up on this device\" asks for the password and makes a passkey on it. "
+     "Its lock box then asks for Face ID by itself, and the password still works. Each device can be turned off "
+     "(the password only there) or removed; lock_biometric = off turns them all off. It needs https and a host name "
+     "(https://irc.example.org, not an IP). Face ID only unlocks: /lock off and a new password still take the password. "
+     "/lock devices lists them, /lock devices del name removes one (a lost phone).",
+     {"/lock", "/lock on", "/lock off", "/set lock_idle 15", "/lock devices", "/lock devices del iPhone"}},
     {"plugin", "Session", "[list] | available | install|update|remove name | enable|disable name[@network[/#channel]] | set name[@network[/#channel]] key value | reload name",
      "Lua plugins: install, turn on and off, configure",
      "Plugins are Lua 5.4 files in the plugins folder next to the config (<name>.lua), sandboxed: no files, no programs, "

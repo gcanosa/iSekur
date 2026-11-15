@@ -16,10 +16,12 @@
 #include <libutil.h>
 #endif
 #include "vterm.h"
+#include <sys/stat.h>
 #include <sys/wait.h>
 #include <unistd.h>
 #include "core.h"
 #include "web.h"  // hash_password, check_password
+#include "session.h"  // cfg_side
 
 static const size_t MAX_JOB_LINES = 1000;  // then it's killed: `yes` must not fill memory
 
@@ -514,18 +516,67 @@ bool Core::lock_on() const {
     return opt_on(nullptr, "lock", false) && !opt(nullptr, "lock_password_hash", "").empty();
 }
 
-std::string Core::lock_try(const std::string& pass, const std::string& then) {
+std::string Core::lock_count(const std::function<bool()>& ok, const std::string& wrong, const std::string& then) {
     time_t now = time(nullptr);
     if (now < lock_wait) return "Too many tries: wait " + std::to_string(lock_wait - now) + "s";
-    if (check_password(pass, opt(nullptr, "lock_password_hash", ""))) { lock_fails = 0; return ""; }
-    if (++lock_fails < 3) return "Wrong password" + (then.empty() ? "" : ": " + then);
+    if (ok()) { lock_fails = 0; return ""; }
+    if (++lock_fails < 3) return wrong + (then.empty() ? "" : ": " + then);
     lock_fails = 0, lock_wait = now + 60;
-    return "Wrong password. Too many tries: wait 60s";
+    return wrong + ". Too many tries: wait 60s";
 }
 
-void Core::unlock(const std::string& pass) {
+std::string Core::lock_try(const std::string& pass, const std::string& then) {
+    return lock_count([&] { return check_password(pass, opt(nullptr, "lock_password_hash", "")); }, "Wrong password", then);
+}
+
+void Core::unlock(const std::string& pass) { unlock_by(lock_try(pass, "")); }
+
+// ---- the webchat's Face ID: the devices (web.passkeys) -------------------------
+// a line each: id, key, on (1/0), count, added, name; tab-separated. Public keys only: nothing in it unlocks anything
+static std::string passkeys_path(const std::string& cfg_path) {
+    std::string base = cfg_path.substr(cfg_path.rfind('/') + 1);  // isekur.conf: web.passkeys, like web.sessions
+    return base == "isekur.conf" ? cfg_path.substr(0, cfg_path.rfind('/') + 1) + "web.passkeys" : cfg_side(cfg_path, "web.passkeys");
+}
+
+std::vector<Core::Passkey>& Core::passkeys() {
+    if (std::exchange(passkeys_read, true)) return passkeys_;
+    FILE* f = fopen(passkeys_path(cfg_path).c_str(), "r");
+    if (!f) return passkeys_;
+    char ln[4096];
+    while (fgets(ln, sizeof ln, f)) {
+        auto p = split(std::string(ln).substr(0, strcspn(ln, "\r\n")), '\t');
+        if (p.size() < 6 || p[0].empty() || unb64(p[1]).empty()) continue;
+        passkeys_.push_back({p[0], p[1], p[5], p[2] == "1", (uint32_t)strtoul(p[3].c_str(), nullptr, 10), (time_t)atoll(p[4].c_str())});
+    }
+    fclose(f);
+    return passkeys_;
+}
+
+bool Core::passkeys_save(Buffer* b) {
+    std::string path = passkeys_path(cfg_path), tmp = path + ".tmp";
+    mode_t old = umask(077);
+    FILE* f = fopen(tmp.c_str(), "w");
+    umask(old);
+    bool ok = f;
+    for (auto& k : passkeys()) {
+        std::string name = k.name;
+        for (auto& ch : name) if (ch == '\t' || ch == '\n' || ch == '\r') ch = ' ';
+        if (f) fprintf(f, "%s\t%s\t%d\t%u\t%lld\t%s\n", k.id.c_str(), k.key.c_str(), k.on ? 1 : 0, k.count, (long long)k.added, name.c_str());
+    }
+    if (f && fclose(f) != 0) ok = false;
+    if (ok && rename(tmp.c_str(), path.c_str()) != 0) ok = false;
+    if (!ok) print(b, LK::ERROR, "Can't write " + path + ": " + strerror(errno));
+    return ok;
+}
+
+bool Core::bio_on() {
+    if (!lock_on() || !opt_on(nullptr, "lock_biometric", false)) return false;
+    for (auto& k : passkeys()) if (k.on) return true;
+    return false;
+}
+
+void Core::unlock_by(const std::string& e) {
     active_at = last_input = time(nullptr);  // typing it is input: else the screensaver it was over comes right back (still idle)
-    std::string e = lock_try(pass, "");
     if (e.empty()) {
         set_lock(false);
         screen_end();  // the box was over a screensaver: that's done too
@@ -602,5 +653,29 @@ void Core::lock_cmd(Buffer* b, const std::string& args) {
             if (auto e = lock_try(p, "locking stays on"); !e.empty()) { print(b, LK::ERROR, e); return; }
             if (save_general(*this, {{"lock", "off"}, {"lock_password_hash", ""}}, b)) print(b, LK::INFO, "Locking off");
         }, true, title, {"The current one, to turn locking off"});
-    } else print(b, LK::ERROR, "Usage: /lock [on|off]");
+    } else if (args == "devices" || args.rfind("devices ", 0) == 0) {  // the webchat's Face ID devices: list, or del one
+        auto& ks = passkeys();
+        std::string rest = trim(args.substr(7));
+        if (rest.empty()) {
+            if (ks.empty()) { print(b, LK::INFO, "No Face ID devices: the webchat's settings (Security) sets one up"); return; }
+            print(b, LK::INFO, std::string("Face ID devices (lock_biometric ") + (opt_on(nullptr, "lock_biometric", false) ? "on" : "off") + "):");
+            for (auto& k : ks) print(b, LK::INFO, "  " + k.name + (k.on ? "" : " (off)") + ", added " + fmt_time(k.added, "%Y-%m-%d"));
+            return;
+        }
+        if (rest.rfind("del ", 0) != 0) { print(b, LK::ERROR, "Usage: /lock devices [del <name>]"); return; }
+        std::string name = trim(rest.substr(4));
+        int hit = -1, n = 0;
+        for (size_t i = 0; i < ks.size(); i++) if (irc_lower(ks[i].name) == irc_lower(name)) hit = (int)i, n++;
+        if (n != 1) { print(b, LK::ERROR, n ? "More than one device is called " + name + ": remove it in the webchat's settings" : "No Face ID device called " + name + " (/lock devices lists them)"); return; }
+        std::string id = ks[hit].id;
+        ask_pass(b, "password", [this, b, id](const std::string& p) {
+            if (auto e = lock_try(p, "the device stays"); !e.empty()) { print(b, LK::ERROR, e); return; }
+            auto& v = passkeys();
+            auto it = std::find_if(v.begin(), v.end(), [&](const Passkey& k) { return k.id == id; });
+            if (it == v.end()) return;
+            std::string was = it->name;
+            v.erase(it);
+            if (passkeys_save(b)) print(b, LK::INFO, "Removed " + was + ": it can't unlock any more (its passkey may stay in the phone's settings)");
+        }, true, title, {"Removing a Face ID device: the lock password first"});
+    } else print(b, LK::ERROR, "Usage: /lock [on|off|devices]");
 }

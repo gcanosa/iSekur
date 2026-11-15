@@ -235,6 +235,21 @@ dialog .btns .left { margin-right: auto; }
 #lock input { width: 100%; background: var(--input-bg, var(--bg)); color: var(--input-fg, var(--fg)); border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 10px 12px; }
 #lock input:focus { outline: 2px solid var(--accent2); outline-offset: -1px; }
 #lock button { width: 100%; background: linear-gradient(var(--accent-veil, transparent), var(--accent-veil, transparent)), linear-gradient(90deg, var(--accent), var(--accent2)); color: var(--on-accent, #111); border: 0; border-radius: 8px; padding: 10px; font-weight: 700; cursor: pointer; }
+/* Face ID in use: its face instead of the padlock, a line scanning down it; green when it unlocks, red when it fails */
+#lock .face { display: none; }
+#lock.bio .face { display: block; }
+#lock.bio svg.lk { display: none; }
+#lock.bio .face .scan { opacity: .55; animation: scan 1.3s ease-in-out infinite alternate; }
+#lock.bio.fail .face .scan, #lock.bio.open .face .scan { display: none; }
+#lock.bio.open .face { animation: facepop .35s ease-out; }
+@keyframes facepop { 50% { transform: scale(1.15); } }
+#lock.bio.open .face .mouth { d: path("M17 37q11 9 22 0"); transition: d .25s; }
+@keyframes scan { from { transform: translateY(0); } to { transform: translateY(37px); } }
+#setlist .bio { max-height: none; overflow: visible; }  /* a row of the settings grid: as tall as its devices */
+.bio .hint { color: var(--muted); font-size: calc(12px * var(--z, 1)); padding: 4px 0; }
+.bio .r .n i { color: var(--accent); font-style: normal; margin-left: 6px; font-size: calc(11px * var(--z, 1)); }
+.bio .add { justify-self: start; margin-top: 4px; padding: 4px 10px; }
+.bio .add:disabled { opacity: .5; cursor: default; }
 #lockerr { color: var(--error-fg, var(--err)); min-height: 1.4em; font-size: calc(13px * var(--z, 1)); }
 #lock.fail .card { animation: shake .45s ease both; }
 #lock.fail svg { color: var(--error-fg, var(--err)); }
@@ -621,8 +636,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .flist .r .n small { color: var(--muted); margin-left: 6px; }
 .flist .r .m { color: var(--muted); font-size: calc(12px * var(--z, 1)); white-space: nowrap; }
 .flist .r .b { display: flex; gap: 6px; }
-.flist .r .b button, .flist .r .b a { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; color: var(--fg); font-size: calc(12px * var(--z, 1)); text-decoration: none; }
-.flist .r .b button:hover, .flist .r .b a:hover { border-color: var(--accent); }
+.flist .r .b button, .flist .r .b a, .bio .add { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 2px 9px; cursor: pointer; color: var(--fg); font-size: calc(12px * var(--z, 1)); text-decoration: none; }
+.flist .r .b button:hover, .flist .r .b a:hover, .bio .add:hover:not(:disabled) { border-color: var(--accent); }
 .flist .r progress { width: 100%; grid-column: 1 / -1; }
 .flist .none { color: var(--muted); padding: 6px; }
 #input { grid-area: input; display: flex; gap: 8px; padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); background: var(--input-bg, var(--bg)); position: relative; }
@@ -691,14 +706,14 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select, textarea) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
   border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 3px 5px; font: inherit; outline: none; }
 .win-95 :is(dialog, #lock) select:not([multiple]) { appearance: none; padding-right: 22px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v14H0z' fill='%23fff'/%3E%3Cpath d='M15 0h1v16H0v-1h15z' fill='%23000'/%3E%3Cpath d='M14 1h1v14H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center / 16px 16px, #fff; }
-.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, #srvnew, #plugtabs button, #bkinds button, .perf .peek) { background: #c0c0c0; color: #000;
+.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, .bio .add, #srvnew, #plugtabs button, #bkinds button, .perf .peek) { background: #c0c0c0; color: #000;
   border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
   font: 400 calc(12px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
 .win-95 :is(dialog .btns button, #lock button) { min-width: 75px; }
 .win-95 :is(dialog .btns button.go, #lock button) { box-shadow: 0 0 0 1px #000, inset -1px -1px #808080, inset 1px 1px #dfdfdf; }  /* the default button */
 .win-95 :is(#plugtabs, #bkinds) button.on { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; background: #dfdfdf; font-weight: bold; }
-.win-95 :is(dialog .btns button, #lock button, .flist .r .b button):active { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; padding: 5px 11px 3px 13px; }
-.win-95 :is(dialog .btns button, #lock button, .flist .r .b button):focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
+.win-95 :is(dialog .btns button, #lock button, .flist .r .b button, .bio .add):active { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; padding: 5px 11px 3px 13px; }
+.win-95 :is(dialog .btns button, #lock button, .flist .r .b button, .bio .add):focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
 .win-95 dialog input[type=checkbox], .win-95 #setlist .sw i { appearance: none; box-sizing: border-box; width: 13px; height: 13px; margin: 0; flex: none;
   border-radius: 0; background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; transition: none; }
 .win-95 #setlist .sw i::after { display: none; }
@@ -762,8 +777,10 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 </div>
 <canvas id="ss" aria-hidden="true"></canvas>
 <div id="lock" role="dialog" aria-modal="true" aria-label="iSekur is locked"><form class="card" id="lockf">
-    <svg viewBox="0 0 48 56" width="52" height="60" aria-hidden="true"><path class="shackle" d="M14 26V16a10 10 0 0 1 20 0v10" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/><rect x="5" y="25" width="38" height="29" rx="7" fill="currentColor"/><circle cx="24" cy="37.5" r="4" fill="var(--menu-bg, var(--panel))"/><rect x="22.5" y="39" width="3" height="7" rx="1.5" fill="var(--menu-bg, var(--panel))"/></svg>
+    <svg class="face" viewBox="0 0 56 56" width="60" height="60" aria-hidden="true"><g fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M4 16V10a6 6 0 0 1 6-6h6M40 4h6a6 6 0 0 1 6 6v6M52 40v6a6 6 0 0 1-6 6h-6M16 52h-6a6 6 0 0 1-6-6v-6"/><path d="M19 20v5M37 20v5M28 20v12h-3"/><path class="mouth" d="M19 39q9 6 18 0"/></g><rect class="scan" x="6" y="8" width="44" height="3" rx="1.5" fill="currentColor"/></svg>
+    <svg class="lk" viewBox="0 0 48 56" width="52" height="60" aria-hidden="true"><path class="shackle" d="M14 26V16a10 10 0 0 1 20 0v10" fill="none" stroke="currentColor" stroke-width="4.5" stroke-linecap="round"/><rect x="5" y="25" width="38" height="29" rx="7" fill="currentColor"/><circle cx="24" cy="37.5" r="4" fill="var(--menu-bg, var(--panel))"/><rect x="22.5" y="39" width="3" height="7" rx="1.5" fill="var(--menu-bg, var(--panel))"/></svg>
     <h1>iSekur is locked</h1>
+    <button type="button" id="lockbio" hidden></button>
     <input id="lockp" type="password" placeholder="password" autocomplete="current-password" aria-label="Lock password">
     <button>Unlock</button>
     <div id="lockerr" role="alert"></div>
@@ -1619,6 +1636,7 @@ function onMsg(ev) {
     else if (m.buf === active && split !== null) { const o = split; setSplit(null); select(o); }  // the other pane takes the screen
     else if (m.buf === active) { const i = order.indexOf(m.buf); active = order[i > 0 ? i - 1 : i + 1]; select(active); }  // else the closed tab stayed on screen
   } else if (m.t === "order") {
+    bioArm = false;  // the session is showing (only sent unlocked): a lock from here on is a live one
     order = m.ids;
     if (!bufs.has(active)) { active = order[0]; select(active); } else later(renderSide);
   } else if (m.t === "active") {
@@ -1630,6 +1648,18 @@ function onMsg(ev) {
     const a = $("#aupd"); a.hidden = !m.ver; a.lastChild.textContent = m.ver + " available"; a.title = "Download iSekur " + m.ver;
   } else if (m.t === "lock") {
     lockMsg(m);
+  } else if (m.t === "bio_chal") {
+    bioChal(m);
+  } else if (m.t === "bio_list") {
+    bioList = m; bioRender();
+  } else if (m.t === "bio_new") {
+    bioCreate(m);
+  } else if (m.t === "bio_ok") {
+    try { localStorage.setItem("bioid", m.id); } catch (e) {}
+    if (dset.open) send({t: "settings", buf: active});  // lock_biometric may have turned on with it
+    setTimeout(() => bioNote(bioWord + " is set up on this device: the lock box asks for it"), 300);
+  } else if (m.t === "bio_err") {
+    bioNote(m.msg);
   } else if (m.t === "ss") {
     ssOn(m.on);
   } else if (m.t === "ssf") {
@@ -1690,11 +1720,12 @@ function lockMsg(m) {
       $("#line").value = ""; $("#lockp").value = "";
       L.className = ""; restart("on");
       setTimeout(() => $("#lockp").focus(), 60);
+      bioLock(m.bio, true);
     }
     $("#lockerr").textContent = m.msg || "";
     if (m.msg) restart("fail"), $("#lockp").select();
   } else if (locked) {
-    locked = false; $("#lockerr").textContent = "";
+    locked = false; $("#lockerr").textContent = ""; bioLock(false);
     L.classList.remove("fail"); L.classList.add("open"); $("#lockp").blur();
     setTimeout(() => { if (!locked) L.className = ""; if (!locked && !narrow.matches) $("#line").focus(); }, 1000);
   }
@@ -1713,7 +1744,7 @@ function ssOn(on) {
   if (!on) lockUnpeek();
   $("#ss").classList.toggle("on", on);
   if (on) ssSize();
-  else if (locked) { const L = $("#lock"); L.classList.remove("on"); void L.offsetWidth; L.classList.add("on"); setTimeout(() => $("#lockp").focus(), 60); }
+  else if (locked) { const L = $("#lock"); L.classList.remove("on"); void L.offsetWidth; L.classList.add("on"); setTimeout(() => $("#lockp").focus(), 60); bioAuto(); }
 }
 // the frame's changed cells into SS.g ([char, color, ox, oy] or null), then the whole canvas again: a mote between
 // two cells leaves nothing behind when it moves on
@@ -1749,6 +1780,7 @@ function lockPeek() {
   clearTimeout(SS.peekT); if (SS.peekS !== 0) SS.peekT = setTimeout(lockUnpeek, (SS.peekS || 30) * 1000);
   if (L.classList.contains("peek")) return;
   L.classList.add("peek"); setTimeout(() => $("#lockp").focus(), 0);
+  bioTried = false, bioAuto();
 }
 function lockUnpeek() {
   clearTimeout(SS.peekT);
@@ -1757,6 +1789,118 @@ function lockUnpeek() {
   L.classList.remove("peek"); $("#lockp").value = ""; $("#lockp").blur();
 }
 $("#lock").addEventListener("click", e => { if (e.target === e.currentTarget) lockUnpeek(); });
+// Face ID / Touch ID / a fingerprint (WebAuthn passkeys): the lock box asks the device instead of the password, on a
+// device set up in the settings (Security). The device signs iSekur's challenge, iSekur checks it; the password
+// always works too. Needs https and a host name (a passkey belongs to one), not an IP
+const bioCan = !!(window.PublicKeyCredential && isSecureContext && navigator.credentials) && !/^[\d.]+$|:|^\[/.test(location.hostname);
+const bioWord = /iPhone|iPad/.test(navigator.userAgent) ? "Face ID" : /Macintosh/.test(navigator.userAgent) && !("ontouchend" in document) ? "Touch ID" : /Android/.test(navigator.userAgent) ? "fingerprint" : "Face ID";
+const bin = s => Uint8Array.from(atob(s), c => c.charCodeAt(0));
+const unbin = b => btoa(String.fromCharCode(...new Uint8Array(b)));
+const bioMine = () => { try { return localStorage.getItem("bioid") || ""; } catch (e) { return ""; } };
+let bioC = null, bioAt = 0, bioBusy = false, bioTried = false, bioT = 0;  // bioC: the lock box's challenge and the devices that may answer it
+// by itself only when someone comes to a locked page: it opens or reconnects locked, the tab comes back, a key over the
+// screensaver. Not right after locking it here (Alt+S): looking at the phone would unlock it again at once
+let bioArm = true;
+document.addEventListener("visibilitychange", () => { if (!document.hidden && locked) bioTried = false, bioAuto(); });
+function bioLock(on, fresh) {
+  clearInterval(bioT); bioC = null; $("#lockbio").hidden = true;
+  if (!on || !bioCan) return;
+  if (fresh) bioTried = !bioArm;
+  bioArm = false;
+  send({t: "bio_chal"});
+  bioT = setInterval(() => { if (!bioBusy) send({t: "bio_chal"}); }, 240000);  // a challenge lasts 5 minutes: a new one before
+}
+function bioChal(m) {
+  if (!locked || !m.chal || !m.ids.length) return void ($("#lockbio").hidden = true);
+  const mine = bioMine();
+  bioC = {chal: m.chal, ids: mine && m.ids.includes(mine) ? [mine] : m.ids}; bioAt = Date.now();
+  const b = $("#lockbio"); b.textContent = "Unlock with " + bioWord;
+  b.hidden = !!mine && !m.ids.includes(mine);  // this device is set up but off: the password only
+  if (!b.hidden && mine) bioAuto();
+}
+// by itself, once a lock: only on this device's own (on) passkey, and with the box in sight (not under a screensaver)
+function bioAuto() {
+  if (bioTried || !bioC || !bioMine() || $("#lockbio").hidden || (SS.on && !$("#lock").classList.contains("peek"))) return;
+  bioTried = true; bioGo(true);
+}
+async function bioGo(auto) {
+  if (!bioC || bioBusy) return;
+  const c = bioC; bioC = null; bioBusy = true;
+  const L = $("#lock"); L.classList.remove("fail"); L.classList.add("bio");  // the face, scanning
+  const t0 = Date.now();
+  try {
+    const cr = await navigator.credentials.get({publicKey: {challenge: bin(c.chal), rpId: location.hostname, userVerification: "required",
+      timeout: 60000, allowCredentials: c.ids.map(id => ({type: "public-key", id: bin(id)}))}});
+    const r = cr.response;
+    send({t: "bio_unlock", id: unbin(cr.rawId), ad: unbin(r.authenticatorData), cdj: unbin(r.clientDataJSON), sig: unbin(r.signature)});
+  } catch (e) {  // cancelled, or the browser wants a tap first (an automatic try): the button and the password stay
+    L.classList.remove("bio");  // the padlock again: the password it is
+    // NotAllowedError at once: the browser wants a tap first (say nothing, the button is there). Later: the face wasn't
+    // known or it was cancelled (WebAuthn doesn't say which). Either way the password, and no more tries by itself
+    bioTried = true;
+    if (!(auto && e.name === "NotAllowedError" && Date.now() - t0 < 400))
+      $("#lockerr").textContent = e.name === "NotAllowedError" ? bioWord + " didn't work: type the password" : bioWord + ": " + e.message + ". Type the password";
+  }
+  bioBusy = false;
+  if (locked) send({t: "bio_chal"}), setTimeout(() => { if (locked && !bioBusy) $("#lockp").focus(); }, 50);  // the next try's challenge
+}
+$("#lockbio").onclick = () => bioGo(false);
+$("#lockp").addEventListener("input", () => $("#lock").classList.remove("bio"));  // typing the password: the padlock
+// the settings window's devices box (under lock_biometric): set up this one, each one on or off, renamed or removed
+let bioList = null;
+const bioBox = el("div", "bio flist");
+function bioNote(t) { $("#setmsg").textContent = t; }
+function bioRender() {
+  bioBox.textContent = "";
+  const m = bioList, mine = bioMine();
+  if (!m) return void bioBox.append(el("div", "hint", "Loading..."));
+  if (!bioCan) bioBox.append(el("div", "hint", bioWord + " needs https and a host name: this page is " + location.origin + ". The password works as always."));
+  else if (!m.lock) bioBox.append(el("div", "hint", "Set a lock password first (/lock): " + bioWord + " unlocks instead of it."));
+  else if (!m.on && m.list.length) bioBox.append(el("div", "hint", "lock_biometric is off: no device unlocks, only the password."));
+  for (const d of m.list) {
+    const r = el("div", "r"), n = el("div", "n", d.name), b = el("div", "b");
+    if (d.id === mine) n.append(el("i", "", "this device"));
+    n.append(el("small", "", "added " + new Date(d.added * 1000).toLocaleDateString()));
+    const lab = el("label", "sw"), cb = el("input"), t = el("span", "", d.on ? "on" : "off");
+    cb.type = "checkbox"; cb.checked = d.on; cb.title = d.on ? "Turn it off: the password only on " + d.name : "Turn it on again";
+    cb.onchange = () => send({t: "bio_set", buf: active, id: d.id, on: cb.checked});
+    lab.append(cb, el("i"), t);
+    const ren = el("button", "", "Rename"), del = el("button", "", "Remove");
+    ren.type = del.type = "button";
+    ren.onclick = async () => {
+      const v = await askBox({title: bioWord, label: "Name", value: d.name, ok: "Rename"});
+      if (v && v.trim()) send({t: "bio_name", buf: active, id: d.id, name: v.trim()});
+    };
+    del.onclick = async () => {
+      const p = await askBox({title: bioWord, text: "Removing " + d.name + ": it won't unlock any more. The lock password first.", label: "Lock password", hidden: true, ok: "Remove"});
+      if (p) send({t: "bio_del", buf: active, id: d.id, pass: p});
+    };
+    b.append(ren, del);
+    r.append(n, lab, b); bioBox.append(r);
+  }
+  if (!m.list.length && bioCan && m.lock) bioBox.append(el("div", "none", "No device set up yet."));
+  const add = el("button", "add", "Set up " + bioWord + " on this device"); add.type = "button";
+  add.disabled = !bioCan || !m.lock;
+  add.onclick = async () => {
+    const p = await askBox({title: bioWord, text: "Setting up " + bioWord + " on this device: the lock password first.", label: "Lock password", hidden: true, ok: "Next"});
+    if (p) send({t: "bio_new", buf: active, pass: p});
+  };
+  if (!m.list.some(d => d.id === mine)) { const wrap = el("div", "b"); wrap.append(add); bioBox.append(wrap); }  // set up here already: nothing to add
+}
+async function bioCreate(m) {
+  try {
+    const cr = await navigator.credentials.create({publicKey: {challenge: bin(m.chal), rp: {id: location.hostname, name: "iSekur"},
+      user: {id: bin(m.user), name: "iSekur", displayName: "iSekur lock"}, pubKeyCredParams: [{type: "public-key", alg: -7}],
+      authenticatorSelection: {authenticatorAttachment: "platform", userVerification: "required", residentKey: "preferred"},
+      excludeCredentials: m.ids.map(id => ({type: "public-key", id: bin(id)})), attestation: "none", timeout: 60000}});
+    const r = cr.response;
+    if (!r.getPublicKey) return bioNote("This browser is too old for " + bioWord + " here (no getPublicKey)");
+    send({t: "bio_add", buf: active, id: unbin(cr.rawId), key: unbin(r.getPublicKey()), alg: r.getPublicKeyAlgorithm(),
+          ad: unbin(r.getAuthenticatorData()), cdj: unbin(r.clientDataJSON), name: m.name});
+  } catch (e) {
+    bioNote(e.name === "InvalidStateError" ? "This device is set up already" : e.name === "NotAllowedError" ? bioWord + " was cancelled: nothing set up" : bioWord + ": " + e.message);
+  }
+}
 $("#lockp").addEventListener("keydown", e => { if (e.key === "Escape" && $("#lock").classList.contains("peek")) e.preventDefault(), lockUnpeek(); });
 function ssPoke(e) {
   const now = Date.now();
@@ -1780,7 +1924,7 @@ $("#lockf").onsubmit = e => { e.preventDefault(); const p = $("#lockp").value; i
 function connect() {
   ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/ws");
   ws.onmessage = onMsg;
-  ws.onopen = () => bufs.clear();  // the snapshot brings them all again: tabs closed while away must not linger
+  ws.onopen = () => { bufs.clear(); bioArm = true; };  // the snapshot brings them all again: tabs closed while away must not linger
   ws.onclose = () => { ws = null; ssOn(false); setTimeout(boot, 3000); };  // no frames without it: not a frozen one; the reconnect starts it again if it's still on
 }
 
@@ -2776,6 +2920,11 @@ function renderSettings(list) {
       Object.assign(row, {el: inp, get: () => inp.value, orig: +secret ? "" : v});
     }
     setRows.push(row);
+    if (sec === "general" && k === "lock_biometric") {  // its devices, right under it
+      const dk = el("div", "k", "devices"); dk.title = bioWord + " on these devices (/lock devices)";
+      setRows.push({full: "lock_biometric devices", sec, cat, head, k: "devices", kl: dk, el: bioBox, uns: 0, get: () => "", orig: ""});
+      send({t: "bio_list", buf: active}); bioRender();
+    }
   }
   filterSettings();
 }

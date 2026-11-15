@@ -36,6 +36,10 @@ private:
         time_t since = 0;    // accepted; a WebSocket: last heard from
         time_t pinged = 0;   // a WebSocket: our last ping
         std::string ip;      // a WebSocket: the browser's address (client_ip)
+        std::string origin, ua;  // a WebSocket: its page's origin (https://host[:port]) and browser, for Face ID
+        std::string bio_chal;    // the Face ID challenge it was given (raw), single use
+        time_t bio_until = 0;
+        bool bio_new = false;    // bio_chal is for setting up a device (the password was right)
         FILE* file = nullptr;  // GET /files/name: streamed into conn.out as it drains
         unsigned long long left = 0;
         ~Client() { if (file) fclose(file); }
@@ -70,6 +74,8 @@ private:
     time_t last_dcc_at = 0;
     std::string keys_json();  // [keys] for the webchat's own bindings
     std::string lock_json();
+    void bio(Client& cl, std::map<std::string, std::string>& m, Buffer* b);  // the Face ID messages (b null while locked)
+    std::string bio_list_json();
     // the screensaver: frames at the size the last page asked for (ssize; other pages stretch it), only the cells that changed
     int ss_w = 0, ss_h = 0;
     long long ss_at = 0;
@@ -96,3 +102,9 @@ std::string json_str(const std::string& s);
 std::string client_ip(const std::string& peer, const std::string& xff);
 std::string ua_short(const std::string& ua);  // "Firefox on macOS", "" when unknown
 std::map<std::string, std::string> json_flat(const std::string& s);
+// WebAuthn: a browser's answer for Face ID. cdj: clientDataJSON, ad: authenticatorData, both as sent; type
+// "webauthn.create" (setting up: no signature) or "webauthn.get" (unlocking: sig, DER ES256, checked with spki,
+// the device's SPKI DER key). "" when good; count: the device's signature counter
+std::string webauthn_check(const std::string& type, const std::string& cdj, const std::string& ad, const std::string& chal,
+                           const std::string& origin, const std::string& spki, const std::string& sig, uint32_t* count);
+std::string b64url(const std::string& s);  // no padding

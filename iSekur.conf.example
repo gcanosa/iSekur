@@ -100,6 +100,11 @@ lock_idle = 0
 # Locked under a screensaver, a key shows the password box over it: it goes away
 # again after this many seconds without a key (0 = only Esc or its X)
 lock_prompt_timeout = 30
+# The webchat's lock box with Face ID / Touch ID / a fingerprint instead of the
+# password, on the devices set up for it (the webchat's settings, Security; it
+# needs https and a domain name, not an IP). The password always works too.
+# /lock devices lists them, /lock devices del <name> removes one.
+lock_biometric = off
 # /shell checks the login and password with this PAM service
 #pam_service = login
 

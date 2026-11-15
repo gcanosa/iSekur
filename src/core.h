@@ -501,6 +501,16 @@ struct Core {
     long long lock_anim_at = 0;  // both sides at once: the webchat gets nothing of the session while locked
     std::string lock_msg;  // the box's error line ("!...")
     bool lock_on() const;
+    // Face ID / Touch ID / fingerprint for the webchat's lock box (WebAuthn passkeys, one per device). Kept in
+    // web.passkeys beside the config; lock_biometric = on lets the enabled ones unlock. Only unlocks: /lock off,
+    // a new password and removing a device still take the password
+    struct Passkey { std::string id, key, name; bool on = true; uint32_t count = 0; time_t added = 0; };  // id, key: base64 (key: SPKI DER)
+    std::vector<Passkey>& passkeys();  // read from the file on first use
+    bool passkeys_save(Buffer* b);     // false: couldn't write it (said in b)
+    bool bio_on();                     // locking on, lock_biometric on, a device enabled
+    void unlock_by(const std::string& err);  // "" unlocks, else the box shows it (unlock() and the webchat's Face ID)
+    // one try at the lock: ok() checks it; 3 wrong in a row wait 60s, a password or a Face ID alike
+    std::string lock_count(const std::function<bool()>& ok, const std::string& wrong, const std::string& then);
     void lock_cmd(Buffer* b, const std::string& args);
     void lock_now(Buffer* b);  // the lock key (Alt+S): locks if a password is set, else says how
     void unlock(const std::string& pass);
@@ -509,6 +519,8 @@ struct Core {
     std::string lock_try(const std::string& pass, const std::string& then);
     int lock_fails = 0;
     time_t lock_wait = 0;
+    std::vector<Passkey> passkeys_;
+    bool passkeys_read = false;
     bool asking(const Buffer* b) const { return b && pass_buf == b && !pass_web; }  // the TUI's dialog is up on b
     bool twitch_handle(Server* s, const Msg& m, time_t ts);  // Twitch-only commands; true: handled
     void twitch_cmd(Buffer* b, const std::string& arg);  // /twitch [token]

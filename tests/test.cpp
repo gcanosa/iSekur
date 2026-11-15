@@ -208,6 +208,53 @@ int main() {
     std::string h = hash_password("s3cret");
     assert(check_password("s3cret", h) && !check_password("s3cre", h) && !check_password("x", "junk"));
 
+    {  // Face ID (WebAuthn): a P-256 key like a phone's, its answers signed here
+        EVP_PKEY* k = EVP_EC_gen("P-256");
+        unsigned char* der = nullptr;
+        int dn = i2d_PUBKEY(k, &der);
+        std::string spki((char*)der, dn);
+        OPENSSL_free(der);
+        std::string chal = "0123456789abcdef0123456789abcdef", origin = "https://irc.example.org:8443";
+        auto cdj = [&](const std::string& type, const std::string& ch, const std::string& org) {
+            return "{\"type\":\"" + type + "\",\"challenge\":\"" + b64url(ch) + "\",\"origin\":\"" + org + "\",\"crossOrigin\":false}";
+        };
+        auto ad = [](const std::string& host, unsigned char flags, uint32_t n) {
+            unsigned char rp[32];
+            SHA256((const unsigned char*)host.data(), host.size(), rp);
+            std::string a((char*)rp, 32);
+            a += (char)flags, a += (char)(n >> 24), a += (char)(n >> 16), a += (char)(n >> 8), a += (char)n;
+            return a;
+        };
+        auto sign = [&](const std::string& a, const std::string& c) {
+            unsigned char hc[32];
+            SHA256((const unsigned char*)c.data(), c.size(), hc);
+            std::string msg = a + std::string((char*)hc, 32), sig(80, '\0');
+            size_t n = sig.size();
+            EVP_MD_CTX* md = EVP_MD_CTX_new();
+            EVP_DigestSignInit(md, nullptr, EVP_sha256(), nullptr, k);
+            EVP_DigestSign(md, (unsigned char*)&sig[0], &n, (const unsigned char*)msg.data(), msg.size());
+            EVP_MD_CTX_free(md);
+            return sig.substr(0, n);
+        };
+        std::string g = cdj("webauthn.get", chal, origin), a = ad("irc.example.org", 0x05, 7);
+        uint32_t count = 0;
+        assert(webauthn_check("webauthn.get", g, a, chal, origin, spki, sign(a, g), &count) == "" && count == 7);
+        assert(webauthn_check("webauthn.get", g, a, chal, origin, spki, sign(a, g + " "), nullptr) == "a bad signature");
+        assert(webauthn_check("webauthn.get", g, a, "another challenge", origin, spki, sign(a, g), nullptr) == "an old or unknown challenge");
+        assert(webauthn_check("webauthn.get", g, a, "", origin, spki, sign(a, g), nullptr) != "");
+        std::string ev = cdj("webauthn.get", chal, "https://evil.example");
+        assert(webauthn_check("webauthn.get", ev, a, chal, origin, spki, sign(a, ev), nullptr).rfind("from another page", 0) == 0);
+        std::string other = ad("evil.example", 0x05, 7);
+        assert(webauthn_check("webauthn.get", g, other, chal, origin, spki, sign(other, g), nullptr) == "for another host name");
+        std::string nouv = ad("irc.example.org", 0x01, 7);  // touched, but no Face ID
+        assert(webauthn_check("webauthn.get", g, nouv, chal, origin, spki, sign(nouv, g), nullptr) == "without Face ID (no user verification)");
+        assert(webauthn_check("webauthn.create", g, a, chal, origin, spki, "", nullptr) == "not a webauthn.create");
+        std::string cr = cdj("webauthn.create", chal, origin);
+        assert(webauthn_check("webauthn.create", cr, a, chal, origin, spki, "", nullptr) == "");  // setting up: no signature
+        assert(webauthn_check("webauthn.create", cr, a, chal, origin, "junk", "", nullptr) == "not an ES256 key");
+        EVP_PKEY_free(k);
+    }
+
     assert(safe_name("../../etc/passwd") == "_.._.._etc_passwd" && safe_name("#Chan[x]") == "#chan{x}");
     assert(safe_name(".hidden") == "_.hidden" && safe_name("") == "_");
 
@@ -422,6 +469,42 @@ int main() {
         assert(core.pass_buf == home && !core.quit);
         core.exec(home, "");  // Esc / empty: cancelled
         assert(!core.quit && !core.pass_buf);
+        {  // Face ID devices: kept in web.passkeys, lock_biometric guarded, /lock devices del takes the password
+            std::string was = core.cfg_path;
+            core.cfg_path = "build/test-bio.conf";
+            std::string pk = "build/test-bio.web.passkeys";
+            remove(pk.c_str());
+            core.passkeys_read = false, core.passkeys_.clear();
+            assert(core.passkeys().empty() && !core.bio_on());
+            core.passkeys().push_back({"aWQx", b64("key"), "iPhone", true, 3, 1700000000});
+            core.passkeys().push_back({"aWQy", b64("key"), "Mac", false, 0, 1700000000});
+            assert(core.passkeys_save(home));
+            core.passkeys_read = false, core.passkeys_.clear();
+            auto& ks = core.passkeys();
+            assert(ks.size() == 2 && ks[0].name == "iPhone" && ks[0].on && ks[0].count == 3 && !ks[1].on && ks[1].key == b64("key"));
+            assert(!core.bio_on());  // lock_biometric off
+            core.cfg["general"]["lock_biometric"] = "on";
+            assert(core.bio_on());
+            ks[0].on = false;
+            assert(!core.bio_on());  // no device on
+            ks[0].on = true;
+            core.cfg["general"].erase("lock_biometric");
+            core.exec(home, "/set lock_biometric on");  // turning it on asks for the password
+            assert(core.pass_buf == home);
+            core.exec(home, "");
+            core.exec(home, "/lock devices");
+            assert(home->lines.back().text.find("Mac (off), added ") == 2);
+            core.exec(home, "/lock devices del nobody");
+            assert(home->lines.back().text == "No Face ID device called nobody (/lock devices lists them)");
+            core.exec(home, "/lock devices del iphone"), core.exec(home, "nope");
+            assert(core.passkeys().size() == 2 && home->lines.back().text == "Wrong password: the device stays");
+            core.exec(home, "/lock devices del iphone"), core.exec(home, "pw");
+            assert(core.passkeys().size() == 1 && core.passkeys()[0].name == "Mac");
+            core.passkeys_read = false, core.passkeys_.clear();
+            assert(core.passkeys().size() == 1);  // saved
+            remove(pk.c_str());
+            core.passkeys_read = false, core.passkeys_.clear(), core.cfg_path = was, core.lock_fails = 0;
+        }
         core.lock_now(home);  // the lock key (Alt+S): locks at once, no prompt
         assert(core.locked && !core.pass_buf);
         core.set_lock(false);
