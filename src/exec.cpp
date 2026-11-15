@@ -22,6 +22,9 @@
 #include "core.h"
 #include "web.h"  // hash_password, check_password
 #include "session.h"  // cfg_side
+#include <algorithm>
+#include <cerrno>
+#include <utility>
 
 static const size_t MAX_JOB_LINES = 1000;  // then it's killed: `yes` must not fill memory
 
