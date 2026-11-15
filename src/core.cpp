@@ -380,7 +380,7 @@ std::vector<Core::Setting> Core::settings() const {
             bool set = !ini_get(cfg, sec, k).empty();
             std::string val = !set && v.empty() ? "(not set)"
                               : secret_key(k) && !v.empty() ? "********"
-                              : k == "perform"              ? perform_show(v)
+                              : k == "perform" || sec == "aliases" ? perform_show(v)
                                                             : v;
             if (!set && !v.empty()) val += "  (default)";
             if (unsaved.count(sec) && unsaved.at(sec).count(k)) val += "  (unsaved)";
@@ -448,7 +448,7 @@ std::vector<std::pair<std::string, std::string>> conf_keys() {
 
 // a key iSekur reads in [sec] (KEYS by scope, the template's [web]/[bnc]/[keys]); [plugin.*] are the plugins' own
 static bool key_known(const std::string& sec, const std::string& key) {
-    if (sec.rfind("plugin.", 0) == 0 || state_key(sec, key)) return true;
+    if (sec.rfind("plugin.", 0) == 0 || sec == "aliases" || state_key(sec, key)) return true;  // [aliases]: any name
     if (sec == "general" || sec.rfind("server.", 0) == 0) {
         const KeyInfo* ki = key_info(key);
         return ki && ki->scope != (sec == "general" ? 'n' : 'g');
@@ -1316,8 +1316,43 @@ std::string perform_show(const std::string& v) {
 }
 bool perform_secret(const std::string& v) {
     for (auto& c : perform_lines(v))
-        if (input_secret("", c) != std::string::npos) return true;
+        if (size_t p = input_secret("", c); p != std::string::npos && p < c.size() && c[p] != '$') return true;  // $1: an alias's argument, not one
     return false;
+}
+
+// an alias's commands with its variables: $1..$9, $1- (that word on), $* (all), $nick, $channel, $server; any
+// other $ stays as written. No argument variable: what was typed goes after the last command (irssi's way)
+std::vector<std::string> alias_expand(const std::string& body, const std::string& args, const std::string& nick,
+                                      const std::string& chan, const std::string& net) {
+    auto words = split(args, ' ');
+    bool used = false;
+    auto one = [&](const std::string& c) {
+        std::string o;
+        for (size_t i = 0; i < c.size(); i++) {
+            if (c[i] != '$' || i + 1 >= c.size()) { o += c[i]; continue; }
+            char d = c[i + 1];
+            if (d == '*') { o += args, i++, used = true; continue; }
+            if (d >= '1' && d <= '9') {
+                size_t n = (size_t)(d - '1');
+                if (i + 2 < c.size() && c[i + 2] == '-') o += after_words(args, n), i += 2;
+                else o += n < words.size() ? words[n] : "", i++;
+                used = true;
+                continue;
+            }
+            bool hit = false;
+            for (auto& [name, val] : {std::pair<std::string, std::string>{"nick", nick}, {"channel", chan}, {"server", net}})
+                if (c.compare(i + 1, name.size(), name) == 0 && (i + 1 + name.size() >= c.size() || !isalnum((unsigned char)c[i + 1 + name.size()]))) {
+                    o += val, i += name.size(), hit = true;
+                    break;
+                }
+            if (!hit) o += '$';
+        }
+        return o;
+    };
+    std::vector<std::string> out;
+    for (auto& c : perform_lines(body)) out.push_back(one(c));
+    if (!used && !args.empty() && !out.empty()) out.back() += " " + args;
+    return out;
 }
 bool umode_adds(const std::string& modes, char m) {
     char sign = '+';
@@ -1667,6 +1702,54 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (!plugin_depth && plugin_emit("command", s, b->name, {{"name", cmd}, {"args", args}})) return;
     if (cmd == "plugin" || cmd == "plugins") { plugin_cmd(b, cmd == "plugins" ? "" : args); return; }
     if (!find_command(cmd) && plugin_run(b, cmd, args)) return;  // a plugin's command; iSekur's own always win
+    if (std::string body = find_command(cmd) ? "" : ini_get(cfg, "aliases", cmd); !body.empty()) {  // /alias: its commands, here
+        if (alias_depth >= 10) { print(b, LK::ERROR, "/" + cmd + ": aliases calling aliases, 10 deep: stopped"); return; }
+        alias_depth++;
+        for (auto& c : alias_expand(body, args, s ? s->nick : "", b->type == BT::CHANNEL ? b->name : "", s ? s->cfg.name : "")) {
+            if (index_of(b) < 0) break;  // a /close in it: the rest has nowhere to go
+            exec(b, c);
+        }
+        alias_depth--;
+        return;
+    }
+    if (cmd == "alias") {  // /alias [name [/command && /command]] | del name: [aliases], written at once
+        std::string name = argv.empty() ? "" : argv[0];
+        to_lower(name);
+        if (!name.empty() && name[0] == '/') name.erase(0, 1);
+        auto& al = cfg["aliases"];
+        if (name.empty()) {
+            int n = 0;
+            for (auto& [k, v] : al) if (!v.empty()) n++;
+            print(b, LK::INFO, n ? "Aliases (/alias del name removes one):" : "No aliases: /alias ns /msg NickServ $* makes /ns, see /help alias");
+            for (auto& [k, v] : al) if (!v.empty()) print(b, LK::INFO, "  /" + k + " = " + perform_show(v));
+            return;
+        }
+        std::string err;
+        if (name == "del") {
+            std::string d = argv.size() > 1 ? argv[1] : "";
+            to_lower(d);
+            if (!d.empty() && d[0] == '/') d.erase(0, 1);
+            if (d.empty() || ini_get(cfg, "aliases", d).empty()) { print(b, LK::ERROR, d.empty() ? "Usage: /alias del name" : "No alias /" + d); return; }
+            al.erase(d);
+            if (unsaved.count("aliases")) unsaved["aliases"].erase(d);
+            if (cfg_path.empty() || ini_drop_key_file(cfg_path, "aliases", d, err)) print(b, LK::INFO, "Removed the alias /" + d + " (saved)");
+            else print(b, LK::ERROR, err);
+            return;
+        }
+        if (name.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_-") != std::string::npos) { print(b, LK::ERROR, "An alias's name takes letters, digits, _ and -"); return; }
+        if (find_command(name)) { print(b, LK::ERROR, "/" + name + " is iSekur's own command: pick another name"); return; }
+        std::string body = rest(1);
+        if (body.empty()) {
+            std::string v = ini_get(cfg, "aliases", name);
+            print(b, v.empty() ? LK::ERROR : LK::INFO, v.empty() ? "No alias /" + name + ": /alias " + name + " /command makes it" : "/" + name + " = " + perform_show(v));
+            return;
+        }
+        std::string body_n = perform_join(perform_lines(body));  // each command with its /
+        bool had = !ini_get(cfg, "aliases", name).empty();
+        al[name] = unsaved["aliases"][name] = body_n;
+        if (save_section(*this, "aliases", b)) print(b, LK::INFO, (had ? "Changed /" : "Made /") + name + " = " + perform_show(body_n) + " (saved)");
+        return;
+    }
     if (cmd == "help") { help(b, args); return; }
     if (cmd == "about") { about(b); return; }
     if (cmd == "logs") {  // the log browser, at this tab's logs; text: searched there right away (the webchat opens its own)
@@ -1746,7 +1829,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             std::string def = ini_get(defaults, sec, key);
             if (sec == "general" && key == "timestamp") def = theme.lay("timestamp", "%H:%M") + ", the theme's";
             if (sec == "general" && key == "nick_width") def = theme.lay("nick_width", "12") + ", the theme's";
-            print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : key == "perform" && !ini_get(cfg, sec, key).empty() ? perform_show(ini_get(cfg, sec, key)) : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
+            print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : (key == "perform" || sec == "aliases") && !ini_get(cfg, sec, key).empty() ? perform_show(ini_get(cfg, sec, key)) : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }
         // a grabbed session can't switch /exec on, or point the webchat at other folders or logins, without the lock password
@@ -1809,7 +1892,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             else bnc_req_buf = b, bnc_req = on ? BncReq::START : BncReq::STOP;
         }
         dirty = true;
-        std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : key == "perform" ? perform_show(val) : val;  // "": back to the default
+        std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : key == "perform" || sec == "aliases" ? perform_show(val) : val;  // "": back to the default
         if (saved_now) { print(b, LK::INFO, argv[0] + " = " + shown + "  (saved)"); return; }
         print(b, LK::INFO, argv[0] + " = " + shown +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"

@@ -42,6 +42,8 @@ std::string ini_get(const Ini& ini, const std::string& sec, const std::string& k
                     const std::string& def = "");
 std::string ini_drop_keys(const std::string& text, const std::set<std::string>& keys);  // those keys gone, in every section
 bool ini_drop_keys_file(const std::string& path, const std::set<std::string>& keys, std::string& err);
+std::string ini_drop_key(const std::string& text, const std::string& sec, const std::string& key);  // one key, one section
+bool ini_drop_key_file(const std::string& path, const std::string& sec, const std::string& key, std::string& err);
 
 // ---- colors / theme --------------------------------------------------------
 using RGB = int32_t;  // 0xRRGGBB, -1 = terminal default
@@ -546,7 +548,8 @@ struct Core {
     void sts_save();
     void notify_cmd(Buffer* b, const std::string& args);  // /notify [add|del] nick: MONITOR (or ISON) watch list
     void notify_start(Server* s);       // after 001: MONITOR + the list
-    void autojoin_now(Server* s);       // after 001 (or the hidden host, join_wait): the autojoin channels and open tabs
+    void autojoin_now(Server* s);
+    int alias_depth = 0;                // an alias running an alias...: 10 deep at most       // after 001 (or the hidden host, join_wait): the autojoin channels and open tabs
     void notify_seen(Server* s, const std::string& nick, bool on, const std::string& host = "");
     void typed(Buffer* b, const std::string& input);  // the input line changed: +typing=active / done (send_typing)
     void mark_read(Server* s, time_t now);  // draft/read-marker: MARKREAD for the tabs on screen
@@ -698,7 +701,10 @@ std::string status_info_json(const Core& c);  // tui.cpp: the status_info items 
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"
 std::string ctcp_version();    // the full CTCP VERSION reply, with the OS
 std::vector<std::string> split(const std::string& s, char sep);
-std::string after_words(const std::string& s, size_t n);  // the text after the first n words
+std::string after_words(const std::string& s, size_t n);
+// an alias's body as the commands to run: $1..$9, $1-, $*, $nick, $channel, $server filled in (core.cpp)
+std::vector<std::string> alias_expand(const std::string& body, const std::string& args, const std::string& nick,
+                                      const std::string& chan, const std::string& net);  // the text after the first n words
 std::vector<std::string> banner_lines(const Theme& t, bool mono = false, double shine = -99, int light = -1);  // the startup banner, theme colors or gray; light: 1 on a light background whatever the theme says
 // typed: the lines /about types out (the tagline, the support channel)
 std::vector<std::string> twitch_banner();  // twitch.cpp: a Twitch server tab's banner

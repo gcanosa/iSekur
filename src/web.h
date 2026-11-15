@@ -77,7 +77,8 @@ private:
     void screen_poll();
     std::string update_json();   // /lock: on, msg (the box's error line)
     std::string split_json();  // the terminal's /split: buf (-1: none), first, mode, pm
-    std::string last_keys, last_stat;
+    std::string last_keys, last_stat, last_cmds;
+    std::string cmds_json();  // the commands for Tab and the suggestions: iSekur's, then your /alias ones
     time_t last_stat_at = 0;
     time_t ws_seen = 0;  // last time a browser was attached
     // the audit lines: ip -> (attached, last seen); gone once 30s pass without it (a reload or a blip isn't)

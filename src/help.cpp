@@ -354,6 +354,14 @@ static const std::vector<CmdInfo> CMDS = {
     {"save", "Settings", "", "Write changed settings to the config file",
      "Saves what /set, /server, /autojoin and /ignore changed. Comments in the file are kept.",
      {"/save"}},
+    {"alias", "Settings", "[name [/command && /command]] | del name", "Your own commands",
+     "/alias name /command makes /name run it; && runs several in order. In them $1..$9 are the words typed after "
+     "/name, $1- that word and the rest, $* all of them, $nick your nick, $channel this tab's channel, $server its "
+     "network; with no $1..$9 or $* what you type goes at the end. iSekur's own commands can't be renamed. "
+     "Without arguments it lists them; del removes one. Kept in [aliases], written at once; one with a password "
+     "in it is saved encrypted.",
+     {"/alias ns /msg NickServ $*", "/alias rejoin /part && /join $channel", "/alias brb /away $* && /nick $nick|away",
+      "/alias", "/alias del brb"}},
     {"hilight", "Settings", "[add|del] word", "Words highlighted besides your nick on this network",
      "Without arguments, lists them. Each network has its own list (hilight_words in its [server.name] "
      "section). Matching ignores case and takes whole words; * matches anything (isekur*). /save keeps the list.",

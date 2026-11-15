@@ -668,6 +668,44 @@ int main() {
     assert(sent() == "KICK #other r1 :bye\r\n");
     core.exec(chb, "/mode +m");
     assert(sent() == "MODE #c +m\r\n");
+    {  // /alias: [aliases] written at once, its variables, && for several, iSekur's own names kept
+        assert((alias_expand("/msg NickServ $*", "identify pw", "me", "#c", "net") == std::vector<std::string>{"/msg NickServ identify pw"}));
+        assert((alias_expand("/part && /join $channel", "", "me", "#c", "net") == std::vector<std::string>{"/part", "/join #c"}));
+        assert((alias_expand("/msg $1 hi $2- ($nick on $server) $5 $HOME $nickname", "bob a b c", "me", "", "net") ==
+                std::vector<std::string>{"/msg bob hi a b c (me on net)  $HOME $nickname"}));
+        assert((alias_expand("/msg NickServ", "identify pw", "me", "", "") == std::vector<std::string>{"/msg NickServ identify pw"}));  // no $: at the end
+        assert(!perform_secret("/msg NickServ identify $1") && perform_secret("/msg NickServ identify pw"));
+        std::string path = "build/test-alias.conf";
+        remove(path.c_str());
+        std::swap(core.cfg_path, path);
+        core.exec(chb, "/alias hi /msg $1 hello from $nick in $channel");
+        core.exec(chb, "/alias two /hi bob && /quote PING :$server");
+        core.exec(chb, "/alias join /part");  // iSekur's own: refused
+        core.exec(chb, "/alias loop /loop");
+        sent();
+        core.exec(chb, "/two");
+        assert(sent() == "PRIVMSG bob :hello from me in #c\r\nPING :t\r\n");
+        core.exec(chb, "/loop");  // stops 10 deep
+        assert(chb->lines.back().text.find("10 deep") != std::string::npos && ini_get(core.cfg, "aliases", "join").empty());
+        core.exec(chb, "/alias ns /msg NickServ identify pw9z");
+        std::ifstream f1(core.cfg_path);
+        std::string file((std::istreambuf_iterator<char>(f1)), {});
+        assert(file.find("hi = /msg $1 hello from $nick in $channel") != std::string::npos && file.find("ns = enc:") != std::string::npos && file.find("pw9z") == std::string::npos);
+        core.exec(chb, "/alias");
+        assert(chb->lines.back().text == "  /two = /hi bob && /quote PING :$server" && chb->lines[chb->lines.size() - 3].text == "  /loop = /loop");
+        bool row = false;  // the settings windows: an Aliases category with the alias, its password hidden in the list
+        for (auto& r : core.setting_rows()) row |= r.sec == "aliases" && r.key == "ns" && r.cat == "aliases";
+        for (auto& st : core.settings()) if (st.key == "aliases.ns") assert(st.val == "/msg NickServ identify ********");
+        assert(row);
+        core.exec(chb, "/alias del /ns");
+        core.exec(chb, "/alias del loop");
+        Ini disk;
+        assert(ini_load(core.cfg_path, disk) && ini_get(disk, "aliases", "ns").empty() && ini_get(disk, "aliases", "hi") == "/msg $1 hello from $nick in $channel");
+        std::swap(core.cfg_path, path);
+        remove(path.c_str());
+        core.cfg.erase("aliases"), core.unsaved.erase("aliases");
+        sent();
+    }
     core.exec(ts->status, "/mode -x");  // outside a channel: your own modes, not the server tab's name
     assert(sent() == "MODE me -x\r\n");
     core.exec(chb, "/umode +i");  // from any tab

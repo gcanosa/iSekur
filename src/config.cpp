@@ -89,7 +89,7 @@ bool ini_load(const std::string& path, Ini& out) {
     Ini plain;  // typed into the file by hand: encrypted in place right away
     for (auto& [sec, kv] : out)
         for (auto& [k, v] : kv)
-            if (!cfg_secret(k) || v.empty()) continue;
+            if ((!cfg_secret(k) && sec != "aliases") || v.empty()) continue;  // [aliases]: sealed when one holds a password
             else if (k == "perform") {  // each line: open the sealed ones; rewrite when one is sealed or plain the wrong way
                 std::string all;
                 bool reshape = false, lost = false;
@@ -105,7 +105,7 @@ bool ini_load(const std::string& path, Ini& out) {
                 v = all;
                 if (reshape && !lost) plain[sec][k] = v;  // never drop a line that didn't open
             }
-            else if (v.rfind("enc:", 0) != 0) { if (cfg_seal(k, v)) plain[sec][k] = v; }
+            else if (v.rfind("enc:", 0) != 0) { if (cfg_seal(k, v) || (sec == "aliases" && perform_secret(v))) plain[sec][k] = v; }
             else {
                 if (key.empty()) key = cfg_key(path, false);
                 std::string p;
@@ -227,6 +227,26 @@ std::string ini_drop_keys(const std::string& text, const std::set<std::string>& 
     return out + held;
 }
 
+// text without key's lines in [sec] (only there: /alias del port mustn't touch a network's port)
+std::string ini_drop_key(const std::string& text, const std::string& sec, const std::string& key) {
+    std::istringstream in(text);
+    std::string out, line, cur;
+    while (std::getline(in, line)) {
+        std::string t = trim(line);
+        if (!t.empty() && t[0] == '[' && t.back() == ']') cur = trim(t.substr(1, t.size() - 2));
+        else if (cur == sec && !t.empty() && t[0] != '#' && t[0] != ';' && t.find('=') != std::string::npos && trim(t.substr(0, t.find('='))) == key) continue;
+        out += line + "\n";
+    }
+    return out;
+}
+bool ini_drop_key_file(const std::string& path, const std::string& sec, const std::string& key, std::string& err) {
+    std::ifstream f(path);
+    if (!f) return true;
+    std::stringstream ss;
+    ss << f.rdbuf();
+    return write_file(path, ini_drop_key(ss.str(), sec, key), err);
+}
+
 bool ini_drop_keys_file(const std::string& path, const std::set<std::string>& keys, std::string& err) {
     std::ifstream f(path);
     if (!f) return true;
@@ -301,7 +321,7 @@ bool ini_save(const std::string& path, const Ini& changes, std::string& err) {
                     o += (o.empty() ? "" : " && ") + p;
                 }
                 v = o;
-            } else if (cfg_seal(k, v) && !v.empty() && v.rfind("enc:", 0) != 0) {
+            } else if ((cfg_seal(k, v) || (sec == "aliases" && perform_secret(v))) && !v.empty() && v.rfind("enc:", 0) != 0) {
                 if (key.empty() && (key = cfg_key(path, true)).empty()) { err = "can't write secret.key next to " + path; return false; }
                 v = "enc:" + e2e_seal(key, v);
             }

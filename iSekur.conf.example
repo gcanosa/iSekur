@@ -234,6 +234,13 @@ backlog       = 50           ; lines of each tab a client gets when it connects 
 #          scroll_down toggle_nicklist toggle_topic detach toggle_mouse other_pane find_tab
 #          quit (asks first) keys (the key list, F1 M-k)
 #          tab_1 .. tab_10
+[aliases]
+; Your own commands: /alias name /command, or one line each here; && runs several in order.
+; $1..$9 the words after /name, $1- that word on, $* all, $nick, $channel, $server (/help alias).
+; ns     = /msg NickServ $*
+; rejoin = /part && /join $channel
+; brb    = /away $* && /nick $nick|away
+
 [keys]
 ; The defaults are shown. Uncomment a line to change that action's keys (or /set keys.next_tab "M-Right C-n").
 ; next_tab = M-Down C-n

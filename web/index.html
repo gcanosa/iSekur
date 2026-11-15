@@ -2765,7 +2765,7 @@ function renderSettings(list) {
       for (const c of choices.includes(now) || !now ? choices : [now, ...choices]) sel.append(new Option(c, c, false, c === now));  // a /set value not in the list stays shown
       sel.onchange = () => live(sel.value);
       Object.assign(row, {el: sel, get: () => sel.value, orig: now});
-    } else if (k === "perform") {  // its commands one per line, like the Servers window
+    } else if (k === "perform" || sec === "aliases") {  // commands one per line, like the Servers window
       const pb = perfBox(v, () => pb.ta.classList.toggle("chg", pb.get() !== row.orig));
       Object.assign(row, {el: pb.wrap, get: pb.get, orig: performLines(v).join(" && ")});
     } else {
@@ -2786,7 +2786,7 @@ const inCat = (cat, s) => !s || cat === s || cat.startsWith(s + "/");
 function catLabel(s) {
   if (!s) return "All";
   if (s.includes("/")) return s.slice(s.indexOf("/") + 1);
-  return s === "general" ? "Global" : s.startsWith("server.") ? "⇢ " + s.slice(7) : s === "web" ? "Web" : s === "bnc" ? "BNC" : s === "keys" ? "Keys" : s;
+  return s === "general" ? "Global" : s.startsWith("server.") ? "⇢ " + s.slice(7) : s === "web" ? "Web" : s === "bnc" ? "BNC" : s === "keys" ? "Keys" : s === "aliases" ? "Aliases" : s;
 }
 // the categories with how many keys match, and the keys of the chosen one (or all, under section headers)
 function filterSettings() {

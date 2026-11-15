@@ -925,9 +925,7 @@ void Web::snapshot(Client& cl) {
         known.insert(b->id);
     }
     send(order_json());
-    std::string cm = "{\"t\":\"cmds\",\"list\":[";  // Tab completion and the suggestions: [name, usage, summary, aliases]
-    for (auto& k : commands()) cm += std::string(cm.back() == '[' ? "" : ",") + "[" + json_str(k.name) + "," + json_str(k.usage) + "," + json_str(k.summary) + "," + json_str(k.aliases) + "]";
-    send(cm + "]}");
+    send(cmds_json());
     send(keys_json());
     send(stat_json());
     if (c.active) send("{\"t\":\"active\",\"buf\":" + std::to_string(c.active->id) + "}");
@@ -962,6 +960,15 @@ void Web::broadcast(const std::string& json) {
         if (cl->conn.out.size() > MAX_OUT) { cl->conn.closing = true; continue; }  // too slow
         cl->conn.out += f;
     }
+}
+
+std::string Web::cmds_json() {  // [name, usage, summary, aliases]
+    std::string cm = "{\"t\":\"cmds\",\"list\":[";
+    for (auto& k : commands()) cm += std::string(cm.back() == '[' ? "" : ",") + "[" + json_str(k.name) + "," + json_str(k.usage) + "," + json_str(k.summary) + "," + json_str(k.aliases) + "]";
+    if (c.cfg.count("aliases"))
+        for (auto& [k, v] : c.cfg.at("aliases"))
+            if (!v.empty() && !find_command(k)) cm += ",[" + json_str(k) + ",\"\"," + json_str("alias: " + perform_show(v)) + ",\"\"]";
+    return cm + "]}";
 }
 
 std::string Web::keys_json() {
@@ -1035,6 +1042,7 @@ void Web::flush() {
     if (o != last_order) broadcast(o), last_order = o;
     std::string k = keys_json();
     if (k != last_keys) broadcast(k), last_keys = k;
+    if (std::string cm = cmds_json(); cm != last_cmds) broadcast(cm), last_cmds = cm;  // an /alias made, changed or removed
     time_t t = time(nullptr);
     if (t != last_stat_at) {  // the clock, lag, cpu...: at most once a second
         last_stat_at = t;

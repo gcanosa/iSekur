@@ -1324,7 +1324,7 @@ static std::string cat_label(const std::string& c) {
     if (c == "general") return "Global";
     if (c.rfind("server.", 0) == 0 && cat_parent(c).empty()) return "⇢ " + c.substr(7);
     if (!cat_parent(c).empty()) return (cat_parent(c) == "general" ? "  " : "    ") + c.substr(c.find('/') + 1);
-    return c == "web" ? "Web" : c == "bnc" ? "BNC" : c == "keys" ? "Keys" : c;
+    return c == "web" ? "Web" : c == "bnc" ? "BNC" : c == "keys" ? "Keys" : c == "aliases" ? "Aliases" : c;
 }
 
 // the server the selected key or category is about ("" for none): its keys, or a "server.x" category
@@ -1473,7 +1473,8 @@ void Tui::draw_settings(int W, int H) {
             continue;
         }
         std::string over = L.r->over.empty() ? "" : "  (" + L.r->over + ")";
-        std::string v = !L.r->val.empty() ? (L.r->secret ? "********" : L.r->val) + (overrides ? "  \u2190 overrides Global" : "") + over
+        bool cmds = L.r->key == "perform" || L.r->sec == "aliases";  // commands: their passwords as ********
+        std::string v = !L.r->val.empty() ? (L.r->secret ? "********" : cmds ? perform_show(L.r->val) : L.r->val) + (overrides ? "  \u2190 overrides Global" : "") + over
                         : L.r->secret || L.r->def.empty() ? "(not set)" + over
                                                           : (inherits ? "inherits: " : "default: ") + L.r->def + over;
         int ex = text(vx, yy, vmax, v, on ? sel : L.r->val.empty() ? dim : val, false);
@@ -3362,6 +3363,9 @@ int Tui::suggest(std::vector<Sugg>& out) const {
         for (auto& k : commands())
             if (std::string(k.name).rfind(irc_lower(pfx), 0) == 0)
                 out.push_back({(slash ? "/" : "") + std::string(k.name), (*k.usage ? " " + std::string(k.usage) : "") + "  ", k.summary});
+        if (c.cfg.count("aliases"))  // yours (/alias), after iSekur's
+            for (auto& [k, v] : c.cfg.at("aliases"))
+                if (!v.empty() && k.rfind(irc_lower(pfx), 0) == 0) out.push_back({(slash ? "/" : "") + k, "  ", "alias: " + perform_show(v)});
     };
     if (sp == std::string::npos) { cmds(s.substr(1), true); return 0; }  // "/jo"
     std::string cmd = irc_lower(s.substr(1, sp - 1)), arg = s.substr(sp + 1);

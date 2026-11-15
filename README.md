@@ -32,6 +32,8 @@ that mirrors your live session in a browser, bouncer style.
   and account registration (`/register`, `/verify`)
 - Per server: autoconnect, autojoin with channel keys (`/autojoin add` in a channel, `/autojoin snap` saves every open channel), SASL or
   `nickserv_pass` to identify on connect (`auto_identify = false` turns that off)
+- Aliases: your own commands (`/alias ns /msg NickServ $*`, `/alias rejoin /part && /join $channel`), with `$1`..`$9`,
+  `$1-`, `$*`, `$nick`, `$channel` and `$server`; kept in `[aliases]`, encrypted when one holds a password
 - Per server, on connect: user modes (`umodes = +ix`) and commands run before autojoin (`/perform`), for X on
   Undernet, Q on QuakeNet, eggdrops, IdleRPG or anything else; `/perform preset undernet` asks for the login and adds
   it (with +x, and the channels wait for the hidden host). One `perform =` line per command; a line with a password is encrypted. Also in `/servers`
