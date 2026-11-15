@@ -115,7 +115,7 @@ macOS (Homebrew):
 Needs a C++17 compiler, GNU make, OpenSSL 1.1+/LibreSSL and PAM (libpam0g-dev on Debian/Ubuntu). termbox2 and libvterm are vendored.
 
     make            # gmake on *BSD
-    make test
+    make test       # optional: checks the build on your system
     make notwitch   # without Twitch chat support (/twitch then says so)
     ./isekur        # or: ./isekur -c path/to/isekur.conf
     sudo make install            # /usr/local; PREFIX=... must match the build
