@@ -129,6 +129,8 @@ dialog, #ctx, #lock .card { --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: v
 dialog { background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: var(--dlg-sel-bg, #ffffff14); --tab_active-fg: var(--dlg-sel-fg, #d6d8e6);
   --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); border: 1px solid var(--line); border-radius: 12px; padding: 0; width: min(560px, calc(100vw - 32px)); max-height: calc(var(--vvh, 100dvh) - 48px); }
+/* modal: centered in what the keyboard leaves visible (--vvt/--vvb, fitView), not on the whole screen under it */
+dialog:modal { inset: var(--vvt, 0px) 0 var(--vvb, 0px); }
 dialog::backdrop { background: #0009; }
 dialog form { display: grid; gap: 10px; padding: 18px 20px; }
 dialog h2 { margin: 0 0 4px; font-size: calc(15px * var(--z, 1)); color: var(--dlg-title, var(--accent)); }
@@ -785,7 +787,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
     <button>Unlock</button>
     <div id="lockerr" role="alert"></div>
   </form></div>
-<dialog id="dtopic"><form method="dialog">
+<dialog id="dtopic" data-type><form method="dialog">
   <h2 id="dtopic-h">Topic</h2>
   <label>Enter sets it, Esc leaves it as it is<input name="t" id="dtopic-t" autocomplete="off" spellcheck="true"></label>
   <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok">Set topic</button></div>
@@ -878,7 +880,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <p id="dpab-d"></p>
   <div class="btns"><button class="go" value="ok" autofocus>Close</button></div>
 </form></dialog>
-<dialog id="dask"><form method="dialog">
+<dialog id="dask" data-type><form method="dialog">
   <h2 id="dask-h">iSekur</h2>
   <div id="dask-t" class="dask-t"></div>
   <label id="dask-l"><span></span><input id="dask-i" autocomplete="off" spellcheck="false"></label>
@@ -1985,9 +1987,18 @@ try { sideFold(localStorage.getItem("side") === "0"); } catch (e) { sideFold(fal
 // fixed at the viewport's top (--vvt) with its height (--vvh), and the overlays start under the topic bar (--toph).
 // iOS can send the last resize late (or none): look again as the keyboard settles, and on every pan
 const vv = window.visualViewport, root = document.documentElement.style;
+// a phone: a window opens without the keyboard, or it covers the window (the search box or first field would raise it);
+// a tap on a field brings it. The question box and the topic (data-type) are for typing: they keep it. touch: below
+const showModal0 = HTMLDialogElement.prototype.showModal;
+HTMLDialogElement.prototype.showModal = function () {
+  showModal0.call(this);
+  if (touch && !("type" in this.dataset)) document.activeElement?.blur();
+};
+const deskFocus = e => { if (!touch) e.focus(); };
 function fitView() {
   if (!vv || Math.abs(vv.scale - 1) > .01) return;
   root.setProperty("--vvh", vv.height + "px"), root.setProperty("--vvt", vv.offsetTop + "px");
+  root.setProperty("--vvb", Math.max(0, innerHeight - vv.offsetTop - vv.height) + "px");  // under it: the keyboard
   window.scrollTo(0, 0);
   root.setProperty("--toph", $("#topic").getBoundingClientRect().bottom + "px");
 }
@@ -2258,7 +2269,7 @@ function renderThemes() {
   box.children[thSel]?.scrollIntoView({block: "nearest"});
 }
 function thPick() { const n = thList()[thSel]; if (n && n !== theme.name) send({t: "theme", buf: active, name: n}); renderThemes(); }  // the live preview
-function openThemes() { thOrig = theme.name; $("#thq").value = ""; thSel = Math.max(0, (theme.themes || []).indexOf(thOrig)); dtheme.returnValue = ""; dtheme.showModal(); renderThemes(); $("#thq").focus(); }  // render once open: scrollIntoView does nothing in a closed dialog
+function openThemes() { thOrig = theme.name; $("#thq").value = ""; thSel = Math.max(0, (theme.themes || []).indexOf(thOrig)); dtheme.returnValue = ""; dtheme.showModal(); renderThemes(); deskFocus($("#thq")); }  // render once open: scrollIntoView does nothing in a closed dialog
 $("#thq").oninput = () => { thSel = 0; thPick(); };
 $("#thq").onkeydown = e => {
   const n = thList().length, d = {ArrowDown: 1, ArrowUp: -1, PageDown: 8, PageUp: -8}[e.key];
@@ -2306,7 +2317,7 @@ function renderKeys() {
   $("#klist").innerHTML = h || '<div class="none">no key matches</div>';
 }
 const dkeys = $("#dkeys");
-function openKeys() { $("#side").classList.remove("open"); $("#kq").value = ""; renderKeys(); dkeys.showModal(); $("#kq").focus(); }
+function openKeys() { $("#side").classList.remove("open"); $("#kq").value = ""; renderKeys(); dkeys.showModal(); deskFocus($("#kq")); }
 $("#kq").oninput = renderKeys;
 // 📜 /logs: the log browser. The tree is network > channel or query > its days, newest first. A day comes whole
 // (logread); the find box filters it as you type, and Enter searches every day of the channel or network picked in
@@ -2322,7 +2333,7 @@ function openLogs(q) {
   $("#side").classList.remove("open");
   lgs = null; lgOpen = new Set(); lgSel = null; lgDay = null; lgHits = null; lgCal = null; lgQ0 = q;
   $("#logq").value = q; $("#logev").checked = true;
-  send({t: "logs", buf: active}); dlogs.showModal(); renderLogs(); $("#logq").focus();
+  send({t: "logs", buf: active}); dlogs.showModal(); renderLogs(); deskFocus($("#logq"));
 }
 // the find box's words, "a phrase" and nick:alice (or from:), as the terminal's
 function logQuery(q) {
@@ -2570,7 +2581,7 @@ const bAgo = s => s < 60 ? "<1m" : s < 3600 ? Math.floor(s / 60) + "m" : s < 864
 function bansAsk(mode) { bMode = mode; bans = null; bSel = ""; send({t: "bans", buf: bBuf, mode}); renderBans(); }
 function openBans(mode = "b", buf = active) {
   $("#side").classList.remove("open"); bBuf = buf; bSort = "t"; bRev = false; $("#bq").value = "";
-  dbans.returnValue = ""; dbans.showModal(); bansAsk(mode); $("#bq").focus();
+  dbans.returnValue = ""; dbans.showModal(); bansAsk(mode); deskFocus($("#bq"));
 }
 function bList() {
   const q = $("#bq").value.trim().toLowerCase(), key = {m: r => r[0].toLowerCase(), s: r => r[1].toLowerCase(), t: r => -r[2]}[bSort];  // t: newest first
