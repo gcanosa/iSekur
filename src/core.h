@@ -407,7 +407,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null; l non-null: the soft one); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -471,7 +471,7 @@ struct Core {
     bool tty = false;         // a terminal is attached (the TUI is drawing)
     bool detach_req = false;  // /detach or Alt+D: main() lets go of the terminal
     bool bell = false;  // the TUI rings the terminal bell on its next draw
-    void ring(Server* s);  // private message, mention or invite, if bell_notifications
+    void ring(Server* s, bool soft = false);  // private message or mention (soft: invite, /notify online, DCC), if bell_notifications
     // /e2e, /oper: the next line typed in pass_buf is a password, handed to pass_done
     Buffer* pass_buf = nullptr;
     std::string pass_label;  // the TUI's prompt, e.g. "Password for bob"

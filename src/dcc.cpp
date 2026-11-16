@@ -91,7 +91,7 @@ static std::string tag(const Dcc* d) { return "DCC #" + std::to_string(d->id) + 
 static void note(Core& c, Dcc* d, LK k, const std::string& title, const std::string& text) {
     Buffer* b = where(c, d->srv);
     c.print(b, k, text);
-    c.ring(d->srv);
+    c.ring(d->srv, true);
     Line l{time(nullptr), k, title, text};
     c.notify(Ev::NOTE, b, &l);
 }

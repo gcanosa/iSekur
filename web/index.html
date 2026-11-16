@@ -1691,7 +1691,7 @@ function onMsg(ev) {
   } else if (m.t === "speak") {  // a plugin's text: the browser's voice
     say(m.text, m.lang);
   } else if (m.t === "bell") {
-    beep();
+    beep(m.soft);
   } else if (m.t === "menu") {
     showMenu(m);
   } else if (m.t === "about") {
@@ -3444,9 +3444,10 @@ for (const m of panes) {
 document.fonts?.addEventListener("loadingdone", keepEnd);
 // bell_notifications: a short beep, like the terminal's bell (browsers allow sound after a first click or key)
 let actx = null;
-const unlockAudio = () => { try { actx = actx || new AudioContext(); actx.resume(); } catch (e) {} };
-addEventListener("pointerdown", unlockAudio, {once: true});
-addEventListener("keydown", unlockAudio, {once: true});
+// not once: iOS suspends the context when the page goes to the background, a later tap wakes it again
+const unlockAudio = () => { try { actx = actx || new AudioContext(); if (actx.state !== "running") actx.resume(); } catch (e) {} };
+addEventListener("pointerdown", unlockAudio);
+addEventListener("keydown", unlockAudio);
 // a plugin's text, read aloud by the browser's voice (no voice or no speechSynthesis: silent)
 function say(text, lang) {
   try {
@@ -3456,11 +3457,22 @@ function say(text, lang) {
     speechSynthesis.speak(u);
   } catch (e) {}
 }
-function beep() {
-  if (!actx || actx.state !== "running") return;
-  const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
-  o.frequency.value = 880; g.gain.setValueAtTime(0.08, t); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.15);
-  o.connect(g).connect(actx.destination); o.start(t); o.stop(t + 0.15);
+// a rising two-note chime, each note with a soft octave, loud enough over a phone's speaker:
+// E5-A5 for mentions and private messages, the softer B4-E5 for invites, /notify and DCC
+function beep(soft) {
+  if (!actx) return;
+  if (actx.state !== "running") actx.resume().catch(() => {});
+  const t0 = actx.currentTime + 0.01;
+  (soft ? [[494, 0], [659, 0.11]] : [[659, 0], [880, 0.11]]).forEach(([f, d]) => {
+    const t = t0 + d, g = actx.createGain();
+    g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(0.35, t + 0.008); g.gain.exponentialRampToValueAtTime(0.0001, t + 0.45);
+    g.connect(actx.destination);
+    [[f, 1], [f * 2, 0.25]].forEach(([hz, v]) => {
+      const o = actx.createOscillator(), h = actx.createGain();
+      o.frequency.value = hz; h.gain.value = v;
+      o.connect(h).connect(g); o.start(t); o.stop(t + 0.46);
+    });
+  });
 }
 // Highlights and private messages you're not looking at: a count in the tab
 // title, plus a desktop notification once the bell is switched on.

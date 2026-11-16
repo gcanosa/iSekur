@@ -1243,7 +1243,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
         break;
     case Ev::CLEAR: known.erase(b->id), sent_nicks.erase(b->id), pending.insert(b->id); break;  // its lines go out again, from scratch
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
-    case Ev::BELL: broadcast("{\"t\":\"bell\"}"); break;
+    case Ev::BELL: broadcast(l ? "{\"t\":\"bell\",\"soft\":1}" : "{\"t\":\"bell\"}"); break;
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
     case Ev::LOCK: case Ev::SCREEN: break;  // above
     case Ev::UPDATE: broadcast(update_json()); break;

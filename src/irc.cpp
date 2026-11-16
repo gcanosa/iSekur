@@ -1246,7 +1246,7 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "INVITE") {
         print(reply_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));
-        if (is_me(m.p(0))) ring(s);
+        if (is_me(m.p(0))) ring(s, true);
         return;
     }
     if (cmd == "PRIVMSG" || cmd == "NOTICE") {

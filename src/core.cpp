@@ -1125,8 +1125,9 @@ void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(cons
     notify(Ev::BUFFER, b);  // the webchat's input line turns into a password field
 }
 
-void Core::ring(Server* s) {
-    if (opt_on(s, "bell_notifications", true)) bell = dirty = true, notify(Ev::BELL, nullptr);
+void Core::ring(Server* s, bool soft) {
+    static const Line SOFT{};  // ponytail: only its presence matters, the webchat plays the lower chime
+    if (opt_on(s, "bell_notifications", true)) bell = dirty = true, notify(Ev::BELL, nullptr, soft ? &SOFT : nullptr);
 }
 
 bool Core::opt_on(const Server* s, const std::string& key, bool def) const {
@@ -1588,7 +1589,7 @@ void Core::notify_seen(Server* s, const std::string& nick, bool on, const std::s
     std::string t = on ? "\x02" + nick + "\x02 is online" + (host.empty() ? "" : " (" + host + ")") : nick + " went offline";
     add(s->status, Line{time(nullptr), LK::INFO, "", t, false, on});  // online: a hilight, copied to window 1
     if (Buffer* q = find(s, nick); q && q->type == BT::QUERY) print(q, LK::INFO, t);
-    if (on) ring(s);
+    if (on) ring(s, true);
 }
 
 void Core::notify_cmd(Buffer* b, const std::string& args) {
