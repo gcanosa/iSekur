@@ -1790,7 +1790,7 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
              {"", "Home End", "start / end of the line"}, {"", "C-u C-k", "delete to start / end"}, {"", "M-BS", "delete the previous word"},
              {"", by["copy_input"], "copy the line (or drag over it)"},
              {"", "C-b C-c C-o", "bold, color, reset"}, {"", "C-v C-] C-_", "reverse, italic, underline"}})
-        out.push_back(r);
+        if (!r.specs.empty()) out.push_back(r);  // copy_input unbound in [keys]: no row
     return out;
 }
 
