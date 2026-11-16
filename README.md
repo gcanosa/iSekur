@@ -13,10 +13,11 @@ that mirrors your live session in a browser, bouncer style.
 
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
-- Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list. The tabs sit on top, or
-  down the left or right side as a tree of networks and their channels (`/set tab_bar left`, `tab_bar_width` or drag its edge),
-  and the nicklist right or left (`/set nicklist_side left`, `nicklist_width` or drag its `│`); a theme can set
-  both widths in its `[layout]`
+- Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
+- Your layout: the tabs on top, or down the left or right side as a tree of networks and their channels like the
+  webchat's (`/set tab_bar left`); the nicklist right or left of the chat (`/set nicklist_side left`). Their widths
+  are `tab_bar_width` and `nicklist_width`, or a drag on their `│`; left empty they're the theme's `[layout]` ones,
+  so a theme can make them wider. All in `/set` → Look, applied as you set them ([screenshot](https://gcanosa.github.io/isekur-site/img/doc-layout.png))
 - `/split` shows two tabs at once, side by side or stacked: keep an eye on a second channel, a private chat or the
   server tab while you talk in the first. Each channel pane has its own nicklist, F6 or Alt+O moves the typing to
   the other pane, `/unsplit` goes back to one. The same in the webchat
@@ -28,7 +29,7 @@ that mirrors your live session in a browser, bouncer style.
   - soft contrast, for late hours: ember, midnight, moss, dusk (dark), dawn, paper, fog, sage (light)
   - mirc / mirc-dark: the classic mIRC look
   - mono / mono-light: no colors at all, greys only (nicks one grey, mIRC color codes in messages shown plain)
-  - every theme file names every key a theme can set, live or as a `# key = ...` example with what it does and what happens unset, so copying any one is a full template for your own (`/set theme_dir ~/mythemes`)
+  - every theme file names every key a theme can set, live or as a `# key = ...` example with what it does and what happens unset, so copying any one is a full template for your own (`/set theme_dir ~/mythemes`); its `[layout]` also sets the nicklist and side tab list widths
 - TLS with certificate verification, IRC over WebSocket (`/server wss://irc.sekurnet.org/ws`), plus IRCv3: CAP 302, SASL PLAIN / SCRAM-SHA-256 / EXTERNAL,
   server-time, echo-message, multi-prefix, away/account-notify, extended-join, account-tag, chghost, setname,
   STS (a server that asks for TLS gets it, and keeps getting it), labeled-response, standard replies,
@@ -56,7 +57,7 @@ that mirrors your live session in a browser, bouncer style.
 - Detach and attach like tmux: Alt+D or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
 - `--daemon` starts it headless; attach from a terminal or the browser
-- Mouse: click tabs and activity numbers, double click a nick for a private chat (a click selects it, Shift or Ctrl+click adds more, right click acts on them all: op, voice, kick), wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click opens it in a box to edit (when you may change it: ops on +t channels)
+- Mouse: click tabs and activity numbers, double click a nick for a private chat (a click selects it, Shift or Ctrl+click adds more, right click acts on them all: op, voice, kick), wheel scrolls chat, nicklist and the side tab list, drag a tab onto another to move it, drag the `│` of the side tab list or the nicklist to resize it, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click opens it in a box to edit (when you may change it: ops on +t channels)
 - Flood-safe sending (pastes are queued so servers don't kick you; long pastes ask first) and `/ignore`
 - Highlights on your nick plus your own words (`/hilight add isekur`, `*` globs), and quit/part messages you can set (`quit_message`, `part_message`)
 - `/grep [-all] text` searches the scrollback
