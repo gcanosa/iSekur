@@ -654,6 +654,14 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #sugg .v { color: var(--set_value-fg, var(--input-fg, var(--fg))); }
 #sugg .cmd .s { color: var(--sugg_usage-fg, var(--input-fg, var(--fg))); }  /* a command's usage: readable, not the separator's line color */
 #sugg .cmd .v { color: var(--sugg_desc-fg, var(--info-fg, var(--fg))); }
+/* nick suggestions: the nick in its color, where it was seen as a small tag; on phones a row of chips */
+#sugg .n.away { opacity: .55; }
+#sugg .n .t { margin-left: 10px; padding: 0 6px; border: 1px solid var(--line); border-radius: 8px; color: var(--muted); font-size: .85em; }
+#sugg.chips { display: flex; gap: 6px; padding: 6px 10px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+#sugg.chips::-webkit-scrollbar { display: none; }
+#sugg.chips div { flex: none; padding: 6px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel, var(--bg)); }
+#sugg.chips div.on { border-color: var(--accent); }
+#sugg.chips .n .t { margin-left: 6px; border: none; padding: 0; }
 #prompt { color: var(--input_prompt-fg, var(--accent)); align-self: center; white-space: nowrap; }
 #line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
 @media (pointer: coarse) { input, select, textarea { font-size: max(16px, 1em) !important; } }
@@ -3032,20 +3040,41 @@ const asking = () => { const b = bufs.get(active); return !!(b && b.ask); };
 // like the terminal's: [from, [[word, sep, value], ...]]; from -1: none, -2: only the command's usage
 const csuffix = () => (theme.lay || {}).complete_suffix ?? ":";  // [general] complete_suffix: "bob: " at a line's start
 const touch = matchMedia("(pointer: coarse)").matches;  // phones/tablets: no Tab key, so nicks are offered as you type
+// nicks starting with word, as suggestion rows [nick + suffix, "", where, entry]: the tab's own; with wide, in a tab
+// without a nicklist (the server tab, a query), the network's other tabs' with the tab they're in.
+// entry ([prefix, nick, away]) marks a nick row, drawn as one
+function nickRows(b, word, wide, suffix = "") {
+  const pfx = ircLower(word), me = ircLower(b.me || ""), seen = new Set(), out = [];
+  const add = (e, where) => { const l = ircLower(e[1]); if (l.startsWith(pfx) && l !== me && !seen.has(l)) seen.add(l), out.push([e[1] + suffix, "", where, e]); };
+  const scan = x => {
+    for (const e of x.nicks) add(e, x === b ? "" : x.name);
+    if (x.type === "query" && x.name[0] !== "*") add(["", x.name, 0], x === b ? "" : "query");
+  };
+  scan(b);
+  if (wide && b.type !== "channel") for (const x of bufs.values()) if (x !== b && x.net && x.net === b.net) scan(x);
+  return out.slice(0, 40);
+}
 function suggest(s) {
   if (asking()) return [-1, []];
-  if (touch && s && !/[\s\/]/.test(s)) {  // the line's first word: nicks here that start with it, tapped in as "nick: "
-    const b = bufs.get(active), pfx = ircLower(s), out = [];
-    if (!b) return [-1, []];
-    for (const n of b.nicks.map(n => n[1]).concat(b.type === "query" ? [b.name] : []))
-      if (ircLower(n).startsWith(pfx)) out.push([n + csuffix(), "", ""]);
-    return [0, out.sort((x, y) => ircLower(x[0]).localeCompare(ircLower(y[0]))).slice(0, 8)];
+  // phones/tablets, a message: the nick being typed (no Tab key there), from 2 letters ("al" is enough for the
+  // line's first word, tapped in as "alice: ")
+  if (touch && s && s[0] !== "/") {
+    const b = bufs.get(active), at = s.search(/\S*$/), word = s.slice(at);
+    if (!b || !word || (at && word.length < 2) || /^[#&]/.test(word)) return [-1, []];
+    const out = nickRows(b, word.replace(/^@/, ""), false, at ? "" : csuffix());
+    return out.length ? [at, out] : [-1, []];
   }
   if (s[0] !== "/" || s.startsWith("//")) return [-1, []];
   const sp = s.indexOf(" "), out = [];
   const cm = (pfx, slash) => { for (const [n, u, sum] of cmds) if (n.startsWith(ircLower(pfx))) out.push([(slash ? "/" : "") + n, (u ? " " + u : "") + "  ", sum]); };
   if (sp < 0) { cm(s.slice(1), true); return [0, out]; }
   const cmd = ircLower(s.slice(1, sp)), arg = s.slice(sp + 1);
+  // "/msg al", "/op alice bo": nicks for the word being typed
+  const at = s.lastIndexOf(" ") + 1, word = s.slice(at), nk = cmds.find(c => c[0] === cmd || (c[3] || "").split(" ").includes(cmd)), b = bufs.get(active);
+  if (word && nk && b && b.net && nickArg(nk[1], arg.split(" ").length - 1, arg.split(" ")[0])) {
+    const nr = nickRows(b, word, true);
+    if (nr.length) return [at, nr];
+  }
   if (arg.includes(" ")) return [-1, []];
   if (cmd === "set") {  // config keys containing what's typed
     if (!setAsked) setAsked = true, send({t: "settings", buf: active});
@@ -3063,6 +3092,21 @@ function suggest(s) {
   const k = cmds.find(c => c[0] === cmd || (c[3] || "").split(" ").includes(cmd));
   if (k) { out.push(["/" + k[0], (k[1] ? " " + k[1] : "") + "  ", k[2]]); return [-2, out]; }
   return [-1, []];
+}
+// does word i of a command with this usage take a nick? Like nick_arg() in src/help.cpp
+function nickArg(usage, i, first) {
+  const t = [];
+  for (let w of usage.split(" | ")[0].split(" ")) {
+    w = w.replace(/^\[+/, "").replace(/\]+$/, "");
+    const rep = w.endsWith("...");
+    if (rep) w = w.slice(0, -3);
+    if (w) t.push(w);
+    if (rep) t.push("...");
+  }
+  if (t[0] === "#channel" && !/^[#&]/.test(first)) t.shift();
+  if (i >= t.length) { if (t[t.length - 1] !== "...") return false; i = t.length - 1; }
+  while (i > 0 && t[i] === "...") i--;
+  return t[i] === "nick" || t[i] === "target" || t[i].startsWith("nick|");
 }
 // where a NickServ/ChanServ password starts and ends in a typed line ([-1] if none), like services_secret()
 // and input_secret() in src/core.cpp: only the password, nicks, channels and emails stay readable
@@ -3163,10 +3207,18 @@ function renderSugg() {
   const [, sg] = suggest(v);
   if (suggSel >= sg.length) suggSel = -1;
   box.textContent = "";
-  sg.forEach(([w, sp, val], i) => {
-    const d = el("div", (i === suggSel ? "on" : "") + (sp !== " = " ? " cmd" : ""));
-    d.append(el("span", "w", w), el("span", "s", sp), el("span", "v", val));
-    d.onmousedown = e => { e.preventDefault(); suggSel = i; take(); };
+  // nicks: in their colors with @/+, away ones dimmed; on a phone a row of chips that scrolls sideways
+  const nicks = sg.length && sg[0][3];
+  box.className = nicks ? "nk" + (touch ? " chips" : "") : "";
+  sg.forEach(([w, sp, val, e], i) => {
+    const d = el("div", (i === suggSel ? "on" : "") + (e ? " n" + (e[2] ? " away" : "") : sp !== " = " ? " cmd" : ""));
+    if (e) {
+      const nm = el("span", "w", (e[0] ? e[0][0] : "") + w);
+      nm.style.color = nickColor(e[1]);
+      d.append(nm);
+      if (val) d.append(el("span", "t", val));
+    } else d.append(el("span", "w", w), el("span", "s", sp), el("span", "v", val));
+    d.onmousedown = ev => { ev.preventDefault(); suggSel = i; take(); };
     box.append(d);
   });
   const on = box.querySelector(".on");

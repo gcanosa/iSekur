@@ -14,6 +14,9 @@ that mirrors your live session in a browser, bouncer style.
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
 - Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
+- `/split` shows two tabs at once, side by side or stacked: keep an eye on a second channel, a private chat or the
+  server tab while you talk in the first. Each channel pane has its own nicklist, F6 or Alt+O moves the typing to
+  the other pane, `/unsplit` goes back to one. The same in the webchat
 - 45 24-bit color themes in `themes/*.theme`, with a 256-color fallback (`/theme` alone opens a live picker):
   - dark: default, neon, dracula, tokyonight, catppuccin-mocha, gruvbox, nord, onedark, rose-pine, kanagawa, solarized,
     github-dark, everforest, ayu, nightfox, night-owl, material, contrast-dark (high contrast)
@@ -55,13 +58,15 @@ that mirrors your live session in a browser, bouncer style.
 - Highlights on your nick plus your own words (`/hilight add isekur`, `*` globs), and quit/part messages you can set (`quit_message`, `part_message`)
 - `/grep [-all] text` searches the scrollback
 - Channel op shortcuts: mass op/voice/kick, `/lockdown`, `/kickban`, `/tempban`, `/chanstats`, `/topicrotate`, and `/bans`: the ban list in a window (terminal and webchat)
-- `/help` with colors, details and examples; commands complete with Tab as you type
+- `/help` with colors, details and examples; commands complete with Tab as you type, and so do the nicks they take
+  (`/msg al`, `/op alice bo`, `/kick tr`): the tab's own, or the network's from a server tab or a private chat.
+  On a phone, nicks show as chips above the keyboard as you type them, in a message too
 - Lua plugins, sandboxed, from a checked catalog (`/plugin install`), on everywhere or per network or channel; auto-away is one (`/plugin install autoaway`)
 - Catch-up from IRCv3 chathistory on join
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), a × on the hovered tab to close it (it asks before leaving a channel or disconnecting), folding networks, Alt+A for the next active tab and the theme's tab colors
-- It also has the terminal's input line and status bar: live suggestions (`/jo`, `/set key`, `/help k`; Up/Down, Tab), hidden password prompts (`/oper`, `/e2e`; Esc cancels, never in the history), pastes with newlines shown as ↵ and `paste_confirm`, mIRC formatting keys (Ctrl+B, Ctrl+C without a selection, Ctrl+O, Ctrl+R, Ctrl+I, Ctrl+U), clock, user modes, lag, clickable `[Act: ...]`, `-- MORE --` and `status_info`, double click the topic to edit it, the bell, and your `[keys]` bindings (Alt+W closes a tab and Alt+X goes to the next server, since browsers keep Ctrl+W and Ctrl+X)
+- It also has the terminal's input line and status bar: live suggestions (`/jo`, `/set key`, `/help k`, `/msg al`; Up/Down, Tab), hidden password prompts (`/oper`, `/e2e`; Esc cancels, never in the history), pastes with newlines shown as ↵ and `paste_confirm`, mIRC formatting keys (Ctrl+B, Ctrl+C without a selection, Ctrl+O, Ctrl+R, Ctrl+I, Ctrl+U), clock, user modes, lag, clickable `[Act: ...]`, `-- MORE --` and `status_info`, double click the topic to edit it, the bell, and your `[keys]` bindings (Alt+W closes a tab and Alt+X goes to the next server, since browsers keep Ctrl+W and Ctrl+X)
 - `/set` alone opens a settings window in the terminal: Global by topic, then each network with its own keys and every Global one it can override (shown as inherited or overriding), `/` to search, `e` to edit in place, Space to switch on/off or step through the themes, `s` saves (the webchat's ⚙ has switches and a theme list); `/set key ""` puts a key's default back
 - Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about
 - `/list` opens a sortable channel table in its own tab (click Channel or Users); type a word there to filter it by name or topic (Esc clears it); double click a #channel anywhere to join it
@@ -287,7 +292,7 @@ dropped instead of showing up as garbage.
 ## Commands
 
 `/server host [port] [-tls] [-noverify]`, `/server rename old new`, `/connect`, `/disconnect`, `/join`, `/part`,
-`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
+`/msg`, `/query`, `/me`, `/notice`, `/nick`, `/topic`, `/quiet [on|off]` (hide joins/parts/quits/nick changes in this tab), `/close`, `/win N`, `/split [side|stack] [N|name]` (two tabs at once) and `/unsplit`, `/raw`, `/rawlog [on|off]` (a *raw tab with every line to and from the server, passwords blanked), `/ctcp`,
 `/theme`, `/keys`, `/set [section.]key [value]`, `/save`, `/reload` (re-read the config file), `/ignore [-t time] [mask]`, `/unignore mask`, `/hilight [add|del] word`, `/grep [-all] text`, `/logs [text]` (the log browser, below), `/web [start|stop|status]`, `/bnc [start|stop|restart|status|password]`,
 `/clear`, `/back` (clears away), `/quit` (this tab's server), `/exit [-y]` (close iSekur; asks while connected, and for the lock password when one is set). Any other command goes to the server unchanged
 (`/whois`, `/mode`, `/away`, ...).

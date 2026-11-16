@@ -390,6 +390,14 @@ int main() {
         if (last_group != k.group) assert(groups.insert(k.group).second), last_group = k.group;
     }
     assert(find_command("J") && std::string(find_command("j")->name) == "join" && !find_command("nope"));
+    {  // which words take a nick: completion offers them
+        auto na = [](const char* c, size_t i, const char* w) { return nick_arg(*find_command(c), i, w); };
+        assert(na("msg", 0, "al") && !na("msg", 1, "hi") && na("query", 0, "b") && na("whois", 0, "x"));
+        assert(na("op", 0, "a") && na("op", 3, "d") && na("ban", 1, "t") && na("react", 1, "a") && !na("react", 0, "a"));
+        assert(na("kick", 0, "troll") && !na("kick", 0, "#chan") && na("kick", 1, "#chan") && !na("kick", 1, "troll") && !na("kick", 2, "#chan"));
+        assert(na("notify", 1, "a") && na("notify", 4, "a") && na("invite", 0, "a") && !na("invite", 1, "a"));
+        assert(!na("join", 0, "#a") && !na("set", 0, "nick") && !na("nick", 0, "x") && !na("tempban", 1, "30"));
+    }
     size_t before = home->lines.size();
     core.exec(home, "/help /join");  // usage, aliases, details, "Examples", 3 examples
     assert(home->lines.size() == before + 7 && home->lines.back().nolog);

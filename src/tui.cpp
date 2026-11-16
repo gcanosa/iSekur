@@ -3381,6 +3381,29 @@ int Tui::suggest(std::vector<Sugg>& out) const {
     };
     if (sp == std::string::npos) { cmds(s.substr(1), true); return 0; }  // "/jo"
     std::string cmd = irc_lower(s.substr(1, sp - 1)), arg = s.substr(sp + 1);
+    // "/msg al", "/op alice bo": nicks for the word being typed, the tab's own; in a tab without a nicklist
+    // (the server tab, a query) the network's, with the tab they're in
+    size_t ws = s.rfind(' ') + 1;
+    std::string word = s.substr(ws);
+    const CmdInfo* nk = find_command(cmd);
+    Buffer* b = c.active;
+    if (!word.empty() && nk && b && b->srv && nick_arg(*nk, (size_t)std::count(arg.begin(), arg.end(), ' '), arg.substr(0, arg.find(' ')))) {
+        std::string pfx = irc_lower(word), me = b->srv->lower(b->srv->nick);
+        std::set<std::string> seen;
+        auto add = [&](const std::string& n, const std::string& where) {
+            std::string l = b->srv->lower(n);
+            if (l.rfind(pfx, 0) == 0 && l != me && seen.insert(l).second) out.push_back({n, "  ", where});
+        };
+        auto scan = [&](Buffer* x) {
+            for (auto& kv : x->nicks) add(kv.second.nick, x == b ? "" : x->name);
+            if (x->type == BT::QUERY && x->name[0] != '*') add(x->name, x == b ? "" : "query");
+        };
+        scan(b);
+        if (b->type != BT::CHANNEL)
+            for (auto& x : c.bufs)
+                if (x->srv == b->srv && x.get() != b) scan(x.get());
+        if (!out.empty()) return (int)from_utf8(s.substr(0, ws)).size();  // Tab and the list count in characters
+    }
     if (arg.find(' ') == std::string::npos) {
         if (cmd == "set") {  // config keys containing what's typed
             for (auto& st : c.settings())
@@ -3409,7 +3432,7 @@ void Tui::complete() {
         comp.clear();
         std::vector<Sugg> sg;
         int from = suggest(sg);
-        if (from >= 0) {  // a command or config key, counted in UTF-8 bytes: these are ASCII
+        if (from >= 0) {  // a command, config key or nick
             st = (size_t)from;
             for (auto& g : sg) comp.push_back(g.word + " ");
         } else {

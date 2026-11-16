@@ -399,6 +399,7 @@ struct CmdInfo {
 };
 const std::vector<CmdInfo>& commands();
 const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
+bool nick_arg(const CmdInfo& k, size_t i, const std::string& first);  // /cmd's word i takes a nick (first: the 1st word typed)
 
 // ---- core ------------------------------------------------------------------
 // check_updates: the latest release's version, read on a thread; `done` publishes `ver`

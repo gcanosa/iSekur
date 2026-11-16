@@ -564,6 +564,28 @@ static const std::vector<CmdInfo> CMDS = {
 
 const std::vector<CmdInfo>& commands() { return CMDS; }
 
+// does word i (0 = the first after "/cmd") take a nick? From the usage: "nick", "target", "[nick|mask ...]";
+// "nick ..." repeats; a leading "[#channel]" is skipped when the first word isn't a channel ("/kick troll").
+// web/index.html nickArg() is the same
+bool nick_arg(const CmdInfo& k, size_t i, const std::string& first) {
+    std::string u = k.usage;
+    u = u.substr(0, u.find(" | "));
+    std::vector<std::string> t;
+    for (auto w : split(u, ' ')) {
+        w.erase(0, w.find_first_not_of('['));
+        while (!w.empty() && w.back() == ']') w.pop_back();
+        bool rep = w.size() >= 3 && w.compare(w.size() - 3, 3, "...") == 0;
+        if (rep) w.resize(w.size() - 3);
+        if (!w.empty()) t.push_back(w);
+        if (rep) t.push_back("...");
+    }
+    if (!t.empty() && t[0] == "#channel" && (first.empty() || (first[0] != '#' && first[0] != '&'))) t.erase(t.begin());
+    if (i >= t.size()) { if (t.empty() || t.back() != "...") return false; i = t.size() - 1; }
+    while (i > 0 && t[i] == "...") i--;
+    const std::string& w = t[i];
+    return w == "nick" || w == "target" || w.rfind("nick|", 0) == 0;
+}
+
 const CmdInfo* find_command(const std::string& name) {
     std::string n = irc_lower(name);
     for (auto& c : CMDS) {
