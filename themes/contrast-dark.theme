@@ -54,6 +54,7 @@ palette = #ff4040 #ffa500 #ffff00 #00ff00 #00ffff #6cb6ff #ff80ff #ff40ff
 [layout]
 nicklist       = on
 nicklist_width = 18
+tab_bar_width  = 20
 nick_width     = 12
 separator      = │
 timestamp      = %H:%M

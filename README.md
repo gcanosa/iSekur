@@ -13,7 +13,10 @@ that mirrors your live session in a browser, bouncer style.
 
 ![iSekur in a terminal: topic bar, tabs with activity colors, nicklist, mIRC colors, a highlight and a "new" marker above missed messages](docs/screenshot.png)
 
-- Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list
+- Multiple servers and tabs, a topic bar, a status bar, a nicklist and an activity list. The tabs sit on top, or
+  down the left or right side as a tree of networks and their channels (`/set tab_bar left`, `tab_bar_width` or drag its edge),
+  and the nicklist right or left (`/set nicklist_side left`, `nicklist_width` or drag its `│`); a theme can set
+  both widths in its `[layout]`
 - `/split` shows two tabs at once, side by side or stacked: keep an eye on a second channel, a private chat or the
   server tab while you talk in the first. Each channel pane has its own nicklist, F6 or Alt+O moves the typing to
   the other pane, `/unsplit` goes back to one. The same in the webchat

@@ -50,7 +50,11 @@ private:
     double hover_alpha(const void* l) const;
     void set_mouse();  // the input mode, and 1003 (every move) while timestamp_hover wants it
     int top_row() const { return (topicbar ? topic_h : 0) + tab_h; }  // first chat row, under the topic and tab bars
-    int tab_h = 1;  // tab bar rows, set by draw()
+    int tab_h = 1;  // tab bar rows, set by draw() (0 with tab_bar = left)
+    // tab_bar = left | right: the tabs as a tree in side_w columns from side_x, a │ at sep_x, the chat from chat_x
+    // to chat_end (side_w 0: tabs on top)
+    int side_w = 0, side_x = 0, sep_x = -1, chat_x = 0, chat_end = 0, side_top = 0, side_act = -1;  // side_top: first row shown; side_act: the tab it last scrolled to
+    char wdrag = 0;  // dragging a │: t the side tab list's, n the nicklist's; the width follows the mouse, saved on release
     // topic bar: wheel scrolls it sideways, a click unfolds it, a double click edits it
     int topic_h = 1, topic_off = 0;
     bool topic_open = false;
@@ -86,7 +90,10 @@ private:
     int tab_drop = -1;  // while dragging one: the id of the tab it would land on (drawn reversed)
     std::pair<Buffer*, int> drop_at(int x, int y);  // the dragged tab and its /move N if released there, else {nullptr, 0}
     std::vector<Hit> hits;
-    int nl_x = -1, nl_scroll = 0;
+    int nl_x = -1, nl_scroll = 0;  // the focused nicklist's │ column (-1: none)
+    int nl_x0 = 0, nl_x1 = 0;      // ...and its list's columns [nl_x0, nl_x1)
+    bool nl_left = false;          // nicklist_side = left
+    int sel_lo = 0, sel_hi = 0;    // the chat text's columns a drag selects and copies in
     // right click on a nick or a channel tab: a menu of commands ("" label = separator); Up/Down/Enter or a click
     struct Menu { int x = 0, y = 0, sel = 0; std::string nick; std::vector<std::pair<std::string, std::string>> items; };
     Menu menu;  // items.empty() = closed
@@ -103,7 +110,7 @@ private:
     void shell_key(int mod, int k, uint32_t ch);
     void draw_term(Term* t, int top, int rows, int cols, int x0 = 0);
     void draw_chat(Buffer* b, int x, int y, int w, int h);  // a tab's lines (or its shell) in that box
-    void draw_nicks(Buffer* b, int sx, int top, int xend, int h, bool focus);
+    void draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int h, bool focus);  // its │ at sx, the list in [x0, xend)
     struct Box { int x = 0, y = 0, w = 0, h = 0; bool in(int px, int py) const { return w && px >= x && px < x + w && py >= y && py < y + h; } };
     Box other;
     Box pane;   // where the focused tab was drawn (a shell tab's clicks go to its program by it)  // /split: where the unfocused pane was drawn (a click there focuses it, the wheel scrolls it)

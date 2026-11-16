@@ -57,6 +57,7 @@ palette = #d2d2d2
 [layout]
 nicklist       = on
 nicklist_width = 16
+tab_bar_width  = 20
 nick_width     = 0
 nick_brackets  = <>
 event_marker   = *

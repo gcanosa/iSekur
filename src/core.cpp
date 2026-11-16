@@ -367,10 +367,16 @@ std::string Core::complete_suffix() const {
     return v == "off" || v == "none" ? "" : v;
 }
 
+// [general] keys whose empty value means the theme's [layout] one: that, else this default ("": not one of them)
+static std::string theme_def(const Theme& t, const std::string& k) {
+    static const std::map<std::string, std::string> D = {{"timestamp", "%H:%M"}, {"nick_width", "12"}, {"nicklist_width", "18"}, {"tab_bar_width", "20"}};
+    auto it = D.find(k);
+    return it == D.end() ? "" : t.lay(k, it->second);
+}
+
 std::vector<Core::Setting> Core::settings() const {
     Ini all = defaults;
-    all["general"]["timestamp"] = theme.lay("timestamp", "%H:%M");  // empty: the theme's, so that's its default
-    all["general"]["nick_width"] = theme.lay("nick_width", "12");
+    for (const char* k : {"timestamp", "nick_width", "nicklist_width", "tab_bar_width"}) all["general"][k] = theme_def(theme, k);  // empty: the theme's, so that's its default
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv)
             if (sec.rfind("plugin.", 0) != 0 && (!v.empty() || !all[sec].count(k))) all[sec][k] = v;  // "key =" keeps the default; plugins: /plugin
@@ -400,7 +406,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
     {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
-    {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'},
+    {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'}, {"tab_bar", "Look", 'g'}, {"tab_bar_width", "Look", 'g'}, {"nicklist_side", "Look", 'g'}, {"nicklist_width", "Look", 'g'},
     {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
     {"hilight_words", "Messages", 'n'}, {"hilight_window", "Messages", 'b'}, {"bell_notifications", "Messages", 'b'},
@@ -493,7 +499,7 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
 static std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> CHOICES = {
         {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
-        {"web_font", {"theme", "mono", "sans", "serif"}}, {"colors", {"auto", "truecolor", "256"}}};
+        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
     if (sec == "general" || srv) {
@@ -590,6 +596,8 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         to_lower(v);
         if (sec == "general" && k == "theme") r.choices = themes;
         else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
+        else if (sec == "general" && k == "tab_bar") r.choices = {"top", "left", "right"};
+        else if (sec == "general" && k == "nicklist_side") r.choices = {"right", "left"};
         else if (sec == "general" && k == "timestamp_hover") r.choices = {"off", "web", "term", "both"};
         else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
         else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
@@ -601,7 +609,8 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     };
     // what [general] uses when a key isn't set: the template's value (the theme's timestamp and nick column)
     auto gdef = [&](const std::string& k) {
-        return k == "timestamp" ? theme.lay("timestamp", "%H:%M") : k == "nick_width" ? theme.lay("nick_width", "12") : ini_get(defaults, "general", k);
+        std::string t = theme_def(theme, k);
+        return t.empty() ? ini_get(defaults, "general", k) : t;
     };
     std::vector<std::string> nets;
     for (auto& [sec, kv] : cfg)
@@ -1883,8 +1892,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (!key_known(sec, key) && !(cfg.count(sec) && cfg.at(sec).count(key))) { print(b, LK::ERROR, "No setting " + argv[0] + ": /set lists them"); return; }
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
-            if (sec == "general" && key == "timestamp") def = theme.lay("timestamp", "%H:%M") + ", the theme's";
-            if (sec == "general" && key == "nick_width") def = theme.lay("nick_width", "12") + ", the theme's";
+            if (std::string t = sec == "general" ? theme_def(theme, key) : ""; !t.empty()) def = t + ", the theme's";
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : (key == "perform" || sec == "aliases") && !ini_get(cfg, sec, key).empty() ? perform_show(ini_get(cfg, sec, key)) : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }
