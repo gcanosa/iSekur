@@ -152,7 +152,8 @@ void Core::dcc_ctcp(Server* s, const std::string& nick, const std::string& arg) 
     if (type == "RESUME" || type == "ACCEPT") {
         Dcc* d = ok ? find(type == "RESUME" ? Dcc::WAIT : Dcc::RESUME) : nullptr;
         unsigned long long pos = d && digits(w[1]) ? strtoull(w[1].c_str(), nullptr, 10) : 0;
-        if (!d || !pos || (d->size && pos >= d->size)) {
+        // ACCEPT: only at the size of the part on disk, which is appended to; another offset would corrupt the file
+        if (!d || !pos || (d->size && pos >= d->size) || (type == "ACCEPT" && pos != d->pos)) {
             print(where(*this, s), LK::INFO, "DCC " + type + " from " + nick + " for nothing we know of: " + arg);
             return;
         }
@@ -288,8 +289,8 @@ static void offer(Core& c, Buffer* b, const std::string& nick, const std::string
     if (!s || s->state != SS::CONNECTED) { c.print(b, LK::ERROR, "/dcc send: not connected here"); return; }
     std::string dir = c.dcc_dir(s), path = what;
     bool bare = what.find('/') == std::string::npos;  // a name in dcc_dir
-    // from the webchat only what's in dcc_dir: it must not reach every file this user can read
-    if (c.from_web && !bare) { c.print(b, LK::ERROR, "From the webchat /dcc send takes a file in " + dir + " only"); return; }
+    // from the webchat or a plugin only what's in dcc_dir: neither may reach every file this user can read
+    if ((c.from_web || c.plugin_depth) && !bare) { c.print(b, LK::ERROR, std::string(c.from_web ? "From the webchat" : "From a plugin") + " /dcc send takes a file in " + dir + " only"); return; }
     if (bare) path = dir + "/" + what;
     else if (path.rfind("~/", 0) == 0)
         if (const char* h = getenv("HOME")) path = h + path.substr(1);

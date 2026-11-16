@@ -449,7 +449,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 #topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 #topic .tm { opacity: 0; transition: opacity .15s; font-size: .85em; white-space: nowrap; }  /* the channel modes, only while hovering the topic */
 #topic:hover .tm { opacity: .55; }
-#topic .t.full { white-space: pre-wrap; overflow-wrap: anywhere; max-height: 40vh; overflow-y: auto; }
+#topic .t.full { white-space: pre-wrap; overflow-wrap: anywhere; max-height: calc(var(--vvh, 100dvh) * .4); overflow-y: auto; }
 #topic button { background: none; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; display: inline-flex; align-items: center; }  /* line icons in the theme's text color, like the menus' */
 /* logout: an icon, its name on hover (right away, not the browser's late tooltip), under it and inside the page */
 #logout { position: relative; color: var(--fg); display: inline-flex; align-items: center; align-self: stretch; }
@@ -471,7 +471,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
   #msgs, #msgs2, #side, #nicks, #nicks2, dialog { overscroll-behavior: contain; }
 }
 #topic #menu { display: none; }  /* #topic button is more specific than #menu */
-#ctx { position: fixed; z-index: 9; min-width: 170px; background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
+#ctx { position: fixed; z-index: 9; min-width: 170px; max-height: calc(var(--vvh, 100dvh) - 8px); overflow-y: auto; overscroll-behavior: contain; background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg);
   border: 1px solid var(--menu_border-fg, var(--line)); border-radius: 8px; padding: 4px 0; box-shadow: 0 10px 30px #0008; }
 #ctx .hd { padding: 4px 12px 4px 35px; font-weight: 700; }  /* lined up with the labels, past the icons */
 #ctx .it { display: flex; align-items: center; gap: 9px; padding: 4px 12px; cursor: pointer; white-space: nowrap; }
@@ -622,7 +622,7 @@ progress::-webkit-progress-bar { background: var(--line); border-radius: 4px; }
 progress::-webkit-progress-value { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
 progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
 /* popups: DCC incoming, complete, failed, stopped */
-#toasts { position: fixed; right: 16px; bottom: 90px; z-index: 20; display: grid; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
+#toasts { position: fixed; right: max(16px, env(safe-area-inset-right)); bottom: calc(var(--vvb, 0px) + 90px); z-index: 20; display: grid; gap: 8px; max-width: min(380px, calc(100vw - 32px)); }
 .toast { background: var(--menu-bg, var(--panel)); border: 1px solid var(--line); border-left: 3px solid var(--accent); border-radius: 10px; padding: 9px 12px; font-size: calc(13px * var(--z, 1)); box-shadow: 0 6px 24px #0007; cursor: pointer; animation: rise .25s ease-out both; }
 .toast.err { border-left-color: var(--error-fg, #ff5f5f); }
 .toast b { display: block; color: var(--accent); font-weight: 700; margin-bottom: 2px; }
@@ -631,7 +631,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #dfiles { width: min(760px, calc(100vw - 32px)); }
 #dfiles h3 { margin: 6px 0 0; font-size: calc(11px * var(--z, 1)); text-transform: uppercase; letter-spacing: 1px; color: var(--accent2); font-weight: 400; }
 #dfiles h3 small { text-transform: none; letter-spacing: 0; color: var(--muted); margin-left: 6px; }
-.flist { display: grid; gap: 2px; max-height: 32vh; overflow-y: auto; font-size: calc(13px * var(--z, 1)); }
+.flist { display: grid; gap: 2px; max-height: calc(var(--vvh, 100dvh) * .32); overflow-y: auto; font-size: calc(13px * var(--z, 1)); }
 .flist .r { display: grid; grid-template-columns: 1fr auto auto; gap: 10px; align-items: center; padding: 5px 6px; border-radius: 6px; }
 .flist .r:hover { background: #ffffff0a; }
 .flist .r .n { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -644,7 +644,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .flist .none { color: var(--muted); padding: 6px; }
 #input { grid-area: input; display: flex; gap: 8px; padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); background: var(--input-bg, var(--bg)); position: relative; }
 /* live suggestions over the input line ("/jo", "/set key", "/help k"), like the terminal's */
-#sugg { position: absolute; left: 0; right: 0; bottom: 100%; max-height: 40vh; overflow-y: auto; background: var(--input-bg, var(--bg)); border-top: 1px solid var(--line); z-index: 4; }
+#sugg { position: absolute; left: 0; right: 0; bottom: 100%; max-height: calc(var(--vvh, 100dvh) * .4); overflow-y: auto; background: var(--input-bg, var(--bg)); border-top: 1px solid var(--line); z-index: 4; }
 #sugg:empty, #input:not(:focus-within) #sugg { display: none; }
 #sugg div { padding: 2px 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
 #sugg div.on { background: var(--tab_active-bg, var(--line)); }
@@ -3369,7 +3369,16 @@ function action(a) {
   if (a === "quit") askExit("");  // like the terminal's: asks first
   else if (a === "copy_input") {  // the whole input line, "Copied N characters" like the terminal
     const n = [...line.value].length;
-    if (n && navigator.clipboard) navigator.clipboard.writeText(line.value).then(() => { flash = "Copied " + n + (n === 1 ? " character" : " characters"); renderStatus(); setTimeout(() => { flash = ""; renderStatus(); }, 1000); }, () => {});
+    const done = () => { flash = "Copied " + n + (n === 1 ? " character" : " characters"); renderStatus(); setTimeout(() => { flash = ""; renderStatus(); }, 1000); };
+    const old = () => {  // plain http has no navigator.clipboard: the old way, the line selected and copied, the cursor put back
+      const a = line.selectionStart, z = line.selectionEnd;
+      line.select();
+      let ok = false;
+      try { ok = document.execCommand("copy"); } catch (e) {}
+      line.setSelectionRange(a, z);
+      if (ok) done();
+    };
+    if (n) navigator.clipboard ? navigator.clipboard.writeText(line.value).then(done, old) : old();
   }
   else if (a === "lock") send({t: "lock", buf: active});
   else if (a === "mark_all_read") send({t: "readall", buf: active});
@@ -3407,9 +3416,16 @@ document.addEventListener("keydown", e => {
     if (!e.target.closest || !e.target.closest("input, textarea, select, [contenteditable]")) line.focus();
     return;
   }
-  const a = keymap[keyspec(e)];
+  if (altRight && !e.ctrlKey && !e.metaKey) return;  // right Option: a symbol being typed (@ # on many Mac layouts), no binding
+  const sp = keyspec(e);
+  if (e.shiftKey && /^(C|D)-r$/.test(sp)) return;  // Ctrl/Cmd+Shift+R: the browser's hard reload, not mark all read
+  const a = keymap[sp];
   if (a && action(a)) e.preventDefault();
 });
+// left Option is Alt for the bindings, right Option keeps typing symbols, like the terminal's macos-option-as-alt = left
+let altRight = false;
+for (const ev of ["keydown", "keyup"]) document.addEventListener(ev, e => { if (e.code === "AltRight") altRight = ev === "keydown"; }, true);
+addEventListener("blur", () => { altRight = false; });
 $("#msgs").addEventListener("scroll", () => {
   if (moreShown === atBottom()) renderStatus();
   // near the top: ask iSekur for older lines (its scrollback holds more than the 500 a tab starts with)
@@ -3601,8 +3617,10 @@ function showMenu(m) {
     box.append(it);
   }
   document.body.append(box);
+  // inside what the keyboard leaves visible (iOS: innerHeight still counts the part under it)
+  const vt = vv ? vv.offsetTop : 0, vb = vv ? vt + vv.height : innerHeight;
   box.style.left = Math.max(0, Math.min(menuAt[0], innerWidth - box.offsetWidth - 4)) + "px";
-  box.style.top = Math.max(0, Math.min(menuAt[1], innerHeight - box.offsetHeight - 4)) + "px";
+  box.style.top = Math.max(vt, Math.min(menuAt[1], vb - box.offsetHeight - 4)) + "px";
 }
 document.addEventListener("click", e => { if (!e.target.closest("#ctx")) closeMenu(); });
 // iOS Safari sends no contextmenu on a long press (Android does): after 500ms still, make one, so every right-click menu

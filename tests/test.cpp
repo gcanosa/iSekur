@@ -924,10 +924,14 @@ int main() {
             assert(q->lines.back().text == "gone is online");
             core.exec(q, "hello!");
             assert(sent() == "PRIVMSG gone :hello!\r\n");
+            core.say(q, std::string(500, '\xa1'));  // not UTF-8, longer than a line: cut in two, no endless loop
+            { std::string o = sent(); assert(std::count(o.begin(), o.end(), '\n') == 2); }
             feed(":gone!u@h QUIT :bye");  // its "has quit" is enough, then nothing goes
             feed(":srv 731 me :gone");
             assert(q->lines.back().text.find("has quit") != std::string::npos);
             core.exec(q, "x"), assert(sent().empty());
+            feed(":gone!u@h PRIVMSG me :back");  // it speaks: online again before any 730 or ISON
+            core.exec(q, "hi"), assert(sent() == "PRIVMSG gone :hi\r\n");
             core.close(q);
             assert(sent() == "MONITOR - gone\r\n" && !ts->online.count("gone"));
             ts->isupport.erase("MONITOR");  // no MONITOR: ISON asks, the reply says
@@ -1536,6 +1540,10 @@ int main() {
     feed(":srv 311 me Erick erick c.example :Erick R");
     feed(":srv 318 me Erick :End of /WHOIS list.");
     assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
+    wb = chb->lines.size();  // a realname of raw bytes, not UTF-8 (anyone can set one): framed, no endless loop
+    feed(":srv 311 me Raw r h * :" + std::string(200, '\xa1'));
+    feed(":srv 318 me Raw :End of /WHOIS list.");
+    assert(chb->lines.size() - wb >= 4 && mirc_strip(chb->lines.back().text) == "└─────────");
 
     // echo-message: a CTCP to our own nick arrives twice (echo + delivery): one reply, one line
     ts->caps.insert("echo-message"), ts->ctcp_at = 0, sent();
@@ -3112,10 +3120,15 @@ print("loaded")
         }
         pc.exec(ph, "/ptest self");
         assert(last(ph) == "/plugin can't be run by a plugin" && pc.plugins.size() == 1);
-        for (const char* blocked : {"exec", "sh", "shell", "attach"}) {  // no programs: the sandbox has no way around through a command
+        for (const char* blocked : {"exec", "sh", "shell", "attach", "alias", "perform"}) {  // no programs: the sandbox has no way around through a command
             size_t tabs = pc.bufs.size();
             pc.exec(ph, std::string("/ptest run ") + blocked + " true");
             assert(last(ph) == std::string("/") + blocked + " can't be run by a plugin" && pc.jobs.empty() && pc.bufs.size() == tabs);
+        }
+        for (const char* key : {"exec_web", "dcc_dir", "pam_service", "web.password_hash", "aliases.x", "server.sn.perform"}) {  // nor by switching them on
+            std::string was = pc.cfg["general"]["exec_web"];
+            pc.exec(ph, std::string("/ptest run set ") + key + " on");
+            assert(last(ph) == std::string("/set ") + key + " can't be run by a plugin" && pc.cfg["general"]["exec_web"] == was);
         }
         // scoped options: channel, then network, then global; a 'n' key skips the channel's
         ServerCfg pcfg;

@@ -1205,6 +1205,8 @@ void Core::handle(Server* s, const Msg& m) {
         }
     }
     if (s->twitch() && twitch_handle(s, m, ts)) return;  // twitch.cpp
+    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "JOIN") && !m.nick.empty() && !is_me(m.nick))  // back: an offline query may send again
+        if (auto it = s->online.find(s->lower(m.nick)); it != s->online.end() && !it->second) notify_seen(s, m.nick, true);
     if ((cmd == "PRIVMSG" || cmd == "NOTICE") && m.tags.count("batch")) {  // a draft/multiline line: kept for its batch's end
         auto mu = s->multi.find(m.tags.at("batch"));
         if (mu != s->multi.end()) {
@@ -1424,7 +1426,11 @@ void Core::handle(Server* s, const Msg& m) {
             std::string pre = first ? "│ " : "│   ";
             if (t.size() <= W) { print(reply_buf(), LK::INFO, pre + t); return; }
             size_t cut = t.rfind(' ', W);
-            if (cut == std::string::npos || cut < W / 3) { cut = W; while (cut && (t[cut] & 0xc0) == 0x80) cut--; }
+            if (cut == std::string::npos || cut < W / 3) {
+                cut = W;
+                while (cut && (t[cut] & 0xc0) == 0x80) cut--;
+                if (!cut) cut = W;  // not UTF-8 (anyone's realname or away can be raw bytes): cut anyway, never loop on it
+            }
             print(reply_buf(), LK::INFO, pre + t.substr(0, cut));
             t = t.substr(cut + (t[cut] == ' '));
         }

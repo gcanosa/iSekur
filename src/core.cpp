@@ -1445,6 +1445,7 @@ static std::vector<std::string> chunk(const std::string& t, size_t max) {
     while (t.size() - i > max) {
         size_t end = i + max;
         while (end > i && ((unsigned char)t[end] & 0xc0) == 0x80) end--;
+        if (end == i) end = i + max;  // not UTF-8 (a BNC client's Latin-1, /exec -o output): cut anyway, or it never moves on
         size_t sp = t.rfind(' ', end);
         if (sp != std::string::npos && sp > i + max / 2) end = sp;
         out.push_back(t.substr(i, end - i));
@@ -1777,6 +1778,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         alias_depth--;
         return;
     }
+    // the sandbox: a plugin can't leave commands to run later as you (an alias you type, perform on connect)
+    if (plugin_depth && (cmd == "alias" || cmd == "perform")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }
     if (cmd == "alias") {  // /alias [name [/command && /command]] | del name: [aliases], written at once
         std::string name = argv.empty() ? "" : argv[0];
         to_lower(name);
@@ -1896,6 +1899,8 @@ void Core::exec(Buffer* b, const std::string& input) {
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : (key == "perform" || sec == "aliases") && !ini_get(cfg, sec, key).empty() ? perform_show(ini_get(cfg, sec, key)) : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }
+        // the sandbox: a plugin can't switch /exec on, open the webchat or the BNC, move dcc_dir or the /shell login either
+        if (plugin_depth && (lock_guarded(sec, key) || key == "pam_service" || key == "perform" || sec == "aliases")) { plug_print(b, LK::ERROR, "/set " + argv[0] + " can't be run by a plugin"); return; }
         // a grabbed session can't switch /exec on, or point the webchat at other folders or logins, without the lock password
         if (lock_guarded(sec, key) && val != ini_get(cfg, sec, key) && lock_gate(*this, b, in, key)) return;
         // a password typed into a *password_hash key is kept as its hash

@@ -871,7 +871,7 @@ void Tui::draw() {
         }
         side_top = std::clamp(side_top, 0, std::max(0, nt - rows));
         Style ls = T.get("separator"), lines = sty(T, "tree_lines", "separator");
-        for (int y2 = y0; y2 < y0 + rows; y2++) fill(y2, side_x, sx1, tbs), text(sep_x, y2, W, "│", ls, false);
+        for (int y2 = y0; y2 < y0 + rows; y2++) fill(y2, side_x, sx1, tbs), text(sep_x, y2, sep_x + 1, T.lay("separator", "│"), ls, false);
         for (int i = side_top; i < nt && i - side_top < rows; i++) {
             Buffer* t = c.bufs[(size_t)vis[(size_t)i]].get();
             int y2 = y0 + i - side_top;
@@ -897,8 +897,10 @@ void Tui::draw() {
             if (hid) text(sx1 - (int)m.size(), y2, sx1, m, s, false);
             hits.push_back({y2, side_x, sx1, vis[(size_t)i], ""});
         }
-        if (side_top > 0) text(sx1 - 2, y0, sx1, "↑", tbs, false);  // more above / below: the wheel scrolls
-        if (side_top + rows < nt) text(sx1 - 2, y0 + rows - 1, sx1, "↓", tbs, false);
+        // more above / below: the wheel scrolls; in that row's own colors, not a hole in the active tab's
+        auto rsty = [&](int r) { int i = side_top + r; return i < nt ? lsty[(size_t)i] : tbs; };
+        if (side_top > 0) text(sx1 - 2, y0, sx1, "↑", rsty(0), false);
+        if (side_top + rows < nt) text(sx1 - 2, y0 + rows - 1, sx1, "↓", rsty(rows - 1), false);
     } else {
     const int TAB_ROWS = 3;  // ponytail: fixed cap, a setting if anyone wants more
     std::vector<int> starts{0};  // the first label of each row
@@ -979,7 +981,7 @@ void Tui::draw() {
         Box p1{chat_x, top, AW, ch}, p2 = p1;
         if (c.split_mode == 1 || (c.split_mode == 0 && AW >= 140)) {  // side by side, a separator column between
             p1.w = std::max(10, std::min(AW - 11, (AW - 1) * c.split_pm / 1000)), p2.x = chat_x + p1.w + 1, p2.w = chat_end - p2.x;
-            for (int y = top; y < top + ch; y++) text(p2.x - 1, y, W, "│", T.get("separator"), false);
+            for (int y = top; y < top + ch; y++) text(p2.x - 1, y, p2.x, T.lay("separator", "│"), T.get("separator"), false);
             div_x = p2.x - 1;
         } else p1.h = std::max(3, std::min(ch - 3, ch * c.split_pm / 1000)), p2.y = top + p1.h, p2.h = ch - p1.h, div_y = p2.y;
         other = c.split_first ? p1 : p2;
@@ -1152,6 +1154,7 @@ void Tui::draw() {
     y = H - 1;
     Style is = T.get("input");
     fill(y, 0, W, is);
+    in_px = -1;  // no input line to drag over until it's drawn below (a box, a shell tab, a question: none)
     if (tw.open) {  // /theme: the picker has the keys
         draw_themes(W, H);
         present();
@@ -1215,7 +1218,6 @@ void Tui::draw() {
         present();
         return;
     }
-    in_px = -1;  // no input line to drag over until it's drawn below
     if (c.asking(b)) {  // /shell login, /e2e and /oper passwords: a dialog box
         draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel", 0, 0, 'a');
         present();
@@ -3306,9 +3308,11 @@ void Tui::mouse(int mod, int k, int x, int y) {
         int w = wdrag == 't' ? std::clamp(side_x ? tb_width() - 1 - x : x, 10, std::min(60, tb_width() - 41))
                              : std::clamp(nl_left ? x - nl_x0 : nl_x1 - 1 - x, 8, 40);
         std::string key = wdrag == 't' ? "tab_bar_width" : "nicklist_width";
-        if (std::to_string(w) != c.cfg["general"][key]) c.cfg["general"][key] = std::to_string(w), c.dirty = true;
-        if (k == TB_KEY_MOUSE_RELEASE) {  // saved like /set + /save of that one key
-            wdrag = 0;
+        if (std::to_string(w) != c.cfg["general"][key]) c.cfg["general"][key] = std::to_string(w), c.dirty = true, wdrag_moved = true;
+        if (k == TB_KEY_MOUSE_RELEASE) {  // saved like /set + /save of that one key; a click without a move: nothing
+            bool moved = wdrag_moved;
+            wdrag = 0, wdrag_moved = false;
+            if (!moved) return;
             std::string err, v = c.cfg["general"][key];
             if (c.cfg_path.empty() || !ini_save(c.cfg_path, Ini{{"general", {{key, v}}}}, err)) c.unsaved["general"][key] = v;
         }
@@ -3329,7 +3333,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
         if (!on) nick_sel.clear(), c.dirty = true;
     }
     if (k == TB_KEY_MOUSE_LEFT && menu.items.empty() && y >= top && y < top + ch && ((side_w && x == sep_x) || (nl_x >= 0 && x == nl_x))) {
-        wdrag = side_w && x == sep_x ? 't' : 'n';
+        wdrag = side_w && x == sep_x ? 't' : 'n', wdrag_moved = false;
         return;
     }
     if (k == TB_KEY_MOUSE_LEFT && menu.items.empty() && ((div_x >= 0 && x == div_x && y >= top && y < top + ch) || (div_y >= 0 && y == div_y))) {
@@ -3364,7 +3368,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
                 nick_click_ms = 0, open_menu(who, x, y);
                 continue;
             }
-            if ((side_w ? x < side_x || x >= side_x + side_w : y < top_row() - tab_h || y >= top_row()) || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
+            if ((side_w ? x < side_x || x >= side_x + side_w || y < top_row() || y >= top_row() + chat_height() : y < top_row() - tab_h || y >= top_row()) || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
             Buffer* tb = c.bufs[(size_t)h.tab].get();
             if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY || tb->type == BT::SHELL)  // its commands run there
                 c.select(tb), menu = Menu{x, y, 0, tb->type == BT::STATUS ? tb->srv->cfg.name : tb->name, c.tab_menu(tb)}, c.dirty = true;

@@ -54,6 +54,7 @@ private:
     // tab_bar = left | right: the tabs as a tree in side_w columns from side_x, a │ at sep_x, the chat from chat_x
     // to chat_end (side_w 0: tabs on top)
     int side_w = 0, side_x = 0, sep_x = -1, chat_x = 0, chat_end = 0, side_top = 0, side_act = -1;  // side_top: first row shown; side_act: the tab it last scrolled to
+    bool wdrag_moved = false;  // ...and the width changed: only then is it saved (a click would pin the theme's)
     char wdrag = 0;  // dragging a │: t the side tab list's, n the nicklist's; the width follows the mouse, saved on release
     // topic bar: wheel scrolls it sideways, a click unfolds it, a double click edits it
     int topic_h = 1, topic_off = 0;
