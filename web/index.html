@@ -1257,6 +1257,7 @@ function typingText(n) {
           : n.length > 1 ? n.slice(0, -1).join(", ") + " and " + n[n.length - 1] : n[0];
   return s + (n.length === 1 ? " is typing\u2026" : " are typing\u2026");
 }
+let flash = "";  // a word on the status bar for a moment (Alt+C: "Copied 42 characters")
 function renderStatus() {
   const b = bufs.get(active), st = $("#stl"), si = $("#sti"); st.textContent = si.textContent = "";
   if (!b) return;
@@ -1277,6 +1278,7 @@ function renderStatus() {
     st.append("] ");
   }
   if ((moreShown = !atBottom())) seg("-- MORE --", "more");
+  if (flash) seg(flash);
   for (const item of stat.info) {  // uptime, cpu, mem, load, battery: colored by iSekur
     if (si.childNodes.length) si.append(" ");
     for (const [txt, fg, bg] of item) { const e = el("span", "", txt); if (fg) e.style.color = fg; if (bg) e.style.background = bg; si.append(e); }
@@ -2304,7 +2306,7 @@ const KEY_GROUPS = [
             ["toggle_topic", "show or hide the topic bar"], ["keys", "this list"]]],
   ["Session", [["lock", "lock the screen now (/lock)"], ["quit", "exit iSekur (asks first)"]]],
   ["Typing", [["Enter", "send the line"], ["Tab", "complete nick or command"], ["Up Down", "earlier lines you typed"],
-              ["C-b C-c C-o", "bold, color, reset"], ["C-r C-i C-u", "reverse, italic, underline"], ["Esc", "cancel a password prompt"]], true]];
+              ["C-b C-c C-o", "bold, color, reset"], ["C-r C-i C-u", "reverse, italic, underline"], ["Esc", "cancel a password prompt"], ["M-c", "copy the line"]], true]];
 const MAC = /Mac|iP(hone|ad)/.test(navigator.platform), escH = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
 function keyCaps(sp) {  // "M-Right" -> <kbd>Alt</kbd>+<kbd>→</kbd>
   const N = {Right: "→", Left: "←", Up: "↑", Down: "↓"}, M = {M: MAC ? "⌥ Opt" : "Alt", C: MAC ? "⌃ Ctrl" : "Ctrl", S: "Shift", D: "⌘ Cmd"};
@@ -3339,7 +3341,7 @@ $("#input").onsubmit = async e => {
 };
 // keys: the terminal's defaults a browser lets through (it keeps Ctrl+W, Ctrl+N, Ctrl+T...; Alt+W and
 // Alt+X stand in for Ctrl+W and Ctrl+X, Alt+R for Ctrl+R, which is reverse here), plus the [keys] section, in the terminal's spelling ("M-Right")
-const KEYS_DEF = {"M-Down": "next_tab", "M-Up": "prev_tab", "M-Right": "next_server", "M-Left": "prev_server", "M-a": "next_active", "M-r": "mark_all_read", "D-r": "mark_all_read", "M-x": "next_server", "M-w": "close_tab",
+const KEYS_DEF = {"M-Down": "next_tab", "M-Up": "prev_tab", "M-Right": "next_server", "M-Left": "prev_server", "M-a": "next_active", "M-r": "mark_all_read", "D-r": "mark_all_read", "M-x": "next_server", "M-w": "close_tab", "M-c": "copy_input",
   "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down", "F6": "other_pane", "M-o": "other_pane",
   "C-g": "find_tab", "M-j": "find_tab", "M-q": "quit", "M-s": "lock", "F1": "keys", "M-k": "keys"};
 for (let i = 1; i <= 10; i++) KEYS_DEF["M-" + i % 10] = "tab_" + i;
@@ -3364,6 +3366,10 @@ function askExit(msg) {
 function action(a) {
   const n = order.indexOf(active), sz = order.length, at = i => order[((i % sz) + sz) % sz];
   if (a === "quit") askExit("");  // like the terminal's: asks first
+  else if (a === "copy_input") {  // the whole input line, "Copied N characters" like the terminal
+    const n = [...line.value].length;
+    if (n && navigator.clipboard) navigator.clipboard.writeText(line.value).then(() => { flash = "Copied " + n + (n === 1 ? " character" : " characters"); renderStatus(); setTimeout(() => { flash = ""; renderStatus(); }, 1000); }, () => {});
+  }
   else if (a === "lock") send({t: "lock", buf: active});
   else if (a === "mark_all_read") send({t: "readall", buf: active});
   else if (a === "next_tab") select(at(n + 1));

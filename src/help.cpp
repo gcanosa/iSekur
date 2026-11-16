@@ -781,8 +781,9 @@ static const std::vector<GuidePage> GUIDE = {
         "  click tabs and the " "\x03" "08" "[Act: 3]" RESET " numbers, wheel scrolls, " BOLD "drag to copy" RESET ", right click a",
         "  tab for its menu (autojoin, reconnect, fold). Tab colors: " "\x03" "10" "news" RESET ", " "\x03" "09" "messages" RESET ", " "\x03" "04" "your nick" RESET ".",
         "",
-        G_NOTE "On a Mac, Alt is " BOLD "Option" RESET ". If Option keys type symbols, turn on \"Option as Meta\"",
-        "  in your terminal's settings. Keys are yours to change in " BOLD "[keys]" RESET " (" G_CMD("/help set") ").",
+        G_NOTE "On a Mac, Alt is " BOLD "Option" RESET ". If Option+A types " BOLD "å" RESET ", make Option Alt: Ghostty " BOLD "macos-option-as-alt = left" RESET ",",
+        "  iTerm2 Left Option " BOLD "Esc+" RESET ", Terminal.app " BOLD "Use Option as Meta key" RESET ". The same Alt keys work in the webchat.",
+        "  " G_KEY("Alt+C") " copies the input line (or drag over it). Keys are yours to change in " BOLD "[keys]" RESET " (" G_CMD("/help set") ").",
         "  " G_CMD("/keys") ", " G_KEY("F1") " or " G_KEY("Alt+K") " shows every key in a window, anytime.",
     }},
     {"Make it yours", {

@@ -20,6 +20,9 @@ struct Tui {
     void draw();
     long long ts_anim_until = 0;  // timestamp_hover: a time fading in or out, redraw ~30 times a second until then
 
+    bool in_selecting = false;                  // a drag over the input line (main's loop: input_edge while it lasts)
+    void input_edge();                          // that drag at an edge: scroll one character that way
+
 private:
     std::u32string input;
     int typed_id = 0;  // the tab the input line was last typed in (+typing goes there)
@@ -64,6 +67,15 @@ private:
     bool selecting = false;
     bool in_sel(int x, int y) const;
     void copy_sel();
+    void copy_text(const std::string& s);       // OSC 52 and "Copied N characters"
+    std::u32string shown_input() const;         // the input line as drawn (a password typed: *s)
+    void copy_input(size_t a, size_t b);        // input[a, b) to the clipboard
+    size_t input_at(int x) const;               // the input character under column x
+    int in_px = -1, in_off = 0, in_w = 1;       // where the input line's text starts, its scroll (columns) and width, as last drawn (-1: not drawn)
+    int in_drag_x = 0;                          // the mouse's column in a drag over the input line
+    size_t isel_a = 0, isel_b = 0;              // a drag over the input line: from, to
+    void option_note(uint32_t ch);              // a Mac Option symbol typed: once, how to make Option Alt
+    bool option_noted = false;
     // the chat rows of the last draw, so a copy is the lines' text ("00:08 nick text"), not the screen's padding.
     // id: the line it shows (rows of one id join up), -2 the "new" marker (never copied). bx..bend: its text
     struct CopyRow { int y, x0, bx, bend, id; bool first; std::string ts, marker; int tsx0, tsx1; };

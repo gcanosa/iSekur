@@ -378,6 +378,7 @@ int main(int argc, char** argv) {
         if (c.tty && now_ms() < tui.ts_anim_until) wait = std::min(wait, 33), c.dirty = true;  // timestamp_hover: a time fading
         if (!c.screen_by.empty()) wait = std::min(wait, 1000 / c.screen_fps);
         if (c.flash_until) wait = std::min(wait, (int)std::max(0LL, c.flash_until - now_ms()));
+        if (c.tty && tui.in_selecting) wait = std::min(wait, 40);  // a drag over the input line held at an edge scrolls it
         if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep
             long long ph = (now_ms() - c.about_t0) % 3500;
             wait = std::min(wait, ph < 1200 || !c.about_typed.empty() ? 33 : (int)(3500 - ph));
@@ -388,6 +389,7 @@ int main(int argc, char** argv) {
         if (wait_fds(fds, wait) < 0 && errno != EINTR) break;
         probe.skip();
         if (typing) c.dirty = true;
+        if (c.tty && tui.in_selecting) tui.input_edge();
         if (c.flash_until && now_ms() >= c.flash_until) c.flash.clear(), c.flash_until = 0, c.dirty = true;
         guard("shell tabs", [&] { c.terms_poll(fds, term0); });  // first: nothing has closed a tab yet, so the order still holds
         probe.lap("shell tabs");

@@ -1156,6 +1156,7 @@ void Tui::draw() {
         present();
         return;
     }
+    in_px = -1;  // no input line to drag over until it's drawn below
     if (c.asking(b)) {  // /shell login, /e2e and /oper passwords: a dialog box
         draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel", 0, 0, 'a');
         present();
@@ -1163,21 +1164,24 @@ void Tui::draw() {
     }
     int px = text(0, y, W, "[" + buf_label(b) + "] ", sty(T, "input_prompt", "input"), false);
     int avail = std::max(1, W - px - 1);
-    std::u32string in = input;  // a NickServ password being typed: *s from where it starts
-    {
-        std::string u = to_utf8(input);
-        size_t e, p = input_secret(b->name, u, &e);
-        if (p != std::string::npos)
-            for (size_t i = from_utf8(u.substr(0, p)).size(), n = e == std::string::npos ? in.size() : from_utf8(u.substr(0, e)).size(); i < n; i++) in[i] = U'*';
-    }
-    int curw = 0;
-    for (size_t i = 0; i < cur; i++) curw += cwidth(in[i]);
-    int off = std::max(0, curw - avail);
+    std::u32string in = shown_input();
+    int curw = 0, totw = 0;
+    for (size_t i = 0; i < in.size(); i++) (i < cur ? curw : totw) += cwidth(in[i]);
+    totw += curw;
+    // the view moves only to keep the cursor on it (a drag over the line doesn't slide it under the mouse)
+    if (curw < in_off) in_off = curw;
+    if (curw > in_off + avail) in_off = curw - avail;
+    in_off = std::min(in_off, std::max(0, totw - avail));
+    int off = in_off;
+    in_px = px, in_w = avail;
+    size_t s0 = std::min(isel_a, isel_b), s1 = std::max(isel_a, isel_b);
     int col = 0;
     for (size_t i = 0; i < in.size(); i++) {
         char32_t ch32 = in[i];
         int w = cwidth(ch32);
         if (col >= off && col - off + w <= avail) {
+            Style is0 = is;
+            if (in_selecting && i >= s0 && i < s1) is.attr |= A_REV;  // being dragged over
             if (ch32 == 3) {  // a color code: ◆ in the color its digits pick (dim until there are some)
                 std::string code = "\x03";
                 for (size_t j = i + 1; j < in.size() && j < i + 3 && in[j] >= U'0' && in[j] <= U'9'; j++) code += (char)in[j];
@@ -1189,6 +1193,7 @@ void Tui::draw() {
                 r.attr |= A_REV;
                 cell(px + col - off, y, ch32 == U'\n' ? U'↵' : '@' + ch32, r);
             } else cell(px + col - off, y, ch32, is);
+            is = is0;
         }
         col += w;
     }
@@ -1763,9 +1768,8 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
                   {"toggle_topic", "show or hide the topic bar"}, {"toggle_mouse", "mouse on / off"}, {"keys", "this list"}}},
         {"Session", {{"lock", "lock the screen now (/lock)"}, {"detach", "detach (stays connected)"}, {"quit", "exit iSekur (asks first)"}}},
     };
-    std::map<std::string, std::string> by;  // action -> its keys; Option-symbol twins (¬ ∆...) left out
-    for (auto& [sp, act] : keymap)
-        if ((unsigned char)sp[0] < 0x80) by[act] += (by[act].empty() ? "" : " ") + sp;
+    std::map<std::string, std::string> by;  // action -> its keys
+    for (auto& [sp, act] : keymap) by[act] += (by[act].empty() ? "" : " ") + sp;
     std::vector<KeyRow> out;
     for (auto& [g, acts] : GROUPS) {
         out.push_back({g, "", ""});
@@ -1784,6 +1788,7 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
     for (auto& r : std::vector<KeyRow>{
              {"", "Enter", "send the line"}, {"", "Tab", "complete nick or command"}, {"", "Up Down", "earlier lines you typed"},
              {"", "Home End", "start / end of the line"}, {"", "C-u C-k", "delete to start / end"}, {"", "M-BS", "delete the previous word"},
+             {"", by["copy_input"], "copy the line (or drag over it)"},
              {"", "C-b C-c C-o", "bold, color, reset"}, {"", "C-v C-] C-_", "reverse, italic, underline"}})
         out.push_back(r);
     return out;
@@ -2730,20 +2735,23 @@ void Tui::load_keys() {
     keymap["M-f"] = "next_server";  // Ghostty/Terminal.app/iTerm send Option+Right/Left as Esc f / Esc b
     keymap["M-b"] = "prev_server";
     keymap["C-a"] = keymap["M-a"] = "next_active";
-    keymap["C-r"] = keymap["D-r"] = "mark_all_read";  // D-r: Cmd+R, where the terminal reports Cmd (CSI u)
-    keymap["C-x"] = "next_server";
-    keymap["C-w"] = "close_tab";
+    keymap["C-r"] = keymap["M-r"] = keymap["D-r"] = "mark_all_read";  // D-r: Cmd+R, where the terminal reports Cmd (CSI u)
+    keymap["C-x"] = keymap["M-x"] = "next_server";
+    keymap["C-w"] = keymap["M-w"] = "close_tab";
+    keymap["M-c"] = "copy_input";
     keymap["PgUp"] = "scroll_up";
     keymap["PgDn"] = "scroll_down";
-    keymap["C-l"] = keymap["M-l"] = keymap["¬"] = keymap["F2"] = "toggle_nicklist";  // ¬: Option+L on a Mac
-    keymap["C-t"] = keymap["M-t"] = keymap["†"] = "toggle_topic";  // †: Option+T on a Mac without "Option as Meta"
+    // Alt is the same key in the webchat. A Mac terminal sends Option+L as "¬" unless Option is set to be Alt:
+    // no "¬"-style twins (they'd stop ø, ß, å... being typed), a note says what to set instead (option_note)
+    keymap["C-l"] = keymap["M-l"] = keymap["F2"] = "toggle_nicklist";
+    keymap["C-t"] = keymap["M-t"] = "toggle_topic";
     keymap["F3"] = "toggle_mouse";
-    keymap["C-g"] = keymap["M-j"] = keymap["∆"] = "find_tab";  // ∆: Option+J on a Mac
-    keymap["F6"] = keymap["M-o"] = keymap["ø"] = "other_pane";  // /split; ø: Option+O on a Mac
-    keymap["M-q"] = keymap["œ"] = "quit";  // œ: Option+Q on a Mac without "Option as Meta"; it asks first
-    keymap["F1"] = keymap["M-k"] = keymap["˚"] = "keys";  // ˚: Option+K on a Mac
-    keymap["M-s"] = keymap["ß"] = "lock";  // ß: Option+S on a Mac without "Option as Meta"
-    keymap["M-d"] = keymap["∂"] = keymap["C-z"] = "detach";  // ∂: Option+D on a Mac without "Option as Meta"; C-z: detach (still connected) where a shell would suspend
+    keymap["C-g"] = keymap["M-j"] = "find_tab";
+    keymap["F6"] = keymap["M-o"] = "other_pane";  // /split
+    keymap["M-q"] = "quit";  // it asks first
+    keymap["F1"] = keymap["M-k"] = "keys";
+    keymap["M-s"] = "lock";
+    keymap["M-d"] = keymap["C-z"] = "detach";  // C-z: detach (still connected) where a shell would suspend
     // [keys] action = spec [spec...]
     auto ks = c.cfg.find("keys");
     if (ks != c.cfg.end())
@@ -2830,6 +2838,7 @@ void Tui::on_readable() {
 bool Tui::action(const std::string& a) {
     int n = c.index_of(c.active), sz = (int)c.bufs.size();
     auto at = [&](int i) { return c.bufs[(size_t)((i % sz + sz) % sz)].get(); };
+    if (a == "copy_input") { copy_input(0, input.size()); return true; }
     if (a == "next_tab") c.select(at(n + 1));
     else if (a == "prev_tab") c.select(at(n - 1));
     else if (a.rfind("tab_", 0) == 0) {
@@ -2968,6 +2977,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (mod & TB_MOD_ALT) return;  // unbound Alt combos do nothing
     if (input.empty() && guide_tab() && ((ch == 'q' || ch == 'Q') || (k == TB_KEY_ESC && !ch))) { c.guide(c.active, "close"); return; }  // q or Esc closes the guide
     if (input.empty() && k == TB_KEY_ESC && !ch && c.active->srv && c.active->name == "*channels") { c.list_filter(c.active, ""); return; }  // Esc clears the /list filter
+    if (ch) option_note(ch);
     if (ch || k == TB_KEY_SPACE) { input.insert(cur++, 1, ch ? (char32_t)ch : U' '); return; }
     switch (k) {
     case TB_KEY_ENTER: submit(); break;
@@ -3023,6 +3033,60 @@ bool Tui::in_sel(int x, int y) const {
     return p >= std::min(a, z) && p <= std::max(a, z);
 }
 
+// Option+A typed "å": a Mac terminal not sending Option as Alt. Typed as is (it may be meant), and once
+// a run a note says how to make it Alt, when that letter's Alt key does something
+void Tui::option_note(uint32_t ch) {
+    // ponytail: US/ABC layout's Option symbols only; other layouts type the letter they type
+    static const std::map<uint32_t, char> OPT = {{U'å', 'a'}, {U'∫', 'b'}, {U'ç', 'c'}, {U'∂', 'd'}, {U'ƒ', 'f'}, {U'∆', 'j'}, {U'˚', 'k'},
+        {U'¬', 'l'}, {U'ø', 'o'}, {U'œ', 'q'}, {U'®', 'r'}, {U'ß', 's'}, {U'†', 't'}, {U'∑', 'w'}, {U'≈', 'x'}};
+    auto it = OPT.find(ch);
+    if (option_noted || it == OPT.end() || !keymap.count(std::string("M-") + it->second)) return;
+    option_noted = true;
+    c.info_note(c.active, std::string("Option+") + (char)toupper(it->second) + " typed a symbol: for Option as Alt, set macos-option-as-alt = left in Ghostty "
+                "(iTerm2: Left Option key Esc+; Terminal.app: Use Option as Meta key). Right Option keeps typing symbols");
+}
+
+// the input line as drawn: a NickServ password being typed is *s from where it starts
+std::u32string Tui::shown_input() const {
+    std::u32string in = input;
+    std::string u = to_utf8(input);
+    size_t e, p = c.active ? input_secret(c.active->name, u, &e) : std::string::npos;
+    if (p != std::string::npos)
+        for (size_t i = from_utf8(u.substr(0, p)).size(), n = e == std::string::npos ? in.size() : from_utf8(u.substr(0, e)).size(); i < n; i++) in[i] = U'*';
+    return in;
+}
+
+// input[a, b) as text for the clipboard: masked as drawn, formatting codes left out, a pasted newline kept
+void Tui::copy_input(size_t a, size_t b) {
+    std::u32string in = shown_input(), out;
+    for (size_t i = a; i < b && i < in.size(); i++)
+        if (in[i] >= 0x20 || in[i] == U'\n') out += in[i];
+    copy_text(to_utf8(out));
+}
+
+// a drag over the input line held at its left or right edge: one character further that way, the view following
+void Tui::input_edge() {
+    if (!in_selecting) return;
+    // first to what shows at that edge (a fast drag gets there in one jump), then past it
+    if (in_drag_x <= in_px) isel_b = std::min(isel_b, input_at(in_px)), isel_b -= isel_b > 0;
+    else if (in_drag_x >= in_px + in_w) isel_b = std::max(isel_b, input_at(in_px + in_w)), isel_b += isel_b < input.size();
+    else return;
+    cur = isel_b, c.dirty = true;
+}
+
+// the input line's character under column x (the end of the line past it)
+size_t Tui::input_at(int x) const {
+    std::u32string in = shown_input();
+    int col = 0, want = x - in_px + in_off;
+    size_t i = 0;
+    for (; i < in.size(); i++) {
+        int w = cwidth(in[i]);
+        if (col + w > want) break;
+        col += w;
+    }
+    return i;
+}
+
 // the selection to the terminal's clipboard: chat lines as their text, "00:08 nick text" (the time first even when
 // drawn at the right, no padding, a wrapped line joined back up); other rows (a shell tab) as their cells
 void Tui::copy_sel() {
@@ -3062,6 +3126,11 @@ void Tui::copy_sel() {
         while (!l.empty() && l.back() == ' ') l.pop_back();
         out += (&l == &lines[0] ? "" : "\n") + l;
     }
+    copy_text(out);
+}
+
+// to the terminal's clipboard (OSC 52), "Copied N characters" in the status bar
+void Tui::copy_text(const std::string& out) {
     if (out.empty()) return;
     std::string osc = "\x1b]52;c;" + b64(out) + "\x07";
     tb_send(osc.data(), osc.size());
@@ -3141,6 +3210,17 @@ void Tui::mouse(int mod, int k, int x, int y) {
     }
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && (nl_x < 0 || x < nl_x);
+    if (in_selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {  // a drag over the input line
+        in_drag_x = x;
+        if (x > in_px && x < in_px + in_w) isel_b = cur = input_at(x);
+        else input_edge();  // at an edge: input_edge() keeps scrolling while the mouse stays there
+        if (k == TB_KEY_MOUSE_RELEASE) {
+            in_selecting = false;
+            if (isel_a != isel_b) copy_input(std::min(isel_a, isel_b), std::max(isel_a, isel_b));
+        }
+        c.dirty = true;
+        return;
+    }
     if (selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {
         sel_x1 = std::max(0, std::min(x, (nl_x >= 0 ? nl_x : tb_width()) - 1));
         sel_y1 = std::max(top, std::min(y, top + ch - 1));
@@ -3236,6 +3316,10 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (k != TB_KEY_MOUSE_LEFT) return;
+    if (in_px >= 0 && y == tb_height() - 1 && x >= in_px && !(mod & TB_MOD_MOTION)) {  // the input line: the cursor goes there, a drag selects
+        isel_a = isel_b = cur = input_at(x), in_selecting = true, completing = false, c.dirty = true;
+        return;
+    }
     if (over_topic) {
         Buffer* b = c.active;
         long long now = now_ms();

@@ -50,7 +50,7 @@ that mirrors your live session in a browser, bouncer style.
   its session, the same networks and channels, the last lines of each tab, then everything live; what
   they send shows in iSekur too. Logged in with no network, `/msg *isekur` lists, picks or adds one; `bnc.motd` next to the config is their MOTD. TLS or plain, one user. `/bnc start`, `[bnc] autostart = on`, or
   `isekur --bnc` to run only the bouncer in the background; clients that do IRCv3 get chathistory, tags and echoes (below)
-- Detach and attach like tmux: Alt+D (Option+D on a Mac) or `/detach` leaves it running, `isekur --attach`
+- Detach and attach like tmux: Alt+D or `/detach` leaves it running, `isekur --attach`
   brings it back on any terminal; a closed window or a dropped SSH detaches instead of quitting
 - `--daemon` starts it headless; attach from a terminal or the browser
 - Mouse: click tabs and activity numbers, double click a nick for a private chat (a click selects it, Shift or Ctrl+click adds more, right click acts on them all: op, voice, kick), wheel scrolls chat and nicklist, drag copies text (OSC 52; F3 toggles). On the topic bar: the wheel scrolls it sideways, a click unfolds it, a double click opens it in a box to edit (when you may change it: ops on +t channels)
@@ -253,7 +253,7 @@ lets any IRC client in, with its own look, but only for what IRC carries (no `/s
 
 ## Keys
 
-`/keys`, F1 or Alt+K (Option+K on a Mac) shows all of them in a window, drawn as keycaps by group, your own `[keys]` bindings included (terminal and webchat).
+`/keys`, F1 or Alt+K shows all of them in a window, drawn as keycaps by group, your own `[keys]` bindings included (terminal and webchat).
 
 | Key | Action |
 |---|---|
@@ -262,15 +262,15 @@ lets any IRC client in, with its own look, but only for what IRC carries (no `/s
 | Alt+↑/↓, Ctrl+P/N | previous / next tab |
 | Alt+←/→ | previous / next server tab, or a tab of no network (cmd, shells) |
 | Ctrl+A, Alt+A | next tab with activity |
-| Ctrl+R, Cmd+R | mark every tab read (webchat: Cmd+R, Alt+R) |
-| Alt+S (Option+S on a Mac) | lock the terminal and the webchat now (`/lock`; with no lock password yet it says how to set one) |
-| Alt+D (Option+D on a Mac), Ctrl+Z | detach: iSekur keeps running in the background |
-| Ctrl+X | next server |
+| Ctrl+R, Alt+R, Cmd+R | mark every tab read (webchat: Alt+R, Cmd+R) |
+| Alt+S | lock the terminal and the webchat now (`/lock`; with no lock password yet it says how to set one) |
+| Alt+D, Ctrl+Z | detach: iSekur keeps running in the background |
+| Ctrl+X, Alt+X | next server (webchat: Alt+X) |
 | Ctrl+G, Alt+J | find a tab: type part of a channel, nick or network name, Enter goes there (the webchat's filter box on top of the tab list) |
-| Ctrl+W | close tab (parts the channel) |
+| Ctrl+W, Alt+W | close tab (parts the channel; webchat: Alt+W) |
 | PgUp / PgDn | scroll |
-| Ctrl+L, Alt+L (Option+L on a Mac), F2 | show / hide the nicklist |
-| Ctrl+T, Alt+T (Option+T on a Mac) | show / hide the topic bar |
+| Ctrl+L, Alt+L, F2 | show / hide the nicklist |
+| Ctrl+T, Alt+T | show / hide the topic bar |
 | F3 | toggle mouse (drag copies; Shift+drag is the terminal's own selection) |
 | Cmd+click (Ctrl+click on Linux) on a link | opens it: links in messages and the topic are terminal hyperlinks (OSC 8), also when they wrap onto the next line. If your terminal gives the click to iSekur, hold Shift too or turn the mouse off with F3. In tmux: `set -as terminal-features ",*:hyperlinks"` |
 | right click on a nick | menu: query, whois, CTCPs, ignore, op / voice / kick / ban when your rank allows, kill / G-line when you are an IRC operator (Up/Down/Enter or click) |
@@ -280,8 +280,11 @@ lets any IRC client in, with its own look, but only for what IRC carries (no `/s
 | Up / Down while matches are listed | move through them; Enter or Tab puts the highlighted one in the input line without sending |
 | Home / End, Ctrl+E, Ctrl+U / K | start / end of line, end of line, delete to start / end |
 | Alt(Option)+Backspace | delete the previous word |
+| Alt+C, or drag over the input line | copy the input line (or the part dragged over) |
 | Cmd+Backspace, Cmd+←/→ | delete to start, start / end (when the terminal forwards Cmd) |
 | Ctrl+B / C / O / V / ] / _ | bold, color (shown as ◆ in that color), reset, reverse, italic, underline. Ctrl+C on an empty line doesn't quit: it reminds you of /exit and Ctrl+Z / Alt+D |
+
+The Alt keys are the same in the terminal and the webchat. On a Mac, Option is Alt only when the terminal sends it as one: if Option+A types `å`, set `macos-option-as-alt = left` in Ghostty (iTerm2: Left Option key Esc+; Terminal.app: Use Option as Meta key); Right Option keeps typing symbols. iSekur says so the first time it happens.
 
 Rebind any of the actions in the `[keys]` section (`D-` is Cmd, `M-` Alt, `C-` Ctrl).
 
