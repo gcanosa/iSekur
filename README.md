@@ -70,7 +70,7 @@ that mirrors your live session in a browser, bouncer style.
 - Webchat notifications for highlights and private messages (the bell button)
 - A "new" marker above the first message you missed, shared by the terminal and the webchat
 - The webchat has the same nick, channel tab and server tab menus (right click or long press on a nick or a tab), a × on the hovered tab to close it (it asks before leaving a channel or disconnecting), folding networks, Alt+A for the next active tab and the theme's tab colors
-- It also has the terminal's input line and status bar: live suggestions (`/jo`, `/set key`, `/help k`, `/msg al`; Up/Down, Tab), hidden password prompts (`/oper`, `/e2e`; Esc cancels, never in the history), pastes with newlines shown as ↵ and `paste_confirm`, mIRC formatting keys (Ctrl+B, Ctrl+C without a selection, Ctrl+O, Ctrl+R, Ctrl+I, Ctrl+U), clock, user modes, lag, clickable `[Act: ...]`, `-- MORE --` and `status_info`, double click the topic to edit it, the bell, and your `[keys]` bindings (Alt+W closes a tab and Alt+X goes to the next server, since browsers keep Ctrl+W and Ctrl+X)
+- It also has the terminal's input line and status bar: live suggestions (`/jo`, `/set key`, `/help k`, `/msg al`; Up/Down, Tab), hidden password prompts (`/oper`, `/e2e`; Esc cancels, never in the history), pastes with newlines shown as ↵ and `paste_confirm`, mIRC formatting keys (Ctrl+B, Ctrl+C without a selection, Ctrl+O, Ctrl+I, Ctrl+U), clock, user modes, lag, clickable `[Act: ...]`, `-- MORE --` and `status_info`, double click the topic to edit it, the bell, and your `[keys]` bindings (Alt+W closes a tab and Alt+X goes to the next server, since browsers keep Ctrl+W and Ctrl+X)
 - `/set` alone opens a settings window in the terminal: Global by topic, then each network with its own keys and every Global one it can override (shown as inherited or overriding), `/` to search, `e` to edit in place, Space to switch on/off or step through the themes, `s` saves (the webchat's ⚙ has switches and a theme list); `/set key ""` puts a key's default back
 - Webchat buttons at the bottom left: + adds a server (host, port, TLS, network name, nick), ⚙ edits every setting in place (Apply, or Apply & save to the config), ⓘ is /about
 - `/list` opens a sortable channel table in its own tab (click Channel or Users); type a word there to filter it by name or topic (Esc clears it); double click a #channel anywhere to join it
@@ -266,7 +266,7 @@ lets any IRC client in, with its own look, but only for what IRC carries (no `/s
 | Alt+↑/↓, Ctrl+P/N | previous / next tab |
 | Alt+←/→ | previous / next server tab, or a tab of no network (cmd, shells) |
 | Ctrl+A, Alt+A | next tab with activity |
-| Ctrl+R, Alt+R, Cmd+R | mark every tab read (webchat: Alt+R, Cmd+R) |
+| Ctrl+R, Alt+R, Cmd+R | mark every tab read |
 | Alt+S | lock the terminal and the webchat now (`/lock`; with no lock password yet it says how to set one) |
 | Alt+D, Ctrl+Z | detach: iSekur keeps running in the background |
 | Ctrl+X, Alt+X | next server (webchat: Alt+X) |

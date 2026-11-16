@@ -3252,8 +3252,9 @@ line.addEventListener("paste", e => {
   e.preventDefault(); insert(enc(t.replace(/[\r\n]+$/, "")));
 });
 // mIRC formatting: Ctrl+B bold, Ctrl+C color (without a selection: that's copy), Ctrl+O reset,
-// Ctrl+R reverse, Ctrl+I italic, Ctrl+U underline (Ctrl+] and Ctrl+_ too, like the terminal)
-const FMT = {b: "\x02", c: "\x03", o: "\x0f", r: "\x16", i: "\x1d", "]": "\x1d", u: "\x1f", "_": "\x1f"};
+// Ctrl+I italic, Ctrl+U underline (Ctrl+] and Ctrl+_ too, like the terminal); Ctrl+R marks every tab read,
+// as in the terminal, and reverse has no key here (the terminal's Ctrl+V is paste in a browser)
+const FMT = {b: "\x02", c: "\x03", o: "\x0f", i: "\x1d", "]": "\x1d", u: "\x1f", "_": "\x1f"};
 line.addEventListener("keydown", e => {
   const inp = line;
   if (asking()) {
@@ -3340,8 +3341,8 @@ $("#input").onsubmit = async e => {
   send({t: "input", buf: active, text: v});
 };
 // keys: the terminal's defaults a browser lets through (it keeps Ctrl+W, Ctrl+N, Ctrl+T...; Alt+W and
-// Alt+X stand in for Ctrl+W and Ctrl+X, Alt+R for Ctrl+R, which is reverse here), plus the [keys] section, in the terminal's spelling ("M-Right")
-const KEYS_DEF = {"M-Down": "next_tab", "M-Up": "prev_tab", "M-Right": "next_server", "M-Left": "prev_server", "M-a": "next_active", "M-r": "mark_all_read", "D-r": "mark_all_read", "M-x": "next_server", "M-w": "close_tab", "M-c": "copy_input",
+// Alt+X stand in for Ctrl+W and Ctrl+X, Alt+R and Ctrl+R mark every tab read), plus the [keys] section, in the terminal's spelling ("M-Right")
+const KEYS_DEF = {"M-Down": "next_tab", "M-Up": "prev_tab", "M-Right": "next_server", "M-Left": "prev_server", "M-a": "next_active", "M-r": "mark_all_read", "C-r": "mark_all_read", "D-r": "mark_all_read", "M-x": "next_server", "M-w": "close_tab", "M-c": "copy_input",
   "M-l": "toggle_nicklist", "F2": "toggle_nicklist", "M-t": "toggle_topic", "PgUp": "scroll_up", "PgDn": "scroll_down", "F6": "other_pane", "M-o": "other_pane",
   "C-g": "find_tab", "M-j": "find_tab", "M-q": "quit", "M-s": "lock", "F1": "keys", "M-k": "keys"};
 for (let i = 1; i <= 10; i++) KEYS_DEF["M-" + i % 10] = "tab_" + i;
