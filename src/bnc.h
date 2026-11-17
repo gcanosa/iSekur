@@ -17,7 +17,7 @@ struct Bnc {
     static bool autostart(const Ini& cfg);  // [bnc] autostart
     bool start(std::string& err);  // listen now (no-op if already running)
     void stop();                   // drops every client
-    bool running() const { return lfd >= 0; }
+    bool running() const { return !lfds.empty(); }
     bool attached() const;         // a logged-in client is connected
     std::string url;               // "ircs://127.0.0.1:6698", "" when stopped
     std::vector<std::string> status();  // /bnc status: where it listens, who is on
@@ -39,7 +39,7 @@ private:
         time_t since = 0, rx = 0, pinged = 0;
         SS seen = SS::DISCONNECTED;  // the network's state it last heard about
     };
-    int lfd = -1;
+    std::vector<int> lfds;  // one listener per address in [bnc] bind (comma-separated)
     SSL_CTX* ctx = nullptr;
     std::string user, pass_hash;
     std::set<std::string> certfps;  // [bnc] certfp: SHA-256 of the client certificates that log in with SASL EXTERNAL

@@ -69,7 +69,8 @@ void Bnc::stop() {
         if (cl->reg) gone(*cl, "BNC stopped");
     clients.clear();
     if (ctx) SSL_CTX_free(ctx), ctx = nullptr;
-    if (lfd >= 0) close(lfd), lfd = -1;
+    for (int fd : lfds) close(fd);
+    lfds.clear();
     Server::tap = nullptr;
     url.clear();
 }
@@ -83,7 +84,12 @@ bool Bnc::start(std::string& err) {
 
 bool Bnc::start_(std::string& err) {
     const Ini& cfg = c.cfg;
-    std::string bind = ini_get(cfg, "bnc", "bind", "127.0.0.1");
+    std::vector<std::string> binds;  // "127.0.0.1, ::1": one listener each
+    for (auto& a : split(ini_get(cfg, "bnc", "bind", "127.0.0.1"), ',')) {
+        size_t f = a.find_first_not_of(' '), l = a.find_last_not_of(' ');
+        if (f != std::string::npos) binds.push_back(a.substr(f, l - f + 1));
+    }
+    if (binds.empty()) binds.push_back("127.0.0.1");
     int port = atoi(ini_get(cfg, "bnc", "port").c_str());
     if (port <= 0 || port > 65535) port = 6698;
     user = ini_get(cfg, "bnc", "user");
@@ -130,11 +136,21 @@ bool Bnc::start_(std::string& err) {
         err = "[bnc] certfp needs tls = on";
         return false;
     }
-    lfd = listen_tcp(bind, port, err);
-    if (lfd < 0) { err = "BNC listen " + bind + ":" + std::to_string(port) + ": " + err; return false; }
-    url = std::string(tls ? "ircs://" : "irc://") + (bind.find(':') != std::string::npos ? "[" + bind + "]" : bind) + ":" + std::to_string(port);
-    bool loopback = bind == "127.0.0.1" || bind == "::1" || bind == "localhost";
-    if (!tls && !loopback) c.print(c.bufs.front().get(), LK::ERROR, "BNC without TLS on " + bind + ": the password goes over the network in clear");
+    url.clear();
+    std::string open_air;  // the addresses that are no loopback
+    for (auto& bind : binds) {
+        int fd = listen_tcp(bind, port, err);
+        if (fd < 0) {
+            err = "BNC listen " + bind + ":" + std::to_string(port) + ": " + err;
+            for (int o : lfds) close(o);
+            lfds.clear(), url.clear();
+            return false;
+        }
+        lfds.push_back(fd);
+        url += (url.empty() ? "" : " and ") + std::string(tls ? "ircs://" : "irc://") + (bind.find(':') != std::string::npos ? "[" + bind + "]" : bind) + ":" + std::to_string(port);
+        if (bind != "127.0.0.1" && bind != "::1" && bind != "localhost") open_air += (open_air.empty() ? "" : ", ") + bind;
+    }
+    if (!tls && !open_air.empty()) c.print(c.bufs.front().get(), LK::ERROR, "BNC without TLS on " + open_air + ": the password goes over the network in clear");
     return true;
 }
 
@@ -226,19 +242,20 @@ static std::string self_prefix(Core& c, Server* s) {
 
 void Bnc::add_fds(std::vector<pollfd>& v) {
     fd_start = v.size(), fd_count = 0;
-    if (lfd < 0) return;
-    v.push_back({lfd, POLLIN, 0});
+    if (lfds.empty()) return;
+    for (int fd : lfds) v.push_back({fd, POLLIN, 0});
     for (auto& cl : clients) v.push_back({cl->conn.fd, cl->conn.events(), 0});
-    fd_count = 1 + clients.size();
+    fd_count = lfds.size() + clients.size();
 }
 
 void Bnc::process(const std::vector<pollfd>& v) {
-    if (lfd < 0) return;
+    if (lfds.empty()) return;
     time_t now = time(nullptr);
     std::vector<Client*> dead;
-    for (size_t k = 1; k < fd_count && k - 1 < clients.size(); k++) {
+    const size_t nls = lfds.size();
+    for (size_t k = nls; k < fd_count && k - nls < clients.size(); k++) {
         const pollfd& p = v[fd_start + k];
-        Client& cl = *clients[k - 1];
+        Client& cl = *clients[k - nls];
         if (!p.revents) continue;
         bool ok = cl.conn.pump(p.revents, cl.in);
         if (!cl.in.empty()) cl.rx = now;
@@ -258,14 +275,15 @@ void Bnc::process(const std::vector<pollfd>& v) {
         if (cl.in.size() > 16384) cl.conn.closing = true;  // no line is that long
         if (!ok) dead.push_back(&cl);
     }
-    if (v[fd_start].revents & POLLIN)
-        for (;;) {
-            auto cl = std::make_unique<Client>();
-            if (!cl->conn.accept_from(lfd, ctx)) break;
-            if (clients.size() >= MAX_CLIENTS) continue;  // dropped: the destructor closes it
-            cl->ip = cl->conn.host, cl->since = cl->rx = now;
-            clients.push_back(std::move(cl));
-        }
+    for (size_t i = 0; i < nls; i++)
+        if (v[fd_start + i].revents & POLLIN)
+            for (;;) {
+                auto cl = std::make_unique<Client>();
+                if (!cl->conn.accept_from(lfds[i], ctx)) break;
+                if (clients.size() >= MAX_CLIENTS) continue;  // dropped: the destructor closes it
+                cl->ip = cl->conn.host, cl->since = cl->rx = now;
+                clients.push_back(std::move(cl));
+            }
     for (auto& cp : clients) {
         Client& cl = *cp;
         if (!cl.reg) {

@@ -231,7 +231,7 @@ tls           = auto         ; auto: HTTPS unless bound to localhost; true: HTTP
 # A bnc.motd file next to this config is the clients' MOTD (read at each login).
 [bnc]
 autostart     = off
-bind          = 127.0.0.1    ; 0.0.0.0 or :: for every address
+bind          = 127.0.0.1    ; 0.0.0.0 or :: for every address, or several: 127.0.0.1, ::1
 port          = 6698         ; empty or 0: 6698
 tls           = on           ; off: plain IRC (keep that to 127.0.0.1)
 user          = me
