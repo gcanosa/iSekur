@@ -26,6 +26,16 @@ else
   endif
 endif
 
+# OpenSSL can't be left out: say what to install, not a wall of "openssl/ssl.h: No such file" (clean needs no headers)
+ifeq ($(filter clean,$(MAKECMDGOALS)),)
+  ifneq ($(shell printf '\043include <openssl/ssl.h>\n' | $(CXX) -E -x c++ $(OPENSSL_CFLAGS) - >/dev/null 2>&1 && echo yes),yes)
+    $(warning no OpenSSL headers: iSekur can't build without them. Install them and run make again:)
+    $(warning   Debian/Ubuntu: sudo apt install libssl-dev   Fedora/RHEL: sudo dnf install openssl-devel   Arch: sudo pacman -S openssl)
+    $(warning   Alpine: sudo apk add openssl-dev   macOS: brew install openssl@3   Cygwin: libssl-devel from setup)
+    $(error OpenSSL headers missing)
+  endif
+endif
+
 # Cygwin's newlib hides strptime() unless asked; it has no PAM, so no /shell login there
 ifneq ($(findstring CYGWIN,$(shell uname -s)),)
   OPENSSL_CFLAGS += -D_GNU_SOURCE -DISEKUR_NO_PAM
