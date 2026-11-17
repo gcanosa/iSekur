@@ -437,7 +437,9 @@ static const std::vector<CmdInfo> CMDS = {
      "a password (twice) and keeps it: from then on iSekur also locks at startup and on every "
      "--attach. /lock on sets or changes it (the current one first) without locking; /lock off "
      "asks for it and turns locking off. lock_idle = N locks after N minutes without typing "
-     "(0, the default: never). Locked under a screensaver, a key shows the password box over it and the "
+     "(0, the default: never). After the password was right for a guarded setting, the next ones don't ask for "
+     "lock_grace minutes (2; 0: always ask; the terminal and the webchat each on their own, locking ends it; "
+     "lock, lock_password_hash and lock_biometric always ask). Locked under a screensaver, a key shows the password box over it and the "
      "screensaver goes on: Esc or its X puts it away, so does lock_prompt_timeout seconds without a key "
      "(30; 0: only Esc), the password ends both. On the bare box (locked at startup, an attach, the webchat "
      "coming back), Esc with nothing typed starts the screensaver behind it, as Alt+S does. Forgot it? Stop iSekur, set lock = off in the config and start "
@@ -932,7 +934,8 @@ static const std::vector<GuidePage> GUIDE = {
         "  In the webchat, " BOLD "Face ID" RESET " or " BOLD "Touch ID" RESET " can unlock the box instead of typing: Settings, Security. It needs",
         "  HTTPS and a host name (not an IP), and the password is always the way back.",
         "  What opens a door (" BOLD "web.*" RESET ", " BOLD "bnc.*" RESET ", " BOLD "exec_web" RESET ", " BOLD "dcc_dir" RESET ", " G_CMD("/lock") " itself, " G_CMD("/exit") ") asks for the lock password first,",
-        "  from the settings windows too: a wrong or cancelled one says so there and changes nothing.",
+        "  from the settings windows too: a wrong or cancelled one says so there and changes nothing. Once it was right,",
+        "  the next ones don't ask for " G_CMD("lock_grace") " minutes (2; " G_CMD("/set lock_grace 0") " asks every time).",
         "  " G_CMD("/e2e ") G_VAL("nick") "       end-to-end encrypted private chat with another iSekur user",
         "  " G_CMD("/ignore ") G_VAL("nick") "    never see them again (" G_CMD("/save") " to keep it)",
         "  " G_CMD("/dcc") "            files sent to you wait for " G_CMD("/dcc get") ": nothing downloads by itself",

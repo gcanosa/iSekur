@@ -592,6 +592,7 @@ void Core::unlock_by(const std::string& e) {
 
 void Core::set_lock(bool on, bool saver) {
     locked = on, lock_msg.clear(), dirty = true;
+    if (on) lock_grace_until[0] = lock_grace_until[1] = 0;  // locked: the next guarded /set asks again
     crumb("lock", on ? "on" : "off");
     lock_anim = on ? 'l' : 'u', lock_anim_at = now_ms();
     notify(Ev::LOCK, nullptr);

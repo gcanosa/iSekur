@@ -418,7 +418,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"log_keep", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
     {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
-    {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_prompt_timeout", "Security", 'g'}, {"lock_biometric", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
+    {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_grace", "Security", 'g'}, {"lock_prompt_timeout", "Security", 'g'}, {"lock_biometric", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
     {"exec_timeout", "Security", 'g'}, {"exec_web", "Security", 'g'}, {"fifo", "Session", 'g'}, {"fifo_path", "Session", 'g'},
     {"check_updates", "Updates", 'g'},
 };
@@ -442,7 +442,7 @@ const char* key_unit(const std::string& key) {
     static const std::map<std::string, const char*> U = {
         {"log_history", "lines"}, {"log_keep", "days, or 2w 6m 1y"}, {"scrollback", "lines"}, {"paste_confirm", "lines"}, {"history_fetch", "lines"},
         {"flood_burst", "lines"}, {"flood_interval_ms", "ms"}, {"exec_timeout", "seconds"}, {"lock_prompt_timeout", "seconds"},
-        {"lock_idle", "minutes"}, {"nick_width", "chars"}, {"tab_bar_width", "columns"}, {"nicklist_width", "columns"},
+        {"lock_idle", "minutes"}, {"lock_grace", "minutes"}, {"nick_width", "chars"}, {"tab_bar_width", "columns"}, {"nicklist_width", "columns"},
         {"web_font_size", "px"}, {"web_tree_width", "px"}, {"cpu_levels", "%"}, {"mem_levels", "%"}};
     auto it = U.find(key);
     return it == U.end() ? "" : it->second;
@@ -527,6 +527,7 @@ std::string bad_value(const std::string& sec, const std::string& key, const std:
         {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
+    if (sec == "web" && key == "tls") return v == "auto" || v == "true" ? "" : key + " = " + v + ": takes auto (HTTPS unless bound to localhost) or true (HTTPS on localhost too)";
     if (sec == "general" || srv) {
         if (auto c = CHOICES.find(key); c != CHOICES.end()) {
             if (std::find(c->second.begin(), c->second.end(), v) != c->second.end()) return "";
@@ -548,7 +549,7 @@ std::string bad_value(const std::string& sec, const std::string& key, const std:
     // numbers with a range (what the code would clamp to anyway), and the ones whose default is empty (the theme's)
     static const std::map<std::string, std::pair<long, long>> RANGE = {
         {"tab_bar_width", {10, 60}}, {"nicklist_width", {8, 40}}, {"web_tree_width", {120, 600}}, {"history_fetch", {0, 500}},
-        {"scrollback", {100, 0}}, {"nick_width", {0, 0}}};
+        {"scrollback", {100, 0}}, {"nick_width", {0, 0}}, {"lock_grace", {0, 60}}};
     auto rg = RANGE.find(key);
     bool num = rg != RANGE.end() || (!d.empty() && d.find_first_not_of("0123456789") == std::string::npos);
     if (!num) return "";
@@ -637,6 +638,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         else if (sec == "general" && k == "timestamp_hover") r.choices = {"off", "web", "term", "both"};
         else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
         else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
+        else if (sec == "web" && k == "tls") r.choices = {"auto", "true"};  // false never did anything: plain HTTP is only on localhost, which is auto
         else if (v == "on" || v == "off") r.choices = {"on", "off"};
         else if (v == "true" || v == "false") r.choices = {"true", "false"};
         else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
@@ -1728,8 +1730,9 @@ void crumbs_write(int fd) {
 
 // true: the password is being asked, and `line` runs again once it's right
 static bool lock_ok = false;
-static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::string& what) {
+static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::string& what, bool grace = true) {
     if (!c.lock_on() || lock_ok) return false;
+    if (grace && time(nullptr) < c.lock_grace_until[c.from_web]) return false;  // the password was right a moment ago, on this side
     if (!gate_what.empty() && c.pass_buf == b) { gate_q.push_back(line), gate_what += ", " + what; return true; }  // asked already (the webchat's Apply sends every row at once): one password for all
     c.ask_pass(b, "lock password", [&c, b](const std::string& p) {
         auto lines = std::move(gate_q);
@@ -1741,6 +1744,10 @@ static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::st
             lock_ok = true;
             for (auto& l : lines) c.exec(b, l);
             lock_ok = false;
+            if (int m = std::max(0, std::min(60, atoi(c.opt(nullptr, "lock_grace", "2").c_str()))); m > 0) {
+                c.lock_grace_until[c.from_web] = time(nullptr) + m * 60;
+                c.info_note(b, "The settings that ask for the lock password won't ask again for " + std::to_string(m) + (m == 1 ? " minute" : " minutes") + " here (lock_grace)");
+            }
         }
         gate_end(c, b);
     }, true, "Lock password", {"Changing " + what + ": the lock password first"});
@@ -1987,7 +1994,7 @@ void Core::exec(Buffer* b, const std::string& input) {
                 return;
             }
         // a grabbed session can't switch /exec on, or point the webchat at other folders or logins, without the lock password
-        if (lock_guarded(sec, key) && val != ini_get(cfg, sec, key) && lock_gate(*this, b, in, argv[0])) return;
+        if (lock_guarded(sec, key) && val != ini_get(cfg, sec, key) && lock_gate(*this, b, in, argv[0], !(sec == "general" && (key == "lock" || key == "lock_password_hash" || key == "lock_biometric")))) return;
         // a password typed into a *password_hash key is kept as its hash
         if (key.size() >= 13 && key.compare(key.size() - 13, 13, "password_hash") == 0 && !val.empty() && val.rfind("pbkdf2$", 0) != 0)
             val = hash_password(val);

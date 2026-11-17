@@ -533,6 +533,7 @@ struct Core {
     std::string lock_try(const std::string& pass, const std::string& then);
     int lock_fails = 0;
     time_t lock_wait = 0;
+    time_t lock_grace_until[2] = {0, 0};  // [terminal, webchat]: until when a guarded /set doesn't ask again (lock_grace minutes after the password was right)
     std::vector<Passkey> passkeys_;
     bool passkeys_read = false;
     bool asking(const Buffer* b) const { return b && pass_buf == b && !pass_web; }  // the TUI's dialog is up on b

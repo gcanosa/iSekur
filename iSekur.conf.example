@@ -106,6 +106,10 @@ lock = off
 #lock_password_hash =
 # Lock by itself after this many minutes without typing (0 = never)
 lock_idle = 0
+# Once the lock password was right for a guarded setting (web.*, bnc.*, exec_web, dcc_dir...), the next ones
+# in this many minutes (0-60; 0 = ask every time) don't ask again: the terminal and the webchat each on their own,
+# and locking ends it. lock, lock_password_hash and lock_biometric always ask
+lock_grace = 2
 # Locked under a screensaver, a key shows the password box over it: it goes away
 # again after this many seconds without a key (0 = only Esc or its X)
 lock_prompt_timeout = 30

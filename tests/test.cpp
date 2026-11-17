@@ -469,6 +469,7 @@ int main() {
     assert(home->lines.back().text == "/attach works in the terminal only" && core.bufs.size() == tabs);
     {  // with a lock password, exec_web (and lock itself) change only after typing it
         core.cfg["general"]["lock"] = "on", core.cfg["general"]["lock_password_hash"] = hash_password("pw");
+        core.cfg["general"]["lock_grace"] = "0";  // every guarded /set asks, as these tests expect; lock_grace has its own below
         core.exec(home, "/set exec_web on");
         assert(core.pass_buf == home && ini_get(core.cfg, "general", "exec_web").empty());
         core.exec(home, "nope");
@@ -524,6 +525,41 @@ int main() {
             assert(text.find("10.0.0.9") != std::string::npos);
             core.cfg_path = was, core.cfg["web"].erase("bind"), core.cfg["web"].erase("port"), core.unsaved.clear(), core.set_was.clear(), core.lock_fails = 0;
             std::remove("build/test-gate.conf");
+        }
+        {  // lock_grace: after the password was right, the next guarded /set on that side doesn't ask for a few minutes
+            core.lock_fails = core.lock_wait = 0;
+            core.cfg["general"]["lock_grace"] = "2";
+            core.exec(home, "/set web.bind 10.0.0.9"), core.exec(home, "pw");
+            assert(core.cfg["web"]["bind"] == "10.0.0.9" && core.lock_grace_until[0] > time(nullptr));
+            core.exec(home, "/set web.port 9");  // no prompt
+            assert(!core.pass_buf && core.cfg["web"]["port"] == "9");
+            core.exec(home, "/set lock_grace 3"), core.exec(home, "/set lock_idle 0");  // not guarded either way
+            core.exec(home, "/set lock off");  // the lock's own keys always ask
+            assert(core.pass_buf == home);
+            core.exec(home, "");
+            core.from_web = true;  // the webchat has its own: the terminal's password doesn't cover it
+            core.exec(home, "/set web.port 10");
+            assert(core.pass_buf == home && core.cfg["web"]["port"] == "9");
+            core.exec(home, "");
+            core.from_web = false;
+            core.set_lock(true, false);  // locking ends it
+            core.set_lock(false, false);
+            core.exec(home, "/set web.port 11");
+            assert(core.pass_buf == home && core.cfg["web"]["port"] == "9");
+            core.exec(home, "");
+            core.cfg["general"]["lock_grace"] = "0", core.lock_grace_until[0] = core.lock_grace_until[1] = 0;
+            core.exec(home, "/set web.bind 10.0.0.1"), core.exec(home, "pw");
+            core.exec(home, "/set web.port 12");  // 0: asks every time
+            assert(core.pass_buf == home && core.cfg["web"]["port"] == "9");
+            core.exec(home, "");
+            core.cfg["web"].erase("bind"), core.cfg["web"].erase("port"), core.unsaved.clear(), core.set_was.clear(), core.lock_fails = 0;
+        }
+        {  // web.tls: auto or true, and the settings list offers both
+            assert(bad_value("web", "tls", "auto").empty() && bad_value("web", "tls", "true").empty());
+            assert(bad_value("web", "tls", "false") == "tls = false: takes auto (HTTPS unless bound to localhost) or true (HTTPS on localhost too)");
+            for (auto& r : core.setting_rows())
+                if (r.sec == "web" && r.key == "tls") assert(r.choices == std::vector<std::string>({"auto", "true"}));
+            assert(bad_value("general", "lock_grace", "5").empty() && !bad_value("general", "lock_grace", "61").empty());
         }
         core.exec(home, "/exit -y"), core.exec(home, "nope");  // /exit too: the lock password, or iSekur stays
         assert(home->lines.back().text == "Wrong password: iSekur keeps running" && !core.quit);
