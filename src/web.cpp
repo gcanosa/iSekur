@@ -738,6 +738,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "focus" && m["pick"] == "1" && b != c.active) c.select(b);
         else if (m["t"] == "fold") c.fold(b);
         else if (m["t"] == "theme") { std::string err; c.use_theme(m["name"], err); }  // the theme picker's live preview
+        else if (m["t"] == "view_end" && c.view_on(true)) c.view_end();  // Esc in the zen plugin's focus view
         else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
             long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;
             size_t to = (size_t)std::max(0LL, std::min(end, (long long)b->lines.size()));
@@ -920,25 +921,27 @@ std::string Web::order_json() {
 std::string Web::theme_json() {
     bool logs = c.opt_on(nullptr, "log", false);  // on anywhere: the Logs button
     for (auto& sv : c.servers) logs |= c.opt_on(sv.get(), "log", false);
+    const Theme& T = c.look(true);  // the focus view's theme while it's on here; "name" stays the configured one (the picker's)
     std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"sb\":" + std::to_string(c.max_lines) +
                     ",\"font\":" + json_str(ini_get(c.cfg, "general", "web_font")) + ",\"fsize\":" + json_str(ini_get(c.cfg, "general", "web_font_size")) +
-                    ",\"tsa\":" + json_str(ini_get(c.cfg, "general", "timestamp_align")) + ",\"tsh\":" + json_str(ini_get(c.cfg, "general", "timestamp_hover")) + ",\"tree\":" + json_str(ini_get(c.cfg, "general", "web_tree_lines")) + ",\"treew\":" + json_str(ini_get(c.cfg, "general", "web_tree_width")) + ",\"ah\":" + json_str(ini_get(c.cfg, "general", "web_tree_autohide")) + ",\"ub\":" + json_str(ini_get(c.cfg, "general", "web_unread_badge")) + ",\"logs\":" + (logs ? "1" : "0") + ",\"el\":{";
+                    ",\"tsa\":" + json_str(ini_get(c.cfg, "general", "timestamp_align")) + ",\"tsh\":" + json_str(ini_get(c.cfg, "general", "timestamp_hover")) + ",\"tree\":" + json_str(ini_get(c.cfg, "general", "web_tree_lines")) + ",\"treew\":" + json_str(ini_get(c.cfg, "general", "web_tree_width")) + ",\"ah\":" + json_str(ini_get(c.cfg, "general", "web_tree_autohide")) + ",\"ub\":" + json_str(ini_get(c.cfg, "general", "web_unread_badge")) + ",\"logs\":" + (logs ? "1" : "0") +
+                    ",\"zen\":" + (c.view_on(true) ? "{\"w\":" + std::to_string(c.view.width) + ",\"n\":" + std::to_string(c.view.lines) + ",\"ev\":" + (c.view.events ? "1" : "0") + "}" : "null") + ",\"el\":{";
     bool first = true;
-    for (auto& [k, st] : c.theme.el) {
+    for (auto& [k, st] : T.el) {
         o += (first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(st.fg)) +
              ",\"bg\":" + json_str(rgb_hex(st.bg)) + ",\"a\":" + std::to_string(st.attr) + "}";
         first = false;
     }
-    for (auto [k, n] : {std::pair<const char*, Style>{"note", note_style(c.theme)}, {"plugin", plugin_style(c.theme)}})  // the badges, made like the terminal's
-        if (!c.theme.el.count(k)) o += std::string(first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}", first = false;
+    for (auto [k, n] : {std::pair<const char*, Style>{"note", note_style(T)}, {"plugin", plugin_style(T)}})  // the badges, made like the terminal's
+        if (!T.el.count(k)) o += std::string(first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}", first = false;
     o += "},\"lay\":{";
     first = true;
-    auto lay = c.theme.layout;
+    auto lay = T.layout;
     if (auto nw = ini_get(c.cfg, "general", "nick_width"); !nw.empty()) lay["nick_width"] = nw;  // /set nick_width beats the theme's
     lay["complete_suffix"] = c.complete_suffix();  // nick completion at a line's start, like the terminal's
     for (auto& [k, v] : lay) o += (first ? "" : ",") + json_str(k) + ":" + json_str(v), first = false;
     o += "},\"nicks\":[";
-    for (size_t i = 0; i < c.theme.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(c.theme.nicks[i]));
+    for (size_t i = 0; i < T.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(T.nicks[i]));
     o += "],\"themes\":[";  // installed ones, for the /theme picker
     first = true;
     for (auto& n : theme_names()) o += (first ? "" : ",") + json_str(n), first = false;

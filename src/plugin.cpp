@@ -255,7 +255,7 @@ static int l_platform(lua_State* L) {
 }
 // isekur.theme(): the loaded theme's colors, 0xRRGGBB (nil: the terminal's own)
 static int l_theme(lua_State* L) {
-    const Theme& t = self(L)->c->theme;
+    const Theme& t = self(L)->c->theme;  // the configured one, not a view's
     Style d = t.get("default");
     lua_createtable(L, 0, 6);
     lua_pushstring(L, t.name.c_str()), lua_setfield(L, -2, "name");
@@ -642,6 +642,32 @@ static int l_screen(lua_State* L) {  // screen(fn, fps): a screensaver until a k
     if (!was) c.notify(Ev::SCREEN, nullptr);
     return lua_pushboolean(L, 1), 1;
 }
+// view{term, web, width, lines, theme, events}: the focus view (zen) on the terminal and/or the webchat: only the chat, in a
+// centered column `width` wide, the lines before the last `lines` dimmed, join/part/quit lines hidden unless `events`,
+// drawn in `theme` (nil: the configured one), which is never saved. true, or nil and why. view(false) ends yours, view(): is one up
+static int l_view(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (lua_isnone(L, 1)) return lua_pushboolean(L, !c.view.by.empty()), 1;
+    if (!lua_istable(L, 1)) {
+        if (c.view.by == p->name) c.view_end();
+        return 0;
+    }
+    Core::View v;
+    v.by = p->name;
+    auto flag = [&](const char* k, bool def) { lua_getfield(L, 1, k); bool r = lua_isnil(L, -1) ? def : lua_toboolean(L, -1); lua_pop(L, 1); return r; };
+    auto num = [&](const char* k, int def, int lo, int hi) { lua_getfield(L, 1, k); int r = lua_isnumber(L, -1) ? (int)std::clamp<lua_Number>(lua_tonumber(L, -1), lo, hi) : def; lua_pop(L, 1); return r; };
+    v.term = flag("term", true), v.web = flag("web", true), v.events = flag("events", true);
+    v.width = num("width", 80, 20, 400), v.lines = num("lines", 5, 1, 100);
+    lua_getfield(L, 1, "theme");
+    std::string tn = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+    lua_pop(L, 1);
+    std::string err;
+    if (!tn.empty() && !(v.own = load_theme(tn, v.theme, err))) return lua_pushnil(L), lua_pushstring(L, err.c_str()), 2;
+    c.view = v, c.dirty = true;
+    c.notify(Ev::THEME, nullptr);
+    return lua_pushboolean(L, 1), 1;
+}
 static int l_inactive(lua_State* L) { lua_pushinteger(L, time(nullptr) - self(L)->c->active_at); return 1; }
 static int l_lock(lua_State* L) {  // lock(): locks like /lock when a lock password is set; false: none is
     Core& c = *self(L)->c;
@@ -695,7 +721,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"nick", l_nick}, {"rank", l_rank},
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
-        {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
+        {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
         {"platform", l_platform}, {"which", l_which}, {"run", l_run}, {"speak_web", l_speak_web}, {"theme", l_theme},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
@@ -751,9 +777,13 @@ std::string Core::plugin_opt(const std::string& name, const std::string& key, co
     return ini_get(cfg, sec, key, def);
 }
 
+static void view_gone(Core& c) {  // the view's plugin went (disabled, removed, unloaded): the configured look again
+    if (!c.view.by.empty() && std::none_of(c.plugins.begin(), c.plugins.end(), [&](auto& p) { return p->name == c.view.by && !p->dead; })) c.view_end();
+}
 static void reap(Core& c) {
     if (c.plugin_depth) return;
     c.plugins.erase(std::remove_if(c.plugins.begin(), c.plugins.end(), [](auto& p) { return p->dead; }), c.plugins.end());
+    view_gone(c);
 }
 
 static void load_one(Core& c, const std::string& name) {
@@ -770,6 +800,7 @@ void Core::plugins_sync() {
     plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) {
                       return !wanted(*this, p->name) || std::find(files.begin(), files.end(), p->name) == files.end();
                   }), plugins.end());
+    view_gone(*this);
     for (auto& n : files)
         if (wanted(*this, n) && std::none_of(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == n; })) load_one(*this, n);
     plugins_reshow();
@@ -1167,6 +1198,7 @@ void Core::plugins_poll() {
 
 static void remove_plugin(Core& c, Buffer* b, const std::string& name) {
     c.plugins.erase(std::remove_if(c.plugins.begin(), c.plugins.end(), [&](auto& p) { return p->name == name; }), c.plugins.end());
+    view_gone(c);
     std::string dir = c.plugin_dir(), err;
     unlink((dir + "/" + name + ".lua").c_str()), unlink((dir + "/" + name + ".data").c_str());
     std::vector<std::string> secs;
@@ -1399,6 +1431,7 @@ void Core::plugin_cmd(Buffer* b, const std::string& args) {
     if (sub == "remove") { remove_plugin(*this, b, name), plugins_reshow(); return; }
     if (sub == "reload") {
         plugins.erase(std::remove_if(plugins.begin(), plugins.end(), [&](auto& p) { return p->name == name; }), plugins.end());
+        if (view.by == name) view_end();  // a fresh start: its view too
         if (!wanted(*this, name)) { plugins_reshow(), plug_print(b, LK::INFO, name + " is off: /plugin enable " + name); return; }
         load_one(*this, name);
         plugins_reshow();

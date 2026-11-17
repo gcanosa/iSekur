@@ -49,7 +49,8 @@ private:
     void hover_set(const void* l);
     double hover_alpha(const void* l) const;
     void set_mouse();  // the input mode, and 1003 (every move) while timestamp_hover wants it
-    int top_row() const { return (topicbar ? topic_h : 0) + tab_h; }  // first chat row, under the topic and tab bars
+    bool zen = false;  // the focus view (Core::view) is on the terminal: no bars, no nicklist, a centered chat (set by draw())
+    int top_row() const { return zen ? 1 : (topicbar ? topic_h : 0) + tab_h; }  // first chat row, under the topic and tab bars
     int tab_h = 1;  // tab bar rows, set by draw() (0 with tab_bar = left)
     // tab_bar = left | right: the tabs as a tree in side_w columns from side_x, a │ at sep_x, the chat from chat_x
     // to chat_end (side_w 0: tabs on top)

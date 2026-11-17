@@ -615,6 +615,12 @@ void Core::screen_end() {
     notify(Ev::SCREEN, nullptr);
 }
 
+void Core::view_end() {
+    if (view.by.empty()) return;
+    view = View{}, dirty = true;
+    notify(Ev::THEME, nullptr);  // the webchat: the configured theme and layout again
+}
+
 void Core::lock_saver() {
     if (locked && screen_by.empty()) plugin_emit("lock", nullptr, "");
 }

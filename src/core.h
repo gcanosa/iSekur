@@ -498,6 +498,14 @@ struct Core {
                    bool operator!=(const SCell& o) const { return ch != o.ch || fg != o.fg || ox != o.ox || oy != o.oy; } };
     bool screen_frame(int w, int h, const char* ui, std::vector<SCell>& g);  // plugin.cpp; false: none (or it failed and ended)
     void screen_end();
+    // a plugin's focus view (isekur.view, the zen plugin): only the chat, in a centered column, the lines before the last
+    // `lines` dimmed, in the view's own theme, on the terminal and/or the webchat. Nothing is saved: ending it, or the
+    // plugin going (disabled, removed, reloaded, unloaded), brings back the configured theme and layout
+    struct View { std::string by; bool term = false, web = false, events = true, own = false; int width = 80, lines = 5; Theme theme; };
+    View view;
+    bool view_on(bool web) const { return !view.by.empty() && (web ? view.web : view.term); }
+    const Theme& look(bool web) const { return view_on(web) && view.own ? view.theme : theme; }  // what that side draws with
+    void view_end();
     void lock_saver();  // locked, Esc on the bare password box: the screensaver plugin starts one under it (as Alt+S does)
     bool wake();  // someone's here; true: it ended a screensaver (the key that woke it goes no further)
     // the lock screen's animation, in the terminal (the webchat plays its own off the same events):

@@ -310,7 +310,7 @@ static Style level_style(const Theme& T, int lv, Style base) {
 
 // the status_info items that are on, in a fixed order, drawn in st
 static std::vector<Row> status_info(const Core& c, Style st, bool dcc = true) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     auto on = split(c.opt(nullptr, "status_info", "up"), ' ');
     auto has = [&](const char* k) { return std::find(on.begin(), on.end(), k) != on.end(); };
     std::vector<Row> out;
@@ -394,7 +394,7 @@ static std::vector<Row> status_info(const Core& c, Style st, bool dcc = true) {
 std::string json_str(const std::string& s);  // web.cpp
 std::string status_info_json(const Core& c) {
     std::string o = "[";
-    for (auto& r : status_info(c, sty(c.theme, "status_info", "status_hi"), false)) {
+    for (auto& r : status_info(c, sty(c.look(true), "status_info", "status_hi"), false)) {
         o += o.size() > 1 ? ",[" : "[";
         std::string run;
         const Style* at = nullptr;  // runs of one color: [text, fg, bg]
@@ -439,7 +439,7 @@ struct WrapInfo { std::string ts, marker; bool ts_right = false; int indent = 0,
 // tsf: a time stamp format of its own (the log browser's has the seconds)
 static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false, const char* tsf = nullptr,
                              WrapInfo* info = nullptr) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     int nw = atoi(ini_get(c.cfg, "general", "nick_width", T.lay("nick_width", "12")).c_str());  // /set nick_width beats the theme's
     std::string tsfmt = tsf ? tsf : ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
     // timestamp_align = right: the time at the right edge of the first row, the text wraps short of it
@@ -595,7 +595,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
 // a channel's nicklist: the separator at column sx, the list right of it up to xend. Only the
 // focused pane's scrolls (nl_scroll); a double click on a nick opens a query
 void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool focus) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "nicklist_border", "separator");
     for (int y = top; y < top + ch; y++) text(sx, y, sx + 1, T.lay("separator", "│"), bs, false);
     std::vector<const NickEntry*> v;
@@ -631,7 +631,7 @@ void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool 
 }
 
 void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     // a shell tab: its terminal screen, unless scrolled back into what went off the top
     Term* term = b->term.get();
     if (term && b->scroll == 0) {
@@ -639,14 +639,16 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
         draw_term(term, y, h, w, x);
         return;
     }
+    bool hide = b->quiet || (zen && !c.view.events);  // join/part/quit lines: a quiet tab's, and the focus view's unless it shows them
     if (b->scroll)  // scrolled back: the lines that came in since push the view up by all their rows, not one
         for (auto it = b->lines.rbegin(); it != b->lines.rend() && b->scroll_new > 0; ++it, b->scroll_new--)
-            if (!(b->quiet && noise(*it))) b->scroll += (int)wrap(c, *it, b, w, true).size();
+            if (!(hide && noise(*it))) b->scroll += (int)wrap(c, *it, b, w, true).size();
     b->scroll_new = 0;
     std::vector<Row> rows;  // bottom-up
     std::vector<CopyRow> meta;  // rows' copy info, y filled in when drawn
     std::vector<const Line*> lof;  // each row's line (timestamp_hover)
-    int need = h + b->scroll;
+    std::vector<char> dim;  // the focus view: rows of the lines before the last c.view.lines (none while scrolled back)
+    int need = h + b->scroll, nth = 0;
     size_t n = 0;
     for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it, ++n) {
         if (b->unread && n == (size_t)b->unread) {  // read marker above the new lines
@@ -654,9 +656,9 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             std::string bar = "── new ";
             for (int k = 7; k < w; k++) bar += "─";
             cells(mk, bar, sty(T, "marker", "separator"), false);
-            rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1}), lof.push_back(nullptr);
+            rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1}), lof.push_back(nullptr), dim.push_back(zen && !b->scroll && nth >= c.view.lines);  // with the older lines it marks
         }
-        if (b->quiet && noise(*it)) continue;
+        if (hide && noise(*it)) continue;
         WrapInfo wi;
         auto r = wrap(c, *it, b, w, b->scroll > 0, nullptr, &wi);
         int id = (int)n + 1000000 * (x + 1);  // one per line, per pane
@@ -668,6 +670,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             meta.push_back(cr), lof.push_back(&*it);
         }
         rows.insert(rows.end(), r.rbegin(), r.rend());
+        dim.insert(dim.end(), r.size(), zen && !b->scroll && nth++ >= c.view.lines);
     }
     if ((int)rows.size() < need) b->scroll = std::max(0, (int)rows.size() - h);
     if (ts_hover && mouse_on) {  // the times show only on the line under the mouse, fading in and out
@@ -696,9 +699,18 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             }
         }
     }
+    RGB dbg = T.get("default").bg;
     for (int k = 0; k < h; k++) {
         size_t idx = (size_t)(b->scroll + k);
         if (idx >= rows.size()) break;
+        if (dim[idx])  // older than the last lines: their colors 45% of the way from the background, not bold
+            for (auto& cl : rows[idx]) {
+                RGB bg = cl.st.bg >= 0 ? cl.st.bg : dbg, fg = cl.st.fg;
+                cl.st.attr &= ~A_BOLD;
+                if (bg < 0 || fg < 0) { cl.st.attr |= A_DIM; continue; }  // the terminal's own colors: all it can do
+                auto mix = [&](int sh) { return (int)(((bg >> sh) & 255) * 0.55 + ((fg >> sh) & 255) * 0.45) << sh; };
+                cl.st.fg = mix(16) | mix(8) | mix(0);
+            }
         draw_row(x, y + h - 1 - k, x + w, rows[idx]);
         meta[idx].y = y + h - 1 - k, crows.push_back(meta[idx]);
     }
@@ -721,7 +733,7 @@ void Tui::draw() {
     if (c.logs_win) c.logs_win = false, logs_init();
     if (c.bans_win) c.bans_win = false, bw = BanWin{}, bw.open = true, bw.buf = c.bans_buf;
     if (c.bell) c.bell = false, tb_send("\a", 1);
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style def = T.get("default");
     tb_set_clear_attrs(tbc(def.fg), tbc(def.bg));
     tb_clear();
@@ -739,6 +751,7 @@ void Tui::draw() {
         crumb_state(st);
     }
     hits.clear(), crows.clear(), nl_x = -1;
+    zen = c.view_on(false);
     if (!c.locked || c.screen_by.empty()) peek_at = 0;
     long long la = c.lock_anim ? now_ms() - c.lock_anim_at : 0;
     g_reveal = c.lock_anim == 'u' && la >= 350 ? std::min(1.0, (la - 350) / 550.0) : -1;
@@ -768,7 +781,7 @@ void Tui::draw() {
     }
 
     // topic bar
-    if (topicbar) {
+    if (topicbar && !zen) {
         Style ts = T.get("topic");
         fill(0, 0, W, ts);
         std::string topic;
@@ -849,7 +862,7 @@ void Tui::draw() {
     }
     // tab_bar = left | right: when the chat keeps 40 columns beside it
     side_w = 0;
-    std::string tbar = ini_get(c.cfg, "general", "tab_bar");
+    std::string tbar = zen ? "" : ini_get(c.cfg, "general", "tab_bar");
     if (tbar == "left" || tbar == "right") {
         int sw0 = std::clamp(atoi(ini_get(c.cfg, "general", "tab_bar_width", T.lay("tab_bar_width", "20")).c_str()), 10, 60);  // /set beats the theme's
         if (W - sw0 - 1 >= 40) side_w = sw0;
@@ -857,6 +870,10 @@ void Tui::draw() {
     bool right = side_w && tbar == "right";
     side_x = right ? W - side_w : 0, sep_x = !side_w ? -1 : right ? side_x - 1 : side_w;
     chat_x = side_w && !right ? side_w + 1 : 0, chat_end = right ? sep_x : W;
+    if (zen) {  // the focus view: the chat alone, in a column in the middle
+        int zw = std::min(W - 2, c.view.width);
+        chat_x = (W - zw) / 2, chat_end = chat_x + zw;
+    }
     // tabs wrap onto more rows, whole labels only, filled left to right. Past TAB_ROWS the last row
     // scrolls: the active tab stays in view, "‹N" / "N›" count the hidden ones on each side (colored
     // like the most urgent of them) and a click on it brings the next one in
@@ -901,7 +918,8 @@ void Tui::draw() {
         auto rsty = [&](int r) { int i = side_top + r; return i < nt ? lsty[(size_t)i] : tbs; };
         if (side_top > 0) text(sx1 - 2, y0, sx1, "↑", rsty(0), false);
         if (side_top + rows < nt) text(sx1 - 2, y0 + rows - 1, sx1, "↓", rsty(rows - 1), false);
-    } else {
+    } else if (zen) tab_h = 0;
+    else {
     const int TAB_ROWS = 3;  // ponytail: fixed cap, a setting if anyone wants more
     std::vector<int> starts{0};  // the first label of each row
     for (int i = 0, x = 0; i < nt; i++) {
@@ -952,7 +970,7 @@ void Tui::draw() {
     int top = top_row(), ch = chat_height();
     int nlw0 = std::clamp(atoi(ini_get(c.cfg, "general", "nicklist_width", T.lay("nicklist_width", "18")).c_str()), 8, 40);  // /set beats the theme's
     Buffer* sb = c.split_buf && c.split_buf != b ? c.split_buf : nullptr;
-    bool two = sb && ch >= 7;
+    bool two = sb && ch >= 7 && !zen;
     nl_x = -1, other = Box{}, div_x = div_y = -1;
     nl_left = ini_get(c.cfg, "general", "nicklist_side") == "left";
     sel_lo = chat_x, sel_hi = chat_end;  // the chat's columns, less a lone pane's nicklist (set by draw_pane)
@@ -965,7 +983,7 @@ void Tui::draw() {
             text(bx.x + 1, bx.y, bx.x + bx.w, std::to_string(c.index_of(pb) + 1) + ":" + buf_label(pb) + (focus ? "" : "  (F6 / Alt+O / click: focus)"), hs, false);
             bx.y++, bx.h--;
         }
-        int nw = nicklist && pb->type == BT::CHANNEL && bx.w >= 60 ? nlw0 : 0, cwp = bx.w - (nw ? nw + 1 : 0);
+        int nw = nicklist && !zen && pb->type == BT::CHANNEL && bx.w >= 60 ? nlw0 : 0, cwp = bx.w - (nw ? nw + 1 : 0);
         int cx = nw && nl_left ? bx.x + nw + 1 : bx.x;  // nicklist_side = left: the list, its │, then the chat
         if (nw) {
             int sx = nl_left ? bx.x + nw : bx.x + cwp, l0 = nl_left ? bx.x : sx + 1;
@@ -1036,97 +1054,99 @@ void Tui::draw() {
         }
     }
 
-    // status bar
+    // status bar (none in the focus view: a blank row over the input)
     int y = H - 2, x = 0;
-    Style ss = T.get("status"), sh = sty(T, "status_hi", "status");
-    sh.fg = readable(sh.fg, sh.bg >= 0 ? sh.bg : ss.bg);  // the bar's bright text reads whatever the theme (tokyonight-day: 4.0:1)
-    fill(y, 0, W, ss);
-    auto seg = [&](const std::string& inner, Style is) {
-        x = text(x, y, W, "[", ss, false);
-        x = text(x, y, W, inner, is, false);
-        x = text(x, y, W, "] ", ss, false);
-    };
-    x = text(x, y, W, " ", ss, false);
-    seg(fmt_time(time(nullptr), "%H:%M"), sh);
-    Server* s = b->srv;
-    if (s) seg(s->nick + (s->umodes.empty() ? "" : "(+" + s->umodes + ")"), sh);
-    seg(std::to_string(ai + 1) + ":" + (s && b->type != BT::STATUS ? (s->network.empty() ? s->cfg.name : s->network) + "/" : "") +
-            buf_label(b) + (b->modes.empty() ? "" : "(+" + b->modes + ")"),
-        sh);
-    if (s && s->state == SS::CONNECTED && s->lag >= 1) {
-        char lag[32];
-        snprintf(lag, sizeof lag, "Lag %.1fs", s->lag);
-        seg(lag, sh);
-    } else if (s && s->state != SS::CONNECTED) {
-        seg(s->state == SS::DISCONNECTED ? "disconnected" : "connecting", T.get("error"));
-    }
-    if (!b->typing.empty()) {  // +typing
-        std::vector<std::string> who;
-        for (auto& kv : b->typing) {
-            auto it = b->nicks.find(kv.first);
-            who.push_back(it != b->nicks.end() ? it->second.nick : b->type == BT::QUERY ? b->name : kv.first);
+    if (!zen) {
+        Style ss = T.get("status"), sh = sty(T, "status_hi", "status");
+        sh.fg = readable(sh.fg, sh.bg >= 0 ? sh.bg : ss.bg);  // the bar's bright text reads whatever the theme (tokyonight-day: 4.0:1)
+        fill(y, 0, W, ss);
+        auto seg = [&](const std::string& inner, Style is) {
+            x = text(x, y, W, "[", ss, false);
+            x = text(x, y, W, inner, is, false);
+            x = text(x, y, W, "] ", ss, false);
+        };
+        x = text(x, y, W, " ", ss, false);
+        seg(fmt_time(time(nullptr), "%H:%M"), sh);
+        Server* s = b->srv;
+        if (s) seg(s->nick + (s->umodes.empty() ? "" : "(+" + s->umodes + ")"), sh);
+        seg(std::to_string(ai + 1) + ":" + (s && b->type != BT::STATUS ? (s->network.empty() ? s->cfg.name : s->network) + "/" : "") +
+                buf_label(b) + (b->modes.empty() ? "" : "(+" + b->modes + ")"),
+            sh);
+        if (s && s->state == SS::CONNECTED && s->lag >= 1) {
+            char lag[32];
+            snprintf(lag, sizeof lag, "Lag %.1fs", s->lag);
+            seg(lag, sh);
+        } else if (s && s->state != SS::CONNECTED) {
+            seg(s->state == SS::DISCONNECTED ? "disconnected" : "connecting", T.get("error"));
         }
-        seg(typing_text(who), ss);
-    }
-    std::string away;  // [away: net, net]: every network you're away on (the server's 306), whichever tab this is
-    for (auto& sv : c.servers)
-        if (sv->away && sv->state == SS::CONNECTED) away += (away.empty() ? "" : ", ") + (sv->network.empty() ? sv->cfg.name : sv->network);
-    if (!away.empty()) {
-        x = text(x, y, W, "[away: ", ss, false);
-        x = text(x, y, W, away, sh, false);
-        x = text(x, y, W, "] ", ss, false);
-    }
-    if (!c.update_ver.empty()) {  // check_updates found a newer release; a click opens /about
-        Style us = sh;
-        us.attr |= A_BOLD;
-        int x0 = x;
-        seg("\u2191v" + c.update_ver, us);
-        hits.push_back({y, x0, x - 1, -2, ""});
-    }
-    std::string acts;
-    std::vector<std::pair<int, int>> act;
-    for (size_t i = 0; i < c.bufs.size(); i++)
-        if (c.bufs[i]->activity) act.push_back({(int)i + 1, c.bufs[i]->activity});
-    if (!act.empty()) {
-        x = text(x, y, W, "[Act: ", ss, false);
-        for (size_t i = 0; i < act.size(); i++) {
-            Style as = act[i].second == 3 ? T.get("tab_hilight") : act[i].second == 2 ? T.get("tab_msg") : T.get("tab_data");
-            as.bg = ss.bg;
-            if (i) x = text(x, y, W, ",", as, false);
-            int x0 = x;
-            x = text(x, y, W, std::to_string(act[i].first), as, false);
-            hits.push_back({y, x0, x, act[i].first - 1, ""});
-        }
-        x = text(x, y, W, "] ", ss, false);
-    }
-    if (b->scroll) {  // -- MORE --: the hilight's colors where they read on the status bar (github-dark's hilight text
-                      // is near-black, made for its pink background), else the bar's bright text; a default bar: hilight
-        Style hl = T.get("hilight"), ms = sh;
-        ms.bg = ss.bg, ms.attr |= A_BOLD;
-        if (ss.bg < 0) ms = hl;
-        else {
-            ms.fg = -1;
-            for (RGB cand : {hl.bg, hl.fg, sh.fg})
-                if (cand >= 0 && contrast(cand, ss.bg) >= 4.5) { ms.fg = cand; break; }
-            if (ms.fg < 0) ms.fg = readable(sh.fg >= 0 ? sh.fg : hl.fg, ss.bg);
-        }
-        seg("-- MORE --", ms);
-    }
-    if (!c.flash.empty()) seg(c.flash, sh);
-    {  // status_info (uptime, cpu, ...), under the nick list (right edge without one); the last ones drop when it won't fit
-        Style is = sty(T, "status_info", "status_hi");
-        auto parts = status_info(c, is);
-        for (; !parts.empty(); parts.pop_back()) {
-            Row u;
-            for (auto& p2 : parts) {
-                if (!u.empty()) cells(u, " ", is, false);
-                u.insert(u.end(), p2.begin(), p2.end());
+        if (!b->typing.empty()) {  // +typing
+            std::vector<std::string> who;
+            for (auto& kv : b->typing) {
+                auto it = b->nicks.find(kv.first);
+                who.push_back(it != b->nicks.end() ? it->second.nick : b->type == BT::QUERY ? b->name : kv.first);
             }
-            int uw = width(u), ux = nlw && cw + 2 + uw <= W ? cw + 2 : W - uw - 1;
-            if (ux > x) { draw_row(ux, y, W, u); break; }
+            seg(typing_text(who), ss);
         }
-    }
+        std::string away;  // [away: net, net]: every network you're away on (the server's 306), whichever tab this is
+        for (auto& sv : c.servers)
+            if (sv->away && sv->state == SS::CONNECTED) away += (away.empty() ? "" : ", ") + (sv->network.empty() ? sv->cfg.name : sv->network);
+        if (!away.empty()) {
+            x = text(x, y, W, "[away: ", ss, false);
+            x = text(x, y, W, away, sh, false);
+            x = text(x, y, W, "] ", ss, false);
+        }
+        if (!c.update_ver.empty()) {  // check_updates found a newer release; a click opens /about
+            Style us = sh;
+            us.attr |= A_BOLD;
+            int x0 = x;
+            seg("\u2191v" + c.update_ver, us);
+            hits.push_back({y, x0, x - 1, -2, ""});
+        }
+        std::string acts;
+        std::vector<std::pair<int, int>> act;
+        for (size_t i = 0; i < c.bufs.size(); i++)
+            if (c.bufs[i]->activity) act.push_back({(int)i + 1, c.bufs[i]->activity});
+        if (!act.empty()) {
+            x = text(x, y, W, "[Act: ", ss, false);
+            for (size_t i = 0; i < act.size(); i++) {
+                Style as = act[i].second == 3 ? T.get("tab_hilight") : act[i].second == 2 ? T.get("tab_msg") : T.get("tab_data");
+                as.bg = ss.bg;
+                if (i) x = text(x, y, W, ",", as, false);
+                int x0 = x;
+                x = text(x, y, W, std::to_string(act[i].first), as, false);
+                hits.push_back({y, x0, x, act[i].first - 1, ""});
+            }
+            x = text(x, y, W, "] ", ss, false);
+        }
+        if (b->scroll) {  // -- MORE --: the hilight's colors where they read on the status bar (github-dark's hilight text
+                          // is near-black, made for its pink background), else the bar's bright text; a default bar: hilight
+            Style hl = T.get("hilight"), ms = sh;
+            ms.bg = ss.bg, ms.attr |= A_BOLD;
+            if (ss.bg < 0) ms = hl;
+            else {
+                ms.fg = -1;
+                for (RGB cand : {hl.bg, hl.fg, sh.fg})
+                    if (cand >= 0 && contrast(cand, ss.bg) >= 4.5) { ms.fg = cand; break; }
+                if (ms.fg < 0) ms.fg = readable(sh.fg >= 0 ? sh.fg : hl.fg, ss.bg);
+            }
+            seg("-- MORE --", ms);
+        }
+        if (!c.flash.empty()) seg(c.flash, sh);
+        {  // status_info (uptime, cpu, ...), under the nick list (right edge without one); the last ones drop when it won't fit
+            Style is = sty(T, "status_info", "status_hi");
+            auto parts = status_info(c, is);
+            for (; !parts.empty(); parts.pop_back()) {
+                Row u;
+                for (auto& p2 : parts) {
+                    if (!u.empty()) cells(u, " ", is, false);
+                    u.insert(u.end(), p2.begin(), p2.end());
+                }
+                int uw = width(u), ux = nlw && cw + 2 + uw <= W ? cw + 2 : W - uw - 1;
+                if (ux > x) { draw_row(ux, y, W, u); break; }
+            }
+        }
 
+    }
     // nick menu, over everything but the input line
     if (!menu.items.empty()) {
         Style ms = sty(T, "menu", "nicklist"), ss2 = sty(T, "menu_sel", "tab_active"), sep = sty(T, "menu_border", "separator");
@@ -1223,8 +1243,9 @@ void Tui::draw() {
         present();
         return;
     }
-    int px = text(0, y, W, "[" + buf_label(b) + "] ", sty(T, "input_prompt", "input"), false);
-    int avail = std::max(1, W - px - 1);
+    int px = zen ? text(chat_x, y, W, buf_label(b) + " \u203a ", sty(T, "input_prompt", "input"), false)  // the focus view: "#chan › " under the column
+                 : text(0, y, W, "[" + buf_label(b) + "] ", sty(T, "input_prompt", "input"), false);
+    int avail = std::max(1, (zen ? chat_end : W) - px - 1);
     std::u32string in = shown_input();
     int curw = 0, totw = 0;
     for (size_t i = 0; i < in.size(); i++) (i < cur ? curw : totw) += cwidth(in[i]);
@@ -1271,7 +1292,7 @@ void Tui::draw() {
 // label "": a yes/no box, the info lines and the hint, no field
 void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
                       bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx, int dy, char kind) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), fs = T.get("input"), es = T.get("error"), hs = bs, ns = sty(T, "timestamp", "menu"), ls = sty(T, "menu_border", "separator");
     for (Style* st : {&es, &ns, &ls}) st->bg = bs.bg;
     hs.attr |= A_BOLD;
@@ -1321,7 +1342,7 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
 // and the shackle snaps shut, 'f' (a wrong password) they shake and flash red, 'u' the shackle
 // springs open (then present() opens the session from the middle out)
 void Tui::draw_lock(int W, int H, long long ms) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     std::vector<std::string> info;
     if (!c.lock_msg.empty()) info.push_back(c.lock_msg);
     int bh = 5 + (int)info.size(), y0 = std::max(0, (H - bh) / 2 - 1);
@@ -1408,7 +1429,7 @@ static std::string set_server(const std::string& cat, const Core::SetRow* r) {
 }
 
 void Tui::draw_settings(int W, int H) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
           sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), keyst = sty(T, "set_key", "info"), val = sty(T, "set_value", "input"),
           secst = sty(T, "info", "menu"), mark = sty(T, "hilight", "menu");
@@ -1753,7 +1774,7 @@ std::vector<std::string> Tui::theme_list() const {
 }
 
 void Tui::draw_themes(int W, int H) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
           sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input");
     for (Style* st : {&ls, &dim}) st->bg = bs.bg;
@@ -1870,7 +1891,7 @@ static std::vector<std::string> key_caps(const std::string& sp) {
 }
 
 void Tui::draw_keys(int W, int H) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
           cap = sty(T, "menu_sel", "tab_active"), grp = sty(T, "hilight", "menu");
     for (Style* st : {&ls, &dim, &grp}) st->bg = bs.bg;
@@ -1963,7 +1984,7 @@ std::vector<Buffer*> Tui::find_list() const {
 }
 
 void Tui::draw_find(int W, int H) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
           sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input");
     for (Style* st : {&ls, &dim}) st->bg = bs.bg;
@@ -2062,7 +2083,7 @@ void Tui::plug_run(const std::string& cmd) {
 }
 
 void Tui::draw_plugins(int W, int H) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
           sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), es = T.get("error"), keyst = sty(T, "set_key", "info"),
           ok = T.get("join"), up = sty(T, "input_prompt", "hilight");
@@ -2443,7 +2464,7 @@ static const char* ban_noun(char k) { return k == 'e' ? "exception" : k == 'I' ?
 //   │   troll!*@*  (lifts in 9m)                bob            2h ago    │
 //   │ 2 bans · u unban · a add ...                                       │
 void Tui::draw_bans(int W, int H) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Buffer* b = nullptr;
     for (auto& x : c.bufs)
         if (x->id == bw.buf) b = x.get();
@@ -2744,7 +2765,7 @@ void Tui::shell_key(int mod, int k, uint32_t ch) {
 // the shell's screen, cell by cell; its default colors are the theme's
 void Tui::draw_term(Term* t, int top, int rows, int cols, int x0) {
     VTermScreen* scr = vterm_obtain_screen(t->vt);
-    Style def = c.theme.get("default");
+    Style def = c.look(false).get("default");
     for (int r = 0; r < rows && r < t->rows; r++)
         for (int x = 0; x < cols && x < t->cols; x++) {
             VTermScreenCell cl;
@@ -3039,6 +3060,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (mod & TB_MOD_ALT) return;  // unbound Alt combos do nothing
     if (input.empty() && guide_tab() && ((ch == 'q' || ch == 'Q') || (k == TB_KEY_ESC && !ch))) { c.guide(c.active, "close"); return; }  // q or Esc closes the guide
     if (input.empty() && k == TB_KEY_ESC && !ch && c.active->srv && c.active->name == "*channels") { c.list_filter(c.active, ""); return; }  // Esc clears the /list filter
+    if (input.empty() && k == TB_KEY_ESC && !ch && zen) { c.view_end(); return; }  // Esc leaves the focus view (the zen plugin's)
     if (ch) option_note(ch);
     if (ch || k == TB_KEY_SPACE) { input.insert(cur++, 1, ch ? (char32_t)ch : U' '); return; }
     switch (k) {
@@ -3271,7 +3293,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     int top = top_row(), ch = chat_height();
-    bool over_topic = topicbar && y < topic_h, over_chat = y >= top && y < top + ch && x >= chat_x && x < chat_end && (nl_x < 0 || x < std::min(nl_x, nl_x0) || x >= std::max(nl_x + 1, nl_x1));  // not on the nicklist or its │
+    bool over_topic = topicbar && !zen && y < topic_h, over_chat = y >= top && y < top + ch && x >= chat_x && x < chat_end && (nl_x < 0 || x < std::min(nl_x, nl_x0) || x >= std::max(nl_x + 1, nl_x1));  // not on the nicklist or its │
     if (in_selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {  // a drag over the input line
         in_drag_x = x;
         if (x > in_px && x < in_px + in_w) isel_b = cur = input_at(x);
@@ -3792,7 +3814,7 @@ void Tui::logs_cal() {
 }
 
 void Tui::draw_logs(int W, int H) {
-    const Theme& T = c.theme;
+    const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
           sel = sty(T, "menu_sel", "tab_active"), fs = T.get("input"), es = T.get("error"), keyst = sty(T, "set_key", "info"),
           ok = T.get("join"), def = T.get("default"), mark = sty(T, "marker", "separator");

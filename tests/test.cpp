@@ -3613,6 +3613,20 @@ print("loaded")
         assert(irc_parse(":bob!u@h PRIVMSG #chan :https://x.test/a.mp3 https://cdn.pics.test/a.gif https://x.test/b.gif", pm)), pc.handle(ps, pm);
         assert(pchan->lines.back().embeds == R"({"size":"large","type":"image","url":"https://x.test/b.gif"})");
         pc.exec(ph, "/plugin remove preview");
+        // zen: /zen draws the chosen side in mono, the configured theme stays and comes back on /zen, Esc or disable
+        pc.exec(ph, "/plugin install zen");
+        wait_catalog();
+        assert(said("zen " + ver["zen"] + " installed and on"));
+        std::string conf_theme = pc.theme.name;
+        pc.exec(ph, "/plugin set zen where terminal");
+        pc.exec(ph, "/zen");
+        assert(pc.view_on(false) && !pc.view_on(true) && pc.look(false).name == "mono" && pc.look(true).name == conf_theme);
+        pc.exec(ph, "/zen");
+        assert(!pc.view_on(false) && pc.look(false).name == conf_theme);
+        pc.exec(ph, "/zen");
+        pc.exec(ph, "/plugin disable zen");
+        assert(pc.view.by.empty() && pc.look(false).name == conf_theme && pc.theme.name == conf_theme);
+        pc.exec(ph, "/plugin remove zen");
         // screensaver: after idle minutes without a key (attached), each saver draws on any grid, a key ends it
         pc.exec(ph, "/plugin install screensaver");
         wait_catalog();

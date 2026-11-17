@@ -588,6 +588,16 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
 #msgs .older { color: var(--muted); text-align: center; font-size: calc(12px * var(--z, 1)); padding: 4px; }
 .quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
+/* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
+   before the last few dimmed (zenDim marks those with .zf); Esc on an empty line leaves it */
+#app.zen { grid-template-columns: 1fr !important; grid-template-rows: 1fr auto !important; grid-template-areas: "msgs" "input" !important; }
+#app.zen > :not(#msgs):not(#input) { display: none !important; }
+#app.zen #msgs, #app.zen #input { padding-left: max(16px, calc((100% - var(--zenw, 80ch)) / 2)); padding-right: max(16px, calc((100% - var(--zenw, 80ch)) / 2)); }
+#app.zen #msgs { padding-top: 2em; display: flex; flex-direction: column; }
+#app.zen #msgs > :first-child { margin-top: auto; }  /* a short chat rests on the input, where the eyes are */
+#app.zen:not(.zenev) #msgs .l.noise { display: none; }
+#app.zen #msgs .l:not(.zf) { opacity: .45; transition: opacity .2s; }
+@media (hover: hover) { #app.zen #msgs .l:not(.zf):hover { opacity: .9; } }
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
 .k-part, .k-part .nk { color: var(--part-fg, var(--part)); }
 .k-quit, .k-quit .nk { color: var(--quit-fg, var(--part-fg, var(--part))); }
@@ -1524,7 +1534,20 @@ function applyTheme() {
     let off = ah; try { off = off || localStorage.getItem("side") === "0"; } catch (e) {}
     $("#app").classList.toggle("ah", ah); sideFold(off);
   }
+  $("#app").classList.toggle("zen", !!theme.zen);  // the zen plugin's focus view, from the terminal's isekur.view
+  $("#app").classList.toggle("zenev", !!(theme.zen && theme.zen.ev));
+  set("--zenw", theme.zen ? theme.zen.w + "ch" : "");
+  zenDim();
 }
+// the focus view: the last theme.zen.n shown lines keep full strength (.zf), CSS dims the ones before them
+function zenDim() {
+  const box = $("#msgs");
+  box.querySelectorAll(".zf").forEach(e => e.classList.remove("zf"));
+  let n = theme.zen ? theme.zen.n : 0;
+  for (let e = box.lastElementChild; e && n > 0; e = e.previousElementSibling)
+    if (e.classList.contains("l") && e.offsetParent !== null) e.classList.add("zf"), n--;  // not the hidden joins and parts
+}
+new MutationObserver(zenDim).observe($("#msgs"), {childList: true});
 
 // The accent buttons (Apply & save, Connect, Unlock) are a gradient from input_prompt to msg_self: their text,
 // black or white, must read on both ends (WCAG 4.5:1). If neither does (mid-tone accents), the least veil
@@ -3299,6 +3322,7 @@ line.addEventListener("keydown", e => {
   if (gk && gb && gb.name === "*guide" && !inp.value && !e.ctrlKey && !e.altKey && !e.metaKey) {
     e.preventDefault(); send({t: "input", buf: active, text: "/guide " + gk}); return;
   }
+  if (e.key === "Escape" && theme.zen && !inp.value) { e.preventDefault(); send({t: "view_end", buf: active}); return; }  // leaves the focus view
   if (e.key === "Escape" && gb && gb.name === "*channels" && !inp.value) { e.preventDefault(); send({t: "input", buf: active, text: "/list filter"}); return; }  // clears its filter
   if (e.ctrlKey && !e.altKey && !e.metaKey && FMT[e.key.toLowerCase()] && !(e.key.toLowerCase() === "c" && inp.selectionStart !== inp.selectionEnd)) {
     e.preventDefault(); insert(enc(FMT[e.key.toLowerCase()])); return;
