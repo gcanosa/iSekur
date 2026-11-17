@@ -1205,9 +1205,11 @@ void Tui::draw() {
         present();
         return;
     }
-    if (sw.open) {  // /set: the settings window has the keys (a question over it: perform's delete)
+    if (sw.open) {  // /set: the settings window has the keys (a question over it: perform's delete, or the lock password a guarded key asks for)
         draw_settings(W, H);
-        if (!confirm.empty())
+        if (c.asking(c.active))
+            draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel", 0, 0, 'a');
+        else if (!confirm.empty())
             draw_dialog(W, H, confirm_title.empty() ? "iSekur" : confirm_title, wrap_words(confirm.substr(0, confirm.find('\n')), 44), "",
                         false, U"", 0, "y: yes · n or Esc: no", 0, 0, 'c');
         present();
@@ -2975,7 +2977,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         else if (k == TB_KEY_ENTER) c.unlock(to_utf8(lock_in)), lock_in.clear();
         return;
     }
-    if (sw.open && confirm.empty()) { settings_key(mod, k, ch); return; }
+    if (sw.open && confirm.empty() && !c.asking(c.active)) { settings_key(mod, k, ch); return; }  // asking: the password box has the keys, below
     if (tw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) theme_key(k, ch); return; }
     if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
     if (kw.open) { keys_key(k, ch); return; }
@@ -3273,7 +3275,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     }
     if (k == TB_KEY_MOUSE_RELEASE && (mod & TB_MOD_MOTION)) { hover_x = x, hover_y = y; return; }  // 1003: a move, no button held
     if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) { close_box(); return; }
-    if (sw.open) { if (!(mod & TB_MOD_MOTION)) settings_mouse(k, x, y); return; }
+    if (sw.open) { if (!(mod & TB_MOD_MOTION) && !c.asking(c.active)) settings_mouse(k, x, y); return; }
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
     if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
     if (pw.open) { if (!(mod & TB_MOD_MOTION)) plugin_mouse(k, x, y); return; }
