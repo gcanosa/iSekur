@@ -115,14 +115,26 @@ button, input { font: inherit; color: inherit; }
 #sidebtn:hover { color: var(--fg); }
 @media (min-width: 761px) and (pointer: fine), (min-width: 761px) and (pointer: none), (min-width: 761px) and (min-height: 501px) {
   #app.noside { grid-template-columns: 34px 1fr auto; grid-template-areas: "side topic topic" "side msgs nicks" "side status status" "side input input"; }
-  #app.noside #side > :not(#sidetop), #app.noside #tabq { display: none; }
-  #app.noside #sidetop { padding: 0; }
-  #app.noside #sidetop::before { display: none; }
+  #app.noside:not(.ah) #side > :not(#sidetop), #app.noside:not(.ah) #tabq { display: none; }
+  #app.noside:not(.ah) #sidetop { padding: 0; }
+  #app.noside:not(.ah) #sidetop::before { display: none; }
   #app.noside #sidebtn { margin: 0 auto; }
   #app.noside #foot { grid-area: side; align-self: end; flex-direction: column; padding: 8px 3px; border-right: 0; background: none; }
   #app.noside #foot button { flex: none; }
   #app.noside #foot svg { width: 18px; height: 18px; }
+  /* /set web_tree_autohide on: folded to the strip; the mouse at the left edge slides the tab list out over the messages */
+  #app.ah #sidebtn { display: none; }
+  #app.ah #foot { align-self: stretch; justify-content: flex-end; background: var(--tabbar-bg, var(--panel)); border-right: 1px solid var(--line); }
+  #app.ah #side { position: fixed; top: var(--vvt, 0px); left: 34px; height: var(--vvh, 100dvh); width: var(--treew, 220px); box-sizing: border-box; z-index: 8; box-shadow: 0 0 30px #0008;
+    transform: translateX(calc(-100% - 80px)); visibility: hidden; transition: transform .28s cubic-bezier(.2, .8, .2, 1), visibility 0s .28s; }
+  #app.ah #side.open { transform: none; visibility: visible; transition: transform .28s cubic-bezier(.2, .8, .2, 1); }
+  #app.ah #side.slow:not(.open) { transition: transform .7s ease-in-out, visibility 0s .7s; }  /* closed because the mouse left the window: unhurried */
+  .light #app.ah #side { box-shadow: 0 0 24px #0003; }  /* a dark theme's shadow is a smudge on a light one */
+  /* "iSekur" at the top of the strip, away from its buttons: read bottom to top, in the theme's muted color */
+  #app.ah #foot::before { content: "iSekur"; margin: 4px 0 auto; writing-mode: vertical-rl; transform: rotate(180deg); align-self: center; white-space: nowrap;
+    color: var(--muted); opacity: .6; font-size: calc(12px * var(--z, 1)); letter-spacing: 1px; pointer-events: none; user-select: none; }
 }
+@media (prefers-reduced-motion: reduce) { #app.ah #side, #app.ah #side.open { transition: none; } }
 /* dialogs: a box with its title on the border, like the terminal's */
 dialog, #ctx, #lock .card { --muted: var(--dlg-dim, #8a8ea8); --tab_active-bg: var(--dlg-sel-bg, #ffffff14); --tab_active-fg: var(--dlg-sel-fg, #d6d8e6);
   --menu_sel-bg: var(--dlg-sel-bg, #ffffff14); --menu_sel-fg: var(--dlg-sel-fg, #d6d8e6); }
@@ -1507,6 +1519,11 @@ function applyTheme() {
   const fs = parseInt(theme.fsize); set("--fsize", fs >= 8 && fs <= 40 ? fs + "px" : "");
   const tw = parseInt(theme.treew); set("--treew", tw >= 120 && tw <= 600 ? tw + "px" : "");  // /set web_tree_width
   $("#side").classList.toggle("tree", /^(on|true|yes)$/i.test(theme.tree || ""));  // /set web_tree_lines on
+  const ah = /^(on|true|yes|1)$/i.test(theme.ah || "");  // /set web_tree_autohide on: folded, slides out at the left edge
+  if (ah !== $("#app").classList.contains("ah")) {
+    let off = ah; try { off = off || localStorage.getItem("side") === "0"; } catch (e) {}
+    $("#app").classList.toggle("ah", ah); sideFold(off);
+  }
 }
 
 // The accent buttons (Apply & save, Connect, Unlock) are a gradient from input_prompt to msg_self: their text,
@@ -1998,6 +2015,21 @@ function sideFold(off) {
 }
 sidebtn.onclick = () => { const off = !$("#app").classList.contains("noside"); sideFold(off); try { localStorage.setItem("side", off ? "0" : "1"); } catch (e) {} };
 try { sideFold(localStorage.getItem("side") === "0"); } catch (e) { sideFold(false); }
+// /set web_tree_autohide on (desktop): the mouse on the strip opens the list, leaving it closes it; not while the filter has the focus
+const deskMq = matchMedia("(min-width: 761px) and (pointer: fine), (min-width: 761px) and (pointer: none), (min-width: 761px) and (min-height: 501px)");
+const ahOn = () => $("#app").classList.contains("ah") && deskMq.matches;
+document.addEventListener("mousemove", e => {
+  if (!ahOn() || document.activeElement === tabq || e.target.closest("dialog")) return;
+  const s = $("#side"), f = $("#foot"), b = f.querySelector("button:not([hidden])");
+  if (f.contains(e.target) && b && e.clientY >= b.getBoundingClientRect().top - 8) return;  // the strip's buttons and the gaps between them: no change, or it flickers
+  if (e.clientX < 34) s.classList.add("open"), s.classList.remove("slow");
+  else if (!s.contains(e.target)) s.classList.remove("open", "slow");
+});
+tabq.addEventListener("blur", () => { if (ahOn() && !$("#side").matches(":hover")) $("#side").classList.remove("open"); });
+// the mouse out of the window: no more mousemove, so close it here, a moment later (an overshoot past the edge and back keeps it)
+let ahOut = 0;
+document.documentElement.addEventListener("mouseleave", () => { if (ahOn()) ahOut = setTimeout(() => { if (document.activeElement !== tabq) $("#side").classList.add("slow"), $("#side").classList.remove("open"); }, 1200); });
+document.documentElement.addEventListener("mouseenter", () => clearTimeout(ahOut));
 // desktop: hide/show the list (remembered); phone: open/close the overlay
 // phone: #app follows the visible viewport: iOS keeps the page height when the keyboard opens and pans the page up to the
 // focused input (visualViewport.offsetTop), which hid the topic bar and left a white gap under the input line. So #app is
@@ -3397,7 +3429,7 @@ function action(a) {
   else if (a === "toggle_nicklist") $("#nickbtn").click();
   else if (a === "other_pane") { if (split !== null) select(split); }
   else if (a === "find_tab") {  // the filter on top of the tab list (it opens the list if folded or on a phone)
-    if ($("#app").classList.contains("noside")) sidebtn.click();
+    if ($("#app").classList.contains("noside") && !$("#app").classList.contains("ah")) sidebtn.click();
     $("#side").classList.add("open");
     tabq.focus(); tabq.select();
   }

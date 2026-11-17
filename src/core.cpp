@@ -405,7 +405,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
-    {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
+    {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_autohide", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
     {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'}, {"tab_bar", "Look", 'g'}, {"tab_bar_width", "Look", 'g'}, {"nicklist_side", "Look", 'g'}, {"nicklist_width", "Look", 'g'},
     {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
