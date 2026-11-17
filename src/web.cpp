@@ -750,16 +750,17 @@ void Web::ws_frames(Client& cl) {
             o += "],\"typed\":[";
             for (int i : typed) o += std::string(o.back() == '[' ? "" : ",") + std::to_string(i);
             cl.conn.out += ws_frame(o + "]}");
-        } else if (m["t"] == "settings") {  // the settings dialog: [section, key, value, default, unsaved, secret, choices, category, header, shared, over]
+        } else if (m["t"] == "settings") {  // the settings dialog: [section, key, value, default, unsaved, secret, choices, category, header, shared, over, unit]
             std::string o = "{\"t\":\"settings\",\"list\":[";
             for (auto& r : c.setting_rows()) {  // secrets: only whether they're set; choices: a switch or a list
                 o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(r.sec) + "," + json_str(r.key) + "," +
                      json_str(r.secret ? (r.val.empty() ? "" : "\x01") : r.val) + "," + json_str(r.secret ? "" : r.def) + "," +
                      (r.unsaved ? "1" : "0") + "," + (r.secret ? "1" : "0") + ",[";
                 for (size_t i = 0; i < r.choices.size(); i++) o += (i ? "," : "") + json_str(r.choices[i]);
-                o += "]," + json_str(r.cat) + "," + json_str(r.head) + "," + (r.shared ? "1" : "0") + "," + json_str(r.over) + "]";
+                o += "]," + json_str(r.cat) + "," + json_str(r.head) + "," + (r.shared ? "1" : "0") + "," + json_str(r.over) + "," + json_str(r.unit) + "]";
             }
-            cl.conn.out += ws_frame(o + "]}");
+            cl.conn.out += ws_frame(o + "],\"err\":" + json_str(c.set_refused + (c.set_refused.empty() ? "" : " (unchanged)")) + "}");
+            c.set_refused.clear();
         } else if (m["t"] == "plugref") {  // the plugin window's Available tab: fetch the catalog
             c.plugin_refresh(b);
         } else if (m["t"] == "plugins") {  // the plugin window: installed, the catalog, the scopes, and the console's newest line (the last action's answer)

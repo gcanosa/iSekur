@@ -1546,7 +1546,7 @@ void Tui::draw_settings(int W, int H) {
             if (on) text(ex, yy, vmax, inherits ? "   Space: override" : overrides ? "   Space: switch · d: Global's" : "   Space: switch", sel, false);
             continue;
         }
-        std::string over = L.r->over.empty() ? "" : "  (" + L.r->over + ")";
+        std::string over = (L.r->unit.empty() ? "" : " " + L.r->unit) + (L.r->over.empty() ? "" : "  (" + L.r->over + ")");
         bool cmds = L.r->key == "perform" || L.r->sec == "aliases";  // commands: their passwords as ********
         std::string v = !L.r->val.empty() ? (L.r->secret ? "********" : cmds ? perform_show(L.r->val) : L.r->val) + (overrides ? "  \u2190 overrides Global" : "") + over
                         : L.r->secret || L.r->def.empty() ? "(not set)" + over
@@ -1563,7 +1563,7 @@ void Tui::draw_settings(int W, int H) {
     bool on_srv = !set_server(sw.cat, sw.focus == 1 ? hr : nullptr).empty();
     std::string hint = plist && sw.editing ? "Enter: keep it · Esc: cancel · $nick: your nick · /msg x@channels.undernet.org login user pass"
                        : plist ? "\u2191\u2193: move · Enter e: edit · a: add · d: delete · [ ]: up/down · p: preset · s: save · Esc \u2190: back"
-                       : sw.editing     ? "Enter: set it · Esc: cancel · empty = the default"
+                       : sw.editing     ? "Enter: set it · Esc: cancel · empty = the default" + (hr && !hr->unit.empty() ? " · in " + hr->unit : "")
                        : hr && hr->key == "perform" && sw.focus == 1 ? "Enter: its commands · p: a preset (X, Q, eggdrop, IdleRPG) · s: save · q: close"
                        : sw.searching ? "type to search · Enter or \u2193: to the list · Esc: clear it"
                        : on_srv ? "c: connect · r: rename · x: delete server · n: new server · e Enter: edit · s: save · q: close"
@@ -1634,6 +1634,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
         if (k == TB_KEY_ESC) { sw.editing = false; return; }
         if (k == TB_KEY_ENTER && r) {
             std::string v = to_utf8(sw.ed);
+            if (std::string m = v.empty() ? "" : bad_value(r->sec, r->key, v); !m.empty()) { sw.msg = m; return; }  // still editing: fix it or Esc
             c.exec(c.active, "/set " + full_key(*r) + " " + (v.empty() ? "\"\"" : v));
             sw.editing = false;
             sw.msg = r->key == "name" && r->sec.rfind("server.", 0) == 0 ? (v.empty() ? "A server needs a name" : "Renamed to " + v + " (saved)")

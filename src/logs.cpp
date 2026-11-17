@@ -36,6 +36,14 @@ static void scan(const std::string& dir, const std::string& net, std::vector<Log
     closedir(d);
 }
 
+std::vector<LogFile> log_days(const std::string& dir) {
+    std::vector<LogFile> all, out;
+    scan(dir, "", all);
+    for (auto& f : all)
+        if (!f.current) out.push_back(f);
+    return out;
+}
+
 std::vector<LogFile> Core::log_files() const {
     std::vector<LogFile> out;
     std::set<std::string> seen;  // folders

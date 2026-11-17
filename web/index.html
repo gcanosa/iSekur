@@ -1698,7 +1698,7 @@ function onMsg(ev) {
     renderAbout(m);
   } else if (m.t === "settings") {
     setCache = m.list;
-    if (dset.open) renderSettings(m.list);
+    if (dset.open) { renderSettings(m.list); if (m.err) $("#setmsg").textContent = m.err; }
     if (dsrv.open) { srvs = srvRows(m.list); if (srvWant) { const w = srvWant; srvWant = null; srvPick(w); } if (srvSel && !srvs.some(x => x.name === srvSel)) srvSel = null; renderSrv(); }
     renderSugg();
   } else if (m.t === "logs" || m.t === "logread" || m.t === "logfind") {
@@ -2910,7 +2910,7 @@ $("#setbtn").onclick = () => { $("#side").classList.remove("open"); $("#setlist"
 let setCat = "";  // "" = All
 function renderSettings(list) {
   const box = $("#setlist"); box.textContent = ""; setRows = [];
-  for (const [sec, k, v, def, uns, secret, choices, cat, head, shared, over] of list) {
+  for (const [sec, k, v, def, uns, secret, choices, cat, head, shared, over, unit] of list) {
     const full = (sec === "general" ? "" : sec + ".") + k;
     const kl = document.createElement("div"); kl.className = "k" + (+uns ? " uns" : ""); kl.textContent = k; kl.title = full;
     // where the value comes from: under a network, Global's (inherited) or its own; under Global, who overrides it
@@ -2943,7 +2943,7 @@ function renderSettings(list) {
     } else {
       const inp = document.createElement("input");
       if (+secret) { inp.type = "password"; inp.placeholder = v ? "******** (set; type to change)" : "(not set)"; inp.autocomplete = "new-password"; }
-      else { inp.value = v; inp.placeholder = def ? (inh ? "inherits: " : "default: ") + def : "(not set)"; }
+      else { inp.value = v; inp.placeholder = def ? (inh ? "inherits: " : "default: ") + def + (unit ? " " + unit : "") : "(not set)"; if (unit) inp.title = "in " + unit; }
       inp.oninput = () => inp.classList.toggle("chg", inp.value !== row.orig);
       Object.assign(row, {el: inp, get: () => inp.value, orig: +secret ? "" : v});
     }

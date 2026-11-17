@@ -308,7 +308,8 @@ static const std::vector<CmdInfo> CMDS = {
      "color; pick one to read it. [ and ] go to the day before or after, e shows or hides joins, parts, quits and nick "
      "changes, Tab moves between the tree and the log, / goes to the find line, Esc closes. With text, it opens "
      "searching every day of this tab for it. Needs log = on (/set log on, /save); logs of networks no longer in the "
-     "config are listed too.",
+     "config are listed too. log_keep deletes old days: /set log_keep 30 keeps 30 days, also 2w, 6m (months), 1y; "
+     "0 keeps all.",
      {"/logs", "/logs release", "/logs nick:alice green"}},
     {"keys", "Windows", "", "Show every keyboard shortcut",
      "Opens a window with every key binding drawn as keycaps, by group (tabs, view, session, typing), in the terminal "
@@ -331,7 +332,8 @@ static const std::vector<CmdInfo> CMDS = {
      "/ searches, Up/Down moves, Tab or Left/Right goes between categories and keys, e or Enter edits, "
      "Space switches on/off (and steps through the themes, applied at once), d or Del puts the default "
      "back, s or Ctrl+S saves, q or Esc closes; the mouse works too. The webchat's ⚙ is the same, with "
-     "switches and a theme list. With a key it shows it; with a value it changes it right away. "
+     "switches and a theme list. With a key it shows it; with a value it changes it right away, if the key can "
+     "take it: a wrong one (tab_bar middle, scrollback lots, tab_bar_width 200) is refused and says what the key takes. "
      "Only keys iSekur reads are taken, in the section that reads them ([plugin.*] takes any); "
      "one already in the config can still be shown or cleared. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "

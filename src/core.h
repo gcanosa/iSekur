@@ -422,8 +422,9 @@ struct Core {
     // head: the header over its rows ("Look", "⇢ libera · Login", "[web]")
     // shared: a [general] key under a network: not set there (val ""), def is [general]'s; over: under [general],
     // the networks that override it ("libera: off")
-    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; std::string grp, cat, head; bool shared; std::string over; };
+    struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; std::string grp, cat, head; bool shared; std::string over, unit; };
     std::vector<SetRow> setting_rows() const;
+    std::string set_refused;  // the webchat's /set values refused since its settings dialog last asked (its Apply)
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     bool settings_servers = false;  // /servers: that window, at the first server
     std::string settings_srv;       // /servers name: that window, at this network
@@ -745,6 +746,11 @@ void mkdir_p(const std::string& path);  // 0700
 struct KeyInfo { const char* key; const char* grp; char scope; };
 const std::vector<KeyInfo>& setting_keys();
 const KeyInfo* key_info(const std::string& key);                 // nullptr: not one iSekur knows
+void log_prune(const std::string& dir, int keep);                // log_keep: delete rotated logs older than keep days
+std::vector<LogFile> log_days(const std::string& dir);          // a folder's rotated <name>.YYYY-MM-DD.log (logs.cpp)
+std::string bad_value(const std::string& sec, const std::string& key, const std::string& v);  // why key can't take v, "" if it can
+int keep_days(const std::string& v);                            // log_keep: "30", "30d", "2w", "6m", "1y" in days (0 = keep all); -1: not one
+const char* key_unit(const std::string& key);                    // what a number key counts ("lines", "seconds"), "" if none
 std::vector<std::pair<std::string, std::string>> conf_keys();   // iSekur.conf.example's [section] keys, commented or not
 bool server_name_ok(const std::string& n);  // letters, digits, . _ -
 std::vector<std::string> conf_check(const std::string& path);  // the config's problems, "line N: ..." (none: fine); only reads

@@ -36,6 +36,7 @@ log       = off
 log_dir   =                  ; default: "logs" next to this file, e.g. ~/irclogs
 log_history = 200            ; lines restored into a tab from its log (0 = off)
 log_rotate  = on             ; start a new file each day; old ones become <name>.YYYY-MM-DD.log
+log_keep    = 0              ; delete those older than this: 30 (days), 30d, 2w, 6m, 1y (0 = keep all)
 keep_history = on            ; log off: tabs still show their last log_history lines after a restart
                              ; (kept in <config>.history, e.g. isekur.history; private, overwritten)
 
@@ -45,7 +46,7 @@ hilight_window = on
 # Ignored on every network (/ignore -w), besides each server's own ignore list.
 ignore =
 
-# What you leave with (/quit and /part without text). Empty: "iSekur IRC <version>".
+# What you leave with (/quit and /part without text). Empty: "iSekur IRC: v<version>".
 # Can be set per server too.
 quit_message =
 part_message =

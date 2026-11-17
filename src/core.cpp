@@ -415,7 +415,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"ctcp_version", "Messages", 'b'}, {"ctcp_time", "Messages", 'b'}, {"ctcp_ping", "Messages", 'b'},
     {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
     {"e2e_effect", "Channels", 'b'},
-    {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
+    {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"log_keep", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
     {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
     {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_prompt_timeout", "Security", 'g'}, {"lock_biometric", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
@@ -423,6 +423,31 @@ static const std::vector<KeyInfo> KEYS = {
     {"check_updates", "Updates", 'g'},
 };
 const std::vector<KeyInfo>& setting_keys() { return KEYS; }
+int keep_days(const std::string& v) {
+    if (v.empty()) return 0;
+    size_t e = v.find_first_not_of("0123456789");
+    if (e == std::string::npos) e = v.size();
+    if (e == 0 || e > 6 || v.size() - e > 1) return -1;
+    int n = atoi(v.c_str());
+    switch (e == v.size() ? 'd' : tolower((unsigned char)v[e])) {
+    case 'd': return n;
+    case 'w': return n * 7;
+    case 'm': return n * 30;  // ponytail: a month is 30 days, a year 365
+    case 'y': return n * 365;
+    }
+    return -1;
+}
+
+const char* key_unit(const std::string& key) {
+    static const std::map<std::string, const char*> U = {
+        {"log_history", "lines"}, {"log_keep", "days, or 2w 6m 1y"}, {"scrollback", "lines"}, {"paste_confirm", "lines"}, {"history_fetch", "lines"},
+        {"flood_burst", "lines"}, {"flood_interval_ms", "ms"}, {"exec_timeout", "seconds"}, {"lock_prompt_timeout", "seconds"},
+        {"lock_idle", "minutes"}, {"nick_width", "chars"}, {"tab_bar_width", "columns"}, {"nicklist_width", "columns"},
+        {"web_font_size", "px"}, {"web_tree_width", "px"}, {"cpu_levels", "%"}, {"mem_levels", "%"}};
+    auto it = U.find(key);
+    return it == U.end() ? "" : it->second;
+}
+
 const KeyInfo* key_info(const std::string& key) {
     static const std::map<std::string, const KeyInfo*> by = [] {
         std::map<std::string, const KeyInfo*> m;
@@ -496,7 +521,7 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
 
 // what's wrong with key = v in [sec]: a value from a list, a theme, or the kind of value the template's default is
 // (on/off, a number). Empty: nothing
-static std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
+std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> CHOICES = {
         {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
         {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}};
@@ -519,8 +544,19 @@ static std::string bad_value(const std::string& sec, const std::string& key, con
         if ((s == sec || (srv && (s == "general" || s.rfind("server.", 0) == 0))) && kv.count(key) && !kv.at(key).empty()) d = kv.at(key);
     static const std::set<std::string> BOOL = {"on", "off", "true", "false", "yes", "no"};
     if (BOOL.count(d)) return BOOL.count(v) || v == "1" || v == "0" ? "" : key + " = " + v + ": takes on or off";
-    bool num = !d.empty() && d.find_first_not_of("0123456789") == std::string::npos;
-    if (num && v.find_first_not_of("0123456789") != std::string::npos) return key + " = " + v + ": takes a number";
+    if (key == "log_keep") return keep_days(v) >= 0 ? "" : key + " = " + v + ": takes days (30), or 2w, 6m, 1y; 0 keeps all";
+    // numbers with a range (what the code would clamp to anyway), and the ones whose default is empty (the theme's)
+    static const std::map<std::string, std::pair<long, long>> RANGE = {
+        {"tab_bar_width", {10, 60}}, {"nicklist_width", {8, 40}}, {"web_tree_width", {120, 600}}, {"history_fetch", {0, 500}},
+        {"scrollback", {100, 0}}, {"nick_width", {0, 0}}};
+    auto rg = RANGE.find(key);
+    bool num = rg != RANGE.end() || (!d.empty() && d.find_first_not_of("0123456789") == std::string::npos);
+    if (!num) return "";
+    if (v.find_first_not_of("0123456789") != std::string::npos || v.size() > 9) return key + " = " + v + ": takes a number";
+    if (rg == RANGE.end()) return "";
+    long n = atol(v.c_str()), lo = rg->second.first, hi = rg->second.second;
+    if (hi && (n < lo || n > hi)) return key + " = " + v + ": takes " + std::to_string(lo) + "-" + std::to_string(hi);
+    if (!hi && n < lo) return key + " = " + v + ": takes " + std::to_string(lo) + " or more";
     return "";
 }
 
@@ -588,7 +624,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     std::vector<SetRow> out;
     auto themes = theme_names();
     auto add = [&](const std::string& sec, const std::string& k, const std::string& def, const std::string& grp) -> SetRow& {
-        SetRow r{sec, k, ini_get(cfg, sec, k), def, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}, grp, {}, {}, false, {}};
+        SetRow r{sec, k, ini_get(cfg, sec, k), def, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}, grp, {}, {}, false, {}, key_unit(k)};
         bool srv = sec.rfind("server.", 0) == 0;
         r.cat = sec == "general" ? "general/" + grp : srv ? sec + "/" + grp : sec;
         r.head = sec == "general" ? grp : srv ? "⇢ " + sec.substr(7) + " · " + grp : "[" + sec + "]";
@@ -1058,7 +1094,7 @@ void Core::fold(Buffer* st) {
 
 // what you leave with: the config's quit_message / part_message, else what iSekur is
 std::string Core::bye(const Server* s, const std::string& key) const {
-    return opt(s, key, "iSekur IRC " ISEKUR_VERSION);
+    return opt(s, key, "iSekur IRC: v" ISEKUR_VERSION);
 }
 
 bool Core::muted(const Buffer* b) const {
@@ -1172,6 +1208,14 @@ static void rotate_log(const std::string& from, const std::string& to) {
     if (out) unlink(from.c_str());
 }
 
+// log_keep: the rotated <name>.YYYY-MM-DD.log in dir older than keep days go; the current <name>.log never
+void log_prune(const std::string& dir, int keep) {
+    if (keep <= 0) return;
+    std::string cut = fmt_time(time(nullptr) - (time_t)keep * 86400, "%Y-%m-%d");
+    for (auto& f : log_days(dir))
+        if (f.day < cut) unlink(f.path.c_str());
+}
+
 // [general] log = on writes channels and queries to <log_dir>/<server>/<name>.log
 void Core::log_line(Buffer* b, const Line& l) {
     if (l.nolog || !b->srv || b->type == BT::STATUS || !opt_on(b->srv, "log", false)) return;
@@ -1192,6 +1236,7 @@ void Core::log_line(Buffer* b, const Line& l) {
             if (day != today) rotate_log(path, path.substr(0, path.size() - 4) + "." + day + ".log");
         }
         b->log_day = today;
+        if (rotate) log_prune(path.substr(0, path.rfind('/')), keep_days(opt(b->srv, "log_keep", "0")));
         mode_t old = umask(077);  // chat logs are private
         b->log = fopen(path.c_str(), "a");
         umask(old);
@@ -1902,6 +1947,13 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         // the sandbox: a plugin can't switch /exec on, open the webchat or the BNC, move dcc_dir or the /shell login either
         if (plugin_depth && (lock_guarded(sec, key) || key == "pam_service" || key == "perform" || sec == "aliases")) { plug_print(b, LK::ERROR, "/set " + argv[0] + " can't be run by a plugin"); return; }
+        // a value the key can't take is refused here, before it's in the config (the same check /checkconf does)
+        if (!val.empty())
+            if (std::string m = bad_value(sec, key, val); !m.empty()) {
+                print(b, LK::ERROR, m + " (unchanged)");
+                if (from_web) set_refused += (set_refused.empty() ? "" : " · ") + m;
+                return;
+            }
         // a grabbed session can't switch /exec on, or point the webchat at other folders or logins, without the lock password
         if (lock_guarded(sec, key) && val != ini_get(cfg, sec, key) && lock_gate(*this, b, in, key)) return;
         // a password typed into a *password_hash key is kept as its hash

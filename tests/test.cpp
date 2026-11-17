@@ -290,6 +290,16 @@ int main() {
         auto hits = log_search(files, {0, 1, 2}, log_query("green"), 10, &more);
         assert(hits.size() == 2 && !more && hits[0].file == 1 && hits[1].file == 2 && hits[1].line == 1);
         assert(log_search(files, {1, 2}, log_query("\"green light\""), 1, &more).size() == 1 && more);
+        // log_keep: rotated days older than it go, the current file stays; 0 or a bad value keeps all
+        assert(keep_days("") == 0 && keep_days("30") == 30 && keep_days("30d") == 30 && keep_days("2w") == 14 && keep_days("6M") == 180 &&
+               keep_days("1y") == 365 && keep_days("d") == -1 && keep_days("5x") == -1 && keep_days("1yy") == -1 && keep_days("-3") == -1);
+        std::string recent = fmt_time(time(nullptr) - 86400, "%Y-%m-%d");
+        put("#c." + recent + ".log", "x\n");
+        log_prune(net, 0), log_prune(net, -1);
+        assert(lc.log_files().size() == 4);
+        log_prune(net, 7);
+        files = lc.log_files();
+        assert(files.size() == 2 && files[0].current && files[1].day == recent);
         for (auto& f : files) unlink(f.path.c_str());
         unlink((net + "/notes.txt").c_str()), rmdir(net.c_str()), rmdir((dir + "/logs").c_str()), rmdir(d);
     }
@@ -432,6 +442,26 @@ int main() {
         core.fifo_line("/close\\n/help /join");
         assert(core.index_of(fgone) < 0);
         core.active = was && core.index_of(was) >= 0 ? was : core.bufs.front().get();
+    }
+    {  // /set refuses what the key can't take, before it's in the config; the webchat's settings dialog hears why
+        std::string was = ini_get(core.cfg, "general", "tab_bar");
+        for (const char* bad : {"/set tab_bar middle", "/set mouse maybe", "/set scrollback 50", "/set scrollback lots", "/set tab_bar_width 200",
+                                "/set nick_width x", "/set history_fetch 501", "/set log_keep 5x", "/set web_tree_width 90"}) {
+            core.exec(home, bad);
+            assert(home->lines.back().kind == LK::ERROR && home->lines.back().text.find("(unchanged)") != std::string::npos);
+        }
+        assert(ini_get(core.cfg, "general", "tab_bar") == was && !core.cfg["general"].count("tab_bar_width") && !core.cfg["general"].count("log_keep"));
+        assert(bad_value("general", "tab_bar_width", "200") == "tab_bar_width = 200: takes 10-60" && bad_value("general", "scrollback", "50") == "scrollback = 50: takes 100 or more");
+        for (const char* ok : {"/set log_keep 6m", "/set tab_bar_width 30", "/set nick_width 0", "/set history_fetch 500", "/set tab_bar_width \"\""})
+            core.exec(home, ok), assert(home->lines.back().kind != LK::ERROR);
+        assert(ini_get(core.cfg, "general", "log_keep") == "6m" && ini_get(core.cfg, "general", "tab_bar_width").empty());
+        core.from_web = true;
+        core.exec(home, "/set log_keep 1q"), core.exec(home, "/set tab_bar up");
+        core.from_web = false;
+        assert(core.set_refused == "log_keep = 1q: takes days (30), or 2w, 6m, 1y; 0 keeps all · tab_bar = up: takes top, left, right");
+        core.set_refused.clear();
+        for (const char* k : {"log_keep", "tab_bar_width", "nick_width", "history_fetch"}) core.cfg["general"].erase(k), core.unsaved["general"].erase(k), core.set_was["general"].erase(k);
+        if (core.unsaved["general"].empty()) core.unsaved.erase("general");
     }
     core.from_web = true;
     core.exec(home, "/attach vps");
@@ -1403,6 +1433,9 @@ int main() {
         assert(has(7, "goes in a [server") && has(8, "set again") && has(9, "not a key") && has(10, "no closing ]"));
         assert(has(13, "number") && has(14, "decrypted") && has(16, "did you mean port") && has(17, "unknown section"));
         assert(r.size() == 13);  // tls = on, [plugin.x] and the comment are fine
+        std::ofstream(p) << "[general]\ntab_bar_width = 99\nnick_width = wide\nlog_keep = 2w\nlog_keep = soon\n";
+        r = conf_check(p);
+        assert(has(2, "10-60") && has(3, "number") && !has(4, "takes") && has(5, "2w, 6m, 1y"));
         std::filesystem::remove_all(d);
     }
 
@@ -1464,8 +1497,8 @@ int main() {
     core.exec(chb, "/mute off");
     assert(!core.muted(chb) && core.cfg["server.t"]["mute"].empty() && hl("hey ME!"));
     core.exec(chb, "/part");  // closes the tab: open it again for what follows
-    assert(sent() == "PART #c :iSekur IRC " ISEKUR_VERSION "\r\n");
-    assert(core.bye(ts, "quit_message") == "iSekur IRC " ISEKUR_VERSION);
+    assert(sent() == "PART #c :iSekur IRC: v" ISEKUR_VERSION "\r\n");
+    assert(core.bye(ts, "quit_message") == "iSekur IRC: v" ISEKUR_VERSION);
     chb = core.open(ts, BT::CHANNEL, "#c"), chb->joined = true;
     core.cfg["server.t"]["part_message"] = "bye";
     core.exec(chb, "/part");
@@ -1791,7 +1824,7 @@ int main() {
             const Core::SetRow* inh = nullptr;
             auto rows = core.setting_rows();
             for (auto& r : rows) if (r.sec == sv && r.key == "log_history") inh = &r;
-            assert(inh && inh->shared && inh->val.empty() && inh->def == "77" && inh->cat == sv + "/Logs");
+            assert(inh && inh->shared && inh->val.empty() && inh->def == "77" && inh->cat == sv + "/Logs" && inh->unit == "lines");
             core.cfg[sv]["log_history"] = "5", core.cfg[sv]["theme"] = "mirc";
             rows = core.setting_rows();
             bool over = false, gen_theme = false;
