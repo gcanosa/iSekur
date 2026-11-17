@@ -721,7 +721,7 @@ int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); 
 void Tui::draw() {
     xbtn = XBtn{};
     if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
-    if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true, sw.to_servers = c.settings_servers, c.settings_servers = false;
+    if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true, sw.to_servers = c.settings_servers, c.settings_servers = false, c.set_denied.clear();
     if (c.settings_srv.size()) sw.cat = "server." + c.settings_srv, c.settings_srv.clear();  // /servers name: that network's category
     if (c.theme_win) {
         c.theme_win = false, tw = ThemeWin{}, tw.open = true, tw.orig = c.theme.name;
@@ -1590,6 +1590,7 @@ void Tui::draw_settings(int W, int H) {
                        : on_srv ? "c: connect · r: rename · x: delete server · n: new server · e Enter: edit · s: save · q: close"
                        : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · n: new server · /: search · q Esc: close"
                                        : "\u2191\u2193: move · e Enter: edit · Space: on/off, next choice · d: default · /: search · s: save · q: close";
+    if (!c.set_denied.empty()) sw.msg = c.set_denied + " (unchanged)", c.set_denied.clear();  // a guarded /set the lock password refused: the line said so under the window
     text(x0 + 2, y1 - 1, x1 - 1, sw.msg.empty() ? hint : sw.msg, sw.msg.empty() ? dim : mark, false);
 }
 

@@ -501,6 +501,30 @@ int main() {
         core.exec(home, "/set dcc_dir"), core.exec(home, "/set nick_width 12");  // reading one, or a setting that isn't guarded, asks nothing
         assert(!core.pass_buf && core.cfg["general"]["nick_width"] == "12");
         core.cfg["general"].erase("dcc_dir"), core.cfg["general"].erase("nick_width"), core.unsaved.clear(), core.set_was.clear();
+        {  // a guarded /set the lock password refuses is said where the settings window shows it (not only in the tab behind it)
+            core.lock_fails = core.lock_wait = 0, core.set_denied.clear(), core.set_refused.clear();
+            core.exec(home, "/set web.bind 10.0.0.9"), core.exec(home, "nope");  // the terminal's window
+            assert(core.set_denied == "web.bind: Wrong password" && core.set_refused.empty() && ini_get(core.cfg, "web", "bind").empty());
+            core.set_denied.clear();
+            core.exec(home, "/set web.bind 10.0.0.9"), core.exec(home, "");  // Esc
+            assert(core.set_denied == "web.bind: cancelled" && !core.pass_buf);
+            core.set_denied.clear();
+            // the webchat's Apply sends every changed row, and /save for Apply & save, before the password is typed: one password for all
+            core.from_web = true;
+            core.exec(home, "/set web.bind 10.0.0.9"), core.exec(home, "/set web.port 9"), core.exec(home, "/save"), core.exec(home, "nope");
+            assert(core.set_refused == "web.bind, web.port: Wrong password" && core.set_denied.empty() && ini_get(core.cfg, "web", "bind").empty() && !core.pass_buf);
+            core.set_refused.clear();
+            std::string was = core.cfg_path;
+            core.cfg_path = "build/test-gate.conf";
+            core.exec(home, "/set web.bind 10.0.0.9"), core.exec(home, "/set web.port 9"), core.exec(home, "/save"), core.exec(home, "pw");
+            core.from_web = false;
+            assert(core.cfg["web"]["bind"] == "10.0.0.9" && core.cfg["web"]["port"] == "9" && core.set_refused.empty() && core.unsaved.empty());  // both applied, then saved
+            std::ifstream saved("build/test-gate.conf");
+            std::string text((std::istreambuf_iterator<char>(saved)), std::istreambuf_iterator<char>());
+            assert(text.find("10.0.0.9") != std::string::npos);
+            core.cfg_path = was, core.cfg["web"].erase("bind"), core.cfg["web"].erase("port"), core.unsaved.clear(), core.set_was.clear(), core.lock_fails = 0;
+            std::remove("build/test-gate.conf");
+        }
         core.exec(home, "/exit -y"), core.exec(home, "nope");  // /exit too: the lock password, or iSekur stays
         assert(home->lines.back().text == "Wrong password: iSekur keeps running" && !core.quit);
         core.exec(home, "/exit -y");

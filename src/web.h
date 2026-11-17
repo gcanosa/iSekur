@@ -21,7 +21,7 @@ struct Web {
     void process(const std::vector<pollfd>& v);  // after poll()
     void on_event(Ev e, Buffer* b, const Line* l);
     void flush();  // once per loop pass: send coalesced buffer updates
-    bool running() const { return lfd >= 0; }
+    bool running() const { return !lfds.empty(); }
     bool attached() const;  // a logged-in browser is connected
     std::string stat_json();  // the status line: per network umodes, lag and away, status_info
     std::map<std::string, std::pair<int, time_t>> fails;  // failed logins: ip (or "via <proxy peer>") -> (count, locked until)
@@ -44,7 +44,7 @@ private:
         unsigned long long left = 0;
         ~Client() { if (file) fclose(file); }
     };
-    int lfd = -1;
+    std::vector<int> lfds;  // one listener per address in [web] bind (comma-separated)
     SSL_CTX* ctx = nullptr;
     bool secure = false;
     std::string user, pass_hash;

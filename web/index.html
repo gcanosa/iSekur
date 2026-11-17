@@ -2149,6 +2149,7 @@ function syncAsk() {
     dask.dataset.srv = "";
     if (askOpen === key) askOpen = "";  // asked again (a wrong password): open it again
     send({t: "input", buf: id, text: v === null ? "" : v});
+    if (dset.open) send({t: "settings", buf: id});  // a guarded /set (web.*, lock...) waited for this: the window says whether it went through
   });
   dask.dataset.srv = "1";
 }

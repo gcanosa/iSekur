@@ -247,7 +247,8 @@ Web::~Web() { stop(); }
 void Web::stop() {
     clients.clear();
     if (ctx) SSL_CTX_free(ctx), ctx = nullptr;
-    if (lfd >= 0) close(lfd), lfd = -1;
+    for (int fd : lfds) close(fd);
+    lfds.clear();
     secure = false;
     pending.clear(), known.clear(), last_order.clear(), sent_nicks.clear(), ws_ips.clear();
     url.clear();
@@ -289,7 +290,12 @@ bool Web::start(std::string& err) {
 
 bool Web::start_(std::string& err) {
     const Ini& cfg = c.cfg;
-    std::string bind = ini_get(cfg, "web", "bind", "127.0.0.1");
+    std::vector<std::string> binds;  // "127.0.0.1, ::1": one listener each
+    for (auto& a : split(ini_get(cfg, "web", "bind", "127.0.0.1"), ',')) {
+        size_t f = a.find_first_not_of(' '), l = a.find_last_not_of(' ');
+        if (f != std::string::npos) binds.push_back(a.substr(f, l - f + 1));
+    }
+    if (binds.empty()) binds.push_back("127.0.0.1");
     int port = atoi(ini_get(cfg, "web", "port").c_str());
     if (port <= 0 || port > 65535) port = 8443;  // port 0 or junk: the default
     user = ini_get(cfg, "web", "user");
@@ -298,7 +304,7 @@ bool Web::start_(std::string& err) {
         err = "[web] needs user and password_hash (generate one with: isekur --hash-password)";
         return false;
     }
-    bool loopback = bind == "127.0.0.1" || bind == "::1" || bind == "localhost";
+    bool loopback = std::all_of(binds.begin(), binds.end(), [](const std::string& a) { return a == "127.0.0.1" || a == "::1" || a == "localhost"; });
     std::string crt = ini_get(cfg, "web", "cert"), key = ini_get(cfg, "web", "key");
     if (crt.empty() && (!loopback || ini_get(cfg, "web", "tls", "auto") == "true")) {
         std::string dir = c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1);
@@ -324,29 +330,39 @@ bool Web::start_(std::string& err) {
     std::string base = c.cfg_path.substr(c.cfg_path.rfind('/') + 1);
     sessions_path = base == "isekur.conf" ? c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "web.sessions" : cfg_side(c.cfg_path, "web.sessions");
     load_sessions();
-    lfd = listen_tcp(bind, port, err);
-    if (lfd < 0) { err = "web listen " + bind + ":" + std::to_string(port) + ": " + err; return false; }
-    url = std::string(secure ? "https://" : "http://") + (bind.find(':') != std::string::npos ? "[" + bind + "]" : bind) +
-          ":" + std::to_string(port) + "/";
+    url.clear();
+    for (auto& bind : binds) {
+        int fd = listen_tcp(bind, port, err);
+        if (fd < 0) {
+            err = "web listen " + bind + ":" + std::to_string(port) + ": " + err;
+            for (int o : lfds) close(o);
+            lfds.clear(), url.clear();
+            return false;
+        }
+        lfds.push_back(fd);
+        url += (url.empty() ? "" : " and ") + std::string(secure ? "https://" : "http://") + (bind.find(':') != std::string::npos ? "[" + bind + "]" : bind) +
+               ":" + std::to_string(port) + "/";
+    }
     return true;
 }
 
 void Web::add_fds(std::vector<pollfd>& v) {
     fd_start = v.size();
     fd_count = 0;
-    if (lfd < 0) return;
-    v.push_back({lfd, POLLIN, 0});
+    if (lfds.empty()) return;
+    for (int fd : lfds) v.push_back({fd, POLLIN, 0});
     for (auto& cl : clients) v.push_back({cl->conn.fd, cl->conn.events(), 0});
-    fd_count = 1 + clients.size();
+    fd_count = lfds.size() + clients.size();
 }
 
 void Web::process(const std::vector<pollfd>& v) {
-    if (lfd < 0) return;
+    if (lfds.empty()) return;
     time_t now = time(nullptr);
     std::vector<Client*> dead;
-    for (size_t k = 1; k < fd_count; k++) {
+    const size_t nl = lfds.size();
+    for (size_t k = nl; k < fd_count; k++) {
         const pollfd& p = v[fd_start + k];
-        Client& cl = *clients[k - 1];
+        Client& cl = *clients[k - nl];
         if (!p.revents) continue;
         bool ok = cl.conn.pump(p.revents, cl.in);
         if (ok && cl.file) feed(cl), cl.since = now;
@@ -362,10 +378,11 @@ void Web::process(const std::vector<pollfd>& v) {
         }
         if (!ok) dead.push_back(&cl);
     }
-    if (v[fd_start].revents & POLLIN) {
+    for (size_t i = 0; i < nl; i++) {
+        if (!(v[fd_start + i].revents & POLLIN)) continue;
         for (;;) {
             auto cl = std::make_unique<Client>();
-            if (!cl->conn.accept_from(lfd, ctx)) break;
+            if (!cl->conn.accept_from(lfds[i], ctx)) break;
             cl->since = now;
             if (clients.size() >= MAX_CLIENTS) continue;  // dropped: destructor closes it
             clients.push_back(std::move(cl));
@@ -1185,8 +1202,8 @@ void Web::screen_poll() {
 }
 
 void Web::flush() {
-    if (lfd >= 0 && !clients.empty()) screen_poll();  // locked too: a frame has nothing of the session
-    if (lfd < 0 || clients.empty() || c.locked) { pending.clear(); return; }
+    if (!lfds.empty() && !clients.empty()) screen_poll();  // locked too: a frame has nothing of the session
+    if (lfds.empty() || clients.empty() || c.locked) { pending.clear(); return; }
     for (auto& b : c.bufs)
         if (pending.count(b->id)) flush_buf(b.get());
     pending.clear();
@@ -1208,7 +1225,7 @@ void Web::flush() {
 }
 
 void Web::on_event(Ev e, Buffer* b, const Line* l) {
-    if (lfd < 0 || clients.empty()) return;
+    if (lfds.empty() || clients.empty()) return;
     if (e == Ev::SCREEN) {
         broadcast(std::string("{\"t\":\"ss\",\"on\":") + (c.screen_by.empty() ? "false" : "true") + "}");
         ss_last.clear();

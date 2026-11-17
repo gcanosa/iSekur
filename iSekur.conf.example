@@ -212,7 +212,7 @@ autoconnect = false
 # with --web; /web stop turns it off. --daemon always starts it.
 [web]
 autostart     = off
-bind          = 127.0.0.1
+bind          = 127.0.0.1    ; 0.0.0.0 or :: for every address, or several: 127.0.0.1, ::1
 port          = 8443         ; empty or 0: 8443
 user          = me
 password_hash =              ; run: isekur --hash-password

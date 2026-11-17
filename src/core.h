@@ -425,6 +425,7 @@ struct Core {
     struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; std::string grp, cat, head; bool shared; std::string over, unit; };
     std::vector<SetRow> setting_rows() const;
     std::string set_refused;  // the webchat's /set values refused since its settings dialog last asked (its Apply)
+    std::string set_denied;   // the terminal's settings window: a guarded /set the lock password didn't let through, until it shows it
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window
     bool settings_servers = false;  // /servers: that window, at the first server
     std::string settings_srv;       // /servers name: that window, at this network

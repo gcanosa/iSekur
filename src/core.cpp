@@ -1153,8 +1153,24 @@ void Core::reload(Buffer* b) {
         info_note(b, std::to_string(p.size()) + (p.size() == 1 ? " problem" : " problems") + " in the config: /checkconf lists them");
 }
 
+// The lock password asked for a guarded /set (lock_gate): the lines waiting for it, their keys, and a /save typed meanwhile (the
+// webchat's Apply & save sends both at once). What it refuses is said where the settings window shows it: set_refused (the
+// webchat's) or set_denied (the terminal's), besides the error line in the tab
+static std::vector<std::string> gate_q;
+static std::string gate_what;
+static bool gate_save = false;
+static void gate_fail(Core& c, const std::string& m) {
+    std::string& to = c.from_web ? c.set_refused : c.set_denied;
+    to += (to.empty() ? "" : " \u00b7 ") + m;
+}
+static void gate_end(Core& c, Buffer* b) {
+    gate_q.clear(), gate_what.clear();
+    if (gate_save) gate_save = false, c.exec(b, "/save");  // the changes that did go through, and the rest of the Apply
+}
+
 void Core::ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden,
                     const std::string& title, std::vector<std::string> info) {
+    gate_q.clear(), gate_what.clear(), gate_save = false;  // another question: lock_gate sets its own again
     pass_buf = b, pass_label = label, pass_done = std::move(done), pass_hidden = hidden;
     pass_title = title, pass_info = std::move(info), pass_web = from_web;
     if (!tty || from_web) print(b, LK::INFO, "Type the " + label + (hidden ? " (hidden; an empty line cancels)" : " (an empty line cancels)"));  // the TUI asks in a dialog
@@ -1714,10 +1730,21 @@ void crumbs_write(int fd) {
 static bool lock_ok = false;
 static bool lock_gate(Core& c, Buffer* b, const std::string& line, const std::string& what) {
     if (!c.lock_on() || lock_ok) return false;
-    c.ask_pass(b, "lock password", [&c, b, line](const std::string& p) {
-        if (auto e = c.lock_try(p, "it stays as it was"); !e.empty()) { c.print(b, LK::ERROR, e); return; }
-        lock_ok = true, c.exec(b, line), lock_ok = false;
+    if (!gate_what.empty() && c.pass_buf == b) { gate_q.push_back(line), gate_what += ", " + what; return true; }  // asked already (the webchat's Apply sends every row at once): one password for all
+    c.ask_pass(b, "lock password", [&c, b](const std::string& p) {
+        auto lines = std::move(gate_q);
+        std::string keys = gate_what;
+        if (auto e = c.lock_try(p, ""); !e.empty()) {
+            c.print(b, LK::ERROR, e + (e == "Wrong password" ? ": it stays as it was" : ""));
+            gate_fail(c, keys + ": " + e);
+        } else {
+            lock_ok = true;
+            for (auto& l : lines) c.exec(b, l);
+            lock_ok = false;
+        }
+        gate_end(c, b);
     }, true, "Lock password", {"Changing " + what + ": the lock password first"});
+    gate_q = {line}, gate_what = what;
     return true;
 }
 static bool lock_guarded(const std::string& sec, const std::string& key) {
@@ -1769,12 +1796,17 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     std::string in = input;
     if (!in.empty() && in.back() == '\r') in.pop_back();
-    if (b == pass_buf && from_web == pass_web) {  // a password prompt: this line is it, never sent or shown (only from the side that asked)
+    // the webchat's Apply sends every row (/set) and Apply & save a /save at once: while a guarded /set waits for the lock password those are
+    // not attempts at it (they'd be "Wrong password" and use up its tries), lock_gate queues them
+    bool gate_cmd = !gate_what.empty() && (in.rfind("/set ", 0) == 0 || in == "/save");
+    if (b == pass_buf && from_web == pass_web && !gate_cmd) {  // a password prompt: this line is it, never sent or shown (only from the side that asked)
         auto done = std::move(pass_done);
         pass_buf = nullptr, pass_done = nullptr;
         notify(Ev::BUFFER, b);  // back to a normal input line (unless done asks again)
-        if (in.empty()) print(b, LK::INFO, "Cancelled");
-        else done(in);
+        if (in.empty()) {
+            print(b, LK::INFO, "Cancelled");
+            if (!gate_what.empty()) gate_fail(*this, gate_what + ": cancelled"), gate_end(*this, b);
+        } else done(in);
         return;
     }
     if (in.empty()) return;
@@ -1955,7 +1987,7 @@ void Core::exec(Buffer* b, const std::string& input) {
                 return;
             }
         // a grabbed session can't switch /exec on, or point the webchat at other folders or logins, without the lock password
-        if (lock_guarded(sec, key) && val != ini_get(cfg, sec, key) && lock_gate(*this, b, in, key)) return;
+        if (lock_guarded(sec, key) && val != ini_get(cfg, sec, key) && lock_gate(*this, b, in, argv[0])) return;
         // a password typed into a *password_hash key is kept as its hash
         if (key.size() >= 13 && key.compare(key.size() - 13, 13, "password_hash") == 0 && !val.empty() && val.rfind("pbkdf2$", 0) != 0)
             val = hash_password(val);
@@ -2121,6 +2153,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "save") {
+        if (!gate_what.empty() && pass_buf) { gate_save = true, print(b, LK::INFO, "Saving once the lock password is answered"); return; }  // a guarded /set waits for it: it goes in the file too
         std::string err;
         if (unsaved.empty()) { print(b, LK::INFO, "Nothing to save"); return; }
         if (!ini_save(cfg_path, unsaved, err)) { print(b, LK::ERROR, err); return; }
