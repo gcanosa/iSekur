@@ -533,9 +533,29 @@ int main() {
         assert(core.ignored(ts, "SpamBot!u@h") && core.ignored(ts, "x!y@a.evil.host"));
         assert(!core.ignored(ts, "friend!u@good.host") && !core.ignored(ts, "irc.server.net"));
         core.cfg["server.t"].erase("ignore");
-        core.cfg["server.other"]["ignore"] = core.cfg["general"]["ignore"] = "spam*!*@*";
-        assert(!core.ignored(ts, "SpamBot!u@h"));  // another network's list, or a global one, isn't used
-        core.cfg.erase("server.other"), core.cfg["general"].erase("ignore");
+        core.cfg["server.other"]["ignore"] = "spam*!*@*";
+        assert(!core.ignored(ts, "SpamBot!u@h"));  // another network's list isn't used
+        core.cfg["general"]["ignore"] = "spam*!*@*";  // /ignore -w's is
+        assert(core.ignored(ts, "SpamBot!u@h"));
+        core.cfg["server.t"]["ignore"] = "spambot!*@*,x";  // an exception wins, whichever list
+        assert(!core.ignored(ts, "SpamBot!u@h") && core.ignored(ts, "spamz!u@h"));
+        core.cfg.erase("server.other"), core.cfg["general"].erase("ignore"), core.cfg["server.t"].erase("ignore");
+        std::string ty;
+        time_t until;
+        assert(ign_mask("a!*@*,pn=99", &until, &ty) == "a!*@*" && ty == "pn" && until == 99);
+        assert(ign_mask("a!*@*", &until, &ty) == "a!*@*" && ty == "pcntid" && !until);
+        core.cfg["server.t"]["ignore"] = "k!*@*,k j!*@*,j";  // colors only, joins only: not "ignored"
+        assert(!core.ignored(ts, "k!u@h") && core.ignore_types(ts, "j!u@h") == "j" && core.ignored(ts, "j!u@h"));
+        core.cfg["server.t"].erase("ignore");
+        // mIRC's address types
+        assert(ign_addr("Nick", "~user@a.b.example.com", 0) == "*!~user@a.b.example.com");
+        assert(ign_addr("Nick", "~user@a.b.example.com", 1) == "*!*user@a.b.example.com");
+        assert(ign_addr("Nick", "~user@a.b.example.com", 2) == "*!*@a.b.example.com");
+        assert(ign_addr("Nick", "~user@a.b.example.com", 3) == "*!*user@*.b.example.com");
+        assert(ign_addr("Nick", "user@1.2.3.4", 4) == "*!*@1.2.3.*");
+        assert(ign_addr("Nick", "user@localhost", 4) == "*!*@localhost");
+        assert(ign_addr("Nick", "user@a.example.com", 7) == "Nick!*@a.example.com");
+        assert(ign_addr("Nick", "user@a.example.com", 9) == "Nick!*@*.example.com");
     }
     {  // /ignore -t: until then, then not; the list shows the time left
         assert(parse_span("90") == 5400 && parse_span("30m") == 1800 && parse_span("1d12h") == 129600 && parse_span("1w") == 604800);
@@ -543,8 +563,8 @@ int main() {
         Buffer* sb = ts->status;
         core.exec(sb, "/ignore -t 2h timed");
         assert(core.ignored(ts, "timed!u@h") && ini_get(core.cfg, "server.t", "ignore").find("timed!*@*=") == 0);
-        core.exec(sb, "/ignore -t nonsense other");
-        assert(!core.ignored(ts, "other!u@h"));
+        core.exec(sb, "/ignore -t nonsense other");  // -t alone: CTCPs, as in mIRC; "other" isn't a type
+        assert(!core.ignored(ts, "other!u@h") && ini_get(core.cfg, "server.t", "ignore").find("nonsense") == std::string::npos);
         core.cfg["server.t"]["ignore"] = "timed!*@*=" + std::to_string((long long)time(nullptr) - 5) + " keep!*@*";
         assert(!core.ignored(ts, "timed!u@h") && core.ignored(ts, "keep!u@h"));  // ran out
         core.exec(sb, "/ignore -t 1h timed");
@@ -553,6 +573,23 @@ int main() {
         core.exec(sb, "/unignore keep");
         assert(ini_get(core.cfg, "server.t", "ignore") == "timed!*@*");
         core.cfg["server.t"].erase("ignore");
+        // mIRC's flags: types, -u seconds, -r, -w
+        core.exec(sb, "/ignore -pn -u90 bot");
+        std::string e = ini_get(core.cfg, "server.t", "ignore");
+        assert(e.find("bot!*@*,pn=") == 0 && std::stoll(e.substr(e.find('=') + 1)) - time(nullptr) <= 90);
+        core.exec(sb, "/ignore -rw bot");
+        assert(sb->lines.back().kind == LK::ERROR);  // not on the every-network list
+        core.exec(sb, "/ignore -r bot");
+        assert(ini_get(core.cfg, "server.t", "ignore").empty());
+        core.exec(sb, "/ignore -w *!*@*.evil.host");
+        assert(ini_get(core.cfg, "general", "ignore") == "*!*@*.evil.host" && core.ignored(ts, "a!b@x.evil.host"));
+        core.exec(sb, "/unignore -w *!*@*.evil.host");
+        assert(ini_get(core.cfg, "general", "ignore").empty());
+        core.exec(sb, "/ignore -q bot");
+        core.exec(sb, "/ignore -u bot");
+        core.exec(sb, "/ignore nobody 2");  // no address known
+        assert(sb->lines.back().kind == LK::ERROR && ini_get(core.cfg, "server.t", "ignore").empty());
+        core.cfg["general"].erase("ignore");
     }
     Buffer* chb = core.open(ts, BT::CHANNEL, "#c");
     chb->joined = true;
@@ -588,6 +625,25 @@ int main() {
         core.save_history();
         assert(access("build/test-hist.history", F_OK) != 0);
         unlink("build/test-hist.history"), core.cfg_path.clear();
+    }
+    {  // /ignore types on the wire: -c drops channel lines only, -k strips colors, -j hides joins, nick 2 uses their host
+        core.cfg["server.t"]["ignore"] = "chan!*@*,c pastel!*@*,k lurk!*@*,j";
+        size_t n = chb->lines.size();
+        feed(":chan!u@h PRIVMSG #c :hidden");
+        feed(":chan!u@h PRIVMSG me :shown");
+        assert(chb->lines.size() == n && core.find(ts, "chan"));
+        feed(":pastel!u@h PRIVMSG #c :\x03" "04red\x0f text");
+        assert(chb->lines.back().text == "red text");
+        feed(":lurk!u@lurk.example.org JOIN #c");
+        assert(chb->lines.back().text != "lurk (u@lurk.example.org) has joined #c" && chb->nicks.count("lurk"));
+        core.cfg["server.t"].erase("ignore");
+        core.exec(chb, "/ignore lurk 2");
+        assert(ini_get(core.cfg, "server.t", "ignore") == "*!*@lurk.example.org");
+        feed(":other!u@lurk.example.org PRIVMSG #c :gone");
+        assert(chb->lines.back().text != "gone");
+        core.cfg["server.t"].erase("ignore");
+        chb->nicks.erase("lurk");
+        if (Buffer* q = core.find(ts, "chan")) core.close(q);
     }
     {  // /move N: among the server's tabs, after its server tab; a drag runs it
         Buffer *m1 = core.open(ts, BT::CHANNEL, "#m1"), *m2 = core.open(ts, BT::QUERY, "m2");
@@ -1029,6 +1085,22 @@ int main() {
     assert(sent().empty());
     core.chan_timers(ts, t0 + 301);
     assert(sent() == "MODE #c -b *!*@h9\r\n" && ts->tempbans.empty());
+    {  // logged in, and the server has an account extban: their account is banned too
+        chb->nicks["r2"].host = "u@h9", chb->nicks["r2"].account = "R2acct";
+        ts->isupport["EXTBAN"] = "~,amnrz";
+        core.exec(chb, "/kickban r2");
+        assert(sent() == "MODE #c +bb *!*@h9 ~a:R2acct\r\nKICK #c r2 :Banned\r\n");
+        ts->isupport["EXTBAN"] = ",ABCRjm";  // InspIRCd: no prefix, letters of its own
+        core.exec(chb, "/kickban r2");
+        assert(sent() == "MODE #c +b *!*@h9\r\nKICK #c r2 :Banned\r\n");
+        ts->isupport["EXTBAN"] = "$,ajrxz";  // Solanum
+        core.exec(chb, "/tempban r2 5");
+        assert(sent() == "MODE #c +bb *!*@h9 $a:R2acct\r\nKICK #c r2 :Banned for 5 minutes\r\n" && ts->tempbans.size() == 2);
+        core.chan_timers(ts, time(nullptr) + 301);
+        std::string lifted = sent();
+        assert(lifted.find("-b *!*@h9") != std::string::npos && lifted.find("-b $a:R2acct") != std::string::npos && ts->tempbans.empty());
+        ts->isupport.erase("EXTBAN"), chb->nicks["r2"].host.clear(), chb->nicks["r2"].account.clear();
+    }
     core.exec(chb, "/topicrotate 1 first | second ");
     core.chan_timers(ts, t0);
     core.chan_timers(ts, t0 + 30);

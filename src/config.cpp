@@ -359,12 +359,31 @@ long long parse_span(const std::string& w) {
     return n < 0 ? t : t + n * 60;  // a bare number (or one after the units) is minutes
 }
 
-// ponytail: "=epoch" can't be part of a mask (no = in nicks or hosts), so it needs no escaping
-std::string ign_mask(const std::string& e, time_t* until) {
+// ponytail: "=epoch" and ",types" can't be part of a mask (no = or , in nicks or hosts), so they need no escaping
+std::string ign_mask(const std::string& e, time_t* until, std::string* types) {
     size_t eq = e.rfind('=');
     bool timed = eq != std::string::npos && eq + 1 < e.size() && e.find_first_not_of("0123456789", eq + 1) == std::string::npos;
     if (until) *until = timed ? (time_t)atoll(e.c_str() + eq + 1) : 0;
-    return timed ? e.substr(0, eq) : e;
+    std::string m = timed ? e.substr(0, eq) : e;
+    size_t c = m.find(',');
+    if (types) *types = c == std::string::npos ? "pcntid" : m.substr(c + 1);
+    return m.substr(0, c);
+}
+
+// mIRC's mask types: 0 *!user@host 1 *!*user@host 2 *!*@host 3 *!*user@*.host 4 *!*@*.host, 5-9 the same with the nick
+std::string ign_addr(const std::string& nick, const std::string& uh, int type) {
+    size_t at = uh.find('@');
+    std::string user = at == std::string::npos ? "*" : uh.substr(0, at), host = uh.substr(at == std::string::npos ? 0 : at + 1);
+    if (!user.empty() && user[0] == '~') user.erase(0, 1);
+    int t = type % 5;
+    if (t >= 3) {  // *.domain: an IP keeps its first three parts, a name loses its first
+        bool ip = host.find_first_not_of("0123456789.") == std::string::npos;
+        size_t d = ip ? host.rfind('.') : host.find('.');
+        if (d != std::string::npos && (ip || host.find('.', d + 1) != std::string::npos))
+            host = ip ? host.substr(0, d) + ".*" : "*" + host.substr(d);
+    }
+    std::string u = t == 0 ? uh.substr(0, at == std::string::npos ? 0 : at) : t == 2 || t == 4 ? "*" : "*" + user;
+    return (type >= 5 ? nick : "*") + "!" + u + "@" + host;
 }
 
 long long now_ms() {

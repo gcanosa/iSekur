@@ -411,7 +411,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
     {"hilight_words", "Messages", 'n'}, {"hilight_window", "Messages", 'b'}, {"bell_notifications", "Messages", 'b'},
     {"paste_confirm", "Messages", 'b'}, {"complete_suffix", "Messages", 'g'}, {"send_typing", "Messages", 'b'}, {"quit_message", "Messages", 'b'}, {"part_message", "Messages", 'b'},
-    {"ignore", "Messages", 'n'}, {"mute", "Messages", 'n'}, {"notify", "Messages", 'n'},
+    {"ignore", "Messages", 'b'}, {"mute", "Messages", 'n'}, {"notify", "Messages", 'n'},
     {"ctcp_version", "Messages", 'b'}, {"ctcp_time", "Messages", 'b'}, {"ctcp_ping", "Messages", 'b'},
     {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
     {"e2e_effect", "Channels", 'b'},
@@ -1973,47 +1973,77 @@ void Core::exec(Buffer* b, const std::string& input) {
                                "  - /save writes it to the config");
         return;
     }
-    if (cmd == "ignore" || cmd == "unignore") {  // masks: nick or nick!user@host globs, per network; -t time: for a while
-        if (!s) { print(b, LK::ERROR, "Ignores are per network: use it in one of its tabs"); return; }
-        std::string sec = "server." + s->cfg.name;
+    if (cmd == "ignore" || cmd == "unignore") {  // mIRC's: /ignore [-pcntidjkx] [-w] [-r] [-uN] nick|mask [type]
+        // types: p private, c channel, n notice, t CTCP, i invite, d DCC, j joins/parts/quits/nicks, k strip colors, x exception
+        std::string types, usage = "Usage: /ignore [-pcntidjkx] [-w] [-r] [-u time] [nick|mask [0-9]]  (/help ignore)";
+        bool all = false, rm = cmd == "unignore";
         time_t now = time(nullptr), span = 0;
-        auto tf = std::find(argv.begin(), argv.end(), "-t");
-        if (cmd == "ignore" && tf != argv.end()) {
-            span = tf + 1 == argv.end() ? 0 : parse_span(*(tf + 1));
-            if (!span) { print(b, LK::ERROR, "Usage: /ignore -t time mask  (time: 30m, 2h, 1d12h, 1w; a bare number is minutes)"); return; }
-            argv.erase(tf, tf + 2);
+        std::vector<std::string> rest;
+        for (size_t i = 0; i < argv.size(); i++) {
+            const std::string& a = argv[i];
+            if (a.size() < 2 || a[0] != '-') { rest.push_back(a); continue; }
+            // ponytail: the old "-t 2h mask" stays a time when a span and a mask follow; -t alone is CTCPs, as in mIRC
+            if (a == "-t" && i + 2 < argv.size() && parse_span(argv[i + 1])) { span = parse_span(argv[++i]); continue; }
+            for (size_t j = 1; j < a.size(); j++) {
+                char c = a[j];
+                if (c == 'w') all = true;
+                else if (c == 'r') rm = true;
+                else if (c == 'l') {}  // list: what no mask does anyway
+                else if (c == 'u') {  // -u60 or -u 2h; a bare number is seconds, as in mIRC
+                    std::string v = j + 1 < a.size() ? a.substr(j + 1) : i + 1 < argv.size() ? argv[++i] : "";
+                    span = v.find_first_not_of("0123456789") == std::string::npos ? atol(v.c_str()) : parse_span(v);
+                    if (v.empty() || span <= 0 || span > 100000000LL * 604800) { print(b, LK::ERROR, usage + "  (time: 60, 30m, 2h, 1d12h)"); return; }
+                    break;
+                } else if (strchr("pcntidjkx", c)) { if (types.find(c) == std::string::npos) types += c; }
+                else { print(b, LK::ERROR, usage); return; }
+            }
         }
+        if (!all && !s) { print(b, LK::ERROR, "Ignores are per network: use it in one of its tabs, or -w for every network"); return; }
+        std::string sec = all ? "general" : "server." + s->cfg.name, where = all ? "every network" : s->cfg.name;
         std::vector<std::string> masks;  // the live entries: one that ran out is dropped here
         for (auto& e : split(ini_get(cfg, sec, "ignore"), ' ')) {
             time_t until;
             ign_mask(e, &until);
             if (!until || until > now) masks.push_back(e);
         }
-        if (argv.empty()) {
+        if (rest.empty()) {
             std::string shown;
             for (auto& e : masks) {
                 time_t until;
-                shown += (shown.empty() ? "" : " ") + ign_mask(e, &until) + (until ? " (" + fmt_dur((long)(until - now)) + " left)" : "");
+                std::string ty, m = ign_mask(e, &until, &ty);
+                shown += (shown.empty() ? "" : " ") + m + (ty != "pcntid" ? " [" + ty + "]" : "") +
+                         (until ? " (" + fmt_dur((long)(until - now)) + " left)" : "");
             }
-            print(b, LK::INFO, masks.empty() ? "Ignore list on " + s->cfg.name + " is empty" : "Ignoring on " + s->cfg.name + ": " + shown);
+            print(b, LK::INFO, masks.empty() ? "Ignore list on " + where + " is empty" : "Ignoring on " + where + ": " + shown);
+            if (!all && !ini_get(cfg, "general", "ignore").empty()) print(b, LK::INFO, "On every network too: /ignore -lw");
             return;
         }
-        std::string mask = argv[0];
-        if (mask.find('!') == std::string::npos && mask.find('@') == std::string::npos) mask += "!*@*";
-        auto it = std::find_if(masks.begin(), masks.end(), [&](const std::string& e) { return ign_mask(e) == mask; });
-        if (cmd == "unignore") {
-            if (it == masks.end()) { print(b, LK::ERROR, mask + " is not ignored"); return; }
+        std::string mask = rest[0];
+        if (rest.size() > 1) {  // nick N: their address, as the nicklists know it
+            const std::string& n = rest[1];
+            if (n.size() != 1 || !isdigit((unsigned char)n[0])) { print(b, LK::ERROR, usage); return; }
+            std::string uh;
+            for (auto& o : bufs)
+                if (s && o->srv == s)
+                    if (auto f = o->nicks.find(s->lower(mask)); f != o->nicks.end() && !f->second.host.empty()) { uh = f->second.host; break; }
+            if (uh.empty()) { print(b, LK::ERROR, "No address known for " + mask + " (/whois it, or join a channel with it)"); return; }
+            mask = ign_addr(mask, uh, n[0] - '0');
+        } else if (mask.find('!') == std::string::npos && mask.find('@') == std::string::npos) mask += "!*@*";
+        auto it = std::find_if(masks.begin(), masks.end(), [&](const std::string& e) { return irc_lower(ign_mask(e)) == irc_lower(mask); });
+        if (rm) {
+            if (it == masks.end()) { print(b, LK::ERROR, mask + " is not ignored on " + where); return; }
             masks.erase(it);
-        } else {  // again: the new time (or for good) replaces the old
-            std::string e = mask + (span ? "=" + std::to_string((long long)(now + span)) : "");
+        } else {  // again: the new types and time (or for good) replace the old
+            std::string e = mask + (types.empty() || types == "pcntid" ? "" : "," + types) + (span ? "=" + std::to_string((long long)(now + span)) : "");
             if (it == masks.end()) masks.push_back(e);
             else *it = e;
         }
         std::string joined;
         for (auto& m : masks) joined += (joined.empty() ? "" : " ") + m;
         cfg[sec]["ignore"] = unsaved[sec]["ignore"] = joined;
-        print(b, LK::INFO, (cmd == "ignore" ? "Ignoring " : "No longer ignoring ") + mask + " on " + s->cfg.name +
-                               (span ? " for " + fmt_dur((long)span) : "") + " (/save to keep)");
+        std::string what = types.empty() || rm ? "" : types == "x" ? " (an exception: never ignored)" : " (" + types + ")";
+        print(b, LK::INFO, (rm ? "No longer ignoring " : types == "x" ? "Never ignoring " : "Ignoring ") + mask + what + " on " + where +
+                               (span && !rm ? " for " + fmt_dur((long)span) : "") + " (/save to keep)");
         return;
     }
     if (cmd == "hilight") {  // /hilight [add|del] word: words highlighted besides your nick, * matches anything, per network

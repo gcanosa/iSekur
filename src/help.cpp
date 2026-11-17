@@ -244,7 +244,9 @@ static const std::vector<CmdInfo> CMDS = {
      {"/unlock"}},
     {"kickban", "Channel ops", "nick [reason]", "Ban *!*@host and kick, in one go",
      "Bans the user's host (so a new nick doesn't get them back in) and kicks them. If the host isn't "
-     "known yet iSekur asks the server for it first.",
+     "known yet iSekur asks the server for it first. When they're logged in to an account and the server "
+     "has account bans (EXTBAN ~a: or $a:), the account is banned too: a new IP or cloak doesn't get them "
+     "back in either.",
      {"/kickban troll", "/kb troll flooding the channel"}, "kb"},
     {"tempban", "Channel ops", "nick minutes [reason]", "Kick + ban, unbanned after some minutes",
      "Like /kickban, then lifts the ban after the given minutes (1 to 10080). The unban is sent by "
@@ -366,15 +368,23 @@ static const std::vector<CmdInfo> CMDS = {
      "Without arguments, lists them. Each network has its own list (hilight_words in its [server.name] "
      "section). Matching ignores case and takes whole words; * matches anything (isekur*). /save keeps the list.",
      {"/hilight", "/hilight add isekur", "/hilight add ger*", "/hilight del isekur"}},
-    {"ignore", "Settings", "[-t time] [mask]", "Ignore a nick or mask on this network, or list its ignores",
+    {"ignore", "Settings", "[-pcntidjkx] [-w] [-r] [-u time] [nick|mask [0-9]]", "Ignore a nick or mask, or list the ignores",
      "Each network has its own list (ignore in its [server.name] section): the same nick elsewhere is "
-     "often someone else. A bare nick becomes nick!*@*. Ignored users' messages, notices, invites and "
-     "CTCPs are dropped. With -t the ignore ends by itself after that time (30m, 2h, 1d12h, 1w; a bare "
-     "number is minutes); ignoring the mask again changes it. /save keeps the list.",
-     {"/ignore", "/ignore spammer", "/ignore -t 2h spammer", "/ignore *!*@*.evil.host"}},
-    {"unignore", "Settings", "mask", "Stop ignoring a mask",
-     "On this network. Use the mask exactly as /ignore lists it.",
-     {"/unignore spammer!*@*"}},
+     "often someone else; -w puts it on the list for every network ([general]). A bare nick becomes nick!*@*; "
+     "a nick and a type 0-9 takes their address from the nicklists, as mIRC does: 0 *!user@host, "
+     "1 *!*user@host, 2 *!*@host, 3 *!*user@*.host, 4 *!*@*.host, 5-9 the same with the nick. "
+     "Without type letters their messages, notices, CTCPs, invites and DCCs are dropped; with them only "
+     "those: p private messages, c channel messages, n notices, t CTCPs, i invites, d DCCs, j their "
+     "joins, parts, quits and nick changes, k strips their colors instead. -x makes the mask an exception "
+     "that is never ignored (a friend on an ignored host). -u ends the ignore by itself after that time "
+     "(60 is seconds, as in mIRC; 30m, 2h, 1d12h, 1w); -r removes. Ignoring a mask again replaces its "
+     "types and time. /save keeps the list.",
+     {"/ignore", "/ignore spammer", "/ignore -u2h spammer", "/ignore -pn bot", "/ignore -j chatty",
+      "/ignore -k rainbow", "/ignore troll 2", "/ignore -w *!*@*.evil.host", "/ignore -x friend!*@*.evil.host",
+      "/ignore -r spammer"}},
+    {"unignore", "Settings", "[-w] mask", "Stop ignoring a mask",
+     "On this network (-w: the list for every network). Use the mask as /ignore lists it.",
+     {"/unignore spammer!*@*", "/unignore -w *!*@*.evil.host"}},
 
     // ---- Session
     {"exec", "Session", "[-o] [-y] command", "Run a shell command",

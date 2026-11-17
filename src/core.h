@@ -576,7 +576,8 @@ struct Core {
     Line* by_msgid(Buffer* b, const std::string& id);
     void say_multi(Buffer* b, const std::vector<std::string>& lines);  // draft/multiline: a paste as one message
     int drain();            // flush send queues; ms until the next one is due
-    bool ignored(const Server* s, const std::string& prefix) const;  // per network: [server.X] ignore
+    std::string ignore_types(const Server* s, const std::string& prefix) const;  // [server.X] and -w's [general] ignore: the types that match
+    bool ignored(const Server* s, const std::string& prefix) const { return ignore_types(s, prefix).find_first_of("pcntidj") != std::string::npos; }
 
     Buffer* find(Server* s, const std::string& name);
     Buffer* open(Server* s, BT t, const std::string& name);
@@ -715,7 +716,10 @@ std::string ssh_dest(const std::string& ssh_g);  // exec.cpp: `ssh -G` output ->
 std::string fmt_dur(long secs);
 std::string ban_kinds(const Server* s);  // chanops.cpp: the list modes this server has of "beIq" (bans, exceptions, invite exceptions, quiets)
 long long parse_span(const std::string& w);  // config.cpp: 90 (minutes), 30m, 2h, 1d12h, 1w -> seconds; 0 when it isn't one
-std::string ign_mask(const std::string& entry, time_t* until = nullptr);  // config.cpp: an ignore entry "mask" or "mask=epoch" -> mask; until: 0 = for good
+// config.cpp: an ignore entry "mask[,types][=epoch]" -> mask; until: 0 = for good; types: its letters, "pcntid" when none
+// (p private, c channel, n notice, t CTCP, i invite, d DCC, j joins/parts/quits/nicks, k strip colors, x never ignore)
+std::string ign_mask(const std::string& entry, time_t* until = nullptr, std::string* types = nullptr);
+std::string ign_addr(const std::string& nick, const std::string& userhost, int type);  // mIRC's address types 0-9
 std::string typing_text(const std::vector<std::string>& nicks);  // tui.cpp: the status bar's +typing segment  // tui.cpp: 3d4h22m, 47m12s, 9s
 std::string status_info_json(const Core& c);  // tui.cpp: the status_info items for the webchat, [[[text, fg, bg], ...], ...]
 std::string version_string();  // "iSekur 0.2 (v0.2-4-g686b410)"

@@ -168,20 +168,39 @@ bool Core::chanop(Buffer* b, const std::string& cmd, const std::string& args) {
     return true;
 }
 
+// the account extban, "~a:acct" or "$a:acct", when 005 EXTBAN has a prefix and 'a' (UnrealIRCd, Solanum, SekurIRCd);
+// "" otherwise: InspIRCd's unprefixed letters mean something else
+std::string account_ban(const Server* s, const std::string& account) {
+    auto e = s->isupport.find("EXTBAN");
+    if (account.empty() || account == "*" || e == s->isupport.end()) return "";
+    size_t c = e->second.find(',');
+    if (c == 0 || c == std::string::npos || e->second.find('a', c) == std::string::npos) return "";
+    return e->second.substr(0, c) + "a:" + account;
+}
+
 void Core::kickban(Server* s, Buffer* b, const KickBan& kb, const std::string& userhost) {
     std::string mask = "*!*@" + userhost.substr(userhost.find('@') + 1);  // no '@': npos + 1 = 0, all of it
-    s->send("MODE " + kb.chan + " +b " + mask);
+    // logged in: their account too, so a new IP (a new cloak) doesn't get them back in
+    auto ne = b->nicks.find(s->lower(kb.nick));
+    std::string acct = ne == b->nicks.end() ? "" : account_ban(s, ne->second.account);
+    s->send("MODE " + kb.chan + (acct.empty() ? " +b " + mask : " +bb " + mask + " " + acct));
     std::string why = !kb.reason.empty() ? kb.reason
                       : kb.minutes      ? "Banned for " + std::to_string(kb.minutes) + " minutes"
                                         : "Banned";
     s->send("KICK " + kb.chan + " " + kb.nick + " :" + why);
-    if (!kb.minutes) return;
+    if (!kb.minutes) {
+        if (!acct.empty()) print(b, LK::INFO, "Banned " + mask + " and their account (" + acct + ")");
+        return;
+    }
     auto& tb = s->tempbans;
-    tb.erase(std::remove_if(tb.begin(), tb.end(),
-                            [&](const TempBan& t) { return t.mask == mask && s->lower(t.chan) == s->lower(kb.chan); }),
-             tb.end());
-    tb.push_back({kb.chan, mask, time(nullptr) + kb.minutes * 60});
-    print(b, LK::INFO, "Banned " + mask + " for " + std::to_string(kb.minutes) +
+    for (const std::string& m : {mask, acct}) {
+        if (m.empty()) continue;
+        tb.erase(std::remove_if(tb.begin(), tb.end(),
+                                [&](const TempBan& t) { return t.mask == m && s->lower(t.chan) == s->lower(kb.chan); }),
+                 tb.end());
+        tb.push_back({kb.chan, m, time(nullptr) + kb.minutes * 60});
+    }
+    print(b, LK::INFO, "Banned " + mask + (acct.empty() ? "" : " and " + acct) + " for " + std::to_string(kb.minutes) +
                            " minutes. iSekur lifts the ban, so it has to be running then");
 }
 

@@ -168,15 +168,19 @@ int Core::drain() {
     return wait;
 }
 
-bool Core::ignored(const Server* s, const std::string& prefix) const {
-    if (prefix.find('!') == std::string::npos) return false;  // servers are never ignored
-    std::string who = irc_lower(prefix);
+std::string Core::ignore_types(const Server* s, const std::string& prefix) const {
+    if (prefix.find('!') == std::string::npos) return "";  // servers are never ignored
+    std::string who = irc_lower(prefix), out, types;
     time_t now = time(nullptr), until;
-    for (auto& e : split(ini_get(cfg, "server." + s->cfg.name, "ignore"), ' ')) {
-        std::string mask = ign_mask(e, &until);
-        if ((!until || until > now) && fnmatch(irc_lower(mask).c_str(), who.c_str(), 0) == 0) return true;
-    }
-    return false;
+    for (const char* sec : {"server", "general"})  // general: /ignore -w, every network
+        for (auto& e : split(ini_get(cfg, *sec == 's' ? "server." + s->cfg.name : "general", "ignore"), ' ')) {
+            std::string mask = ign_mask(e, &until, &types);
+            if ((!until || until > now) && fnmatch(irc_lower(mask).c_str(), who.c_str(), 0) == 0) {
+                if (types.find('x') != std::string::npos) return "";  // an exception wins over any ignore
+                out += types;
+            }
+        }
+    return out;
 }
 
 bool Server::tag_ok(const std::string& tag) const {
@@ -591,8 +595,12 @@ void Core::handle(Server* s, const Msg& m) {
     auto st = m.tags.find("time");
     if (st != m.tags.end())
         if (time_t t = parse_server_time(st->second)) ts = t;
+    // /ignore -j: their joins, parts, quits and nick changes aren't shown (the nicklist still follows)
+    bool hide_jpq = (m.cmd == "JOIN" || m.cmd == "PART" || m.cmd == "QUIT" || m.cmd == "NICK") &&
+                    s->lower(m.nick) != s->lower(s->nick) && ignore_types(s, m.prefix).find('j') != std::string::npos;
     auto line = [&](Buffer* b, LK k, const std::string& nick, const std::string& text,
                     bool self = false, bool hl = false) {
+        if (hide_jpq && (k == LK::JOIN || k == LK::PART || k == LK::QUIT || k == LK::NICK)) return;
         add(b, Line{ts, k, nick, text, self, hl});
     };
     auto is_me = [&](const std::string& n) { return s->lower(n) == s->lower(s->nick); };
@@ -1217,8 +1225,21 @@ void Core::handle(Server* s, const Msg& m) {
             return;
         }
     }
-    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE" || cmd == "TAGMSG") && !is_me(m.nick) && ignored(s, m.prefix))
-        return;  // includes CTCP: ignored users get no replies either
+    if ((cmd == "PRIVMSG" || cmd == "NOTICE" || cmd == "INVITE" || cmd == "TAGMSG") && !is_me(m.nick))
+        if (std::string it = ignore_types(s, m.prefix); !it.empty()) {
+            std::string tgt = m.p(0);  // @#chan: still the channel
+            while (tgt.size() > 1 && s->prefix_chars.find(tgt[0]) != std::string::npos && s->is_chan(tgt.substr(1))) tgt.erase(0, 1);
+            const std::string& text = m.p(1);
+            bool ctcp = cmd != "INVITE" && cmd != "TAGMSG" && text.size() > 1 && text[0] == '\x01' && text.rfind("\x01" "ACTION", 0) != 0;
+            char t = cmd == "INVITE"            ? 'i'
+                     : ctcp                     ? (text.rfind("\x01" "DCC ", 0) == 0 ? 'd' : 't')
+                     : cmd == "NOTICE"          ? 'n'
+                     : s->is_chan(tgt)          ? 'c'
+                                                : 'p';
+            if (it.find(t) != std::string::npos) return;  // a CTCP too: ignored users get no replies either
+            // ponytail: m is the read loop's own Msg, so the colors come off in place
+            if (it.find('k') != std::string::npos && !ctcp && m.params.size() > 1) const_cast<Msg&>(m).params[1] = mirc_strip(text);
+        }
     auto tagv = [&](const char* name) {  // a client tag, final or draft: "reply" -> +reply or +draft/reply
         auto t = m.tags.find(std::string("+") + name);
         if (t == m.tags.end()) t = m.tags.find(std::string("+draft/") + name);
