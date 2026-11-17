@@ -921,6 +921,10 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div class="btns"><button class="go" value="ok">Close</button></div>
 </form></dialog>
 <script>
+// a script that dies before boot() (an old browser missing something, even a syntax error) leaves a blank page: say why
+onerror = (m, u, l) => document.body.append(Object.assign(document.createElement("pre"), {textContent: "iSekur webchat didn't start: " + m + " (line " + l + ")", style: "position:relative;z-index:999;margin:0;padding:16px;color:#f77;white-space:pre-wrap"}));
+</script>
+<script>
 "use strict";
 const $ = s => document.querySelector(s);
 // the phone layout: a narrow window, or a phone turned sideways (short and touch; a tablet is taller). Every
@@ -945,8 +949,9 @@ function nickColor(n) {
 
 // mIRC formatting -> DOM (text only ever goes through textContent)
 const URL_RE = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
-// a URL or a #channel at the start of a word (not the # in "C#" or a URL's #anchor, which the URL eats first)
-const LINK_RE = new RegExp(URL_RE.source + `|(?<![^\\s(\\[{'"])[#&][^\\s,<>"']*[^\\s,<>"'.;:!?)\\]}]`, "g");
+// a URL or a #channel at the start of a word (not the # in "C#" or a URL's #anchor, which the URL eats first; the start of
+// a word is checked in addText: a lookbehind here is a SyntaxError on iOS before 16.4 and the page never starts)
+const LINK_RE = new RegExp(URL_RE.source + `|[#&][^\\s,<>"']*[^\\s,<>"'.;:!?)\\]}]`, "g");
 function addText(parent, text, st) {
   if (!text) return;
   const span = document.createElement("span");
@@ -959,7 +964,9 @@ function addText(parent, text, st) {
   if (st.i) span.style.fontStyle = "italic";
   if (st.u) span.style.textDecoration = "underline";
   let last = 0;
-  for (const m of text.matchAll(LINK_RE)) {
+  LINK_RE.lastIndex = 0;
+  for (let m; (m = LINK_RE.exec(text)); ) {
+    if (/^[#&]/.test(m[0]) && m.index && !/[\s(\[{'"]/.test(text[m.index - 1])) { LINK_RE.lastIndex = m.index + 1; continue; }  // "C#" is no channel
     span.append(text.slice(last, m.index));
     const a = document.createElement("a");
     if (/^[#&]/.test(m[0])) a.className = "chan", a.title = "Right click or double click: join " + m[0];
@@ -2061,8 +2068,8 @@ document.documentElement.addEventListener("mouseenter", () => clearTimeout(ahOut
 const vv = window.visualViewport, root = document.documentElement.style;
 // a phone: a window opens without the keyboard, or it covers the window (the search box or first field would raise it);
 // a tap on a field brings it. The question box and the topic (data-type) are for typing: they keep it. touch: below
-const showModal0 = HTMLDialogElement.prototype.showModal;
-HTMLDialogElement.prototype.showModal = function () {
+const showModal0 = window.HTMLDialogElement?.prototype.showModal;  // not before iOS 15.4: its windows can't open there, the chat still can
+if (showModal0) HTMLDialogElement.prototype.showModal = function () {
   showModal0.call(this);
   if (touch && !("type" in this.dataset)) document.activeElement?.blur();
 };
@@ -3708,6 +3715,7 @@ for (const ev of ["pointerup", "pointercancel"]) document.addEventListener(ev, (
 document.addEventListener("click", e => { if (Date.now() < lpUntil) e.preventDefault(), e.stopImmediatePropagation(); }, true);
 document.addEventListener("contextmenu", e => { clearTimeout(lpT); if (e.isTrusted && lpOpen) e.preventDefault(), e.stopImmediatePropagation(); }, true);  // the browser's own after ours: one menu
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
+onerror = null;  // started: later errors stay in the console
 boot();
 </script>
 </body>
