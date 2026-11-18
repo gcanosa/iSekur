@@ -3344,7 +3344,8 @@ isekur.command("sp", "", function() print(isekur.run({"espeak", "-v", "x"}, "hel
         setenv("PATH", fake.c_str(), 1);
         const std::string url = "https://example.org/a.mp3";
         assert(rc.radio_start("t", url, "A", false).find("ffmpeg isn't installed") == 0);
-        script("ffmpeg", "printf '%s\\n' \"$@\" > '" + dir + "/args'\n/bin/cat <&0 > '" + dir + "/stdin' &\nprintf 'AUDIO-1'\nexec /bin/sleep 30");
+        // fd 3 keeps ffmpeg's stdin for the background cat: dash and FreeBSD sh point a background job's stdin at /dev/null before "<&0" runs
+        script("ffmpeg", "printf '%s\\n' \"$@\" > '" + dir + "/args'\nexec 3<&0\n/bin/cat <&3 > '" + dir + "/stdin' &\nprintf 'AUDIO-1'\nexec /bin/sleep 30");
         // addresses it won't fetch: nothing local or private, no user:pass@, no spaces, only http(s)
         for (const char* bad : {"file:///etc/passwd", "ftp://example.org/x", "http://127.0.0.1/x", "http://10.1.2.3/x", "http://localhost/x",
                                 "https://u:p@example.org/x", "https://example.org:80@127.0.0.1/x", "https://example.org:pw/x", "https://example.org:/x", "https://example.org/a b", "https://printer.local/x", "-i", ""})
