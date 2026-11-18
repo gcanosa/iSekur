@@ -195,6 +195,13 @@ private:
         long long click_ms = 0;
     };
     PlugWin pw;
+    // a plugin's window (isekur.window, the radio's): Core::pwin is what it shows, this is where the cursor is
+    struct PWinUi { bool live = false, filtering = false; int fy = -1, sy = -1, bar0 = 0, barn = 0, cur = 0, top = 0, rows = 0, x0 = 0, w = 0, list_y = 0, btn_y = 0, last_sel = -1; long long click_ms = 0; std::vector<std::pair<int, int>> bx; std::u32string q; };  // cur: the row's number in the plugin's list; top: the first row shown, counted among those q lets through
+    PWinUi pu;
+    void draw_pwin(int W, int H);
+    std::vector<int> pwin_vis() const;  // the rows (1-based) the filter lets through
+    void pwin_key(int k, uint32_t ch);
+    void pwin_mouse(int k, int x, int y);
     void draw_plugins(int W, int H);
     void plugin_key(int k, uint32_t ch);
     void plugin_mouse(int k, int x, int y);

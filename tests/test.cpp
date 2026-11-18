@@ -3212,6 +3212,135 @@ isekur.command("sp", "", function() print(isekur.run({"espeak", "-v", "x"}, "hel
         assert(text == "hello there");
         setenv("PATH", oldpath.c_str(), 1);
     }
+    {  // the plugin radio (API 12): what it refuses, ffmpeg's MP3 to the sink and a player, mute, direct, stop; isekur.window and its events
+        char d[] = "/tmp/isekur-radio-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d, fake = dir + "/bin", oldpath = getenv("PATH") ? getenv("PATH") : "";
+        mkdir_p(fake), mkdir_p(dir + "/plugins");
+        auto script = [&](const std::string& name, const std::string& body) {  // absolute paths inside: PATH holds only these
+            FILE* f = fopen((fake + "/" + name).c_str(), "w");
+            fputs(("#!/bin/sh\n" + body + "\n").c_str(), f), fclose(f);
+            chmod((fake + "/" + name).c_str(), 0755);
+        };
+        auto slurp = [](const std::string& path) { std::ifstream in(path, std::ios::binary); return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()); };
+        Core rc;
+        rc.cfg_path = dir + "/isekur.conf";
+        Buffer* rh = rc.open(nullptr, BT::STATUS, "isekur");
+        setenv("PATH", fake.c_str(), 1);
+        const std::string url = "https://example.org/a.mp3";
+        assert(rc.radio_start("t", url, "A", false).find("ffmpeg isn't installed") == 0);
+        script("ffmpeg", "printf '%s\\n' \"$@\" > '" + dir + "/args'\n/bin/cat <&0 > '" + dir + "/stdin' &\nprintf 'AUDIO-1'\nexec /bin/sleep 30");
+        // addresses it won't fetch: nothing local or private, no user:pass@, no spaces, only http(s)
+        for (const char* bad : {"file:///etc/passwd", "ftp://example.org/x", "http://127.0.0.1/x", "http://10.1.2.3/x", "http://localhost/x",
+                                "https://u:p@example.org/x", "https://example.org:80@127.0.0.1/x", "https://example.org:pw/x", "https://example.org:/x", "https://example.org/a b", "https://printer.local/x", "-i", ""})
+            assert(!rc.radio_start("t", bad, "x", false).empty() && !rc.radio_on());
+        assert(rc.radio_start("t", "https://www.youtube.com/@x/live", "Y", false).find("yt-dlp isn't installed") == 0);
+        assert(rc.radio_start("t", url, "A", true).find("no player") == 0);
+        auto pump = [&](int ms, const std::function<bool()>& until) {
+            for (int i = 0; i < ms / 20 && !until(); i++) {
+                std::vector<pollfd> fds;
+                rc.radio_fds(fds);
+                poll(fds.data(), (nfds_t)fds.size(), 20);
+                rc.radio_poll(fds, 0);
+            }
+        };
+        std::string got;
+        int ended = 0;
+        rc.radio_sink = [&](const char* b, size_t n) { if (b) got.append(b, n); else ended++; };
+        // ffmpeg is told exactly what to do, and its MP3 reaches the sink
+        assert(rc.radio_start("t", url, "A", false).empty() && rc.radio.st == Core::Radio::RESOLVING);
+        pump(3000, [&] { return rc.radio.st == Core::Radio::PLAYING; });
+        assert(rc.radio.st == Core::Radio::PLAYING && got == "AUDIO-1" && rc.radio.name == "A" && !rc.radio.direct);
+        std::string args = slurp(dir + "/args");
+        assert(args.find("-protocol_whitelist\nhttp,https,tcp,tls,crypto\n") != std::string::npos && args.find("-i\n" + url + "\n") != std::string::npos &&
+               args.find("libmp3lame") != std::string::npos && args.find("volume@v=1.000:eval=frame,alimiter=limit=0.95\n") != std::string::npos &&
+               args.find("-nostdin") == std::string::npos);  // stdin is ours: live volume commands
+        // the volume changes while it plays: ffmpeg's stdin gets the command; a new station starts at the volume it was given
+        rc.radio_volume(50);
+        assert(rc.radio.volume == 50);
+        pump(1500, [&] { return slurp(dir + "/stdin").find("cvolume@v -1 volume 0.500\n") != std::string::npos; });
+        assert(slurp(dir + "/stdin") == "cvolume@v -1 volume 0.500\n");
+        rc.radio_volume(999);
+        assert(rc.radio.volume == 150);  // 0-150
+        rc.radio_volume(-1);
+        assert(rc.radio.volume == 0);
+        rc.radio.volume = 80;
+        // the player on this machine gets the same bytes, until it's muted
+        script("mpv", "/bin/cat > '" + dir + "/played'");
+        got.clear();
+        assert(rc.radio_start("t", url, "A", true).empty());
+        pump(3000, [&] { return rc.radio.st == Core::Radio::PLAYING; });
+        pump(2000, [&] { return slurp(dir + "/played") == "AUDIO-1"; });
+        assert(slurp(dir + "/played") == "AUDIO-1" && rc.radio.host);
+        rc.radio_mute(true);
+        assert(rc.radio.muted);
+        rc.radio_mute(false);
+        rc.radio_stop();
+        assert(!rc.radio_on() && ended >= 1);
+        pump(3000, [&] { return rc.radio.dying.empty(); });
+        assert(rc.radio.dying.empty());  // ffmpeg and the player are gone, reaped
+        // direct: nothing runs here, the browsers connect; a refused one leaves the one that plays alone
+        assert(rc.radio_start("t", "https://example.org/live", "D", false, true).empty());
+        assert(rc.radio.direct && rc.radio.st == Core::Radio::PLAYING && rc.radio.ff < 0 && rc.radio.res < 0);
+        std::string si = status_info_json(rc);  // the status bar says it: R: ON (MUTE when muted), nothing when it's off
+        assert(si.find("[\"R: \",") != std::string::npos && si.find("[\"ON\",") != std::string::npos);
+        rc.radio_mute(true);
+        assert(status_info_json(rc).find("[\"MUTE\",") != std::string::npos);
+        rc.radio_mute(false);
+        assert(!rc.radio_start("t", "https://www.youtube.com/@x/live", "Y", false, true).empty());
+        assert(!rc.radio_start("t", "http://example.org/live", "H", false, true).empty() && rc.radio.direct && rc.radio.name == "D");
+        rc.radio_stop();
+        assert(!rc.radio.direct && !rc.radio_on());
+        assert(status_info_json(rc).find("\"R: \"") == std::string::npos);
+        // the plugin side: isekur.radio refuses and reports, isekur.window and its events (only to its plugin), going with the plugin
+        auto wr = [&](const std::string& name, const std::string& body) {
+            FILE* f = fopen((dir + "/plugins/" + name + ".lua").c_str(), "w");
+            fputs(body.c_str(), f), fclose(f);
+        };
+        wr("rw", R"LUA(
+isekur.command("w", "", function()
+  isekur.window{title = "T", display = {"a", "b"}, items = {"x", "y", "z"}, sel = 2, mark = 1, star = 3, buttons = {"Go", "Quit"}, icons = {"1", "2"}, reels = true, slider = {value = 40, max = 150, step = 10, icon = "v"}}
+end)
+isekur.command("r", "", function()
+  print(select(2, isekur.radio("file:///x")), isekur.radio().state, isekur.radio_mute(true), isekur.window())
+end)
+isekur.command("v", "", function() print(isekur.radio_volume(), isekur.radio_volume(200), isekur.radio_volume(-5), isekur.radio().volume) end)
+isekur.on("window", function(e) print("win", e.action, e.index, e.button, e.value) end)
+)LUA");
+        wr("ro", "isekur.on(\"window\", function(e) print(\"ro got it\") end)\n");
+        rc.exec(rh, "/plugin enable rw");
+        rc.exec(rh, "/plugin enable ro");
+        auto last = [&] { return rh->lines.back().text; };
+        rc.exec(rh, "/r");
+        assert(last() == "not a stream address (http or https, a host on the internet) off false false");
+        rc.radio.volume = 100;
+        rc.exec(rh, "/v");
+        assert(last() == "100 150 0 0");  // nothing plays: the volume is set for the next one
+        rc.exec(rh, "/w");
+        const Core::PWin& w = rc.pwin;
+        assert(w.open && w.by == "rw" && w.title == "T" && w.display.size() == 2 && w.items.size() == 3 && w.sel == 2 && w.mark == 1 && w.star == 3 && w.slider == 40 && w.slider_max == 150 && w.slider_step == 10 && w.slider_icon == "v" &&
+               w.buttons == std::vector<std::string>({"Go", "Quit"}) && w.icons == std::vector<std::string>({"1", "2"}) && w.reels == 1);
+        rc.pwin_act("button", 3, 2);
+        assert(last() == "win button 3 Quit nil" && rc.pwin.sel == 3);
+        rc.pwin_act("pick", 1);
+        assert(last() == "win pick 1 nil nil");
+        rc.pwin_act("button", 1, 9);  // no such button: nothing happens
+        assert(last() == "win pick 1 nil nil");
+        rc.pwin_act("slider", 65);
+        assert(last() == "win slider nil nil 65" && rc.pwin.slider == 65);
+        rc.pwin_act("slider", 9999);
+        assert(last() == "win slider nil nil 150" && rc.pwin.slider == 150);  // up to its max
+        for (auto& l : rh->lines) assert(l.text != "ro got it");  // the other plugin's handler never ran
+        rc.pwin_act("close", 0);
+        assert(last() == "win close nil nil nil" && !rc.pwin.open);
+        rc.exec(rh, "/w");
+        assert(rc.pwin.open);
+        rc.exec(rh, "/plugin disable rw");
+        assert(!rc.pwin.open);  // its plugin went: the window closes
+        rc.plugins.clear();
+        setenv("PATH", oldpath.c_str(), 1);
+        assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
+    }
     {  // Lua plugins: the sandbox, the step and memory caps, scoped options, the store, enable/disable, events
         char d[] = "/tmp/isekur-plugins-XXXXXX";
         assert(mkdtemp(d));

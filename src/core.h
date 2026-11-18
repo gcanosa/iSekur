@@ -302,10 +302,10 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 11 // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 12 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
-// a plugin event's fields besides srv and target: strings and booleans
-using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool>>>;
+// a plugin event's fields besides srv and target: strings, booleans and whole numbers
+using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool, int>>>;
 // twitch.cpp; with make notwitch twitch_host() is always false, so none of it runs
 bool twitch_host(const std::string& host);  // irc.chat.twitch.tv and the like
 struct Server {
@@ -407,7 +407,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null; l non-null: the soft one); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS, RADIO, PWIN };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null; l non-null: the soft one); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab); RADIO: the radio started, changed state or stopped (b is null); PWIN: a plugin's window opened, changed or closed (b is null)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -507,6 +507,49 @@ struct Core {
     bool view_on(bool web) const { return !view.by.empty() && (web ? view.web : view.term); }
     const Theme& look(bool web) const { return view_on(web) && view.own ? view.theme : theme; }  // what that side draws with
     void view_end();
+    // a plugin's radio (API 12, radio.cpp): one stream at a time, decoded by ffmpeg to MP3 and fanned out to the webchat's
+    // <audio> (GET /radio/stream) and, when asked, a player on this machine. A YouTube link (a 24/7 live) goes through yt-dlp
+    // first: the audio-only URL it finds works only from this machine's address, so the audio can't go to a phone directly
+    struct Radio {
+        enum St { OFF, RESOLVING, PLAYING } st = OFF;  // RESOLVING: yt-dlp or ffmpeg hasn't given sound yet (or is starting again)
+        std::string by, name, url, err, player;        // err: why the last one stopped
+        bool host = false, want = false;               // host: on this machine's speakers too; want: a dropped stream starts again
+        int volume = 100;                              // percent, 0-150 (100: as it comes): ffmpeg's volume filter, changed live over its stdin; a direct stream's volume is the browser's
+        bool direct = false;                           // no ffmpeg: the webchat's browsers connect to url themselves (plain https streams)
+        bool muted = false;                            // the browsers mute their <audio>, the player gets nothing; a new station keeps it, Stop clears it
+        pid_t res = -1, ff = -1, pl = -1;              // yt-dlp, ffmpeg, the player
+        int res_fd = -1, ff_fd = -1, ff_err = -1, ff_in = -1, pl_fd = -1;  // yt-dlp's output, ffmpeg's MP3, its stderr and its stdin (live commands), the player's stdin
+        std::string res_out, ff_msg, pl_buf;
+        time_t try_at = 0, data_at = 0, play_at = 0, retry = 0;
+        int fails = 0;
+        std::vector<std::pair<pid_t, time_t>> dying;   // told to stop, not reaped yet (killed for good after a few seconds)
+    } radio;
+    std::vector<int> radio_pf;  // the fds radio_fds pushed, in order
+    std::function<void(const char*, size_t)> radio_sink;  // ffmpeg's MP3 for the webchat's listeners; (nullptr, 0): the stream ended
+    bool web_up = false;  // a webchat is attached (main loop)
+    std::string radio_start(const std::string& by, const std::string& url, const std::string& name, bool host, bool direct = false);  // "" or why not
+    void radio_stop();
+    void radio_mute(bool on);
+    void radio_volume(int percent);
+    bool radio_on() const { return radio.st != Radio::OFF; }
+    void radio_fds(std::vector<pollfd>& fds);
+    void radio_poll(const std::vector<pollfd>& fds, size_t from);
+    void radio_drop();
+    void radio_fail(const std::string& why);
+    // a plugin's window (API 12, isekur.window): a title, a lcd-like display, a list, buttons; in the terminal and the webchat.
+    // sel and mark are 1-based (0: none); mark is the row that plays
+    struct PWin {
+        std::string by, title;
+        std::vector<std::string> display, items, buttons, icons;  // icons: a short symbol before each button's label
+        int sel = 0, mark = 0, star = 0;  // star: a row drawn with a ★ in its own column (the radio's favorite)
+        int reels = -1;  // a cassette in the display: -1 none, 0 its reels still, 1 turning
+        int slider = -1, slider_max = 100, slider_step = 5;  // a slider (the radio's volume): its value, -1 none; the icon before it
+        std::string slider_icon;
+        bool open = false;
+        bool same(const PWin& o) const { return by == o.by && title == o.title && display == o.display && items == o.items && buttons == o.buttons && icons == o.icons && sel == o.sel && mark == o.mark && star == o.star && reels == o.reels && slider == o.slider && slider_max == o.slider_max && slider_step == o.slider_step && slider_icon == o.slider_icon && open == o.open; }
+    } pwin;
+    void pwin_act(const std::string& action, int index, int button = 0);  // a click or a key in it: "pick", "button" (button: 1-based; index: its list row), "slider" (index: its value), "close"
+    std::string emit_only;  // plugin_emit: only this plugin gets the event (a window's)
     void lock_saver();  // locked, Esc on the bare password box: the screensaver plugin starts one under it (as Alt+S does)
     bool wake();  // someone's here; true: it ended a screensaver (the key that woke it goes no further)
     // the lock screen's animation, in the terminal (the webchat plays its own off the same events):

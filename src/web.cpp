@@ -418,7 +418,7 @@ static void respond(Conn& conn, int code, const std::string& status, const std::
                 "\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\n"
                 "Referrer-Policy: no-referrer\r\nX-Frame-Options: DENY\r\n"
                 "Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; "
-                "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src https:; frame-ancestors 'none'\r\n" +  // https: plugins' previews (isekur.embed)
+                "style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; media-src 'self' https:; frame-ancestors 'none'\r\n" +  // https: plugins' previews (isekur.embed)
                 extra + "Connection: close\r\n\r\n" + body;
     conn.closing = true;
 }
@@ -566,6 +566,10 @@ void Web::http(Client& cl) {
         ws_ips[ip] = {ws_ips.count(ip) ? ws_ips[ip].first : now, now};
         snapshot(cl);
         ws_frames(cl);
+    } else if (method == "GET" && path == "/radio/stream") {  // the plugin radio's MP3, endless: the page's <audio>
+        if (!authed || c.locked || c.radio.st != Core::Radio::PLAYING || c.radio.direct) { respond(cl.conn, authed && !c.locked ? 404 : 403, "Not Found", "text/plain", "no radio"); return; }
+        cl.radio = true, cl.since = now;
+        cl.conn.out += "HTTP/1.1 200 OK\r\nContent-Type: audio/mpeg\r\nCache-Control: no-store\r\nX-Content-Type-Options: nosniff\r\nConnection: close\r\n\r\n";
     } else if (method == "GET" && (path == "/files" || path.rfind("/files/", 0) == 0)) {
         if (!authed || c.locked) { respond(cl.conn, 403, "Forbidden", "text/plain", "forbidden"); return; }  // locked: not the files either
         files(cl, path, h);
@@ -756,6 +760,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "fold") c.fold(b);
         else if (m["t"] == "theme") { std::string err; c.use_theme(m["name"], err); }  // the theme picker's live preview
         else if (m["t"] == "view_end" && c.view_on(true)) c.view_end();  // Esc in the zen plugin's focus view
+        else if (m["t"] == "pwin") c.pwin_act(m["a"], atoi(m["i"].c_str()), atoi(m["b"].c_str()));  // a plugin's window: a row picked, a button, closed
         else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
             long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;
             size_t to = (size_t)std::max(0LL, std::min(end, (long long)b->lines.size()));
@@ -982,6 +987,7 @@ void Web::snapshot(Client& cl) {
     auto send = [&](const std::string& j) { cl.conn.out += ws_frame(j); };
     send(theme_json());
     send(std::string("{\"t\":\"ss\",\"on\":") + (c.screen_by.empty() ? "false" : "true") + "}");  // off too: a page back from a dropped connection may still show one
+    send(radio_json());  // off too, locked or not: a page that was playing a direct stream while iSekur restarted must stop
     if (c.locked) { send(lock_json()); return; }  // the rest once it's unlocked
     sent_nicks.clear();  // the next update of each goes out whole to everyone, whatever this one got
     for (auto& b : c.bufs) {
@@ -997,6 +1003,7 @@ void Web::snapshot(Client& cl) {
     send(split_json());
     send(dcc_json());
     send(update_json());
+    if (c.pwin.open) send(pwin_json());
 }
 
 std::string Web::update_json() { return "{\"t\":\"update\",\"ver\":" + json_str(c.update_ver) + "}"; }
@@ -1122,6 +1129,32 @@ bool Web::attached() const {
     return false;
 }
 
+void Web::radio_data(const char* d, size_t n) {
+    time_t now = time(nullptr);
+    for (auto& cl : clients) {
+        if (!cl->radio || cl->conn.closing) continue;
+        if (!d) { cl->conn.closing = true; continue; }  // the stream ended
+        if (cl->conn.out.size() > (1 << 19)) { cl->conn.closing = true; continue; }  // a browser that can't keep up: live audio isn't kept for it
+        cl->conn.out.append(d, n), cl->since = now;
+    }
+}
+
+std::string Web::radio_json() {
+    return std::string("{\"t\":\"radio\",\"state\":\"") + (c.radio.st == Core::Radio::PLAYING ? "playing" : c.radio.st == Core::Radio::RESOLVING ? "resolving" : "off") +
+           "\",\"name\":" + json_str(c.radio.name) + ",\"host\":" + (c.radio.host ? "true" : "false") + ",\"muted\":" + (c.radio.muted ? "true" : "false") + ",\"volume\":" + std::to_string(c.radio.volume) + ",\"direct\":" + json_str(c.radio.direct ? c.radio.url : "") + "}";
+}
+
+std::string Web::pwin_json() {
+    auto arr = [](const std::vector<std::string>& v) {
+        std::string o = "[";
+        for (auto& x : v) o += (o.size() > 1 ? "," : "") + json_str(x);
+        return o + "]";
+    };
+    const Core::PWin& w = c.pwin;
+    return std::string("{\"t\":\"pwin\",\"open\":") + (w.open ? "true" : "false") + ",\"title\":" + json_str(w.title) + ",\"display\":" + arr(w.display) +
+           ",\"items\":" + arr(w.items) + ",\"buttons\":" + arr(w.buttons) + ",\"icons\":" + arr(w.icons) + ",\"sel\":" + std::to_string(w.sel) + ",\"mark\":" + std::to_string(w.mark) + ",\"star\":" + std::to_string(w.star) + ",\"reels\":" + std::to_string(w.reels) + ",\"slider\":" + std::to_string(w.slider) + ",\"smax\":" + std::to_string(w.slider_max) + ",\"sstep\":" + std::to_string(w.slider_step) + ",\"sicon\":" + json_str(w.slider_icon) + "}";
+}
+
 void Web::broadcast(const std::string& json) {
     std::string f = ws_frame(json);
     for (auto& cl : clients) {
@@ -1238,6 +1271,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
                 if (cl->ws && !cl->conn.closing) snapshot(*cl);
         return;
     }
+    if (e == Ev::RADIO) { broadcast(radio_json()); return; }  // the state only: a Stop must reach a locked browser too
     if (c.locked) return;  // nothing of the session while locked
     switch (e) {
     case Ev::LINE: {
@@ -1267,6 +1301,8 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::BELL: broadcast(l ? "{\"t\":\"bell\",\"soft\":1}" : "{\"t\":\"bell\"}"); break;
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
     case Ev::LOCK: case Ev::SCREEN: break;  // above
+    case Ev::RADIO: break;  // above
+    case Ev::PWIN: broadcast(pwin_json()); break;
     case Ev::UPDATE: broadcast(update_json()); break;
     case Ev::BANS: broadcast(bans_json(c, b)); break;
     case Ev::EMBED:  // a plugin's preview under a line already sent: the line's whole list again

@@ -354,6 +354,13 @@ static std::vector<Row> status_info(const Core& c, Style st, bool dcc = true) {
             cells(out.back(), "\u21E3" + std::to_string(offers) + " offered (/dcc)", sty(T, "hilight", "status_hi"), false);
         }
     }
+    if (c.radio.st != Core::Radio::OFF) {  // a plugin's radio: R: ON (MUTE when muted, … while it tunes), always, next to the items you chose
+        bool play = c.radio.st == Core::Radio::PLAYING;
+        Row r;
+        cells(r, "R: ", st, false);
+        cells(r, c.radio.muted ? "MUTE" : play ? "ON" : "\u2026", level_style(T, play && !c.radio.muted ? 0 : 1, st), false);
+        out.push_back(r);
+    }
     if (has("up")) add("u:" + fmt_dur((long)(time(nullptr) - c.started)));
     // label in st, the value in its level's color
     auto leveled = [&](const std::string& label, const std::string& val, const std::string& key, const char* def, int pct) {
@@ -1205,6 +1212,12 @@ void Tui::draw() {
         present();
         return;
     }
+    if (c.pwin.open) {  // a plugin's window (the radio's)
+        draw_pwin(W, H);
+        present();
+        return;
+    }
+    if (pu.live) pu = PWinUi{};
     if (sw.open) {  // /set: the settings window has the keys (a question over it: perform's delete, or the lock password a guarded key asks for)
         draw_settings(W, H);
         if (c.asking(c.active))
@@ -2417,6 +2430,184 @@ void Tui::plugin_mouse(int k, int x, int y) {
     if (again) plugin_key(TB_KEY_ENTER, 0);
 }
 
+// a plugin's window (isekur.window): a display (the first line in the title color, with a cassette's reels when the plugin asks), a
+// filter (/), the list, the buttons. The cursor is ours (Core::pwin.sel only moves it when the plugin changes it); Enter or a double
+// click picks the row, a button is pressed by its first letter or a click
+std::vector<int> Tui::pwin_vis() const {
+    std::string q = to_utf8(pu.q);
+    for (char& ch : q) ch = (char)tolower((unsigned char)ch);
+    std::vector<int> v;
+    for (size_t i = 0; i < c.pwin.items.size(); i++) {
+        std::string t = c.pwin.items[i];
+        for (char& ch : t) ch = (char)tolower((unsigned char)ch);
+        if (q.empty() || t.find(q) != std::string::npos) v.push_back((int)i + 1);
+    }
+    return v;
+}
+
+void Tui::draw_pwin(int W, int H) {
+    const Core::PWin& w = c.pwin;
+    const Theme& T = c.look(false);
+    Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
+          sel = sty(T, "menu_sel", "tab_active"), keyst = sty(T, "set_key", "info"), ok = T.get("join"), fs = T.get("input");
+    for (Style* st : {&ls, &dim, &keyst, &ok}) st->bg = bs.bg, st->attr = 0;
+    for (Style* st : {&dim, &keyst, &ok}) st->fg = readable(st->fg, bs.bg);
+    hs.attr |= A_BOLD, keyst.attr |= A_BOLD;
+    if (!pu.live) pu = PWinUi{}, pu.live = true;
+    if (w.sel != pu.last_sel) pu.last_sel = w.sel, pu.cur = w.sel ? w.sel : pu.cur;
+    auto vis = pwin_vis();
+    int n = (int)vis.size(), at = (int)(std::find(vis.begin(), vis.end(), pu.cur) - vis.begin());
+    if (at >= n) at = 0, pu.cur = n ? vis[0] : 0;  // the cursor's row is filtered out: the first one
+    int fr = w.items.size() >= 6 ? 1 : 0;  // the filter row
+    int nd = std::max(1, std::min((int)w.display.size(), 4));
+    int sr = w.slider >= 0 ? 1 : 0;  // the slider row (volume)
+    pu.rows = n ? std::max(1, std::min({n, H - nd - 9 - fr - sr, 12})) : 0;
+    pu.w = std::min(W - 2, 64), pu.x0 = (W - pu.w) / 2;
+    int bh = nd + pu.rows + 6 + fr + sr, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pu.x0 + pu.w, xm = x1 - 2;
+    int ly = y0 + 1;  // the display's top border
+    int fy = ly + nd + 2;
+    pu.fy = fr ? fy : -1;
+    pu.list_y = fy + fr, pu.sy = sr ? pu.list_y + pu.rows : -1, pu.btn_y = pu.list_y + pu.rows + sr;
+    int hint_y = pu.btn_y + 1;
+    if (n) {
+        if (at < pu.top) pu.top = at;
+        if (at >= pu.top + pu.rows) pu.top = at - pu.rows + 1;
+        pu.top = std::max(0, std::min(pu.top, n - pu.rows));
+    } else pu.top = 0;
+    gutters(W, pu.x0, x1, y0, y0 + bh, T.get("default"));
+    for (int yy = y0; yy < y0 + bh; yy++) fill(yy, pu.x0, x1, bs);
+    for (int xx = pu.x0; xx < x1; xx++) cell(xx, y0, U'─', ls), cell(xx, y0 + bh - 1, U'─', ls);
+    for (int yy = y0; yy < y0 + bh; yy++) cell(pu.x0, yy, U'│', ls), cell(x1 - 1, yy, U'│', ls);
+    cell(pu.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(pu.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
+    if (auto cb = box_title(T, pu.x0, x1 - 1, y0, w.title, hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'w'};
+    // the display: a panel of its own
+    int lx0 = pu.x0 + 2, lx1 = x1 - 2;
+    for (int xx = lx0; xx < lx1; xx++) cell(xx, ly, U'─', ls), cell(xx, ly + nd + 1, U'─', ls);
+    for (int yy = ly; yy <= ly + nd + 1; yy++) cell(lx0, yy, U'│', ls), cell(lx1 - 1, yy, U'│', ls);
+    cell(lx0, ly, U'┌', ls), cell(lx1 - 1, ly, U'┐', ls), cell(lx0, ly + nd + 1, U'└', ls), cell(lx1 - 1, ly + nd + 1, U'┘', ls);
+    for (int i = 0; i < nd; i++)
+        if (i < (int)w.display.size()) text(lx0 + 2, ly + 1 + i, i || w.reels < 0 ? lx1 - 2 : lx1 - 10, w.display[(size_t)i], i ? dim : keyst, false);
+    if (w.reels >= 0) {  // a cassette's two reels, turning ~8 times a second while it plays
+        static const char32_t arc[] = {U'◜', U'◝', U'◞', U'◟'};
+        char32_t r = w.reels ? arc[(now_ms() / 120) % 4] : U'○';
+        int rx = lx1 - 9;
+        cell(rx, ly + 1, U'[', ls), cell(rx + 1, ly + 1, r, keyst), cell(rx + 2, ly + 1, U'═', ls), cell(rx + 3, ly + 1, U'═', ls), cell(rx + 4, ly + 1, U'═', ls), cell(rx + 5, ly + 1, r, keyst), cell(rx + 6, ly + 1, U']', ls);
+    }
+    if (fr) {  // the filter
+        std::string f = "/ " + to_utf8(pu.q);
+        fill(fy, pu.x0 + 2, x1 - 2, fs);  // an input field, even while it isn't typing
+        if (pu.filtering) {
+            int ex = text(pu.x0 + 3, fy, xm - 1, f, fs, false);
+            tb_set_cursor(std::min(ex, x1 - 4), fy);
+        } else {
+            Style ph = fs;
+            ph.fg = readable(dim.fg, fs.bg), ph.attr = 0;
+            text(pu.x0 + 3, fy, xm - 1, pu.q.empty() ? "/ search stations: press / or click here" : f, pu.q.empty() ? ph : fs, false);
+        }
+    }
+    for (int i = 0; i < pu.rows && pu.top + i < n; i++) {
+        int k = vis[(size_t)(pu.top + i)], y = pu.list_y + i;
+        bool on = k == pu.cur;
+        Style st = on ? sel : bs;
+        fill(y, pu.x0 + 1, x1 - 1, st);
+        text(pu.x0 + 2, y, xm, k == w.mark ? "▶" : " ", on ? st : ok, false);  // ▶ playing, ★ favorite: two narrow columns before the name
+        text(pu.x0 + 3, y, xm, k == w.star ? "★" : " ", on ? st : keyst, false);
+        text(pu.x0 + 5, y, xm, w.items[(size_t)k - 1], st, false);
+    }
+    if (!n && !w.items.empty()) text(pu.x0 + 5, pu.list_y, xm, "Nothing matches", dim, false);
+    if (sr) {  // the slider: an icon, a bar, the value
+        int x = text(pu.x0 + 2, pu.sy, xm, w.slider_icon.empty() ? " " : w.slider_icon, keyst, false);
+        pu.bar0 = x + 1, pu.barn = std::max(8, xm - 7 - pu.bar0);
+        int filled = w.slider_max ? (int)((long long)w.slider * pu.barn / w.slider_max) : 0;
+        for (int i = 0; i < pu.barn; i++) cell(pu.bar0 + i, pu.sy, i < filled ? U'█' : U'░', i < filled ? keyst : dim);
+        char pct[16];
+        snprintf(pct, sizeof pct, "%3d%%", w.slider);
+        text(pu.bar0 + pu.barn + 1, pu.sy, xm, pct, hs, false);
+    }
+    pu.bx.clear();
+    int x = pu.x0 + 2;
+    for (size_t bi = 0; bi < w.buttons.size(); bi++) {
+        std::u32string u = from_utf8(w.buttons[bi]);
+        int xs = x;
+        x = text(x, pu.btn_y, xm, "[ " + (bi < w.icons.size() && !w.icons[bi].empty() ? w.icons[bi] + " " : ""), hs, false);
+        x = text(x, pu.btn_y, xm, to_utf8(u.substr(0, 1)), keyst, false);
+        x = text(x, pu.btn_y, xm, to_utf8(u.substr(std::min<size_t>(1, u.size()))) + " ]", hs, false);
+        pu.bx.push_back({xs, x - 1});
+        x += 1;
+    }
+    std::string keys;  // the buttons' first letters
+    for (auto& b : w.buttons) keys += (keys.empty() ? "" : " ") + b.substr(0, 1);
+    text(pu.x0 + 2, hint_y, xm, pu.filtering ? "type to filter · Enter keeps it · Esc clears" :
+         std::string("↑↓ Enter picks") + (sr ? " · ←→ volume" : "") + (fr ? " · / filter" : "") + (keys.empty() ? "" : " · " + keys) + " · Esc", dim, false);
+}
+
+void Tui::pwin_key(int k, uint32_t ch) {
+    const Core::PWin& w = c.pwin;
+    auto vis = pwin_vis();
+    int n = (int)vis.size(), at = (int)(std::find(vis.begin(), vis.end(), pu.cur) - vis.begin());
+    auto go = [&](int to) { if (n) pu.cur = vis[(size_t)std::max(0, std::min(n - 1, to))]; };
+    auto fix = [&] {  // the filter changed: the cursor stays on its row if it still shows, else the first
+        auto v = pwin_vis();
+        if (v.empty()) pu.cur = 0;
+        else if (std::find(v.begin(), v.end(), pu.cur) == v.end()) pu.cur = v[0], pu.top = 0;
+    };
+    bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2, arrow = k == TB_KEY_ARROW_DOWN || k == TB_KEY_ARROW_UP || k == TB_KEY_PGDN || k == TB_KEY_PGUP;
+    if (pu.filtering && !arrow) {
+        if (k == TB_KEY_ESC) pu.q.clear(), pu.filtering = false, fix();
+        else if (k == TB_KEY_ENTER) pu.filtering = false;
+        else if (bs) { if (!pu.q.empty()) pu.q.pop_back(); fix(); }
+        else if (ch || k == TB_KEY_SPACE) pu.q += ch ? (char32_t)ch : U' ', fix();
+        return;
+    }
+    if (ch == ' ') k = TB_KEY_SPACE, ch = 0;
+    if (k == TB_KEY_ESC) {
+        if (!pu.q.empty()) pu.q.clear(), fix();
+        else c.pwin_act("close", 0), pu = Tui::PWinUi{};
+    }
+    else if (k == TB_KEY_ARROW_DOWN) go(at >= n ? 0 : at + 1);
+    else if (k == TB_KEY_ARROW_UP) go(at >= n ? 0 : at - 1);
+    else if (k == TB_KEY_PGDN) go(at + std::max(1, pu.rows));
+    else if (k == TB_KEY_PGUP) go(at - std::max(1, pu.rows));
+    else if (w.slider >= 0 && (k == TB_KEY_ARROW_LEFT || k == TB_KEY_ARROW_RIGHT || ch == '+' || ch == '=' || ch == '-'))
+        c.pwin_act("slider", w.slider + (k == TB_KEY_ARROW_RIGHT || ch == '+' || ch == '=' ? 1 : -1) * w.slider_step);
+    else if (k == TB_KEY_ENTER) { if (pu.cur) c.pwin_act("pick", pu.cur); }
+    else if (ch == '/' && w.items.size() >= 6) pu.filtering = true;
+    else if (ch) {  // a button's first letter
+        for (size_t i = 0; i < w.buttons.size(); i++) {
+            std::u32string u = from_utf8(w.buttons[i]);
+            if (!u.empty() && (char32_t)tolower((int)u[0]) == (char32_t)tolower((int)ch)) { c.pwin_act("button", pu.cur, (int)i + 1); break; }
+        }
+    }
+}
+
+void Tui::pwin_mouse(int k, int x, int y) {
+    const Core::PWin& w = c.pwin;
+    if (w.slider >= 0 && y == pu.sy) {  // the slider row: the wheel steps it, a click sets it
+        if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) c.pwin_act("slider", w.slider + (k == TB_KEY_MOUSE_WHEEL_UP ? 1 : -1) * w.slider_step);
+        else if (k == TB_KEY_MOUSE_LEFT && x >= pu.bar0 && x < pu.bar0 + pu.barn) {
+            int v = (int)((long long)(x - pu.bar0 + 1) * w.slider_max / pu.barn);
+            c.pwin_act("slider", (v + w.slider_step / 2) / w.slider_step * w.slider_step);
+        }
+        return;
+    }
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { pwin_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
+    if (k != TB_KEY_MOUSE_LEFT) return;
+    if (y == pu.fy && x > pu.x0 && x < pu.x0 + pu.w - 1) { pu.filtering = true; return; }  // the filter field
+    if (y == pu.btn_y) {
+        for (size_t i = 0; i < pu.bx.size(); i++)
+            if (x >= pu.bx[i].first && x <= pu.bx[i].second) { c.pwin_act("button", pu.cur, (int)i + 1); return; }
+        return;
+    }
+    auto vis = pwin_vis();
+    int i = y - pu.list_y;
+    if (i < 0 || i >= pu.rows || pu.top + i >= (int)vis.size() || x <= pu.x0 || x >= pu.x0 + pu.w - 1) return;
+    int row = vis[(size_t)(pu.top + i)];
+    long long now = now_ms();
+    bool again = pu.cur == row && now - pu.click_ms < 500;
+    pu.click_ms = now, pu.cur = row;
+    if (again) pwin_key(TB_KEY_ENTER, 0);
+}
+
 // a click previews a theme (again, or a double click: keeps it); the wheel moves
 void Tui::theme_mouse(int k, int x, int y) {
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { theme_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
@@ -2903,7 +3094,7 @@ void Tui::on_readable() {
         if ((ev.type == TB_EVENT_KEY || ev.type == TB_EVENT_MOUSE) && c.wake()) { c.dirty = true; continue; }  // it only ends the screensaver
         keyed |= ev.type == TB_EVENT_KEY;
         if (enter) input.insert(cur++, 1, U'\n'), enter = false;
-        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || lw.open || bw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || c.pwin.open || lw.open || bw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -2920,7 +3111,7 @@ void Tui::on_readable() {
     bool moved = id != typed_id;
     typed_id = id;
     // only after keys here (or a tab change): a mouse move or a resize must not say "done" while you type in the webchat
-    if (c.active && (keyed || moved)) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open || lw.open || bw.open ? "" : to_utf8(input));
+    if (c.active && (keyed || moved)) c.typed(c.active, c.locked || sw.open || tw.open || fw.open || pw.open || c.pwin.open || lw.open || bw.open ? "" : to_utf8(input));
 }
 
 bool Tui::action(const std::string& a) {
@@ -2984,6 +3175,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
     if (kw.open) { keys_key(k, ch); return; }
     if (pw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) plugin_key(k, ch); return; }
+    if (c.pwin.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) pwin_key(k, ch); return; }
     if (lw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) logs_key(k, ch); return; }
     if (bw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) bans_key(k, ch); return; }
     if (!menu.items.empty()) {  // the nick menu has the keys until it closes
@@ -3255,6 +3447,7 @@ void Tui::close_box() {
     case 'f': fw.open = false; break;
     case 'k': kw.open = false; break;
     case 'g': pw.open = false; break;
+    case 'w': c.pwin_act("close", 0); break;  // a plugin's window: its plugin is told
     case 'l': lw.open = false; break;
     case 'b': bw.open = false; break;
     case 'u': bw.ask.clear(); break;
@@ -3281,6 +3474,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
     if (fw.open) { if (!(mod & TB_MOD_MOTION)) find_mouse(k, x, y); return; }
     if (pw.open) { if (!(mod & TB_MOD_MOTION)) plugin_mouse(k, x, y); return; }
+    if (c.pwin.open) { if (!(mod & TB_MOD_MOTION)) pwin_mouse(k, x, y); return; }
     if (lw.open) { if (!(mod & TB_MOD_MOTION)) logs_mouse(k, x, y); return; }
     if (bw.open) { if (!(mod & TB_MOD_MOTION)) bans_mouse(k, x, y); return; }
     if (kw.open) {  // the wheel scrolls, a click outside closes

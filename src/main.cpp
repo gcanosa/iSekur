@@ -319,6 +319,7 @@ int main(int argc, char** argv) {
     } else c.info_note(home, "BNC off: /bnc start, or /set bnc.autostart on");
     c.fifo_open();  // [general] fifo: a named pipe (not on native Windows)
     c.listener = [&](Ev e, Buffer* b, const Line* l) { web.on_event(e, b, l); };
+    c.radio_sink = [&](const char* d, size_t n) { web.radio_data(d, n); };
 
     Tui tui(c);
     if (local && !tui.init(err)) { fprintf(stderr, "terminal: %s\n", err.c_str()); return 1; }
@@ -370,6 +371,8 @@ int main(int argc, char** argv) {
         for (auto& d : c.dccs)
             if (d->conn.fd >= 0) fds.push_back({d->conn.fd, d->conn.events(), 0});
             else if (d->lfd >= 0) fds.push_back({d->lfd, POLLIN, 0});
+        size_t radio0 = fds.size();
+        c.radio_fds(fds);
 
         Buffer* about = c.tty && c.active && !c.active->srv && c.active->name == "*about" && c.active->lines.size() >= 6 ? c.active : nullptr;
         bool typing = c.tty && now_ms() < c.typing_until;  // a line is typing itself out: redraw ~30 times a second
@@ -378,6 +381,9 @@ int main(int argc, char** argv) {
         if (c.tty && now_ms() < tui.ts_anim_until) wait = std::min(wait, 33), c.dirty = true;  // timestamp_hover: a time fading
         if (!c.screen_by.empty()) wait = std::min(wait, 1000 / c.screen_fps);
         if (c.flash_until) wait = std::min(wait, (int)std::max(0LL, c.flash_until - now_ms()));
+        if (c.radio_on() || !c.radio.dying.empty()) wait = std::min(wait, 1000);  // its timeouts and restarts
+        bool reels = c.tty && c.pwin.open && c.pwin.reels == 1;  // a plugin window's cassette turns in the terminal: ~8 frames a second
+        if (reels) wait = std::min(wait, 120);
         if (c.tty && tui.in_selecting) wait = std::min(wait, 40);  // a drag over the input line held at an edge scrolls it
         if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep
             long long ph = (now_ms() - c.about_t0) % 3500;
@@ -388,7 +394,7 @@ int main(int argc, char** argv) {
         probe.lap("before the wait");
         if (wait_fds(fds, wait) < 0 && errno != EINTR) break;
         probe.skip();
-        if (typing) c.dirty = true;
+        if (typing || reels) c.dirty = true;
         if (c.tty && tui.in_selecting) tui.input_edge();
         if (c.flash_until && now_ms() >= c.flash_until) c.flash.clear(), c.flash_until = 0, c.dirty = true;
         guard("shell tabs", [&] { c.terms_poll(fds, term0); });  // first: nothing has closed a tab yet, so the order still holds
@@ -413,6 +419,7 @@ int main(int argc, char** argv) {
         probe.lap("BNC");
         guard("FIFO", [&] { c.fifo_poll(fds, fifo0); });
         guard("/exec", [&] { c.jobs_poll(fds, job0); });
+        guard("radio", [&] { c.radio_poll(fds, radio0); });
         probe.lap("FIFO, /exec");
         crumb_stage("session");
         int t = ses.process(fds, c.tty);
@@ -480,7 +487,8 @@ int main(int argc, char** argv) {
 
         time_t now = time(nullptr);
         c.set_attached(c.tty || web.attached() || bnc.attached());
-        if (bool ui = c.tty || web.attached(); ui != c.ui_on) {  // someone sits down: idle starts over; nobody left: no screensaver
+        c.web_up = web.attached();
+        if (bool ui = c.tty || c.web_up; ui != c.ui_on) {  // someone sits down: idle starts over; nobody left: no screensaver
             c.ui_on = ui;
             if (ui) c.active_at = now;
             else ss_resume = c.locked && !c.screen_by.empty(), c.screen_end();
@@ -548,6 +556,7 @@ int main(int argc, char** argv) {
         for (size_t i = 0; i < polled.size(); i++)
             if (fds[i].revents) polled[i]->conn.pump(fds[i].revents, polled[i]->inbuf);
     }
+    c.radio_stop();  // its ffmpeg and player go with us
     c.save_history();
     c.fifo_close();
     if (c.tty) tui.shutdown();

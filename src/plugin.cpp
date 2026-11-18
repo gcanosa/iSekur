@@ -668,6 +668,153 @@ static int l_view(lua_State* L) {
     c.notify(Ev::THEME, nullptr);
     return lua_pushboolean(L, 1), 1;
 }
+// isekur.radio(url, {name, host, direct, volume}): plays a stream (http or https; a YouTube channel's /live too) for the webchat's browsers and,
+// with host, this machine's speakers. direct: nothing runs here, the webchat's browsers connect to the stream themselves (an https one that isn't YouTube). true, or nil and why (no ffmpeg, no yt-dlp, no player). isekur.radio(false) stops yours.
+// isekur.radio() says what's on: {state = "off", "resolving" or "playing", name, host, direct, web (a webchat is attached), muted, volume, err (why the last one stopped)}
+static int l_radio(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (lua_isnone(L, 1)) {
+        bool mine = c.radio_on() && c.radio.by == p->name;
+        lua_createtable(L, 0, 5);
+        lua_pushstring(L, !mine ? "off" : c.radio.st == Core::Radio::PLAYING ? "playing" : "resolving"), lua_setfield(L, -2, "state");
+        lua_pushstring(L, mine ? c.radio.name.c_str() : ""), lua_setfield(L, -2, "name");
+        lua_pushboolean(L, mine && c.radio.host), lua_setfield(L, -2, "host");
+        lua_pushboolean(L, c.web_up), lua_setfield(L, -2, "web");
+        lua_pushboolean(L, mine && c.radio.muted), lua_setfield(L, -2, "muted");
+        lua_pushboolean(L, mine && c.radio.direct), lua_setfield(L, -2, "direct");
+        lua_pushinteger(L, c.radio.volume), lua_setfield(L, -2, "volume");
+        lua_pushstring(L, c.radio.err.c_str()), lua_setfield(L, -2, "err");
+        return 1;
+    }
+    if (!lua_isstring(L, 1)) {
+        if (c.radio_on() && c.radio.by == p->name) c.radio_stop(), c.radio.muted = false;  // Stop: the next one starts with sound
+        return 0;
+    }
+    std::string url = str_arg(L, 1), name = url;
+    bool host = false, direct = false;
+    if (lua_istable(L, 2)) {
+        lua_getfield(L, 2, "name");
+        if (lua_isstring(L, -1)) name = one_line(lua_tostring(L, -1)).substr(0, 120);
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "host");
+        host = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "direct");
+        direct = lua_toboolean(L, -1);
+        lua_pop(L, 1);
+        lua_getfield(L, 2, "volume");
+        if (lua_isnumber(L, -1)) c.radio.volume = (int)std::clamp<lua_Number>(lua_tonumber(L, -1), 0, 150);
+        lua_pop(L, 1);
+    }
+    std::string why = c.radio_start(p->name, url, name, host, direct);
+    if (!why.empty()) return lua_pushnil(L), lua_pushstring(L, why.c_str()), 2;
+    return lua_pushboolean(L, 1), 1;
+}
+
+// isekur.radio_volume(percent): the volume of your radio, 0-150 (100: as it comes), live; returns it. isekur.radio's volume option sets it at the start
+static int l_radio_volume(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (!lua_isnone(L, 1) && (!c.radio_on() || c.radio.by == p->name)) c.radio_volume((int)luaL_checkinteger(L, 1));
+    return lua_pushinteger(L, c.radio.volume), 1;
+}
+// isekur.radio_mute(on): mutes or unmutes your radio, the webchat's sound and the player on this machine; the state
+static int l_radio_mute(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (c.radio_on() && c.radio.by == p->name && !lua_isnone(L, 1)) c.radio_mute(lua_toboolean(L, 1));
+    return lua_pushboolean(L, c.radio_on() && c.radio.by == p->name && c.radio.muted), 1;
+}
+
+// the strings of t[key] (a list), one line each, at most n of them and len bytes each (never cut inside a UTF-8 character)
+static std::vector<std::string> str_list(lua_State* L, int t, const char* key, size_t n, size_t len) {
+    std::vector<std::string> v;
+    lua_getfield(L, t, key);
+    if (lua_istable(L, -1))
+        for (lua_Integer i = 1; (size_t)v.size() < n; i++) {
+            lua_rawgeti(L, -1, i);
+            if (lua_isnil(L, -1)) { lua_pop(L, 1); break; }
+            std::string s = luaL_tolstring(L, -1, nullptr);
+            lua_pop(L, 2);
+            for (char& ch : s)
+                if ((unsigned char)ch < 32 || ch == 127) ch = ' ';
+            if (s.size() > len) {
+                s.resize(len);
+                while (!s.empty() && ((unsigned char)s.back() & 0xc0) == 0x80) s.pop_back();
+                if (!s.empty() && (unsigned char)s.back() >= 0xc0) s.pop_back();
+            }
+            v.push_back(s);
+        }
+    lua_pop(L, 1);
+    return v;
+}
+// isekur.window{title, display = {lines}, items = {rows}, sel, mark, star, buttons = {labels}, icons = {a symbol for each button}, reels, slider = {value, max, step, icon}}: opens or updates your window, in the
+// terminal and the webchat. sel is the row the cursor starts on (it moves when this number changes), mark the row that is playing and
+// star one drawn with a ★ (1-based, 0: none). reels: a cassette in the display, its reels turning when true, still when false (nothing if left out). A click, Enter or Esc comes back as the `window` event. isekur.window(false) closes it, isekur.window() says if it's open
+static int l_window(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (lua_isnone(L, 1)) return lua_pushboolean(L, c.pwin.open && c.pwin.by == p->name), 1;
+    if (!lua_istable(L, 1)) {
+        if (c.pwin.open && c.pwin.by == p->name) c.pwin = Core::PWin{}, c.dirty = true, c.notify(Ev::PWIN, nullptr);
+        return 0;
+    }
+    Core::PWin w;
+    w.by = p->name, w.open = true;
+    lua_getfield(L, 1, "title");
+    w.title = lua_isstring(L, -1) ? one_line(lua_tostring(L, -1)).substr(0, 60) : p->name;
+    lua_pop(L, 1);
+    w.display = str_list(L, 1, "display", 4, 200), w.items = str_list(L, 1, "items", 300, 120), w.buttons = str_list(L, 1, "buttons", 6, 16), w.icons = str_list(L, 1, "icons", 6, 8);
+    auto row = [&](const char* k) {
+        lua_getfield(L, 1, k);
+        int r = lua_isnumber(L, -1) ? (int)std::clamp<lua_Number>(lua_tonumber(L, -1), 0, (lua_Number)w.items.size()) : 0;
+        lua_pop(L, 1);
+        return r;
+    };
+    w.sel = row("sel"), w.mark = row("mark"), w.star = row("star");
+    lua_getfield(L, 1, "reels");
+    w.reels = lua_isboolean(L, -1) ? lua_toboolean(L, -1) : -1;
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "slider");  // {value, max, step, icon}: a bar under the list (the radio's volume)
+    if (lua_istable(L, -1)) {
+        auto num = [&](const char* k, int def, int lo, int hi) { lua_getfield(L, -1, k); int r = lua_isnumber(L, -1) ? (int)std::clamp<lua_Number>(lua_tonumber(L, -1), lo, hi) : def; lua_pop(L, 1); return r; };
+        w.slider_max = num("max", 100, 1, 1000), w.slider_step = num("step", 5, 1, w.slider_max), w.slider = num("value", 0, 0, w.slider_max);
+        lua_getfield(L, -1, "icon");
+        if (lua_isstring(L, -1)) w.slider_icon = one_line(lua_tostring(L, -1)).substr(0, 8);
+        lua_pop(L, 1);
+    }
+    lua_pop(L, 1);
+    if (!c.pwin.same(w)) c.pwin = w, c.dirty = true, c.notify(Ev::PWIN, nullptr);
+    return 0;
+}
+
+// a click, Enter or Esc in the plugin's window: its `window` event (action "pick" with the row, "button" with the button and the row
+// the cursor is on, "close"); only to the plugin that owns it
+void Core::pwin_act(const std::string& a, int i, int bt) {
+    if (!pwin.open) return;
+    std::string by = pwin.by;
+    PArgs args{{"action", a == "close" ? std::string("close") : a == "pick" ? std::string("pick") : a == "slider" ? std::string("slider") : std::string("button")}};
+    if (a == "close") pwin = PWin{}, dirty = true, notify(Ev::PWIN, nullptr);
+    else if (a == "slider") {  // its new value; the other side (terminal or webchat) follows
+        if (pwin.slider < 0) return;
+        i = std::clamp(i, 0, pwin.slider_max);
+        pwin.slider = i, dirty = true;
+        notify(Ev::PWIN, nullptr);
+        args.push_back({"value", i});
+    } else {
+        i = std::clamp(i, 0, (int)pwin.items.size());
+        if (i) pwin.sel = i;
+        args.push_back({"index", i});
+        if (a != "pick") {
+            if (bt < 1 || bt > (int)pwin.buttons.size()) return;
+            args.push_back({"button", pwin.buttons[(size_t)bt - 1]});
+        }
+    }
+    emit_only = by;
+    plugin_emit("window", nullptr, "", args);
+    emit_only.clear();
+}
 static int l_inactive(lua_State* L) { lua_pushinteger(L, time(nullptr) - self(L)->c->active_at); return 1; }
 static int l_lock(lua_State* L) {  // lock(): locks like /lock when a lock password is set; false: none is
     Core& c = *self(L)->c;
@@ -721,7 +868,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"servers", l_servers}, {"channels", l_channels}, {"away", l_away}, {"attached", l_attached},
         {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time}, {"me", l_me}, {"nick", l_nick}, {"rank", l_rank},
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
-        {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
+        {"radio", l_radio}, {"radio_mute", l_radio_mute}, {"radio_volume", l_radio_volume}, {"window", l_window}, {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
         {"platform", l_platform}, {"which", l_which}, {"run", l_run}, {"speak_web", l_speak_web}, {"theme", l_theme},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
@@ -777,8 +924,11 @@ std::string Core::plugin_opt(const std::string& name, const std::string& key, co
     return ini_get(cfg, sec, key, def);
 }
 
-static void view_gone(Core& c) {  // the view's plugin went (disabled, removed, unloaded): the configured look again
-    if (!c.view.by.empty() && std::none_of(c.plugins.begin(), c.plugins.end(), [&](auto& p) { return p->name == c.view.by && !p->dead; })) c.view_end();
+static void view_gone(Core& c) {  // a plugin went (disabled, removed, unloaded): its view ends (the configured look again), its radio stops, its window closes
+    auto up = [&](const std::string& n) { return std::any_of(c.plugins.begin(), c.plugins.end(), [&](auto& p) { return p->name == n && !p->dead; }); };
+    if (!c.view.by.empty() && !up(c.view.by)) c.view_end();
+    if (c.radio_on() && !up(c.radio.by)) c.radio_stop();
+    if (c.pwin.open && !up(c.pwin.by)) c.pwin = Core::PWin{}, c.dirty = true, c.notify(Ev::PWIN, nullptr);
 }
 static void reap(Core& c) {
     if (c.plugin_depth) return;
@@ -836,7 +986,7 @@ bool Core::plugin_emit(const char* ev, const Server* s, const std::string& targe
     auto list = plugins;  // kept alive, whatever a handler does
     for (auto& p : list) {
         auto h = p->on.find(ev);
-        if (p->dead || h == p->on.end()) continue;
+        if (p->dead || h == p->on.end() || (!emit_only.empty() && p->name != emit_only)) continue;
         if (s && !truthy(plugin_opt(p->name, "enabled", s, target, "off", 'c'))) continue;  // off in this network or channel
         for (int ref : std::vector<int>(h->second)) {
             if (p->dead) break;
@@ -847,6 +997,7 @@ bool Core::plugin_emit(const char* ev, const Server* s, const std::string& targe
             if (!target.empty()) lua_pushstring(L, target.c_str()), lua_setfield(L, -2, "target");
             for (auto& [k, v] : args) {
                 if (auto* str = std::get_if<std::string>(&v)) lua_pushlstring(L, str->data(), str->size());
+                else if (auto* n = std::get_if<int>(&v)) lua_pushinteger(L, *n);
                 else lua_pushboolean(L, std::get<bool>(v));
                 lua_setfield(L, -2, k);
             }

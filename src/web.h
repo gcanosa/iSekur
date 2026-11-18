@@ -24,6 +24,7 @@ struct Web {
     bool running() const { return !lfds.empty(); }
     bool attached() const;  // a logged-in browser is connected
     std::string stat_json();  // the status line: per network umodes, lag and away, status_info
+    void radio_data(const char* d, size_t n);  // the radio's MP3 to every /radio/stream; (nullptr, 0): it ended, they close
     std::map<std::string, std::pair<int, time_t>> fails;  // failed logins: ip (or "via <proxy peer>") -> (count, locked until)
 
 private:
@@ -40,6 +41,7 @@ private:
         std::string bio_chal;    // the Face ID challenge it was given (raw), single use
         time_t bio_until = 0;
         bool bio_new = false;    // bio_chal is for setting up a device (the password was right)
+        bool radio = false;    // GET /radio/stream: the radio's MP3 goes into conn.out as it comes
         FILE* file = nullptr;  // GET /files/name: streamed into conn.out as it drains
         unsigned long long left = 0;
         ~Client() { if (file) fclose(file); }
@@ -81,6 +83,8 @@ private:
     long long ss_at = 0;
     std::vector<Core::SCell> ss_last;
     void screen_poll();
+    std::string radio_json();    // the radio: state (off, resolving, playing), name, host
+    std::string pwin_json();     // a plugin's window
     std::string update_json();   // /lock: on, msg (the box's error line)
     std::string split_json();  // the terminal's /split: buf (-1: none), first, mode, pm
     std::string last_keys, last_stat, last_cmds;
