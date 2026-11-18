@@ -136,8 +136,8 @@ send_typing = on
 # Away by yourself when idle or detached: the autoaway plugin (/plugin install autoaway).
 # Plugins keep their settings in [plugin.<name>] sections: /help plugin
 
-# On join, fetch what was said since the last line you have, from servers with
-# IRCv3 chathistory (max 500, 0 = off).
+# On join (and on connect, for the private chats still open), fetch what was said
+# since the last line you have, from servers with IRCv3 chathistory (max 500, 0 = off).
 history_fetch = 100
 
 # CTCP answers (at most one reply every 2s per server, against floods).

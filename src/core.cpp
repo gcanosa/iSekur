@@ -989,15 +989,22 @@ void Core::save_history() {
     if (!any) { unlink(path.c_str()); return; }  // nothing kept: no file, not an empty one
     mode_t old = umask(077);  // chat lines are private, like the logs
     FILE* f = fopen(tmp.c_str(), "w");
+    int err = errno;
     umask(old);
-    if (!f) return;
-    for (auto& [key, v] : rows) {
-        if (v.empty()) continue;
-        fprintf(f, "=== %s\n", key.c_str());
-        for (auto& l : v) fprintf(f, "%s\n", log_fmt(l).c_str());
+    if (f) {
+        for (auto& [key, v] : rows) {
+            if (v.empty()) continue;
+            fprintf(f, "=== %s\n", key.c_str());
+            for (auto& l : v) fprintf(f, "%s\n", log_fmt(l).c_str());
+        }
+        if (fclose(f) == 0 && rename(tmp.c_str(), path.c_str()) == 0) { hist_warned = false; return; }
+        err = errno;
+        unlink(tmp.c_str());
     }
-    if (fclose(f) == 0) rename(tmp.c_str(), path.c_str());
-    else unlink(tmp.c_str());
+    // a service whose config folder isn't writable (the .conf itself can be) lost every chat silently: say so, once
+    if (!hist_warned)
+        hist_warned = true, print(nullptr, LK::ERROR, "Can't save the chat history to " + path + ": " + strerror(err) +
+                                  ". Tabs won't show their last lines after a restart: make that folder writable, or keep_history = off");
 }
 
 Buffer* Core::open(Server* s, BT t, const std::string& name) {

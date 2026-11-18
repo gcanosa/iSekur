@@ -419,6 +419,20 @@ void Core::autojoin_now(Server* s) {
         auto k = s->chan_keys.find(s->lower(ch));
         s->send("JOIN " + ch + (k != s->chan_keys.end() ? " " + k->second : ""));
     }
+    // the private chats still open: what came in while we were away (after the JOINs, behind the flood limit)
+    for (auto& b : bufs)
+        if (b->srv == s && b->type == BT::QUERY && !b->name.empty() && b->name[0] != '*') catch_up(s, b.get(), b->name);
+}
+
+// From a server with draft/chathistory: what was said in b since the last line we have (history_fetch lines at most)
+void Core::catch_up(Server* s, Buffer* b, const std::string& target) {
+    int fetch = atoi(opt(s, "history_fetch", "100").c_str());
+    if (fetch <= 0 || !s->caps.count("draft/chathistory")) return;
+    time_t last = 0;
+    for (auto& l : b->lines)
+        if (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) last = l.ts;
+    std::string when = last ? "timestamp=" + iso_utc(last, ".000Z") : "*";
+    s->send("CHATHISTORY " + std::string(last ? "AFTER " : "LATEST ") + target + " " + when + " " + std::to_string(std::min(fetch, 500)));
 }
 
 void Core::tick(time_t now) {
@@ -906,16 +920,7 @@ void Core::handle(Server* s, const Msg& m) {
             b->joined = true;
             b->nicks.clear();
             b->sync_until = time(nullptr) + 60;  // until 30s after the MODE reply; 60s if it never comes (Twitch)
-            // catch up from the server: what was said since the last line we have
-            int fetch = atoi(opt(s, "history_fetch", "100").c_str());
-            if (fetch > 0 && s->caps.count("draft/chathistory")) {
-                time_t last = 0;
-                for (auto& l : b->lines)
-                    if (l.kind == LK::MSG || l.kind == LK::ACTION || l.kind == LK::NOTICE) last = l.ts;
-                std::string when = last ? "timestamp=" + iso_utc(last, ".000Z") : "*";
-                s->send("CHATHISTORY " + std::string(last ? "AFTER " : "LATEST ") + ch + " " + when + " " +
-                        std::to_string(std::min(fetch, 500)));
-            }
+            catch_up(s, b, ch);
             quiet_add = true, line(b, LK::JOIN, m.nick, "You have joined " + ch, true), quiet_add = false;
             if (!s->twitch()) s->send("MODE " + ch), s->who_auto.insert(s->lower(ch));  // Twitch: 421 unknown command
             if (fresh) select(b);  // the webchat follows too

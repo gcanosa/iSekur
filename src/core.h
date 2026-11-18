@@ -604,6 +604,7 @@ struct Core {
     std::map<std::string, std::vector<Line>> hist_cache;
     bool hist_loaded = false;
     long long hist_saved = 0;
+    bool hist_warned = false;  // the "can't save" error was shown (until a save works again)
     void save_history();
     void hist_read();  // <config>.history into hist_cache, once
     ServerCfg server_cfg(const std::string& name) const;
@@ -626,6 +627,7 @@ struct Core {
     void query_watch(Server* s, const std::string& nick, bool add);  // a query opens / closes: watch its nick (or stop)
     bool query_offline(Buffer* b);      // a query whose nick is offline: says so, true = don't send
     void autojoin_now(Server* s);
+    void catch_up(Server* s, Buffer* b, const std::string& target);  // CHATHISTORY since b's last line
     int alias_depth = 0;                // an alias running an alias...: 10 deep at most       // after 001 (or the hidden host, join_wait): the autojoin channels and open tabs
     void notify_seen(Server* s, const std::string& nick, bool on, const std::string& host = "");
     void typed(Buffer* b, const std::string& input);  // the input line changed: +typing=active / done (send_typing)

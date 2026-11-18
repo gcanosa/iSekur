@@ -707,6 +707,31 @@ int main() {
         assert(h->lines[2].text == "--- end of last session ---" && h->lines[2].nolog);
         assert(core.hist_cache.count("gone\t#old") && !core.hist_cache.count("t\t#hist"));
         core.close(h);
+        {  // a private conversation comes back the same way (the incoming line opens the tab)
+            core.hist_cache.clear(), core.hist_loaded = false;
+            feed(":Pal!u@h PRIVMSG " + ts->nick + " :hi there");
+            Buffer* q = core.find(ts, "Pal");
+            assert(q && q->type == BT::QUERY && q->lines.size() == 1);
+            core.add(q, Line{time(nullptr), LK::MSG, ts->nick, "hello Pal", true});
+            core.save_history();
+            core.close(q);
+            core.hist_cache.clear(), core.hist_loaded = false;
+            q = core.open(ts, BT::QUERY, "Pal");
+            assert(q->lines.size() == 3 && q->lines[0].text == "hi there" && q->lines[1].self && q->lines[2].nolog);
+            core.close(q);
+            // and the way a restart does it: open_queries reopens the tab when the server is added
+            q = core.open(ts, BT::QUERY, "Pal");
+            core.hist_cache.clear(), core.hist_loaded = false;
+            core.hist_loaded = false, q->lines.clear();
+            core.add(q, Line{time(nullptr), LK::MSG, "Pal", "still here"});
+            core.save_history();
+            assert(ini_get(core.cfg, "server." + ts->cfg.name, "open_queries") == "Pal");
+            core.hist_cache.clear(), core.hist_loaded = false;
+            Server* s2 = core.add_server(ts->cfg);
+            Buffer* q2 = core.find(s2, "Pal");
+            assert(q2 && q2->lines.size() == 2 && q2->lines[0].text == "still here");
+            core.close(s2->status), core.close(q);
+        }
         core.cfg["general"]["keep_history"] = "off";
         core.hist_cache.clear(), core.hist_loaded = false;
         h = core.open(ts, BT::CHANNEL, "#hist");
@@ -716,6 +741,21 @@ int main() {
         core.hist_cache.clear(), core.hist_loaded = true;  // nothing to keep: no empty file left behind
         core.save_history();
         assert(access("build/test-hist.history", F_OK) != 0);
+        {  // a folder it can't write to: said once (not every 5 minutes), and again only after a save worked
+            core.cfg_path = "build/no-such-dir/test.conf";
+            Buffer* h2 = core.open(ts, BT::CHANNEL, "#nosave");
+            core.add(h2, Line{1000, LK::MSG, "bob", "x"});
+            core.save_history();
+            const Line& w = core.bufs.front()->lines.back();
+            assert(core.hist_warned && w.kind == LK::ERROR && w.text.find("Can't save the chat history to build/no-such-dir/test.history: ") == 0);
+            size_t n = core.bufs.front()->lines.size();
+            core.save_history();
+            assert(core.bufs.front()->lines.size() == n);
+            core.cfg_path = "build/test-hist.conf";
+            core.save_history();
+            assert(!core.hist_warned);
+            core.close(h2);
+        }
         unlink("build/test-hist.history"), core.cfg_path.clear();
     }
     {  // /ignore types on the wire: -c drops channel lines only, -k strips colors, -j hides joins, nick 2 uses their host
@@ -1653,6 +1693,33 @@ int main() {
         ts->cfg.join_wait = false;
         feed(":srv 001 me :Welcome");
         assert(!ts->join_hold && sent().find("JOIN #c\r\n") != std::string::npos);
+        {  // the private chats still open ask the server for what came in meanwhile, after the JOINs
+            int fl = ts->flood_ms;
+            ts->flood_ms = 0, ts->caps.insert("draft/chathistory");
+            Buffer* qa = core.open(ts, BT::QUERY, "Pal");
+            core.add(qa, Line{1000, LK::MSG, "Pal", "before"});
+            Buffer* qb = core.open(ts, BT::QUERY, "Bud");
+            Buffer* qs = core.open(ts, BT::QUERY, "*snotices");
+            sent(), feed(":srv 001 me :Welcome");
+            std::string o2 = sent();
+            assert(o2.find("JOIN #c\r\n") < o2.find("CHATHISTORY AFTER Pal timestamp=1970-01-01T00:16:40.000Z 100\r\n"));
+            assert(o2.find("CHATHISTORY LATEST Bud * 100\r\n") != std::string::npos && o2.find("*snotices") == std::string::npos);
+            core.cfg["general"]["history_fetch"] = "0";
+            feed(":srv 001 me :Welcome");
+            assert(sent().find("CHATHISTORY") == std::string::npos);
+            // what comes back (theirs, and ours from another client) lands in the open tab as old news
+            qa->unread = qa->activity = 0;  // as after a restart: nothing missed yet
+            feed(":srv BATCH +hq chathistory Pal");
+            feed("@batch=hq;time=2026-11-18T10:00:00.000Z :Pal!u@h PRIVMSG me :while away");
+            feed("@batch=hq;time=2026-11-18T10:01:00.000Z :me!u@h PRIVMSG Pal :answered elsewhere");
+            feed(":srv BATCH -hq");
+            assert(qa->lines.size() == 3 && qa->lines[1].text == "while away" && !qa->lines[1].self && qa->lines[2].self);
+            assert(!qa->unread && !qa->activity);
+            assert(!qa->lines[1].hilight);
+            assert(!core.find(ts, "me"));
+            core.cfg["general"].erase("history_fetch"), ts->caps.erase("draft/chathistory"), ts->flood_ms = fl;
+            core.close(qa), core.close(qb), core.close(qs);
+        }
         ts->cfg.umodes.clear(), ts->cfg.perform.clear(), ts->cfg.join_wait = true;
         // /perform: the list in the config at once, and the echo of a login is masked
         std::string path = "build/test-perform.conf";
