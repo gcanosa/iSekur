@@ -1167,6 +1167,7 @@ void Web::broadcast(const std::string& json) {
 std::string Web::cmds_json() {  // [name, usage, summary, aliases]
     std::string cm = "{\"t\":\"cmds\",\"list\":[";
     for (auto& k : commands()) cm += std::string(cm.back() == '[' ? "" : ",") + "[" + json_str(k.name) + "," + json_str(k.usage) + "," + json_str(k.summary) + "," + json_str(k.aliases) + "]";
+    for (auto& [k, u, pl] : c.plugin_commands()) cm += ",[" + json_str(k) + "," + json_str(u) + "," + json_str("plugin: " + pl) + ",\"\"]";
     if (c.cfg.count("aliases"))
         for (auto& [k, v] : c.cfg.at("aliases"))
             if (!v.empty() && !find_command(k)) cm += ",[" + json_str(k) + ",\"\"," + json_str("alias: " + perform_show(v)) + ",\"\"]";

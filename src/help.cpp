@@ -591,8 +591,7 @@ const std::vector<CmdInfo>& commands() { return CMDS; }
 // does word i (0 = the first after "/cmd") take a nick? From the usage: "nick", "target", "[nick|mask ...]";
 // "nick ..." repeats; a leading "[#channel]" is skipped when the first word isn't a channel ("/kick troll").
 // web/index.html nickArg() is the same
-bool nick_arg(const CmdInfo& k, size_t i, const std::string& first) {
-    std::string u = k.usage;
+bool nick_arg(std::string u, size_t i, const std::string& first) {
     u = u.substr(0, u.find(" | "));
     std::vector<std::string> t;
     for (auto w : split(u, ' ')) {
@@ -645,14 +644,31 @@ void Core::help(Buffer* b, const std::string& topic) {
             std::string pad(plain.size() < 34 ? 34 - plain.size() : 2, ' ');
             out("  " + usage(c) + pad + c.summary);
         }
+        if (auto pc = plugin_commands(); !pc.empty()) {
+            out(C_GROUP "Plugins" RESET C_DIM " (the ones that are on, /plugin manages them)" RESET);
+            for (auto& [k, u, pl] : pc) {
+                std::string plain = "/" + k + (u.empty() ? "" : " " + u);
+                out("  " C_CMD BOLD "/" + k + RESET + (u.empty() ? "" : " " C_ARGS + u + RESET) + std::string(plain.size() < 34 ? 34 - plain.size() : 2, ' ') + "plugin: " + pl);
+            }
+        }
         out(C_DIM "Anything else starting with / goes to the server unchanged. Type // to send a line that starts with /." RESET);
         return;
     }
     const CmdInfo* c = find_command(q);
+    auto pc = plugin_commands();
+    if (!c)
+        for (auto& [k, u, pl] : pc)
+            if (k == irc_lower(q)) {  // a plugin's: its usage, and where to read more
+                out(C_CMD BOLD "/" + k + RESET + (u.empty() ? "" : " " C_ARGS + u + RESET) + C_DIM "  -  " RESET "a command of the " + pl + " plugin");
+                out("  " C_DIM "/plugin shows what it does and its settings (/plugin list, /plugin set " + pl + " key value)." RESET);
+                return;
+            }
     if (!c) {
         std::string near;
         for (auto& k : CMDS)
             if (std::string(k.name).find(irc_lower(q)) != std::string::npos) near += " /" + std::string(k.name);
+        for (auto& [k, u, pl] : pc)
+            if (k.find(irc_lower(q)) != std::string::npos) near += " /" + k;
         out("\x03" "04No such command: /" + q + RESET +
             (near.empty() ? " - /help lists them all. Unknown commands go to the server as typed." : ". Did you mean:" C_CMD + near + RESET "?"));
         return;

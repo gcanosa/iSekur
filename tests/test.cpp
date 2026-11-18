@@ -401,12 +401,14 @@ int main() {
     }
     assert(find_command("J") && std::string(find_command("j")->name) == "join" && !find_command("nope"));
     {  // which words take a nick: completion offers them
-        auto na = [](const char* c, size_t i, const char* w) { return nick_arg(*find_command(c), i, w); };
+        auto na = [](const char* c, size_t i, const char* w) { return nick_arg(find_command(c)->usage, i, w); };
         assert(na("msg", 0, "al") && !na("msg", 1, "hi") && na("query", 0, "b") && na("whois", 0, "x"));
         assert(na("op", 0, "a") && na("op", 3, "d") && na("ban", 1, "t") && na("react", 1, "a") && !na("react", 0, "a"));
         assert(na("kick", 0, "troll") && !na("kick", 0, "#chan") && na("kick", 1, "#chan") && !na("kick", 1, "troll") && !na("kick", 2, "#chan"));
         assert(na("notify", 1, "a") && na("notify", 4, "a") && na("invite", 0, "a") && !na("invite", 1, "a"));
         assert(!na("join", 0, "#a") && !na("set", 0, "nick") && !na("nick", 0, "x") && !na("tempban", 1, "30"));
+        // a plugin's usage: /seen nick, /pmguard allow nick
+        assert(nick_arg("nick", 0, "x") && nick_arg("[allow|deny|show|drop nick | allowed]", 1, "allow") && !nick_arg("send|retry", 0, "s") && !nick_arg("", 0, "x"));
     }
     size_t before = home->lines.size();
     core.exec(home, "/help /join");  // usage, aliases, details, "Examples", 3 examples
@@ -3356,6 +3358,16 @@ isekur.on("window", function(e) print("win", e.action, e.index, e.button, e.valu
         wr("ro", "isekur.on(\"window\", function(e) print(\"ro got it\") end)\n");
         rc.exec(rh, "/plugin enable rw");
         rc.exec(rh, "/plugin enable ro");
+        {  // the suggestions (terminal and webchat) list the commands of the plugins that are on
+            auto pc = rc.plugin_commands();
+            assert(std::find(pc.begin(), pc.end(), std::array<std::string, 3>{"w", "", "rw"}) != pc.end());
+            rc.exec(rh, "/help w");  // its usage and the plugin it comes from, not "No such command"
+            assert(rh->lines[rh->lines.size() - 2].text.find("a command of the rw plugin") != std::string::npos);
+            rc.exec(rh, "/plugin disable rw");
+            pc = rc.plugin_commands();
+            assert(std::find(pc.begin(), pc.end(), std::array<std::string, 3>{"w", "", "rw"}) == pc.end());
+            rc.exec(rh, "/plugin enable rw");
+        }
         auto last = [&] { return rh->lines.back().text; };
         rc.exec(rh, "/r");
         assert(last() == "not a stream address (http or https, a host on the internet) off false false");

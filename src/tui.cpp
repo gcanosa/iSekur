@@ -3787,6 +3787,8 @@ int Tui::suggest(std::vector<Sugg>& out) const {
         for (auto& k : commands())
             if (std::string(k.name).rfind(irc_lower(pfx), 0) == 0)
                 out.push_back({(slash ? "/" : "") + std::string(k.name), (*k.usage ? " " + std::string(k.usage) : "") + "  ", k.summary});
+        for (auto& [k, u, pl] : c.plugin_commands())  // the plugins that are on
+            if (k.rfind(irc_lower(pfx), 0) == 0) out.push_back({(slash ? "/" : "") + k, (u.empty() ? "" : " " + u) + "  ", "plugin: " + pl});
         if (c.cfg.count("aliases"))  // yours (/alias), after iSekur's
             for (auto& [k, v] : c.cfg.at("aliases"))
                 if (!v.empty() && k.rfind(irc_lower(pfx), 0) == 0) out.push_back({(slash ? "/" : "") + k, "  ", "alias: " + perform_show(v)});
@@ -3798,8 +3800,12 @@ int Tui::suggest(std::vector<Sugg>& out) const {
     size_t ws = s.rfind(' ') + 1;
     std::string word = s.substr(ws);
     const CmdInfo* nk = find_command(cmd);
+    std::string usage = nk ? nk->usage : "";  // iSekur's own or a plugin's
+    if (!nk)
+        for (auto& [k, u, pl] : c.plugin_commands())
+            if (k == cmd) usage = u;
     Buffer* b = c.active;
-    if (!word.empty() && nk && b && b->srv && nick_arg(*nk, (size_t)std::count(arg.begin(), arg.end(), ' '), arg.substr(0, arg.find(' ')))) {
+    if (!word.empty() && !usage.empty() && b && b->srv && nick_arg(usage, (size_t)std::count(arg.begin(), arg.end(), ' '), arg.substr(0, arg.find(' ')))) {
         std::string pfx = irc_lower(word), me = b->srv->lower(b->srv->nick);
         std::set<std::string> seen;
         auto add = [&](const std::string& n, const std::string& where) {
@@ -3832,6 +3838,8 @@ int Tui::suggest(std::vector<Sugg>& out) const {
             out.push_back({"/" + std::string(k->name), (*k->usage ? " " + std::string(k->usage) : "") + "  ", k->summary});
             return -2;
         }
+        for (auto& [k, u, pl] : c.plugin_commands())  // "/radio ": its usage, until the 2nd word
+            if (k == cmd) { out.push_back({"/" + k, (u.empty() ? "" : " " + u) + "  ", "plugin: " + pl}); return -2; }
     }
     return -1;
 }

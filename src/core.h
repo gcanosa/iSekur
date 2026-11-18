@@ -2,6 +2,7 @@
 #pragma once
 #include <cctype>
 #define ISEKUR_VERSION "0.5.2"
+#include <array>
 #include <atomic>
 #include <cstdint>
 #include <cstdio>
@@ -399,7 +400,7 @@ struct CmdInfo {
 };
 const std::vector<CmdInfo>& commands();
 const CmdInfo* find_command(const std::string& name);  // name or alias, no "/"
-bool nick_arg(const CmdInfo& k, size_t i, const std::string& first);  // /cmd's word i takes a nick (first: the 1st word typed)
+bool nick_arg(std::string usage, size_t i, const std::string& first);  // a command's usage: word i takes a nick (first: the 1st word typed)
 
 // ---- core ------------------------------------------------------------------
 // check_updates: the latest release's version, read on a thread; `done` publishes `ver`
@@ -729,6 +730,7 @@ struct Core {
     void plugins_reshow();  // show again over every tab's scrollback: a plugin came, went or changed a setting
     void plugin_cmd(Buffer* b, const std::string& args);  // /plugin
     bool plugin_run(Buffer* b, const std::string& cmd, const std::string& args);  // a plugin's /command; false: none has it
+    std::vector<std::array<std::string, 3>> plugin_commands() const;  // {command, usage, plugin} of the plugins that are on, for the suggestions
     // ev to every plugin on in s/target (s null: every loaded one); true: a handler returned true (hide the line)
     bool plugin_emit(const char* ev, const Server* s, const std::string& target, const PArgs& args = {}, std::string* text = nullptr,
                      std::vector<std::pair<std::string, std::string>>* menu = nullptr);  // text: a handler returning a string replaces it (show); menu: the {label, command} pairs handlers return (nickmenu)

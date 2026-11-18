@@ -1013,6 +1013,14 @@ bool Core::plugin_emit(const char* ev, const Server* s, const std::string& targe
     return hide;
 }
 
+std::vector<std::array<std::string, 3>> Core::plugin_commands() const {
+    std::vector<std::array<std::string, 3>> out;
+    for (auto& p : plugins)
+        if (!p->dead)
+            for (auto& [cmd, i] : p->cmds) out.push_back({cmd, i.usage, p->name});
+    return out;
+}
+
 bool Core::plugin_run(Buffer* b, const std::string& cmd, const std::string& args) {
     for (auto p : plugins) {
         auto it = p->cmds.find(cmd);
