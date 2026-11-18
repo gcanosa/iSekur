@@ -355,6 +355,7 @@ dialog .btns .left { margin-right: auto; }
 #dlogs form { grid-template-rows: auto auto minmax(0, 1fr) auto auto; height: min(82vh, 860px); }
 #logbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 #logbar #logq { flex: 1; min-width: 180px; }
+#logbar #logtot { color: var(--muted); font-size: calc(12px * var(--z, 1)); white-space: nowrap; }
 #logbar button, #loghead button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 #logbar button:disabled, #loghead button:disabled { opacity: .45; cursor: default; }
 #logbody { display: grid; grid-template-columns: minmax(170px, 250px) 1fr; gap: 10px; min-height: 0; }
@@ -915,7 +916,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 <dialog id="dlogs"><form method="dialog">
   <h2>Logs</h2>
   <div id="logbar"><input id="logq" placeholder='Find: words, "a phrase", nick:alice. Enter searches every day of the channel or network' autocomplete="off" aria-label="Find in the logs">
-    <label class="ck"><input type="checkbox" id="logev" checked> Joins, parts, quits</label><button type="button" id="logcalb" title="Pick a day on a calendar ( c )">📅 Calendar</button></div>
+    <label class="ck"><input type="checkbox" id="logev" checked> Joins, parts, quits</label><button type="button" id="logcalb" title="Pick a day on a calendar ( c )">📅 Calendar</button><small id="logtot" title="What every log on disk takes on the machine iSekur runs on"></small></div>
   <div id="logbody"><div id="logtree" role="tree" aria-label="Logs by network and channel"></div>
     <div id="logpane"><div id="loghead"></div><div id="loglines"></div><div id="logcal" hidden></div></div></div>
   <div class="hint" id="loghint"></div>
@@ -2534,6 +2535,7 @@ function renderLogs() {
   const T = $("#logtree");
   T.textContent = "";
   $("#loghint").textContent = "A day opens it · type to filter it · Enter searches every day of the channel or network picked · a found line opens in its day · [ ] older, newer day · c calendar";
+  $("#logtot").textContent = lgs && lgs.files.length ? lgSize(lgs.files.reduce((a, f) => a + f.size, 0)) + " on disk · " + lgs.files.length + (lgs.files.length === 1 ? " file" : " files") : "";
   if (!lgs) { T.append(el("div", "none", "Loading…")); renderLogLines(); return; }
   if (!lgs.files.length) {
     const n = el("div", "none", "No logs yet.");
