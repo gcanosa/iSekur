@@ -1604,11 +1604,17 @@ void Tui::draw_settings(int W, int H) {
                        : sw.editing     ? "Enter: set it · Esc: cancel · empty = the default" + (hr && !hr->unit.empty() ? " · in " + hr->unit : "")
                        : hr && hr->key == "perform" && sw.focus == 1 ? "Enter: its commands · p: a preset (X, Q, eggdrop, IdleRPG) · s: save · q: close"
                        : sw.searching ? "type to search · Enter or \u2193: to the list · Esc: clear it"
-                       : on_srv ? "c: connect · r: rename · x: delete server · n: new server · e Enter: edit · s: save · q: close"
+                       : on_srv ? "c: connect · l: login · r: rename · x: delete · n: new server · e Enter: edit · s: save · q: close"
                        : sw.focus == 0 ? "\u2191\u2193: category · \u2192 Tab Enter: its keys · n: new server · /: search · q Esc: close"
                                        : "\u2191\u2193: move · e Enter: edit · Space: on/off, next choice · d: default · /: search · s: save · q: close";
     if (!c.set_denied.empty()) sw.msg = c.set_denied + " (unchanged)", c.set_denied.clear();  // a guarded /set the lock password refused: the line said so under the window
     text(x0 + 2, y1 - 1, x1 - 1, sw.msg.empty() ? hint : sw.msg, sw.msg.empty() ? dim : mark, false);
+}
+
+// the ways to log in as a menu: each item runs cmd + " " + method (/login sasl, /server host -login sasl), the last one is no login
+static std::vector<std::pair<std::string, std::string>> login_items(const std::string& cmd, const std::string& none_label, const std::string& none_cmd) {
+    return {{"Account (SASL)", cmd + " sasl"}, {"NickServ password", cmd + " nickserv"}, {"Certificate (CertFP)", cmd + " cert"},
+            {"Server password (bouncer)", cmd + " password"}, {"", ""}, {none_label, none_cmd}};
 }
 
 void Tui::settings_key(int mod, int k, uint32_t ch) {
@@ -1720,10 +1726,18 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     }
     if (ch == 'n') {
         sw.open = false;
-        c.ask_pass(c.active, "server", [this](const std::string& v) { if (!v.empty()) c.exec(c.active, "/server " + v); }, false, "New server",
-                   {"host [port] [-tls] [-noverify] [-name name] [-nick nick]", "e.g. irc.sekurnet.org 6697 -tls -name sekurnet"});
+        // the host line, then how to log in: the login is asked before it connects (a password goes out with the connection)
+        c.ask_pass(c.active, "server", [this](const std::string& v) {
+            if (v.empty()) return;
+            std::string nm = v.substr(0, v.find(' '));  // the host, or its -name
+            auto w = split(v, ' ');
+            if (auto i = std::find(w.begin(), w.end(), "-name"); i != w.end() && i + 1 != w.end()) nm = *(i + 1);
+            menu = Menu{std::max(0, tb_width() / 2 - 14), std::max(0, tb_height() / 2 - 4), 0, "Log in to " + nm + "?",
+                        login_items("/server " + v + " -login", "No login: connect", "/server " + v)};
+        }, false, "New server", {"host [port] [-tls] [-noverify] [-name name] [-nick nick]", "e.g. irc.sekurnet.org 6697 -tls -name sekurnet"});
         return;
     }
+    if (ch == 'l' && !srv.empty()) { settings_login(srv); return; }
     if (ch == 'p' && !srv.empty()) { settings_preset(srv); return; }
     if (ch == 'e') k = TB_KEY_ENTER, ch = 0;
     if (ch == 'd') k = TB_KEY_DELETE, ch = 0;
@@ -1761,6 +1775,17 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
         c.exec(c.active, "/set " + full_key(*r) + " \"\"");
         sw.msg = full_key(*r) + (r->shared ? " uses Global's again" : " is back to its default") + "  (not saved yet: s)";
     }
+}
+
+// l on a network: how it logs in, in a menu, in that network's tab (/login's dialogs ask there)
+void Tui::settings_login(const std::string& srv) {
+    for (auto& sv : c.servers)
+        if (sv->cfg.name == srv) {
+            sw.open = false;
+            c.select(sv->status);
+            menu = Menu{std::max(0, tb_width() / 2 - 14), std::max(0, tb_height() / 2 - 4), 0, srv + " login", login_items("/login", "No login: clear it", "/login none")};
+            return;
+        }
 }
 
 // p on a network: the presets in a menu, in that network's tab (the dialogs that follow ask there)

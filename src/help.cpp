@@ -12,10 +12,11 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-login method] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
-     "(default: the host), -nick its own nick (default: [general] nick). An IPv6 address works bare or "
+     "(default: the host), -nick its own nick (default: [general] nick), -login sasl, cert, nickserv or password asks for that login "
+     "before it connects (see /login). An IPv6 address works bare or "
      "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). A ws:// or wss:// URL as the host "
      "is IRC over WebSocket (IRCv3), for a network that only listens that way or sits behind an HTTPS proxy: the scheme "
      "says TLS, the URL the port (443 or 80 without one) and the path, -noverify still applies. The server is remembered "
@@ -44,10 +45,19 @@ static const std::vector<CmdInfo> CMDS = {
      "Connects the server of the current tab, or the [server.<name>] you give.",
      {"/connect", "/connect sekurnet"}},
     {"servers", "Connection", "[name]", "Manage your servers",
-     "The terminal: the settings window at the first server (or the one you name; Edit network in a server tab's menu does that), where c connects the selected one, r renames it, x deletes "
-     "it (it asks first), n adds one and p adds a login preset (X, Q, eggdrop, IdleRPG); its keys edit it, On connect has the user modes and /perform's commands. The webchat: the Servers window (the server-rack button). Elsewhere it "
+     "The terminal: the settings window at the first server (or the one you name; Edit network in a server tab's menu does that), where c connects the selected one, l sets how it logs in (SASL, NickServ, a certificate, a server password: /login), r renames it, x deletes "
+     "it (it asks first), n adds one (and asks how it logs in before it connects) and p adds a login preset (X, Q, eggdrop, IdleRPG); its keys edit it, On connect has the user modes and /perform's commands. The webchat: the Servers window (the server-rack button), "
+     "with a Login section: the method, then its account and password, or the certificate. Elsewhere it "
      "lists them. A network still on a legacy charset: /set server.sekurnet.encoding iso-8859-9 (any iconv name), used from its next connect.",
      {"/servers", "/servers sekurnet"}},
+    {"login", "Connection", "sasl|cert|nickserv|password|none", "How this network logs you in",
+     "Asks for what the method needs and saves it for the network of this tab; passwords are hidden and kept encrypted in the config. "
+     "sasl: your services account (account name, password), used while connecting; SCRAM instead of PLAIN: /set server.sekurnet.sasl_mech SCRAM-SHA-256. "
+     "cert: a .pem client certificate (CertFP, SASL EXTERNAL); a key in its own file: /set server.sekurnet.key. "
+     "nickserv: /msg NickServ IDENTIFY when it connects, for networks without SASL. password: the server password, for a bouncer "
+     "(ZNC user/network:pass). A new login replaces the one the network had, none removes it. It is used from the next connect "
+     "(/reconnect). A new network can ask first: /server host -login sasl. In /servers: l. The webchat's Servers window has a Login section for the same.",
+     {"/login sasl", "/login nickserv", "/login none", "/server irc.sekurnet.org 6697 -tls -name sekurnet -login sasl"}},
     {"perform", "Connection", "[add <command> | set N <command> | del N | move N M | preset <name>]", "Commands run when the server connects",
      "Without arguments, lists this server's on-connect commands (passwords as ********). They run in order once "
      "connected, after the user modes (umodes = +ix) and before autojoin; $nick is your nick. add / set / del / move "
@@ -714,11 +724,12 @@ static const std::vector<GuidePage> GUIDE = {
         "  " "\x03" "10" "-nick " RESET G_VAL("other") "    a different nick on this network only",
         "",
         G_HEAD("Registered nick? Log in with SASL"),
+        "  " G_CMD("/login sasl") " asks for your account and password and saves them. Or by hand:",
         "  " G_CMD("/set server.sekurnet.sasl_user ") G_VAL("yournick"),
         "  " G_CMD("/set server.sekurnet.sasl_pass ") G_VAL("secret") "   then " G_CMD("/save") " and " G_CMD("/connect"),
         "",
         "  " G_CMD("/disconnect") " leaves a server (tabs stay), " G_CMD("/connect") " comes back, " G_CMD("/quit") " leaves this tab's server, " G_CMD("/exit") " closes iSekur.",
-        "  " G_CMD("/servers") " manages them: " G_KEY("c") " connects, " G_KEY("x") " deletes, " G_KEY("n") " adds one.",
+        "  " G_CMD("/servers") " manages them: " G_KEY("c") " connects, " G_KEY("l") " sets the login, " G_KEY("x") " deletes, " G_KEY("n") " adds one.",
         "  Right-click a server tab: " BOLD "Connect at startup" RESET " or not, " BOLD "Delete server" RESET ".",
         G_NOTE BOLD "irc.SekurNet.org" RESET " is iSekur's own network: any other works the same way.",
     }},
@@ -919,7 +930,7 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("Tabs in the browser"),
         "  " BOLD "‹" RESET " at the top of the tab list folds it to a strip, " BOLD "›" RESET " opens it. " BOLD "👥" RESET " hides the users.",
         "  " G_CMD("/split ") G_VAL("3") " and " G_CMD("/unsplit") " work there too, for that browser only.",
-        "  The server-rack button lists your servers: edit, connect, delete or add one.",
+        "  The server-rack button lists your servers: edit (the login too), connect, delete or add one.",
         "  " G_CMD("/set web_font sans") " and " G_CMD("/set web_font_size 16") ": the browser's font and size.",
         "  " G_CMD("/set web_tree_lines on") ": faint lines join each network to its channels.",
         "  " G_CMD("/set web_tree_width 280") ": the tab list's width in px (120 to 600).",

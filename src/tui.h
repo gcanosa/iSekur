@@ -152,6 +152,7 @@ private:
     void settings_key(int mod, int k, uint32_t ch);
     void settings_mouse(int k, int x, int y);
     void settings_preset(const std::string& srv);  // p: perform's presets for that network, in a menu
+    void settings_login(const std::string& srv);   // l: how that network logs in (/login), in a menu
     // /theme alone: the installed themes in a box, a filter on top; moving previews them (the webchat too)
     struct ThemeWin {
         bool open = false;

@@ -584,6 +584,8 @@ struct Core {
     void twitch_cmd(Buffer* b, const std::string& arg);  // /twitch [token]
     void ask_pass(Buffer* b, const std::string& label, std::function<void(const std::string&)> done, bool hidden = true,
                   const std::string& title = "", std::vector<std::string> info = {});
+    // /login, /server -login: asks for a network's login (sasl, cert, nickserv, password; none clears it) and writes it; save: to the config now
+    void login_ask(Buffer* b, const std::string& net, const std::string& method, bool save, std::function<void(bool)> done);
 
     void load_config();
     void reload(Buffer* b);  // /reload

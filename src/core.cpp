@@ -645,6 +645,66 @@ static bool save_section(Core& c, const std::string& sec, Buffer* b) {
     return false;
 }
 
+// A network logs in one way: SASL (an account), a certificate, NickServ or a server password. What each one sets, in the
+// order /login asks it, and the keys it clears with them; the first key says a network uses it. The webchat's Servers
+// window has the same four in its Login picker. Choosing another one, or none, clears the old one's keys
+struct LoginStep { const char *key, *label; bool hidden; };
+struct LoginKind { const char *name, *title, *note; std::vector<LoginStep> steps; std::vector<const char*> also; };
+static const std::vector<LoginKind> LOGINS = {
+    {"sasl", "SASL login", "your services account", {{"sasl_user", "account name", false}, {"sasl_pass", "password", true}}, {"sasl_mech"}},
+    {"cert", "Certificate login", "a .pem with its key in it (CertFP)\nKey apart: /set server.<name>.key", {{"cert", "certificate file", false}}, {"key"}},
+    {"nickserv", "NickServ login", "for networks without SASL", {{"nickserv_pass", "NickServ password", true}}, {}},
+    {"password", "Server password", "for bouncers: user/network:pass", {{"password", "server password", true}}, {}},
+};
+static const LoginKind* login_kind(const std::string& n) {
+    for (auto& k : LOGINS)
+        if (n == k.name) return &k;
+    return nullptr;
+}
+
+// the next question of a login, its answers so far in vals; fin gets them all. (An empty line cancels a question, and that ends it)
+static void login_step(Core& c, Buffer* b, const LoginKind* k, const std::string& net, size_t i, std::vector<std::string> vals,
+                       std::function<void(const std::vector<std::string>&)> fin) {
+    if (i == k->steps.size()) { fin(vals); return; }
+    const LoginStep& st = k->steps[i];
+    std::vector<std::string> info = {"For " + net};
+    for (auto& l : split(k->note, '\n')) info.push_back(l);
+    if (std::any_of(k->steps.begin(), k->steps.end(), [](const LoginStep& x) { return x.hidden; })) info.push_back("Saved encrypted in the config.");
+    c.ask_pass(b, st.label, [&c, b, k, net, i, vals, fin](const std::string& v) mutable {
+        vals.push_back(v);
+        login_step(c, b, k, net, i + 1, vals, fin);
+    }, st.hidden, k->title, info);
+}
+
+// /login and /server -login: asks for what the method needs (method "none": nothing, it only clears), clears the keys of the
+// login the network had, writes the new ones and tells the servers (save: to the config now, else /save keeps them).
+// done(true) after that, done(false) when it couldn't be saved
+void Core::login_ask(Buffer* b, const std::string& net, const std::string& method, bool save, std::function<void(bool)> done) {
+    const LoginKind* want = login_kind(method);
+    std::string sec = "server." + net;
+    auto fin = [this, b, net, sec, want, save, done](const std::vector<std::string>& vals) {
+        auto put = [&](const char* k, const std::string& v) { cfg[sec][k] = unsaved[sec][k] = v; };
+        const LoginKind* had = nullptr;
+        for (auto& k : LOGINS)
+            if (!had && !ini_get(cfg, sec, k.steps[0].key).empty()) had = &k;
+        if (had && had != want) {
+            for (auto& st : had->steps) if (!ini_get(cfg, sec, st.key).empty()) put(st.key, "");
+            for (auto k : had->also) if (!ini_get(cfg, sec, k).empty()) put(k, "");
+        }
+        for (size_t i = 0; want && i < vals.size(); i++) put(want->steps[i].key, vals[i]);
+        for (auto& sv : servers)
+            if (sv->cfg.name == net) sv->cfg = server_cfg(net);
+        if (save && !save_section(*this, sec, b)) { if (done) done(false); return; }
+        print(b, LK::INFO, want ? net + ": " + want->title + (save ? " saved" : " set") + (want->steps[0].hidden ? "" : ", " + vals[0])
+                                : "No login for " + net + (had ? ": the " + std::string(had->title) + " is gone" : ""));
+        for (auto& sv : servers)
+            if (save && sv->cfg.name == net && sv->state != SS::DISCONNECTED) info_note(b, "Connected already: /reconnect logs in with it");
+        if (done) done(true);
+    };
+    if (want) login_step(*this, b, want, net, 0, {}, fin);
+    else fin({});
+}
+
 std::vector<Core::SetRow> Core::setting_rows() const {
     std::vector<SetRow> out;
     auto themes = theme_names();
@@ -2223,6 +2283,13 @@ void Core::exec(Buffer* b, const std::string& input) {
         quit = true;
         return;
     }
+    if (cmd == "login") {  // /login sasl|cert|nickserv|password|none: this network's login, asked in dialogs and saved
+        std::string m = argv.empty() ? "" : to_lower(argv[0]);
+        if (!s) { print(b, LK::ERROR, "Not a server's tab: /login sets the login of the network you're in"); return; }
+        if (m != "none" && !login_kind(m)) { print(b, LK::ERROR, "Usage: /login sasl|cert|nickserv|password|none  (/help login)"); return; }
+        login_ask(b, s->cfg.name, m, true, nullptr);
+        return;
+    }
     if (cmd == "server" && !argv.empty() && argv[0] == "rename") {  // /server rename [old] [new]: asks for what's missing
         std::string from = argv.size() > 1 ? argv[1] : s ? s->cfg.name : "";
         if (from.empty()) { print(b, LK::ERROR, "Usage: /server rename old new"); return; }
@@ -2249,9 +2316,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] | del name"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-login method] | del name"); return; }
         // an IPv6 address: bare (2001:db8::1) or in brackets with a port ([2001:db8::1]:6697); the lookup takes it bare
-        std::string host = argv[0], nick, port;
+        std::string host = argv[0], nick, port, login;
         if (host[0] == '[') {
             size_t e = host.find(']');
             if (e != std::string::npos && e + 1 < host.size() && host[e + 1] == ':') port = host.substr(e + 2);
@@ -2268,6 +2335,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             if (argv[i] == "-tls") tls = true;
             else if (argv[i] == "-noverify") verify = false;
             else if ((argv[i] == "-name" || argv[i] == "-nick") && i + 1 < argv.size()) (argv[i] == "-name" ? name : nick) = argv[i + 1], i++;
+            else if (argv[i] == "-login" && i + 1 < argv.size()) login = to_lower(argv[++i]);
             else port = argv[i];
         }
         // the name is a config section: [server.<name>]
@@ -2275,6 +2343,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             print(b, LK::ERROR, "A server name can have letters, digits, . _ and - only");
             return;
         }
+        if (!login.empty() && !login_kind(login)) { print(b, LK::ERROR, "-login takes sasl, cert, nickserv or password"); return; }
         for (auto& sv : servers)
             if (sv->cfg.name == name) { connect(sv.get()); select(sv->status); return; }
         std::string sec = "server." + name;
@@ -2288,7 +2357,15 @@ void Core::exec(Buffer* b, const std::string& input) {
         ServerCfg sc = server_cfg(name);
         Server* ns = add_server(sc);
         select(ns->status);
-        connect(ns);
+        // -login: its questions first, since the password and the certificate go out with the connection
+        if (login.empty()) connect(ns);
+        else {
+            print(ns->status, LK::INFO, "It connects once the login is answered. Cancelled: /connect " + name + " goes ahead without one");
+            login_ask(ns->status, name, login, false, [this, name](bool ok) {
+                for (auto& sv : servers)
+                    if (ok && sv->cfg.name == name) connect(sv.get());
+            });
+        }
         return;
     }
     if (cmd == "connect") {

@@ -1457,6 +1457,52 @@ int main() {
         std::swap(core.cfg_path, path);
     }
 
+    // /login and /server -login: asked in dialogs, one login at a time; a new server asks before it connects (a password goes out with the connection)
+    {
+        std::string path = "build/test-login.conf";
+        std::swap(core.cfg_path, path);
+        size_t n = core.servers.size();
+        core.exec(home, "/server irc.invalid 6667 -name lg -login nope");
+        assert(core.servers.size() == n && home->lines.back().text.rfind("-login takes", 0) == 0);
+        core.exec(home, "/login sasl");
+        assert(home->lines.back().text.rfind("Not a server's tab", 0) == 0 && !core.pass_buf);
+        core.exec(home, "/server irc.invalid 6667 -name lg -login sasl");
+        Server* g = core.servers.back().get();
+        assert(core.servers.size() == n + 1 && g->conn.fd < 0 && core.pass_buf == g->status);  // asking, not connected yet
+        core.exec(g->status, "me");
+        assert(core.pass_buf == g->status && g->conn.fd < 0);
+        core.exec(g->status, "hunter2");
+        assert(!core.pass_buf && g->conn.fd >= 0 && g->cfg.sasl_user == "me" && g->cfg.sasl_pass == "hunter2" && core.unsaved["server.lg"].count("sasl_pass"));
+        // another login replaces it: SASL's keys are cleared, saved at once
+        core.exec(g->status, "/login nickserv");
+        assert(core.pass_buf == g->status);
+        core.exec(g->status, "ns3cret");
+        Ini f;
+        assert(!core.pass_buf && g->cfg.nickserv_pass == "ns3cret" && g->cfg.sasl_user.empty() && g->cfg.sasl_pass.empty() &&
+               ini_get(core.cfg, "server.lg", "sasl_user").empty() && !core.unsaved.count("server.lg") && ini_load(core.cfg_path, f) &&
+               f["server.lg"]["nickserv_pass"] == "ns3cret" && f["server.lg"]["sasl_user"].empty());
+        // an empty answer leaves it as it was
+        core.exec(g->status, "/login sasl");
+        core.exec(g->status, "");
+        assert(!core.pass_buf && g->cfg.nickserv_pass == "ns3cret" && g->cfg.sasl_user.empty());
+        // a certificate
+        core.exec(g->status, "/login cert");
+        core.exec(g->status, "/tmp/me.pem");
+        assert(!core.pass_buf && g->cfg.cert == "/tmp/me.pem" && g->cfg.key.empty() && g->cfg.nickserv_pass.empty());
+        core.exec(g->status, "/login none");
+        assert(!core.pass_buf && g->cfg.cert.empty() && ini_get(core.cfg, "server.lg", "cert").empty());
+        core.exec(g->status, "/login what");
+        assert(g->status->lines.back().text.rfind("Usage: /login", 0) == 0);
+        // cancelled on a new server: it's there, not connected
+        core.exec(home, "/server irc.invalid 6667 -name lg2 -login password");
+        Server* g2 = core.servers.back().get();
+        core.exec(g2->status, "");
+        assert(!core.pass_buf && g2->conn.fd < 0 && core.cfg.count("server.lg2") && ini_get(core.cfg, "server.lg2", "password").empty());
+        for (auto nm : {"lg", "lg2"}) core.exec(home, std::string("/server del ") + nm);
+        remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
+    }
+
     // every key the settings know is in the template (where it can be set), and every key there is known
     {
         std::set<std::string> gen, srv;

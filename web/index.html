@@ -180,6 +180,7 @@ dialog textarea.chg { border-color: var(--accent2); }
 .oncon { border-top: 1px solid var(--line); padding-top: 8px; }
 .oncon[open] { display: grid; gap: 8px; }
 .oncon summary { cursor: pointer; font-size: calc(12px * var(--z, 1)); color: var(--fg); font-weight: 700; }
+.lg { display: grid; gap: 8px; } .lg[hidden] { display: none; }
 dialog .row2 { display: grid; grid-template-columns: 1fr 110px; gap: 10px; }
 dialog .btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 4px; }
 dialog .btns button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 7px 14px; cursor: pointer; }
@@ -871,6 +872,25 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <label class="ck"><input type="checkbox" name="tls" checked> SSL/TLS</label>
   <label class="ck"><input type="checkbox" name="verify" checked> Verify the certificate (off for self-signed servers)</label>
   <label class="ck"><input type="checkbox" name="auto" checked> Connect at startup</label>
+  <details class="oncon" id="srvlogin"><summary>Login (SASL, NickServ, certificate)</summary>
+  <label>Log in with<select name="login"><option value="">None</option><option value="sasl">Account (SASL)</option><option value="nickserv">NickServ</option><option value="cert">Certificate</option><option value="password">Server password</option></select></label>
+  <div class="lg" data-m="sasl" hidden>
+  <label>Account name<input name="sasl_user" autocomplete="off" spellcheck="false"></label>
+  <label>Password<input type="password" name="sasl_pass" autocomplete="new-password"></label>
+  <label>Mechanism<select name="sasl_mech"><option value="">Automatic (PLAIN)</option><option>PLAIN</option><option>SCRAM-SHA-256</option></select></label>
+  </div>
+  <div class="lg" data-m="nickserv" hidden>
+  <label>NickServ password (sent as /msg NickServ IDENTIFY when it connects)<input type="password" name="nickserv_pass" autocomplete="new-password"></label>
+  </div>
+  <div class="lg" data-m="cert" hidden>
+  <label>Certificate file (.pem, on the machine that runs iSekur)<input name="cert" placeholder="/path/client.pem" autocomplete="off" spellcheck="false"></label>
+  <label>Key file (empty: the key is in the certificate)<input name="key" placeholder="/path/client.key" autocomplete="off" spellcheck="false"></label>
+  </div>
+  <div class="lg" data-m="password" hidden>
+  <label>Server password (bouncers: user/network:pass)<input type="password" name="password" autocomplete="new-password"></label>
+  </div>
+  <div class="hint" id="srvlh"></div>
+  </details>
   <details class="oncon" id="srvadv"><summary>Advanced: on connect (user modes, logins to X, Q, bots)</summary>
   <div class="row2"><label>User modes<input name="umodes" placeholder="+ix" autocomplete="off" spellcheck="false"></label>
   <label>Preset<select name="preset" title="Adds the login line (and +x for X and Q)"><option value="">Add...</option><option value="undernet">Undernet X</option><option value="quakenet">QuakeNet Q</option><option value="eggdrop">Eggdrop</option><option value="idlerpg">IdleRPG</option></select></label></div>
@@ -2213,11 +2233,12 @@ function syncAsk() {
 // picking one fills the form: Save writes the changes (/set + /save), Connect also connects, Delete removes it
 // (/server del). New, or no server yet: the form adds one, as /server
 const dsrv = $("#dsrv"), fs = dsrv.querySelector("form").elements;
-let srvs = [], srvSel = null, srvNote = "", srvWant = null;  // srvSel: the [server.x] name being edited, null: a new one; srvNote: "Saved."; srvWant: Edit network, picked once the list comes
+let srvs = [], srvSel = null, srvNote = "", srvWant = null, srvNick = "";  // srvSel: the [server.x] name being edited, null: a new one; srvNote: "Saved."; srvWant: Edit network, picked once the list comes
 const isOn = v => /^(true|on|yes|1)$/i.test(v || "");
 function srvRows(list) {  // [section, key, value, default, ...] rows -> one object per server: what's in effect
   const by = new Map();
   for (const [sec, k, v, def] of list) {
+    if (sec === "general" && k === "nick") srvNick = v || def;  // what an account name defaults to
     if (!sec.startsWith("server.")) continue;
     const o = by.get(sec) || {name: sec.slice(7)}; by.set(sec, o);
     o[k] = k === "nick" ? v : v || def;  // the nick's default is [general] nick: the placeholder says so
@@ -2231,6 +2252,32 @@ fs.preset.onchange = async () => {
   srvPB.add(r.line);
   if (r.cloak) fs.umodes.value = umodeWithX(fs.umodes.value.trim());
 };
+// Login: a network logs in one way, the picker shows that one's fields. The first key of each says a network uses it; a
+// password never comes back here (the row says only that it's set), so its field stays empty and empty means "keep it"
+const LOGIN = {sasl: ["sasl_user", "sasl_pass", "sasl_mech"], cert: ["cert", "key"], nickserv: ["nickserv_pass"], password: ["password"]};
+const LOGIN_SECRET = new Set(["sasl_pass", "nickserv_pass", "password"]);
+const LOGIN_NAME = {sasl: "Account (SASL)", cert: "Certificate", nickserv: "NickServ", password: "Server password"};
+const loginOf = o => o && Object.keys(LOGIN).find(m => o[LOGIN[m][0]]) || "";
+function srvLogin() {  // the picked method's fields, what's saved, and what else the network has
+  const m = fs.login.value, o = srvs.find(x => x.name === srvSel), had = loginOf(o);
+  for (const d of dsrv.querySelectorAll("#srvlogin .lg")) d.hidden = d.dataset.m !== m;
+  for (const k of LOGIN_SECRET) fs[k].placeholder = o && o[k] ? "saved · type to replace" : "";
+  fs.sasl_user.placeholder = fs.nick.value.trim() || srvNick || "your nick";
+  const more = Object.keys(LOGIN).filter(x => x !== had && o && o[LOGIN[x][0]]).map(x => LOGIN_NAME[x]);
+  $("#srvlh").textContent = (had && had !== m ? (m ? "Saving replaces the " + LOGIN_NAME[had] + " login. " : "Saving removes the " + LOGIN_NAME[had] + " login. ") : "") +
+    (more.length ? "Also set: " + more.join(", ") + " (/set changes them)." : "");
+}
+// what to /set for a login: another one clears the one it had; a password only when typed. sasl_user empty: the nick
+function loginSets(o) {
+  const m = fs.login.value, had = loginOf(o), out = [];
+  if (had && had !== m) for (const k of LOGIN[had]) if (o[k]) out.push([k, ""]);
+  for (const k of m ? LOGIN[m] : []) {
+    const v = LOGIN_SECRET.has(k) ? fs[k].value : fs[k].value.trim() || (k === "sasl_user" ? fs.nick.value.trim() || srvNick : "");
+    if (LOGIN_SECRET.has(k) ? v !== "" : v !== (o && o[k] || "")) out.push([k, v]);
+  }
+  return out;
+}
+fs.login.onchange = srvLogin; fs.nick.addEventListener("input", srvLogin);
 function srvTab(name) { for (const b of bufs.values()) if (b.type === "status" && b.net === name) return b; return null; }
 function renderSrv() {
   const L = $("#srvlist"); L.textContent = "";
@@ -2249,6 +2296,7 @@ function renderSrv() {
   $("#srvgo").textContent = !o ? "Connect" : t && t.state !== "disconnected" ? "Save & reconnect" : "Save & connect";
   $("#srvhint").textContent = (srvNote ? srvNote + " " : "") + (!o ? "A new server: Connect adds it and connects." :
     (t ? t.state[0].toUpperCase() + t.state.slice(1) : "Not connected") + ". Host, port and TLS changes take effect on the next connect.");
+  srvLogin();
 }
 function srvPick(name) {
   srvSel = name, srvNote = "";
@@ -2259,7 +2307,10 @@ function srvPick(name) {
     fs.autojoin.value = (o.autojoin || "").split(",").map(x => x.trim()).filter(Boolean).join(", ");
     fs.tls.checked = isOn(o.tls); fs.verify.checked = isOn(o.tls_verify ?? "true"); fs.auto.checked = isOn(o.autoconnect ?? "true");
     fs.umodes.value = o.umodes || ""; fs.jwait.checked = isOn(o.join_wait ?? "on");
+    fs.login.value = loginOf(o);
+    for (const k of ["sasl_user", "sasl_mech", "cert", "key"]) fs[k].value = o[k] || "";
   }
+  $("#srvlogin").open = !!loginOf(o);  // closed unless this network logs in
   $("#srvadv").open = !!(o && (o.umodes || o.perform || !isOn(o.join_wait ?? "on")));  // basic setup: closed unless this network uses it
   srvPB.reset(o ? o.perform : "");
   fs.verify.disabled = !fs.tls.checked;
@@ -2284,6 +2335,8 @@ function srvApply() {
     if (v === was) continue;
     send({t: "input", buf: active, text: "/set server." + o.name + "." + k + " " + (v === "" ? '""' : v)}), n++;
   }
+  for (const [k, v] of loginSets(o)) send({t: "input", buf: active, text: "/set server." + o.name + "." + k + " " + (v === "" ? '""' : v)}), n++;
+  for (const k of LOGIN_SECRET) fs[k].value = "";  // sent: they're saved now (a second Save mustn't send them again)
   if (n) send({t: "input", buf: active, text: "/save"});
   return n > 0;
 }
@@ -2306,13 +2359,18 @@ dsrv.onclose = () => {
     else send({t: "input", buf: active, text: "/connect " + srvSel});
     return;
   }
-  const host = fs.host.value.trim(), name = fs.name.value.trim(), nick = fs.nick.value.trim();
+  const host = fs.host.value.trim(), nick = fs.nick.value.trim();
+  // the name /server would give it (a ws:// URL: its host, odd characters: -), said out loud so the [server.x] keys below land on it
+  const name = fs.name.value.trim() || (host.match(/^wss?:\/\/([^\/:]+)/i)?.[1] || host.replace(/^\[|\]$/g, "")).replace(/[^A-Za-z0-9._-]/g, "-");
+  const sec = "server." + name;
+  // the login first: a password and a certificate go out with the connection /server starts
+  for (const [k, v] of loginSets(null)) send({t: "input", buf: active, text: "/set " + sec + "." + k + " " + v});
   let cmd = "/server " + host + " " + (fs.port.value || (fs.tls.checked ? 6697 : 6667));
   if (fs.tls.checked) cmd += " -tls" + (fs.verify.checked ? "" : " -noverify");
-  if (name) cmd += " -name " + name;
+  cmd += " -name " + name;
   if (nick) cmd += " -nick " + nick;
   send({t: "input", buf: active, text: cmd});
-  const sec = "server." + (name || host), aj = fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(",");
+  const aj = fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(",");
   if (aj) send({t: "input", buf: active, text: "/set " + sec + ".autojoin " + aj});
   if (!fs.auto.checked) send({t: "input", buf: active, text: "/set " + sec + ".autoconnect false"});
   if (fs.umodes.value.trim()) send({t: "input", buf: active, text: "/set " + sec + ".umodes " + fs.umodes.value.trim()});
