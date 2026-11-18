@@ -1898,6 +1898,13 @@ int main() {
             bool nwrow = false;
             for (auto& r : core.setting_rows()) nwrow |= r.sec == "general" && r.key == "nick_width" && r.def == core.theme.lay("nick_width", "12") && !r.def.empty();
             assert(nwrow);
+            // an empty template default the code fills in says what it is (log_dir's folder, the quit text), not "(not set)"
+            bool ldrow = false, qrow = false;
+            for (auto& r : core.setting_rows()) {
+                ldrow |= r.sec == "general" && r.key == "log_dir" && r.def == core.cfg_path.substr(0, core.cfg_path.rfind('/') + 1) + "logs";
+                qrow |= r.sec == "general" && r.key == "quit_message" && r.def.rfind("iSekur IRC: v", 0) == 0;
+            }
+            assert(ldrow && qrow);
             // complete_suffix: ":" by default, any text, off/none for nothing (Tab and the webchat add the space)
             assert(core.complete_suffix() == ":");
             core.cfg["general"]["complete_suffix"] = ",";

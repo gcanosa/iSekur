@@ -1569,7 +1569,9 @@ void Tui::draw_settings(int W, int H) {
             if (on) text(ex, yy, vmax, inherits ? "   Space: override" : overrides ? "   Space: switch · d: Global's" : "   Space: switch", sel, false);
             continue;
         }
-        std::string over = (L.r->unit.empty() ? "" : " " + L.r->unit) + (L.r->over.empty() ? "" : "  (" + L.r->over + ")");
+        // the unit only after a bare number (or none yet): "3m" is already its own unit, "3m days" read wrong
+        bool bare = L.r->val.find_first_not_of("0123456789") == std::string::npos;
+        std::string over = (L.r->unit.empty() || !bare ? "" : " " + L.r->unit) + (L.r->over.empty() ? "" : "  (" + L.r->over + ")");
         bool cmds = L.r->key == "perform" || L.r->sec == "aliases";  // commands: their passwords as ********
         std::string v = !L.r->val.empty() ? (L.r->secret ? "********" : cmds ? perform_show(L.r->val) : L.r->val) + (overrides ? "  \u2190 overrides Global" : "") + over
                         : L.r->secret || L.r->def.empty() ? "(not set)" + over

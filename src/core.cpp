@@ -374,9 +374,33 @@ static std::string theme_def(const Theme& t, const std::string& k) {
     return it == D.end() ? "" : t.lay(k, it->second);
 }
 
+std::string default_fifo(const std::string& cfg);  // fifo.cpp
+
+// keys the template leaves empty but the code fills in: what unset means, so the settings say it instead of "(not set)"
+// ("": nothing to say, it really is just unset: a password, a mask list...)
+static std::string code_def(const std::string& cfg_path, const std::string& sec, const std::string& k) {
+    if (sec == "general") {
+        if (k == "log_dir") return cfg_path.substr(0, cfg_path.rfind('/') + 1) + "logs";
+        if (k == "quit_message" || k == "part_message") return "iSekur IRC: v" ISEKUR_VERSION;
+        if (k == "fifo_path") return default_fifo(cfg_path);
+        if (k == "dcc_ip") return "the address the IRC connection uses";
+        if (k == "dcc_ports") return "any free port";
+        if (k == "ignore") return "nobody";
+    } else if (sec == "web" || sec == "bnc") {
+        if (k == "cert") return "self-signed";
+        if (k == "key") return "the self-signed one's";
+        if (sec == "web" && k == "html") return "the built-in page";
+        if (sec == "bnc" && k == "certfp") return "none (password login)";
+    }
+    return "";
+}
+
 std::vector<Core::Setting> Core::settings() const {
     Ini all = defaults;
     for (const char* k : {"timestamp", "nick_width", "nicklist_width", "tab_bar_width"}) all["general"][k] = theme_def(theme, k);  // empty: the theme's, so that's its default
+    for (auto& [sec, kv] : all)
+        for (auto& [k, v] : kv)
+            if (v.empty()) v = code_def(cfg_path, sec, k);
     for (auto& [sec, kv] : cfg)
         for (auto& [k, v] : kv)
             if (sec.rfind("plugin.", 0) != 0 && (!v.empty() || !all[sec].count(k))) all[sec][k] = v;  // "key =" keeps the default; plugins: /plugin
@@ -648,6 +672,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     // what [general] uses when a key isn't set: the template's value (the theme's timestamp and nick column)
     auto gdef = [&](const std::string& k) {
         std::string t = theme_def(theme, k);
+        if (t.empty()) t = code_def(cfg_path, "general", k);
         return t.empty() ? ini_get(defaults, "general", k) : t;
     };
     std::vector<std::string> nets;
@@ -698,7 +723,10 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         if (cfg.count(sec))
             for (auto& [k, v] : cfg.at(sec))
                 if (std::find(ks.begin(), ks.end(), k) == ks.end()) ks.push_back(k);
-        for (auto& k : ks) add(sec, k, ini_get(defaults, sec, k), "");
+        for (auto& k : ks) {
+            std::string d = ini_get(defaults, sec, k);
+            add(sec, k, d.empty() ? code_def(cfg_path, sec, k) : d, "");
+        }
     }
     return out;
 }
@@ -1981,6 +2009,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (argv.size() == 1) {
             std::string def = ini_get(defaults, sec, key);
             if (std::string t = sec == "general" ? theme_def(theme, key) : ""; !t.empty()) def = t + ", the theme's";
+            else if (def.empty()) def = code_def(cfg_path, sec, key);
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : (key == "perform" || sec == "aliases") && !ini_get(cfg, sec, key).empty() ? perform_show(ini_get(cfg, sec, key)) : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
             return;
         }

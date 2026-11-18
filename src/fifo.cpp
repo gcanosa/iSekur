@@ -16,7 +16,7 @@
 static const size_t MAX_FIFO_LINE = 8192;  // a longer line with no newline is dropped, not kept forever
 
 // no fifo_path: the main config gets ~/.config/isekur/fifo; any other config gets <name>.fifo beside it, like its socket
-static std::string default_fifo(const std::string& cfg) {
+std::string default_fifo(const std::string& cfg) {
     if (cfg.empty() || cfg == default_config_path()) {  // beside it, so $XDG_CONFIG_HOME moves the pipe too
         std::string d = default_config_path();
         return d.substr(0, d.rfind('/') + 1) + "fifo";
