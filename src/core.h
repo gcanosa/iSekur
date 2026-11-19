@@ -59,10 +59,14 @@ struct Theme {
     std::string name;
     std::map<std::string, Style> el;
     std::vector<RGB> nicks;
+    RGB self_nick = -1;  // your own nick's color: like the nick colors, but none of them (own_nick_color); -1: no palette to tell it from
     std::map<std::string, std::string> layout;
     Style get(const std::string& k) const;
     std::string lay(const std::string& k, const std::string& def) const;
 };
+RGB nick_rgb(const Theme& t, const std::string& nick);  // a nick's color: its hash picks one of the theme's (-1: the theme has none)
+double color_distance(RGB a, RGB b);  // how far apart two colors look (CIE76 ΔE: 25 is plainly another color)
+RGB distinct_nick(const Theme& t);  // the color for your own nick: the palette's lightness and chroma, a hue none of them has, near msg_self
 extern std::string theme_dir;  // [general] theme_dir: searched first for <name>.theme
 bool load_theme(const std::string& name, Theme& out, std::string& err);
 Style note_style(const Theme& t);  // the INFO badge on iSekur's own notices: [colors] note, else made from hilight
@@ -303,7 +307,7 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 12 // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 13 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings, booleans and whole numbers
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool, int>>>;
@@ -508,6 +512,13 @@ struct Core {
     bool view_on(bool web) const { return !view.by.empty() && (web ? view.web : view.term); }
     const Theme& look(bool web) const { return view_on(web) && view.own ? view.theme : theme; }  // what that side draws with
     void view_end();
+    // the nicks' colors (the nick column and a plugin's): your own is its own color when own_nick_color is on. -1: the theme's text color
+    bool own_nick_on() const;
+    RGB self_nick(const Theme& t) const { return own_nick_on() && t.self_nick >= 0 ? t.self_nick : t.get("msg_self").fg; }
+    RGB nick_color(const Server* s, const std::string& nick, const Theme& t) const;
+    // a plugin's colored user list (isekur.nicklist_colors, nickcolors): each nick in the color its lines have, in the tabs where the plugin is on
+    std::string nicklist_by;
+    bool nicklist_colored(const Buffer* b) const;
     // a plugin's radio (API 12, radio.cpp): one stream at a time, decoded by ffmpeg to MP3 and fanned out to the webchat's
     // <audio> (GET /radio/stream) and, when asked, a player on this machine. A YouTube link (a 24/7 live) goes through yt-dlp
     // first: the audio-only URL it finds works only from this machine's address, so the audio can't go to a phone directly

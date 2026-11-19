@@ -2064,6 +2064,16 @@ int main() {
         assert(load_theme(n, th, terr));
         for (const char* k : {"default", "status", "tab_active", "input", "timestamp", "join", "error"}) assert(th.el.count(k));
         assert(th.nicks.size() >= (n.rfind("mirc", 0) == 0 || n.rfind("mono", 0) == 0 ? 1u : 6u));  // mirc, mono: one nick color
+        // a tab with activity (data, messages, a mention) is plainly another color than a quiet one, in every theme
+        for (const char* k : {"tab_data", "tab_msg", "tab_hilight"})
+            if (th.get("tabbar").fg >= 0 && th.get(k).fg >= 0) assert(color_distance(th.get(k).fg, th.get("tabbar").fg) >= 24.5);
+        // own_nick_color: yours is a color none of the nick colors is (and clearly apart from each), unless nobody's are colored
+        assert((th.nicks.size() < 2) == (th.self_nick < 0));
+        for (RGB c : th.nicks) {
+            if (th.self_nick < 0) break;
+            int dr = (c >> 16 & 255) - (th.self_nick >> 16 & 255), dg = (c >> 8 & 255) - (th.self_nick >> 8 & 255), db = (c & 255) - (th.self_nick & 255);
+            assert(dr * dr + dg * dg + db * db >= 30 * 30);
+        }
     }
     {  // mono: mIRC color codes in text keep the base colors, bold still works
         Theme th;
@@ -3279,6 +3289,31 @@ end)
             Ini disk;
             assert(ini_load(sy.cfg_path, disk) && ini_get(disk, "plugin.st@y", "allowed") == "bob carol");
         }
+        {  // API 13: nick_color (yours is its own color), theme().self, nicklist_colors (the user list painted where the plugin is on)
+            FILE* f = fopen((dir + "/plugins/nc.lua").c_str(), "w");
+            fputs(R"LUA(
+isekur.command("nc", "", function(a, srv)
+  print(isekur.nick_color(srv, "bob"), isekur.nick_color(srv, "ME"), isekur.theme().self, isekur.nicklist_colors())
+  isekur.nicklist_colors(true)
+end)
+)LUA", f), fclose(f);
+            sy.theme.nicks = {0xff0000, 0x00ff00}, sy.theme.self_nick = 0x0000ff, sy.theme.el["msg_self"].fg = 0xabcdef;
+            sy.exec(ph, "/plugin enable nc");
+            sy.exec(yb, "/nc");
+            assert(ph->lines.back().text == std::to_string(nick_rgb(sy.theme, "bob")) + " " + std::to_string(0x0000ff) + " " + std::to_string(0x0000ff) + " false");
+            assert(sy.nicklist_by == "nc" && sy.nicklist_colored(yb) && !sy.nicklist_colored(ph));
+            sy.exec(ph, "/set own_nick_color off");  // the theme's own msg_self again
+            sy.exec(yb, "/nc");
+            assert(ph->lines.back().text == std::to_string(nick_rgb(sy.theme, "bob")) + " " + std::to_string(0xabcdef) + " nil true");
+            assert(sy.self_nick(sy.theme) == 0xabcdef);
+            sy.exec(ph, "/set own_nick_color on");
+            assert(sy.self_nick(sy.theme) == 0x0000ff);
+            sy.exec(ph, "/plugin enable nc@other");  // on in another network only: loaded, but not painting here
+            sy.exec(ph, "/plugin disable nc");
+            assert(sy.nicklist_by == "nc" && !sy.nicklist_colored(yb));
+            sy.exec(ph, "/plugin disable nc@other");
+            assert(sy.nicklist_by.empty() && !sy.nicklist_colored(yb));  // it went with its plugin
+        }
         sy.plugins.clear();
         assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
     }
@@ -3949,6 +3984,29 @@ print("loaded")
         pc.exec(ph, "/plugin disable zen");
         assert(pc.view.by.empty() && pc.look(false).name == conf_theme && pc.theme.name == conf_theme);
         pc.exec(ph, "/plugin remove zen");
+        // nickcolors: the channel's nicks said in a message get their color (shown only), but not inside a link, a #name or
+        // a text with colors of its own, nor short ones; where picks the chat, the user list or both
+        pc.theme.nicks = {0xff0000, 0x00ff00, 0x0000ff};
+        pc.exec(ph, "/plugin install nickcolors");
+        wait_catalog();
+        assert(said("nickcolors " + ver["nickcolors"] + " installed and on") && pc.nicklist_by == "nickcolors" && pc.nicklist_colored(pchan));
+        assert(irc_parse(":gary!u@h JOIN #chan", pm)), pc.handle(ps, pm);
+        assert(irc_parse(":hank!u@h JOIN #chan", pm)), pc.handle(ps, pm);
+        auto painted = [&](const std::string& n) { char b[16]; snprintf(b, sizeof b, "\x04%06x", (unsigned)nick_rgb(pc.theme, n)); return std::string(b) + n + "\x04"; };
+        const std::string said_ = "hey gary, see https://gary.test/hank and #gary, hank.test zed ed";
+        assert(irc_parse(":hank!u@h PRIVMSG #chan :" + said_, pm)), pc.handle(ps, pm);
+        assert(pchan->lines.back().text == "hey " + painted("gary") + ", see https://gary.test/hank and #gary, hank.test zed ed" && pchan->lines.back().said == said_);
+        assert(irc_parse(":hank!u@h PRIVMSG #chan :hi \x03" "4gary", pm)), pc.handle(ps, pm);
+        assert(pchan->lines.back().text == "hi \x03" "4gary" && pchan->lines.back().said.empty());
+        assert(irc_parse(":hank!u@h PRIVMSG #chan :gary: hank!", pm)), pc.handle(ps, pm);
+        assert(pchan->lines.back().text == painted("gary") + ": " + painted("hank") + "!");
+        pc.exec(ph, "/plugin set nickcolors where userlist");  // the user list only: the lines are as said again, the list still painted
+        assert(pchan->lines.back().text == "gary: hank!" && pc.nicklist_by == "nickcolors");
+        pc.exec(ph, "/plugin set nickcolors where chat");
+        pc.plugin_emit("tick", nullptr, "");
+        assert(pchan->lines.back().text == painted("gary") + ": " + painted("hank") + "!" && pc.nicklist_by.empty());
+        pc.exec(ph, "/plugin remove nickcolors");
+        pc.theme.nicks.clear();
         // screensaver: after idle minutes without a key (attached), each saver draws on any grid, a key ends it
         pc.exec(ph, "/plugin install screensaver");
         wait_catalog();

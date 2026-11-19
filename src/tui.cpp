@@ -112,13 +112,18 @@ static void linkify(Row& r) {
 }
 
 static RGB readable(RGB c, RGB bg);
+// the chat's theme while its lines are built (wrap): a nick color of it, or yours, is shown as the theme made it, in the
+// nick column and in a text a plugin painted (nickcolors) alike
+static const Theme* tint_theme = nullptr;
+static RGB tint_self = -1;
+static bool theme_nick(RGB c) { return tint_theme && (c == tint_self || std::find(tint_theme->nicks.begin(), tint_theme->nicks.end(), c) != tint_theme->nicks.end()); }
 static void cells(Row& out, const std::string& s, Style st, bool mirc = true) {
     auto put = [&](uint32_t cp, const Style& cs) {
         int w = cwidth(cp);
         if (!w) return;
         out.push_back({cp, cs, w});
         // a mIRC color on the theme's background (yellow on rose-pine-dawn): toward black or white until it reads
-        if (mirc && cs.fg != st.fg && cs.bg == st.bg) out.back().st.fg = readable(cs.fg, st.bg);
+        if (mirc && cs.fg != st.fg && cs.bg == st.bg && !theme_nick(cs.fg)) out.back().st.fg = readable(cs.fg, st.bg);
     };
     if (mirc) mirc_walk(s, st, put);
     else
@@ -242,10 +247,8 @@ static Style sty(const Theme& t, const std::string& k, const std::string& fb) {
 }
 
 static Style nick_style(const Theme& t, const std::string& nick) {
-    unsigned h = 5381;
-    for (char ch : irc_lower(nick)) h = h * 33 + (unsigned char)ch;
     Style s = t.get("default");
-    if (!t.nicks.empty()) s.fg = t.nicks[h % t.nicks.size()];  // no theme file found: no nick colors
+    if (!t.nicks.empty()) s.fg = nick_rgb(t, nick);  // no theme file found: no nick colors
     return s;
 }
 
@@ -447,6 +450,7 @@ struct WrapInfo { std::string ts, marker; bool ts_right = false; int indent = 0,
 static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int width_, bool full = false, const char* tsf = nullptr,
                              WrapInfo* info = nullptr) {
     const Theme& T = c.look(false);
+    tint_theme = &T, tint_self = c.self_nick(T);
     int nw = atoi(ini_get(c.cfg, "general", "nick_width", T.lay("nick_width", "12")).c_str());  // /set nick_width beats the theme's
     std::string tsfmt = tsf ? tsf : ini_get(c.cfg, "general", "timestamp", T.lay("timestamp", "%H:%M"));
     // timestamp_align = right: the time at the right edge of the first row, the text wraps short of it
@@ -469,6 +473,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
         marker = pfx + l.nick;
         if (auto br = T.lay("nick_brackets", ""); br.size() == 2) marker = br[0] + marker + br[1];  // mirc: <nick>
         ms = l.self ? T.get("msg_self") : nick_style(T, l.nick);
+        if (l.self) ms.fg = c.self_nick(T);  // own_nick_color: a color none of the others has
         if (!l.self && l.color >= 0) ms.fg = l.color;  // Twitch: the color they picked
         if (l.hilight) ms = T.get("hilight"), body = sty(T, "hilight_text", "default");
         break;
@@ -608,6 +613,7 @@ void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool 
     std::vector<const NickEntry*> v;
     for (auto& kv : b->nicks) v.push_back(&kv.second);
     Server* s = b->srv;
+    bool paint = c.nicklist_colored(b);  // a plugin (nickcolors) wants each nick in its chat color
     // the map is keyed by irc_lower(nick), so it's already in name order: only rank moves them
     std::stable_sort(v.begin(), v.end(), [&](const NickEntry* x, const NickEntry* y) {
         return s->prefix_rank(x->prefix) < s->prefix_rank(y->prefix);
@@ -632,7 +638,12 @@ void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool 
         bool sel = focus && std::find(nick_sel.begin(), nick_sel.end(), e->nick) != nick_sel.end();
         if (sel) ns = sty(T, "menu_sel", "tab_active");
         fill(top + 1 + (int)i, x0, xend, sel ? ns : T.get("nicklist"));
-        text(x0 + 1, top + 1 + (int)i, xend, (e->prefix.empty() ? " " : e->prefix.substr(0, 1)) + e->nick, ns, false);
+        std::string pf = e->prefix.empty() ? " " : e->prefix.substr(0, 1);
+        if (paint && !sel) {  // the prefix keeps its rank color, the nick takes its own
+            int nx = text(x0 + 1, top + 1 + (int)i, xend, pf, ns, false);
+            if (RGB nc = c.nick_color(s, e->nick, T); nc >= 0) ns.fg = nc;  // exactly the nick column's
+            text(nx, top + 1 + (int)i, xend, e->nick, ns, false);
+        } else text(x0 + 1, top + 1 + (int)i, xend, pf + e->nick, ns, false);
     }
     for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, x0, xend, T.get("nicklist"));
 }

@@ -930,7 +930,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
            (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +
                                                 ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
-           ",\"typing\":[" + typing + "]" +
+           ",\"typing\":[" + typing + "]" + (c.nicklist_colored(b) ? ",\"nc\":1" : "") +
            ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + (nicks.empty() ? "" : ",\"nicks\":" + nicks) + "}";
 }
 
@@ -964,7 +964,7 @@ std::string Web::theme_json() {
     for (auto& [k, v] : lay) o += (first ? "" : ",") + json_str(k) + ":" + json_str(v), first = false;
     o += "},\"nicks\":[";
     for (size_t i = 0; i < T.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(T.nicks[i]));
-    o += "],\"themes\":[";  // installed ones, for the /theme picker
+    o += "],\"self\":" + json_str(rgb_hex(c.own_nick_on() ? T.self_nick : -1)) + ",\"themes\":[";  // self: your nick's own color (own_nick_color); the installed themes, for the /theme picker
     first = true;
     for (auto& n : theme_names()) o += (first ? "" : ",") + json_str(n), first = false;
     return o + "]}";

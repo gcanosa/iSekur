@@ -470,6 +470,116 @@ std::string Theme::lay(const std::string& k, const std::string& def) const {
     return it == layout.end() ? def : it->second;
 }
 
+// ---- nick colors -------------------------------------------------------------
+RGB nick_rgb(const Theme& t, const std::string& nick) {
+    if (t.nicks.empty()) return -1;
+    unsigned h = 5381;
+    for (char ch : irc_lower(nick)) h = h * 33 + (unsigned char)ch;
+    return t.nicks[h % t.nicks.size()];
+}
+
+struct Lab { double L, a, b; };
+static double lin(int c8) { double c = c8 / 255.0; return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); }
+static double lum(RGB c) { return 0.2126 * lin(c >> 16 & 255) + 0.7152 * lin(c >> 8 & 255) + 0.0722 * lin(c & 255); }
+static double ratio(RGB a, RGB b) { double x = lum(a) + 0.05, y = lum(b) + 0.05; return x > y ? x / y : y / x; }
+static Lab to_lab(RGB c) {
+    double r = lin(c >> 16 & 255), g = lin(c >> 8 & 255), b = lin(c & 255);
+    double X = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047, Y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b,
+           Z = (0.0193339 * r + 0.1191920 * g + 0.9503041 * b) / 1.08883;
+    auto f = [](double v) { return v > 216.0 / 24389 ? std::cbrt(v) : (24389.0 / 27 * v + 16) / 116; };
+    return {116 * f(Y) - 16, 500 * (f(X) - f(Y)), 200 * (f(Y) - f(Z))};
+}
+// the color of a Lab point, -1 when a screen can't show it
+static RGB from_lab(double L, double a, double b) {
+    double fy = (L + 16) / 116, fx = fy + a / 500, fz = fy - b / 200;
+    auto inv = [](double v) { return v * v * v > 216.0 / 24389 ? v * v * v : (116 * v - 16) / (24389.0 / 27); };
+    double X = inv(fx) * 0.95047, Y = inv(fy), Z = inv(fz) * 1.08883;
+    double ch[3] = {3.2404542 * X - 1.5371385 * Y - 0.4985314 * Z, -0.9692660 * X + 1.8760108 * Y + 0.0415560 * Z,
+                    0.0556434 * X - 0.2040259 * Y + 1.0572252 * Z};
+    RGB out = 0;
+    for (double v : ch) {
+        if (v < -0.002 || v > 1.002) return -1;
+        v = std::clamp(v, 0.0, 1.0);
+        out = out << 8 | (int)std::lround(255 * (v <= 0.0031308 ? 12.92 * v : 1.055 * std::pow(v, 1 / 2.4) - 0.055));
+    }
+    return out;
+}
+static double delta_e(const Lab& x, const Lab& y) { return std::sqrt((x.L - y.L) * (x.L - y.L) + (x.a - y.a) * (x.a - y.a) + (x.b - y.b) * (x.b - y.b)); }
+
+double color_distance(RGB a, RGB b) { return delta_e(to_lab(a), to_lab(b)); }
+
+// A tab with activity (data, messages, a mention) has to look different from a quiet one: a theme whose color for it is
+// within a few steps of the quiet tab's (dracula's data is the quiet color itself) gets it moved away from the
+// background, lighter on a dark theme and darker on a light one, until it is plainly another color. Its hue stays
+static void apart_tabs(Theme& t) {
+    Style quiet = t.get("tabbar");
+    RGB bg = quiet.bg >= 0 ? quiet.bg : t.get("default").bg;
+    if (quiet.fg < 0) return;
+    bool light = bg >= 0 ? lum(bg) > 0.18 : false;  // the terminal's own background: dark is the usual one
+    for (const char* k : {"tab_data", "tab_msg", "tab_hilight"}) {
+        auto it = t.el.find(k);
+        if (it == t.el.end() || it->second.fg < 0 || color_distance(it->second.fg, quiet.fg) >= 25) continue;
+        Lab l = to_lab(it->second.fg);
+        RGB pick = it->second.fg;
+        for (int i = 0; i < 40 && l.L > 3 && l.L < 97; i++) {
+            l.L += light ? -1.5 : 1.5;
+            for (double k = 1; k >= 0.5; k -= 0.1)  // out of what a screen shows at that lightness: a little less colorful
+                if (RGB c = from_lab(l.L, l.a * k, l.b * k); c >= 0) { pick = c; break; }
+            if (color_distance(pick, quiet.fg) >= 25) break;
+        }
+        it->second.fg = pick;
+    }
+}
+
+// Your own nick: the theme's nick colors share a handful of hues, so some other nick always has msg_self's color and
+// your lines blend in. This picks one that is none of them yet still looks like one of them: as light and as colorful
+// as the palette (a little beyond it when the palette is crowded), as readable on the background as its weakest color,
+// and of those the hue farthest from every palette color (within 15%), then the one as light and colorful as msg_self. A palette of one color (mirc,
+// mono: nicks aren't colored) has nothing to tell it from: -1
+RGB distinct_nick(const Theme& t) {
+    if (t.nicks.size() < 2) return -1;
+    Style d = t.get("default");
+    RGB self = t.get("msg_self").fg, bg = d.bg;
+    if (bg < 0) bg = d.fg >= 0 && lum(d.fg) < 0.4 ? 0xffffff : 0x000000;  // the terminal's own: the opposite of the text
+    std::vector<Lab> pal;
+    double lo = 100, hi = 0, cl = 200, ch = 0, weakest = 21;
+    for (RGB c : t.nicks) {
+        Lab l = to_lab(c);
+        pal.push_back(l);
+        double k = std::hypot(l.a, l.b);
+        lo = std::min(lo, l.L), hi = std::max(hi, l.L), cl = std::min(cl, k), ch = std::max(ch, k);
+        weakest = std::min(weakest, ratio(c, bg));
+    }
+    double need = std::min(4.5, std::max(3.0, weakest));
+    Lab base = to_lab(self >= 0 ? self : t.nicks[0]);
+    struct Pick { RGB c; double apart, near; };
+    std::vector<Pick> all;
+    for (double margin : {0.0, 6.0, 12.0, 20.0}) {
+        all.clear();
+        double a = std::max(15.0, lo - margin), b = std::min(90.0, hi + margin);
+        for (int li = 0; li <= 8; li++)
+            for (double k : {std::max(cl, 25.0), (std::max(cl, 25.0) + ch) / 2 + margin, ch + margin})
+                for (int h = 0; h < 360; h += 3) {
+                    double L = a + (b - a) * li / 8, A = k * std::cos(h * M_PI / 180), B = k * std::sin(h * M_PI / 180);
+                    RGB c = from_lab(L, A, B);
+                    if (c < 0 || ratio(c, bg) < need) continue;
+                    Lab x = to_lab(c);
+                    double apart = 1e9;
+                    for (auto& p : pal) apart = std::min(apart, delta_e(x, p));
+                    all.push_back({c, apart, std::hypot(x.L - base.L, std::hypot(x.a, x.b) - std::hypot(base.a, base.b))});  // near: as light and colorful as msg_self, any hue
+                }
+        double best = 0;
+        for (auto& p : all) best = std::max(best, p.apart);
+        if (best >= 25) break;  // plainly another color: no need to leave the palette's lightness
+    }
+    double best = 0;
+    for (auto& p : all) best = std::max(best, p.apart);
+    Pick* pick = nullptr;
+    for (auto& p : all)
+        if (p.apart >= best * 0.85 && (!pick || p.near < pick->near)) pick = &p;
+    return pick ? pick->c : -1;
+}
+
 // "fg bg attr..." e.g. "#ffffff #5f00af bold"
 static Style parse_style(const std::string& v) {
     Style st;
@@ -544,6 +654,8 @@ bool load_theme(const std::string& given, Theme& out, std::string& err) {
     for (std::string tok; pal >> tok;) t.nicks.push_back(parse_color(tok));
     if (t.nicks.empty()) t.nicks = {0xff5f5f, 0x5fff5f, 0xffff5f, 0x5f87ff, 0xff5fff, 0x5fffff};
     t.layout = ini["layout"];
+    t.self_nick = distinct_nick(t);
+    apart_tabs(t);
     mirc_colors = t.lay("mirc_colors", "on") != "off";
     out = t;
     return true;

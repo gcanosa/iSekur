@@ -430,7 +430,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
     {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_autohide", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
-    {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'}, {"tab_bar", "Look", 'g'}, {"tab_bar_width", "Look", 'g'}, {"nicklist_side", "Look", 'g'}, {"nicklist_width", "Look", 'g'},
+    {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"own_nick_color", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'}, {"tab_bar", "Look", 'g'}, {"tab_bar_width", "Look", 'g'}, {"nicklist_side", "Look", 'g'}, {"nicklist_width", "Look", 'g'},
     {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
     {"hilight_words", "Messages", 'n'}, {"hilight_window", "Messages", 'b'}, {"bell_notifications", "Messages", 'b'},
@@ -1192,6 +1192,14 @@ void Core::fold(Buffer* st) {
 // what you leave with: the config's quit_message / part_message, else what iSekur is
 std::string Core::bye(const Server* s, const std::string& key) const {
     return opt(s, key, "iSekur IRC: v" ISEKUR_VERSION);
+}
+
+bool Core::own_nick_on() const { return opt_on(nullptr, "own_nick_color", true); }
+
+// a nick as the chat colors it: you in your own color, the others by their hash. -1: the theme has none for it
+RGB Core::nick_color(const Server* s, const std::string& nick, const Theme& t) const {
+    if (s && !s->nick.empty() && s->lower(nick) == s->lower(s->nick)) return self_nick(t);
+    return nick_rgb(t, nick);
 }
 
 bool Core::muted(const Buffer* b) const {
@@ -2136,7 +2144,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         if (sec == "keys" || (sec == "general" && (key == "timestamp_hover" || key == "mouse"))) cfg_changed = true;  // the terminal applies them (tui apply_cfg)
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
-        if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0 || key == "web_unread_badge")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
+        if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "own_nick_color" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0 || key == "web_unread_badge")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
+        if (sec == "general" && (key == "own_nick_color" || key == "theme")) plugins_reshow();  // what nickcolors painted follows the new colors
         if (key == "log") notify(Ev::THEME, nullptr);  // the webchat shows its Logs button only while logging
         if (sec == "general" && key == "typing_effect") typing_quiet(opt_on(nullptr, "typing_effect", false));  // like /typing
         if (sec == "general" && (key == "fifo" || key == "fifo_path")) fifo_open();  // the pipe opens, moves or closes at once

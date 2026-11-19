@@ -83,9 +83,10 @@ button, input { font: inherit; color: inherit; }
 @media (hover: hover) { #side .tab:hover .x { visibility: visible; } }
 #side .tab .x:hover { opacity: 1; }
 #side .tab.active { background: var(--tab_active-bg, #ffffff12); color: var(--tab_active-fg, inherit); border-left-color: var(--accent); }
-#side .tab.a1:not(.active) { color: var(--tab_data-fg, #9aa0c0); }
-#side .tab.a2:not(.active) { color: var(--tab_msg-fg, #ffffff); font-weight: 700; }
-#side .tab.a3:not(.active) { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; }
+/* a tab with activity: its color, and a bar in it at the left (a theme's message color is often the plain text color, so bold alone is all that told it from a quiet tab) */
+#side .tab.a1:not(.active) { color: var(--tab_data-fg, #9aa0c0); border-left-color: color-mix(in srgb, var(--tab_data-fg, #9aa0c0) 60%, transparent); }
+#side .tab.a2:not(.active) { color: var(--tab_msg-fg, #ffffff); font-weight: 700; border-left-color: var(--tab_msg-fg, #ffffff); }
+#side .tab.a3:not(.active) { color: var(--tab_hilight-fg, #ff6ac1); font-weight: 700; border-left-color: var(--tab_hilight-fg, #ff6ac1); }
 #side .tab.off { opacity: .55; }
 #side .ghost { opacity: .5; background: color-mix(in srgb, var(--accent) 14%, transparent); outline: 1px dashed var(--accent); outline-offset: -1px; }  /* where a dragged tab lands */  /* a dragged tab lands here */
 #side .tab.split { border-left-color: var(--muted); border-left-style: dashed; }  /* in the webchat's other /split pane */
@@ -1023,12 +1024,14 @@ const URL_RE = /\bhttps?:\/\/[^\s<>"']+[^\s<>"'.,;:!?)\]]/g;
 // a URL or a #channel at the start of a word (not the # in "C#" or a URL's #anchor, which the URL eats first; the start of
 // a word is checked in addText: a lookbehind here is a SyntaxError on iOS before 16.4 and the page never starts)
 const LINK_RE = new RegExp(URL_RE.source + `|[#&][^\\s,<>"']*[^\\s,<>"'.;:!?)\\]}]`, "g");
+// one of the theme's nick colors, or yours: shown as the theme made it (the nick column does too), also in a text a plugin painted
+const themeNick = c => { c = String(c).toLowerCase(); return c === (theme.self || "").toLowerCase() || (theme.nicks || []).some(n => n.toLowerCase() === c); };
 function addText(parent, text, st) {
   if (!text) return;
   const span = document.createElement("span");
   let fg = st.fg, bg = st.bg;
   if (st.rev) [fg, bg] = [bg || "var(--bg)", fg || "var(--fg)"];
-  else if (fg && !bg && chatBg && rgb(fg)) fg = hexc(readOn([rgb(fg)], chatBg));  // yellow on a light theme: darkened until it reads
+  else if (fg && !bg && chatBg && rgb(fg) && !themeNick(fg)) fg = hexc(readOn([rgb(fg)], chatBg));  // yellow on a light theme: darkened until it reads
   if (fg) span.style.color = fg;
   if (bg) span.style.background = bg;
   if (st.b) span.style.fontWeight = "700";
@@ -1135,7 +1138,8 @@ function lineEl(b, l) {
     const e = b.nickmap && b.nickmap.get(ircLower(l.n));
     nk.textContent = (e && e[0] ? e[0][0] : "") + l.n;
     const br = (theme.lay || {}).nick_brackets || ""; if ([...br].length === 2) nk.textContent = [...br][0] + nk.textContent + [...br][1];
-    if (l.s) nk.className += " self"; else if (!l.h) nk.style.color = l.c || nickColor(l.n);
+    if (l.s) nk.className += " self", theme.self && (nk.style.color = theme.self);  // own_nick_color: none of the others' colors
+    else if (!l.h) nk.style.color = l.c || nickColor(l.n);
     mirc(tx, l.x); tx.src_ = l.x;
   } else if (l.k === "action") { nk.textContent = "*"; mirc(tx, tx.src_ = l.n + " " + l.x); }
   else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, tx.src_ = l.x); }
@@ -1412,6 +1416,10 @@ function renderNicks(el = $("#nicks"), id = active) {  // #nicks2: the other /sp
       selMark(el);
     };
     d.textContent = (p ? p[0] : " ") + n;
+    if (b.nc) {  // a plugin (nickcolors) paints the user list: the nick in its chat color, the prefix keeps its rank's
+      const me = ircLower(n) === ircLower(b.me || ""), c = me ? theme.self || ((theme.el || {}).msg_self || {}).fg : nickColor(n);
+      if (c) d.textContent = p ? p[0] : " ", d.append(Object.assign(document.createElement("span"), {textContent: n, style: "color:" + c}));
+    }
     const tip = [real, acct ? "account: " + acct : "", bot ? "bot" : "", away ? "away" : ""].filter(Boolean).join(" \u00b7 ");
     if (tip) d.title = tip;
     d.ondblclick = () => { nickSel[id] = [n]; selMark(el); send({t: "input", buf: id, text: "/query " + n}); };  // double: one stray click does nothing
@@ -1703,7 +1711,7 @@ function onMsg(ev) {
   if (m.t === "theme") {
     $("#logsbtn").hidden = !m.logs;  // only while logging is on (/set log on); /logs still opens it  // new fonts reflow the chat: one that was at the bottom stays there (renderMsgs would see it scrolled up)
     const end = $("#msgs").pin_;
-    theme = m; applyTheme(); renderMsgs(); renderSide();  // renderSide: /set web_unread_badge
+    theme = m; applyTheme(); renderMsgs(); renderSide(); renderNicks(); renderNicks2();  // renderSide: /set web_unread_badge; the nicks: a plugin paints them
     if (end) $("#msgs").scrollTop = $("#msgs").scrollHeight;
   }
   else if (m.t === "buf") {
@@ -1716,8 +1724,8 @@ function onMsg(ev) {
     if ((m.id === active || m.id === split) && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
     later(renderSide);
     if (dsrv.open && m.type === "status") later(renderSrv);  // the servers' dots follow their state
-    if (m.id === active) { renderTopic(); if (fresh || !old) later(renderNicks); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
-    if (m.id === split && (fresh || !old)) later(renderNicks2);
+    if (m.id === active) { renderTopic(); if (fresh || !old || !old.nc !== !m.nc) later(renderNicks); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
+    if (m.id === split && (fresh || !old || !old.nc !== !m.nc)) later(renderNicks2);
   } else if (m.t === "lines") {
     const b = bufs.get(m.buf); if (b) b.lines = m.lines, b.first = m.first, b.noMore = b.loading = false;
     if (m.buf === active) renderMsgs(); else if (m.buf === split) renderPane2();

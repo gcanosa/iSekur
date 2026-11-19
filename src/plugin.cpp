@@ -261,10 +261,37 @@ static int l_theme(lua_State* L) {
     lua_pushstring(L, t.name.c_str()), lua_setfield(L, -2, "name");
     auto col = [&](const char* k, RGB c) { if (c >= 0) lua_pushinteger(L, c), lua_setfield(L, -2, k); };
     col("fg", d.fg), col("bg", d.bg), col("hilight", t.get("hilight").fg), col("timestamp", t.get("timestamp").fg);
+    if (self(L)->c->own_nick_on()) col("self", t.self_nick);  // your nick's own color (own_nick_color): none of `nicks`
     lua_createtable(L, (int)t.nicks.size(), 0);
     for (size_t i = 0; i < t.nicks.size(); i++) lua_pushinteger(L, t.nicks[i]), lua_rawseti(L, -2, (lua_Integer)i + 1);
     lua_setfield(L, -2, "nicks");
     return 1;
+}
+// isekur.nick_color(srv, nick): the color the chat gives that nick, 0xRRGGBB: yours is its own (the theme's `self`), anyone's else
+// comes from a hash of the nick (one of the theme's `nicks`). nil when the theme has no nick colors
+static int l_nick_color(lua_State* L) {
+    Core& c = *self(L)->c;
+    RGB r = c.nick_color(srv_arg(L, 1), str_arg(L, 2), c.theme);
+    if (r < 0) lua_pushnil(L);
+    else lua_pushinteger(L, r);
+    return 1;
+}
+// the web gets each channel again (its "nc" says whether the list is painted); the terminal just draws
+static void nicklist_by(Core& c, const std::string& by) {
+    if (by == c.nicklist_by) return;
+    c.nicklist_by = by, c.dirty = true;
+    for (auto& b : c.bufs)
+        if (b->type == BT::CHANNEL) c.notify(Ev::BUFFER, b.get());
+}
+// isekur.nicklist_colors(on): the user list shows each nick in its chat color, in the tabs where your plugin is on (display only).
+// One plugin at a time; it ends with the plugin. isekur.nicklist_colors() says whether yours is on
+static int l_nicklist_colors(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (lua_isnone(L, 1)) return lua_pushboolean(L, c.nicklist_by == p->name), 1;
+    if (lua_toboolean(L, 1)) nicklist_by(c, p->name);
+    else if (c.nicklist_by == p->name) nicklist_by(c, "");
+    return 0;
 }
 // isekur.which(name): the program's full path on PATH, nil when it isn't there
 static int l_which(lua_State* L) {
@@ -870,6 +897,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
         {"radio", l_radio}, {"radio_mute", l_radio_mute}, {"radio_volume", l_radio_volume}, {"window", l_window}, {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
         {"platform", l_platform}, {"which", l_which}, {"run", l_run}, {"speak_web", l_speak_web}, {"theme", l_theme},
+        {"nick_color", l_nick_color}, {"nicklist_colors", l_nicklist_colors},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
     lua_pushstring(L, name.c_str()), lua_setfield(L, -2, "name");
@@ -927,6 +955,7 @@ std::string Core::plugin_opt(const std::string& name, const std::string& key, co
 static void view_gone(Core& c) {  // a plugin went (disabled, removed, unloaded): its view ends (the configured look again), its radio stops, its window closes
     auto up = [&](const std::string& n) { return std::any_of(c.plugins.begin(), c.plugins.end(), [&](auto& p) { return p->name == n && !p->dead; }); };
     if (!c.view.by.empty() && !up(c.view.by)) c.view_end();
+    if (!c.nicklist_by.empty() && !up(c.nicklist_by)) nicklist_by(c, "");
     if (c.radio_on() && !up(c.radio.by)) c.radio_stop();
     if (c.pwin.open && !up(c.pwin.by)) c.pwin = Core::PWin{}, c.dirty = true, c.notify(Ev::PWIN, nullptr);
 }
@@ -971,6 +1000,11 @@ static void menu_items(lua_State* L, std::vector<std::pair<std::string, std::str
             w != "plugin" && w != "exec" && w != "sh" && w != "shell" && w != "attach")
             out.push_back({l, cmd});
     }
+}
+
+// the user list of b is painted: a plugin asked (isekur.nicklist_colors) and is on in that channel
+bool Core::nicklist_colored(const Buffer* b) const {
+    return !nicklist_by.empty() && b->srv && b->type == BT::CHANNEL && truthy(plugin_opt(nicklist_by, "enabled", b->srv, b->name, "off", 'c'));
 }
 
 bool Core::plugin_hooks(const char* ev, const Server* s, const std::string& target) {

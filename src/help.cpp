@@ -884,6 +884,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/set timestamp_align right") " the time at the right edge of the chat",
         "  " G_CMD("/set timestamp_hover both") " the time shows only under the mouse (or web, term)",
         "  " G_CMD("/set nick_width 16") "     room for longer nicks before they're cut (0: no column)",
+        "  " G_CMD("/set own_nick_color off") " your nick in the theme's own color, one other nicks can share (on: a color of its own)",
         "  " G_CMD("/set tab_bar left") "     the tabs as a tree down the left side (or right; " G_CMD("tab_bar_width") ", or drag its edge)",
         "  " G_CMD("/set nicklist_side left") " the user list at the left of the chat (" G_CMD("nicklist_width") ", or drag its │)",
     }},

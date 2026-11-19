@@ -204,7 +204,7 @@ static std::string wire_tags(const Msg& m, bool client_only = false) {
 
 // a tab's line as a client sees it: from us (self) or them, to the channel, or to us (me) in a query
 static std::string msg_line(const Buffer* b, const Line& l, const std::string& self, const std::string& me, bool stamp) {
-    std::string text = (stamp ? "[" + fmt_time(l.ts, "%H:%M") + "] " : "") + (l.e2e ? "\xf0\x9f\x94\x92 " : "") + l.text;
+    std::string text = (stamp ? "[" + fmt_time(l.ts, "%H:%M") + "] " : "") + (l.e2e ? "\xf0\x9f\x94\x92 " : "") + (l.said.empty() ? l.text : l.said);  // said: what it was before a plugin painted it (lolcat, nickcolors): other clients get that
     if (l.kind == LK::ACTION) text = "\x01" "ACTION " + text + "\x01";
     std::string to = b->type == BT::CHANNEL || l.self ? b->name : me;
     return ":" + (l.self ? self : l.nick) + (l.kind == LK::NOTICE ? " NOTICE " : " PRIVMSG ") + to + " :" + text;
