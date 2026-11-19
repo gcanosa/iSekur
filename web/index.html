@@ -357,7 +357,8 @@ dialog .btns .left { margin-right: auto; }
 #dlogs form { grid-template-rows: auto auto minmax(0, 1fr) auto auto; height: min(82vh, 860px); }
 #logbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
 #logbar #logq { flex: 1; min-width: 180px; }
-#logbar #logtot { color: var(--muted); font-size: calc(12px * var(--z, 1)); white-space: nowrap; }
+#logbar #logtot { flex: 0 0 100%; text-align: right; margin-top: -4px; color: var(--muted); font-size: calc(12px * var(--z, 1)); white-space: nowrap; }  /* its own line under find/switches/Calendar, at the right */
+#logbar #logtot:empty { display: none; }
 #logbar button, #loghead button { background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; cursor: pointer; }
 #logbar button:disabled, #loghead button:disabled { opacity: .45; cursor: default; }
 #logbody { display: grid; grid-template-columns: minmax(170px, 250px) 1fr; gap: 10px; min-height: 0; }

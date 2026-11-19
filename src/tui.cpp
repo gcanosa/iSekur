@@ -4091,11 +4091,13 @@ void Tui::draw_logs(int W, int H) {
     sx = text(sx, y0 + 1, x1 - 2, lw.events ? " events shown  " : " events hidden  ", dim, false);
     sx = text(sx, y0 + 1, x1 - 2, "c", keyst, false);
     lw.cal_x = text(sx, y0 + 1, x1 - 2, " calendar", dim, false);
-    // what every log on disk takes (the files this window lists): right-aligned, if it fits
+    // what every log on disk takes (the files this window lists): on the line under the find line, at the right,
+    // like a title on the border (a row of its own would cost the log a line); left out if it doesn't fit
     unsigned long long used = 0;
     for (auto& f : lw.files) used += (unsigned long long)f.size;
-    std::string tot = human_bytes(used) + " on disk · " + thousands(lw.files.size()) + (lw.files.size() == 1 ? " file" : " files");
-    if (x1 - 2 - (int)tot.size() > lw.cal_x + 1) text(x1 - 2 - (int)tot.size(), y0 + 1, x1 - 2, tot, hs, false);
+    std::u32string tot = from_utf8(" " + human_bytes(used) + " on disk · " + thousands(lw.files.size()) + (lw.files.size() == 1 ? " file " : " files "));
+    int tx = x1 - 2 - (int)tot.size();
+    if (tx > lw.xd + 1) text(tx, y0 + 2, x1 - 2, to_utf8(tot), hs, false);
 
     // the tree
     auto t = log_tree();
