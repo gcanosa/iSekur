@@ -1576,10 +1576,12 @@ int main() {
             assert(c.connect(target, ntohs(la.sin_port), 0, "", ""));
             std::string in;
             bool ok = true;
-            for (int i = 0; i < 500 && ok && c.st != Conn::OPEN; i++) {
+            // pumped on an event only, like the main loop: a connect still in progress has SO_ERROR 0, which pump() reads as
+            // connected (Windows takes seconds to refuse one on loopback, so the refused IPv6 try looked open there)
+            for (int i = 0; i < 1500 && ok && c.st != Conn::OPEN; i++) {
                 pollfd pf{c.fd, c.events(), 0};
                 poll(&pf, 1, 10);
-                ok = c.pump(pf.revents, in);
+                if (pf.revents) ok = c.pump(pf.revents, in);
             }
             err = c.err, local.clear();
             if (ok && c.st == Conn::OPEN) {
