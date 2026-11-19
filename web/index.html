@@ -3495,6 +3495,7 @@ line.addEventListener("keydown", e => {
     return;
   }
   comp = null;
+  if (e.altKey || e.metaKey || e.ctrlKey) return;  // Alt+Up/Down switch tabs (document handler): not history, or the recalled line follows into the tab's draft
   if (e.key === "ArrowUp" && hpos > 0) { e.preventDefault(); inp.value = hist[--hpos]; renderSugg(); }
   else if (e.key === "ArrowDown" && hpos < hist.length) { e.preventDefault(); inp.value = ++hpos === hist.length ? "" : hist[hpos]; renderSugg(); }
 });
