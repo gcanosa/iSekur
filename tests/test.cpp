@@ -1595,8 +1595,9 @@ int main() {
         std::string err, local;
         assert(via("127.0.0.1", "", err, local) && local == "127.0.0.1");
         assert(via("127.0.0.1", "127.0.0.1", err, local) && local == "127.0.0.1");
-        assert(!via("127.0.0.1", "::1", err, local) && err == "vhost ::1 is IPv6 but 127.0.0.1 only has IPv4 addresses: -host needs one of the server's family");
-        assert(!via("127.0.0.1", "192.0.2.1", err, local) && err.rfind("vhost 192.0.2.1: ", 0) == 0);  // not one of this machine's addresses
+        assert(!via("127.0.0.1", "::1", err, local) && err.rfind("vhost ::1 is IPv6 only, but 127.0.0.1 has no IPv6 address", 0) == 0);
+        assert(!via("127.0.0.1", "192.0.2.1", err, local) && err.rfind("vhost 192.0.2.1: 192.0.2.1 (", 0) == 0 &&
+               err.find(": it has to be an address of this machine") != std::string::npos);  // not one of this machine's addresses: which one, and why
         assert(!via("127.0.0.1", "no-such-host.invalid", err, local) && err.rfind("vhost no-such-host.invalid: ", 0) == 0);
         int probe = socket(AF_INET, SOCK_STREAM, 0);  // Linux has all of 127/8, macOS only 127.0.0.1
         sockaddr_in two{};
@@ -1608,7 +1609,7 @@ int main() {
         if (l6 >= 0) {
             assert(via("::1", "::1", err, local) && local == "::1");
             assert(via("::1", "", err, local) && local == "::1");
-            assert(!via("::1", "127.0.0.1", err, local) && err == "vhost 127.0.0.1 is IPv4 but ::1 only has IPv6 addresses: -host needs one of the server's family");
+            assert(!via("::1", "127.0.0.1", err, local) && err.rfind("vhost 127.0.0.1 is IPv4 only, but ::1 has no IPv4 address", 0) == 0);
             addrinfo hs{}, *lh = nullptr;  // a name with both: the vhost's family picks the address, in either order
             hs.ai_socktype = SOCK_STREAM;
             bool both4 = false, both6 = false;
@@ -1619,8 +1620,11 @@ int main() {
             if (both4 && both6) {
                 assert(via("localhost", "127.0.0.1", err, local) && local == "127.0.0.1");
                 assert(via("localhost", "::1", err, local) && local == "::1");
+                // a vhost name with both families, only the server's IPv4 listening: the IPv6 try is refused, the IPv4 one goes through
+                close(l6), l6 = -1;
+                assert(via("localhost", "localhost", err, local) && local == "127.0.0.1");
             }
-            close(l6);
+            if (l6 >= 0) close(l6);
         }
         close(lfd);
     }

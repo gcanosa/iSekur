@@ -37,7 +37,10 @@ struct Conn {
     // must read first. Polled for that instead of what we'd normally wait on, so neither stalls nor spins
     bool read_wants_write = false, write_wants_read = false;
     std::string out, err, host;
-    std::vector<sockaddr_storage> addrs, laddrs;
+    std::vector<sockaddr_storage> addrs, laddrs;  // laddrs: the vhost's addresses; with a vhost, addrs[i] is tried from from[i]
+    std::vector<sockaddr_storage> from;
+    std::vector<std::string> vfail;  // why each vhost address couldn't be used, for the error when none could
+    bool vbind_failed = false;
     std::string vhost;  // set before connect() like px: the local name or address to connect from, "" = the OS picks
     std::shared_ptr<Resolve> res;  // while RESOLVING; fd is then the wakeup pipe
     size_t ai = 0;
@@ -76,6 +79,7 @@ private:
     bool proxy_read(std::string& in);
     bool spawn_ssh();
     bool next_addr();
+    void vhost_failed(const std::string& why);
     bool start_tls();
 };
 

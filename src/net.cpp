@@ -39,7 +39,7 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
                    const std::string& k) {
     close();
     host = h, tls = t, cert = c, key = k, err.clear(), out.clear();
-    addrs.clear(), ai = 0;
+    addrs.clear(), from.clear(), vfail.clear(), vbind_failed = false, ai = 0;
     thost = h, tport = port, pin.clear(), pstep = 0;
     if (px.kind == Proxy::SSH) return spawn_ssh();
     if (px.kind) port = px.port;  // resolve and connect to the proxy, it reaches h for us
@@ -56,24 +56,34 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
         addrinfo hints{}, *ai = nullptr;
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_family = AF_UNSPEC;
-        int e = getaddrinfo(h.c_str(), port_s.c_str(), &hints, &ai);
-        if (e) r->err = gai_strerror(e);
-        for (addrinfo* a = ai; a; a = a->ai_next) {
-            sockaddr_storage ss{};
-            memcpy(&ss, a->ai_addr, a->ai_addrlen);
-            r->addrs.push_back(ss);
-        }
-        if (ai) freeaddrinfo(ai);
-        ai = nullptr;
-        if (!vh.empty()) {  // the same lookup for the vhost: a failure here is the connection's error
-            hints.ai_flags = AI_PASSIVE;
-            if ((e = getaddrinfo(vh.c_str(), "0", &hints, &ai))) r->err = "vhost " + vh + ": " + gai_strerror(e), r->addrs.clear();
-            for (addrinfo* a = ai; a; a = a->ai_next) {
+        // unmapped: no ::ffff:a.b.c.d (macOS answers an AF_INET6 lookup of a v4-only name with those): it is IPv4 to the network
+        auto copy = [](addrinfo* from, std::vector<sockaddr_storage>& to, bool& v4, bool& v6, bool unmapped = false) {
+            for (addrinfo* a = from; a; a = a->ai_next) {
+                if (unmapped && a->ai_family == AF_INET6 && IN6_IS_ADDR_V4MAPPED(&((sockaddr_in6*)a->ai_addr)->sin6_addr)) continue;
                 sockaddr_storage ss{};
                 memcpy(&ss, a->ai_addr, a->ai_addrlen);
-                r->local.push_back(ss);
+                to.push_back(ss);
+                v4 |= a->ai_family == AF_INET, v6 |= a->ai_family == AF_INET6;
             }
-            if (ai) freeaddrinfo(ai);
+            if (from) freeaddrinfo(from);
+        };
+        bool v4 = false, v6 = false, sv4 = false, sv6 = false;
+        int e = 0;
+        if (!vh.empty()) {  // the vhost first: its family says which of the server's addresses can be used at all
+            if ((e = getaddrinfo(vh.c_str(), nullptr, &hints, &ai))) r->err = "vhost " + vh + ": " + gai_strerror(e);
+            copy(ai, r->local, v4, v6);
+            hints.ai_flags = 0;
+            // an IPv6 vhost asks for the server's IPv6 addresses (and v4 for v4), so a resolver that leaves
+            // AAAA out when it sees no IPv6 route, or lists v4 first, can't give a family the vhost can't use
+            if (!e && v4 != v6) hints.ai_family = v6 ? AF_INET6 : AF_INET;
+        }
+        if (!e) {
+            e = getaddrinfo(h.c_str(), port_s.c_str(), &hints, &ai);
+            copy(ai, r->addrs, sv4, sv6, hints.ai_family == AF_INET6);
+            if (e || r->addrs.empty())
+                r->err = hints.ai_family == AF_UNSPEC ? gai_strerror(e)
+                                                      : "vhost " + vh + " is " + (v6 ? "IPv6" : "IPv4") + " only, but " + h + " has no " +
+                                                            (v6 ? "IPv6" : "IPv4") + " address" + (e ? std::string(" (") + gai_strerror(e) + ")" : "");
         }
         r->done.store(true, std::memory_order_release);
         char one = 1;
@@ -92,6 +102,20 @@ static std::string ip_str(const sockaddr_storage& ss) {
     return h;
 }
 
+// the vhost as bind() wants it, built fresh like irssi does: the family and the address, nothing a resolver filled in
+static socklen_t bind_sockaddr(const sockaddr_storage& l, sockaddr_storage& b) {
+    memset(&b, 0, sizeof b);
+    b.ss_family = l.ss_family;
+    if (l.ss_family == AF_INET6) {
+        auto* d = (sockaddr_in6*)&b;
+        d->sin6_addr = ((const sockaddr_in6*)&l)->sin6_addr;
+        d->sin6_scope_id = ((const sockaddr_in6*)&l)->sin6_scope_id;  // fe80:: needs it, a global address has 0
+        return sizeof(sockaddr_in6);
+    }
+    ((sockaddr_in*)&b)->sin_addr = ((const sockaddr_in*)&l)->sin_addr;
+    return sizeof(sockaddr_in);
+}
+
 bool Conn::next_addr() {
     while (ai < addrs.size()) {
         sockaddr_storage& ss = addrs[ai++];
@@ -100,12 +124,14 @@ bool Conn::next_addr() {
         fd = socket(ss.ss_family, SOCK_STREAM, 0);
         if (fd < 0) { err = strerror(errno); continue; }
         nonblock(fd);
-        if (!vhost.empty()) {  // from the vhost's address of this family (a v6 vhost can't reach a v4 server)
-            auto l = std::find_if(laddrs.begin(), laddrs.end(), [&](const sockaddr_storage& a) { return a.ss_family == ss.ss_family; });
-            if (l == laddrs.end()) { err = "vhost " + vhost + " has no " + (ss.ss_family == AF_INET6 ? "IPv6" : "IPv4") + " address"; continue; }
-            if (::bind(fd, (const sockaddr*)&*l, ss.ss_family == AF_INET6 ? sizeof(sockaddr_in6) : sizeof(sockaddr_in))) {
-                std::string ip = ip_str(*l);  // a name can be several addresses: say which one
-                err = "vhost " + vhost + (ip == vhost ? "" : " (" + ip + ")") + ": " + strerror(errno) + " (it has to be an address of this machine)";
+        if (!vhost.empty()) {  // from this address of the vhost (same family as the server's: pump() paired them up)
+            const sockaddr_storage& l = from[ai - 1];
+            sockaddr_storage b;
+            int one = 1;
+            setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);  // as irssi sets it before its bind
+            if (::bind(fd, (const sockaddr*)&b, bind_sockaddr(l, b))) {
+                vbind_failed = true;
+                vhost_failed(ip_str(l) + " (" + strerror(errno) + ")");
                 continue;
             }
         }
@@ -114,10 +140,20 @@ bool Conn::next_addr() {
             return true;
         }
         err = strerror(errno);
+        if (!vhost.empty()) vhost_failed(ip_str(from[ai - 1]) + " to " + ip_str(ss) + " (" + err + ")");
     }
     if (fd >= 0) ::close(fd), fd = -1;
     st = NONE;
+    if (!vhost.empty() && !vfail.empty()) {  // every try is in it, not just the last
+        err = "vhost " + vhost + ": ";
+        for (size_t i = 0; i < vfail.size(); i++) err += (i ? ", " : "") + vfail[i];
+        if (vbind_failed) err += ": it has to be an address of this machine";
+    }
     return false;
+}
+
+void Conn::vhost_failed(const std::string& why) {
+    if (std::find(vfail.begin(), vfail.end(), why) == vfail.end()) vfail.push_back(why);
 }
 
 static SSL_CTX* new_client_ctx() {
@@ -527,13 +563,13 @@ bool Conn::pump(short rev, std::string& in) {
         ::close(fd), fd = -1;
         addrs = res->addrs, laddrs = res->local;
         err = res->err;
-        if (!vhost.empty() && !addrs.empty() && !laddrs.empty() &&
-            std::none_of(addrs.begin(), addrs.end(), [&](const sockaddr_storage& a) {
-                return std::any_of(laddrs.begin(), laddrs.end(), [&](const sockaddr_storage& l) { return l.ss_family == a.ss_family; });
-            })) {  // not one pair of the same family: say it once, plainly, instead of failing each address in turn
-            auto fam = [](const sockaddr_storage& a) { return a.ss_family == AF_INET6 ? "IPv6" : "IPv4"; };
-            err = "vhost " + vhost + " is " + fam(laddrs[0]) + " but " + (px.kind ? px.host : host) + " only has " + fam(addrs[0]) + " addresses: -host needs one of the server's family";
-            addrs.clear();
+        if (!vhost.empty() && !addrs.empty()) {  // each server address from each vhost address of its family, so one that can't be used
+            std::vector<sockaddr_storage> pairs;  // (not assigned here, say) leaves the others a turn
+            for (auto& a : addrs)
+                for (auto& l : laddrs)
+                    if (l.ss_family == a.ss_family) pairs.push_back(a), from.push_back(l);
+            addrs = pairs;
+            if (addrs.empty()) err = "vhost " + vhost + " has no address of the family of " + (px.kind ? px.host : host);
         }
         res.reset();
         return next_addr();  // never fall through: the new socket isn't connected yet
@@ -544,6 +580,7 @@ bool Conn::pump(short rev, std::string& in) {
         getsockopt(fd, SOL_SOCKET, SO_ERROR, &e, &l);
         if (e) {
             err = strerror(e);
+            if (!vhost.empty() && ai > 0) vhost_failed(ip_str(from[ai - 1]) + " to " + ip_str(addrs[ai - 1]) + " (" + err + ")");
             return next_addr();
         }
         int one = 1;
