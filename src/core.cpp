@@ -424,7 +424,7 @@ std::vector<Core::Setting> Core::settings() const {
 // it (opt() reads it that way). A key added here belongs in iSekur.conf.example too (the tests check both ways)
 static const std::vector<KeyInfo> KEYS = {
     {"name", "Connection", 'n'}, {"host", "Connection", 'n'}, {"port", "Connection", 'n'}, {"tls", "Connection", 'n'},
-    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'},
+    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'}, {"vhost", "Connection", 'n'},
     {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
@@ -868,6 +868,7 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.autoconnect = is_on(ini_get(cfg, sec, "autoconnect", "true"));
     sc.auto_identify = is_on(ini_get(cfg, sec, "auto_identify", "true"));
     sc.encoding = ini_get(cfg, sec, "encoding");
+    sc.vhost = ini_get(cfg, sec, "vhost");
     std::string enc = sc.encoding;
     if (to_lower(enc) == "utf-8" || enc == "utf8") sc.encoding.clear();  // the default, spelled out
     sc.nick = ini_get(cfg, sec, "nick", gnick);
@@ -2332,9 +2333,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-login method] | del name"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-login method] | del name"); return; }
         // an IPv6 address: bare (2001:db8::1) or in brackets with a port ([2001:db8::1]:6697); the lookup takes it bare
-        std::string host = argv[0], nick, port, login;
+        std::string host = argv[0], nick, port, login, vhost;
         if (host[0] == '[') {
             size_t e = host.find(']');
             if (e != std::string::npos && e + 1 < host.size() && host[e + 1] == ':') port = host.substr(e + 2);
@@ -2352,6 +2353,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             else if (argv[i] == "-noverify") verify = false;
             else if ((argv[i] == "-name" || argv[i] == "-nick") && i + 1 < argv.size()) (argv[i] == "-name" ? name : nick) = argv[i + 1], i++;
             else if (argv[i] == "-login" && i + 1 < argv.size()) login = to_lower(argv[++i]);
+            else if (argv[i] == "-host" && i + 1 < argv.size()) vhost = argv[++i];
             else port = argv[i];
         }
         // the name is a config section: [server.<name>]
@@ -2360,9 +2362,13 @@ void Core::exec(Buffer* b, const std::string& input) {
             return;
         }
         if (!login.empty() && !login_kind(login)) { print(b, LK::ERROR, "-login takes sasl, cert, nickserv or password"); return; }
-        for (auto& sv : servers)
-            if (sv->cfg.name == name) { connect(sv.get()); select(sv->status); return; }
         std::string sec = "server." + name;
+        for (auto& sv : servers)
+            if (sv->cfg.name == name) {
+                if (!vhost.empty()) cfg[sec]["vhost"] = unsaved[sec]["vhost"] = vhost, sv->cfg = server_cfg(name);  // -host on a known one: the new vhost, then the reconnect
+                connect(sv.get()), select(sv->status);
+                return;
+            }
         if (port.empty() || (tls && port == "6667")) port = tls ? "6697" : "6667";
         // remembered like /set, so /save keeps it for the next start
         for (auto& [k, v] : std::map<std::string, std::string>{
@@ -2370,6 +2376,7 @@ void Core::exec(Buffer* b, const std::string& input) {
                  {"tls", tls ? "true" : "false"}, {"tls_verify", verify ? "true" : "false"}})
             cfg[sec][k] = unsaved[sec][k] = v;
         if (!nick.empty()) cfg[sec]["nick"] = unsaved[sec]["nick"] = nick;
+        if (!vhost.empty()) cfg[sec]["vhost"] = unsaved[sec]["vhost"] = vhost;
         ServerCfg sc = server_cfg(name);
         Server* ns = add_server(sc);
         select(ns->status);

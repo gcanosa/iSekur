@@ -1545,6 +1545,62 @@ int main() {
         std::swap(core.cfg_path, path);
     }
 
+    // /server -host: the vhost is kept as server.<name>.vhost (on a known server too), and Conn binds to it before it connects
+    {
+        std::string path = "build/test-vhost.conf";
+        std::swap(core.cfg_path, path);
+        core.exec(home, "/server 127.0.0.1 1 -name vh -host 127.0.0.1");
+        assert(core.cfg["server.vh"]["vhost"] == "127.0.0.1" && core.server_cfg("vh").vhost == "127.0.0.1");
+        core.exec(home, "/server 127.0.0.1 1 -name vh -host vhost.example.org");  // a known one: the new vhost, then the reconnect
+        assert(core.cfg["server.vh"]["vhost"] == "vhost.example.org");
+        for (auto& sv : core.servers)
+            if (sv->cfg.name == "vh") assert(sv->cfg.vhost == "vhost.example.org");
+        core.exec(home, "/server del vh");
+        assert(core.server_cfg("vh").vhost.empty());
+        remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
+
+        std::string derr;
+        int lfd = listen_tcp("127.0.0.1", 0, derr);
+        assert(lfd >= 0);
+        sockaddr_in la{};
+        socklen_t ll = sizeof la;
+        getsockname(lfd, (sockaddr*)&la, &ll);
+        // connects to the listener from `vh`; err = why not, local = the address the connection came from
+        auto via = [&](const std::string& vh, std::string& err, std::string& local) {
+            Conn c;
+            c.vhost = vh;
+            assert(c.connect("127.0.0.1", ntohs(la.sin_port), 0, "", ""));
+            std::string in;
+            bool ok = true;
+            for (int i = 0; i < 500 && ok && c.st != Conn::OPEN; i++) {
+                pollfd pf{c.fd, c.events(), 0};
+                poll(&pf, 1, 10);
+                ok = c.pump(pf.revents, in);
+            }
+            err = c.err, local.clear();
+            if (ok && c.st == Conn::OPEN) {
+                sockaddr_in a{};
+                socklen_t l = sizeof a;
+                char ip[INET_ADDRSTRLEN];
+                getsockname(c.fd, (sockaddr*)&a, &l);
+                local = inet_ntop(AF_INET, &a.sin_addr, ip, sizeof ip);
+            }
+            return ok && c.st == Conn::OPEN;
+        };
+        std::string err, local;
+        assert(via("", err, local) && local == "127.0.0.1");
+        assert(via("127.0.0.1", err, local) && local == "127.0.0.1");
+        assert(!via("::1", err, local) && err == "vhost ::1 has no IPv4 address");  // a v6 vhost can't reach a v4 server
+        assert(!via("192.0.2.1", err, local) && err.rfind("vhost 192.0.2.1: ", 0) == 0);  // not one of this machine's addresses
+        assert(!via("no-such-host.invalid", err, local) && err.rfind("vhost no-such-host.invalid: ", 0) == 0);
+        int probe = socket(AF_INET, SOCK_STREAM, 0);  // Linux has all of 127/8, macOS only 127.0.0.1
+        sockaddr_in two{};
+        two.sin_family = AF_INET, two.sin_addr.s_addr = htonl(0x7f000002);
+        if (bind(probe, (sockaddr*)&two, sizeof two) == 0) assert(via("127.0.0.2", err, local) && local == "127.0.0.2");
+        close(probe), close(lfd);
+    }
+
     // every key the settings know is in the template (where it can be set), and every key there is known
     {
         std::set<std::string> gen, srv;
@@ -2285,6 +2341,25 @@ int main() {
         char fb[32] = "";
         assert(f && fread(fb, 1, sizeof fb, f) == 11 && std::string(fb) == "hello world");
         fclose(f), close(peer), close(lfd);
+
+        {  // the network's vhost: a download connects from it (an address that isn't ours: it can't, and says so)
+            std::string vp = "build/dcctest/v.txt";
+            int vl = listen_tcp("127.0.0.1", 0, derr);
+            ll = sizeof la, getsockname(vl, (sockaddr*)&la, &ll);
+            ts->cfg.vhost = "192.0.2.1";
+            feed(":bob!u@h PRIVMSG me :\x01" "DCC SEND v.txt 2130706433 " + std::to_string(ntohs(la.sin_port)) + " 5\x01");
+            core.exec(chb, "/dcc get bob");
+            Dcc* vd = core.dccs.back().get();
+            for (int i = 0; i < 500 && vd->st == Dcc::RUN; i++) {
+                std::vector<pollfd> pf{{vd->conn.fd, vd->conn.events(), 0}};
+                poll(pf.data(), 1, 10);
+                core.dccs_poll(pf, 0);
+            }
+            assert(vd->st == Dcc::FAILED && vd->err.rfind("vhost 192.0.2.1: ", 0) == 0);
+            ts->cfg.vhost.clear(), close(vl);
+            core.dccs.pop_back();
+            unlink(vp.c_str());
+        }
 
         // the loop main() runs, for the transfers only; `side` is the other end
         auto run = [&](Dcc* x, const std::function<void()>& side) {

@@ -128,6 +128,7 @@ static void receive(Core& c, Dcc* d) {
     d->got = d->rate_got = d->pos;
     d->at = d->last_rx = time(nullptr);
     d->conn.in_cap = QUEUE;  // a fast sender can't keep us reading past the next poll
+    if (d->srv) d->conn.vhost = d->srv->cfg.vhost;  // from the network's vhost, like its IRC connection
     if (!d->conn.connect(d->host, d->port, 0, "", "")) finish(c, d, d->conn.err);
 }
 

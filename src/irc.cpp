@@ -322,12 +322,13 @@ void Core::connect(Server* s) {
     }
     s->conn.px = {};
     s->conn.ws = s->cfg.ws;
+    s->conn.vhost = s->cfg.vhost;
     plugin_emit("connect", s, "");  // a proxy plugin calls isekur.proxy(srv, url) here
     std::string how = tls ? "TLS" + why : "";
     if (!s->cfg.ws.empty()) how += (how.empty() ? "WebSocket " : ", WebSocket ") + s->cfg.ws;
     print(s->status, LK::INFO,
           "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (how.empty() ? "" : " (" + how + ")") +
-              (s->conn.px.kind ? " via " + proxy_desc(s->conn.px) : ""));
+              (s->conn.px.kind ? " via " + proxy_desc(s->conn.px) : "") + (s->cfg.vhost.empty() ? "" : " from " + s->cfg.vhost));
     if (!s->conn.connect(s->cfg.host, port, tls, s->cfg.cert, s->cfg.key)) {
         s->state = SS::CONNECTING;  // so disconnect() schedules a retry
         disconnect(s, s->conn.err);

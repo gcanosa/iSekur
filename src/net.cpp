@@ -1,4 +1,5 @@
 #include "net.h"
+#include <algorithm>
 #include <cerrno>
 #include <cstring>
 #include <fcntl.h>
@@ -51,7 +52,7 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
     std::string port_s = std::to_string(port);
     // Detached: if we give up first (close()), the thread just finishes into
     // its own copy of `r` and a pipe nobody reads.
-    std::thread([r, h = rh, port_s, wfd = p[1]] {
+    std::thread([r, h = rh, port_s, vh = vhost, wfd = p[1]] {
         addrinfo hints{}, *ai = nullptr;
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_family = AF_UNSPEC;
@@ -63,6 +64,17 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
             r->addrs.push_back(ss);
         }
         if (ai) freeaddrinfo(ai);
+        ai = nullptr;
+        if (!vh.empty()) {  // the same lookup for the vhost: a failure here is the connection's error
+            hints.ai_flags = AI_PASSIVE;
+            if ((e = getaddrinfo(vh.c_str(), "0", &hints, &ai))) r->err = "vhost " + vh + ": " + gai_strerror(e), r->addrs.clear();
+            for (addrinfo* a = ai; a; a = a->ai_next) {
+                sockaddr_storage ss{};
+                memcpy(&ss, a->ai_addr, a->ai_addrlen);
+                r->local.push_back(ss);
+            }
+            if (ai) freeaddrinfo(ai);
+        }
         r->done.store(true, std::memory_order_release);
         char one = 1;
         if (write(wfd, &one, 1) < 0) {}  // reader may be gone; SIGPIPE is ignored
@@ -82,6 +94,14 @@ bool Conn::next_addr() {
         fd = socket(ss.ss_family, SOCK_STREAM, 0);
         if (fd < 0) { err = strerror(errno); continue; }
         nonblock(fd);
+        if (!vhost.empty()) {  // from the vhost's address of this family (a v6 vhost can't reach a v4 server)
+            auto l = std::find_if(laddrs.begin(), laddrs.end(), [&](const sockaddr_storage& a) { return a.ss_family == ss.ss_family; });
+            if (l == laddrs.end()) { err = "vhost " + vhost + " has no " + (ss.ss_family == AF_INET6 ? "IPv6" : "IPv4") + " address"; continue; }
+            if (::bind(fd, (const sockaddr*)&*l, ss.ss_family == AF_INET6 ? sizeof(sockaddr_in6) : sizeof(sockaddr_in))) {
+                err = "vhost " + vhost + ": " + strerror(errno);
+                continue;
+            }
+        }
         if (::connect(fd, (sockaddr*)&ss, len) == 0 || errno == EINPROGRESS) {
             st = CONNECTING;
             return true;
@@ -498,7 +518,7 @@ bool Conn::pump(short rev, std::string& in) {
     if (st == RESOLVING) {
         if (!res->done.load(std::memory_order_acquire)) return true;
         ::close(fd), fd = -1;
-        addrs = res->addrs;
+        addrs = res->addrs, laddrs = res->local;
         err = res->err;
         res.reset();
         return next_addr();  // never fall through: the new socket isn't connected yet
@@ -772,8 +792,13 @@ bool Conn::spawn_ssh() {
     nonblock(sv[0]), nonblock(ep[0]);
     std::string w = (thost.find(':') != std::string::npos ? "[" + thost + "]" : thost) + ":" + std::to_string(tport),
                 dest = (px.user.empty() ? "" : px.user + "@") + px.host, port = std::to_string(px.port);
-    const char* argv[] = {"ssh", "-W", w.c_str(), "-p", port.c_str(), "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
-                          "-o", "LogLevel=ERROR", "-o", "ServerAliveInterval=60", "--", dest.c_str(), nullptr};
+    std::vector<const char*> argv = {"ssh", "-W", w.c_str(), "-p", port.c_str(), "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
+                                     "-o", "LogLevel=ERROR", "-o", "ServerAliveInterval=60"};
+    if (!vhost.empty()) {  // ssh's own source address: the jump host sees the vhost
+        if (!host_ok(vhost)) { err = "vhost " + vhost + " isn't a name or an address"; ::close(sv[0]), ::close(sv[1]), ::close(ep[0]), ::close(ep[1]); return false; }
+        argv.insert(argv.end(), {"-b", vhost.c_str()});
+    }
+    argv.insert(argv.end(), {"--", dest.c_str(), nullptr});
     pid_t pid = fork();
     if (pid < 0) { err = std::string("fork: ") + strerror(errno); ::close(sv[0]), ::close(sv[1]), ::close(ep[0]), ::close(ep[1]); return false; }
     if (pid == 0) {
@@ -782,7 +807,7 @@ bool Conn::spawn_ssh() {
         dup2(sv[1], 0), dup2(sv[1], 1), dup2(ep[1], 2);
         if (sv[1] > 2) ::close(sv[1]);
         if (ep[1] > 2) ::close(ep[1]);
-        execvp("ssh", (char* const*)argv);
+        execvp("ssh", (char* const*)argv.data());
         dprintf(2, "can't run ssh: %s\n", strerror(errno));
         _exit(127);
     }

@@ -12,10 +12,12 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-login method] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-login method] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
-     "(default: the host), -nick its own nick (default: [general] nick), -login sasl, cert, nickserv or password asks for that login "
+     "(default: the host), -nick its own nick (default: [general] nick), -host the local hostname or IP to connect from "
+     "(a vhost: it has to be one of this machine's own addresses; its family must match the server's; kept as "
+     "server.<name>.vhost; over a proxy it is the address the proxy sees, and ssh gets it as -b; DCC downloads connect from it and DCC offers carry it), -login sasl, cert, nickserv or password asks for that login "
      "before it connects (see /login). An IPv6 address works bare or "
      "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). A ws:// or wss:// URL as the host "
      "is IRC over WebSocket (IRCv3), for a network that only listens that way or sits behind an HTTPS proxy: the scheme "
@@ -30,7 +32,7 @@ static const std::vector<CmdInfo> CMDS = {
      "its [server.<name>] in the config (saved at once, comments kept), its tab, its logs folder and kept history follow, "
      "no reconnect needed (the name is only yours). Without the names it asks, for the tab you're in; the settings window's "
      "name row and r do the same.",
-     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify",
+     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify", "/server irc.sekurnet.org 6697 -tls -host vhost.example.org",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "

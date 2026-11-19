@@ -11,7 +11,7 @@ typedef struct ssl_ctx_st SSL_CTX;
 
 // Result of a background getaddrinfo(); `done` publishes the other fields.
 struct Resolve {
-    std::vector<sockaddr_storage> addrs;
+    std::vector<sockaddr_storage> addrs, local;  // local: the vhost's addresses, port 0
     std::string err;
     std::atomic<bool> done{false};
 };
@@ -37,7 +37,8 @@ struct Conn {
     // must read first. Polled for that instead of what we'd normally wait on, so neither stalls nor spins
     bool read_wants_write = false, write_wants_read = false;
     std::string out, err, host;
-    std::vector<sockaddr_storage> addrs;
+    std::vector<sockaddr_storage> addrs, laddrs;
+    std::string vhost;  // set before connect() like px: the local name or address to connect from, "" = the OS picks
     std::shared_ptr<Resolve> res;  // while RESOLVING; fd is then the wakeup pipe
     size_t ai = 0;
     int tls = 0;  // client: 0 plain, 1 tls+verify, 2 tls no verify
