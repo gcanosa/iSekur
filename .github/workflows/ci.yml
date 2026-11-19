@@ -46,6 +46,40 @@ jobs:
           prepare: pkg install -y gmake
           run: gmake && gmake test
 
+  openbsd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
+      - uses: vmactions/openbsd-vm@v1
+        with:
+          prepare: pkg_add gmake
+          run: gmake && gmake test
+
+  netbsd:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
+      - uses: vmactions/netbsd-vm@v1
+        with:
+          prepare: /usr/sbin/pkg_add gmake
+          run: gmake && gmake test
+
+  alpine:  # musl, not glibc
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/checkout@v5
+        with: { repository: gcanosa/isekur-plugins, path: isekur-plugins }  # the plugin catalog, for make test
+      - uses: jirutka/setup-alpine@v1
+        with:
+          packages: build-base openssl-dev linux-pam-dev
+      - run: make && make test
+        shell: alpine.sh {0}
+
   cygwin:
     runs-on: windows-latest
     defaults:
