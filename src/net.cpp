@@ -57,7 +57,9 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
         hints.ai_socktype = SOCK_STREAM;
         hints.ai_family = AF_UNSPEC;
         // unmapped: no ::ffff:a.b.c.d (macOS answers an AF_INET6 lookup of a v4-only name with those): it is IPv4 to the network
-        auto copy = [](addrinfo* from, std::vector<sockaddr_storage>& to, bool& v4, bool& v6, bool unmapped = false) {
+        // takes the list by reference and nulls it: a failed getaddrinfo leaves its result untouched on glibc, so the
+        // second lookup's copy() would free the vhost's list again
+        auto copy = [](addrinfo*& from, std::vector<sockaddr_storage>& to, bool& v4, bool& v6, bool unmapped = false) {
             for (addrinfo* a = from; a; a = a->ai_next) {
                 if (unmapped && a->ai_family == AF_INET6 && IN6_IS_ADDR_V4MAPPED(&((sockaddr_in6*)a->ai_addr)->sin6_addr)) continue;
                 sockaddr_storage ss{};
@@ -65,7 +67,7 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
                 to.push_back(ss);
                 v4 |= a->ai_family == AF_INET, v6 |= a->ai_family == AF_INET6;
             }
-            if (from) freeaddrinfo(from);
+            if (from) freeaddrinfo(from), from = nullptr;
         };
         bool v4 = false, v6 = false, sv4 = false, sv6 = false;
         int e = 0;
