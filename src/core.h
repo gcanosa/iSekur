@@ -227,6 +227,8 @@ struct ServerCfg {
     std::string nick, altnick, user, realname, pass;
     std::string encoding;  // legacy charset of this network (iconv name), "" = UTF-8
     std::string vhost;     // connect from this local name or address (/server -host), "" = the OS picks
+    bool cap = true;       // IRCv3 capability negotiation (CAP LS) on connect; off (/server -nocap): for a server that chokes on it, no SASL either
+    bool noproxy = false;  // connect direct whatever a proxy plugin says (/server -noproxy)
     std::string sasl_user, sasl_pass, sasl_mech, cert, key, nickserv_pass;
     std::vector<std::string> autojoin;  // "#chan" or "#chan key"
     std::string umodes;                 // sent as MODE <nick> umodes after 001 ("+ix")

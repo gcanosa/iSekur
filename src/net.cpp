@@ -86,6 +86,12 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
     return true;
 }
 
+static std::string ip_str(const sockaddr_storage& ss) {
+    char h[NI_MAXHOST] = "";
+    getnameinfo((const sockaddr*)&ss, ss.ss_family == AF_INET6 ? sizeof(sockaddr_in6) : sizeof(sockaddr_in), h, sizeof h, nullptr, 0, NI_NUMERICHOST);
+    return h;
+}
+
 bool Conn::next_addr() {
     while (ai < addrs.size()) {
         sockaddr_storage& ss = addrs[ai++];
@@ -98,7 +104,8 @@ bool Conn::next_addr() {
             auto l = std::find_if(laddrs.begin(), laddrs.end(), [&](const sockaddr_storage& a) { return a.ss_family == ss.ss_family; });
             if (l == laddrs.end()) { err = "vhost " + vhost + " has no " + (ss.ss_family == AF_INET6 ? "IPv6" : "IPv4") + " address"; continue; }
             if (::bind(fd, (const sockaddr*)&*l, ss.ss_family == AF_INET6 ? sizeof(sockaddr_in6) : sizeof(sockaddr_in))) {
-                err = "vhost " + vhost + ": " + strerror(errno);
+                std::string ip = ip_str(*l);  // a name can be several addresses: say which one
+                err = "vhost " + vhost + (ip == vhost ? "" : " (" + ip + ")") + ": " + strerror(errno) + " (it has to be an address of this machine)";
                 continue;
             }
         }
@@ -520,6 +527,14 @@ bool Conn::pump(short rev, std::string& in) {
         ::close(fd), fd = -1;
         addrs = res->addrs, laddrs = res->local;
         err = res->err;
+        if (!vhost.empty() && !addrs.empty() && !laddrs.empty() &&
+            std::none_of(addrs.begin(), addrs.end(), [&](const sockaddr_storage& a) {
+                return std::any_of(laddrs.begin(), laddrs.end(), [&](const sockaddr_storage& l) { return l.ss_family == a.ss_family; });
+            })) {  // not one pair of the same family: say it once, plainly, instead of failing each address in turn
+            auto fam = [](const sockaddr_storage& a) { return a.ss_family == AF_INET6 ? "IPv6" : "IPv4"; };
+            err = "vhost " + vhost + " is " + fam(laddrs[0]) + " but " + (px.kind ? px.host : host) + " only has " + fam(addrs[0]) + " addresses: -host needs one of the server's family";
+            addrs.clear();
+        }
         res.reset();
         return next_addr();  // never fall through: the new socket isn't connected yet
     }

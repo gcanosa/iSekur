@@ -20,6 +20,7 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include <arpa/inet.h>
+#include <netdb.h>
 #include "core.h"
 #include "session.h"
 #include "web.h"
@@ -1555,6 +1556,8 @@ int main() {
         assert(core.cfg["server.vh"]["vhost"] == "vhost.example.org");
         for (auto& sv : core.servers)
             if (sv->cfg.name == "vh") assert(sv->cfg.vhost == "vhost.example.org");
+        core.cfg["server.vh"]["vhost"] = "[2001:db8::1]";  // as /server takes an IPv6 address: the lookup takes it bare
+        assert(core.server_cfg("vh").vhost == "2001:db8::1");
         core.exec(home, "/server del vh");
         assert(core.server_cfg("vh").vhost.empty());
         remove(core.cfg_path.c_str());
@@ -1566,11 +1569,11 @@ int main() {
         sockaddr_in la{};
         socklen_t ll = sizeof la;
         getsockname(lfd, (sockaddr*)&la, &ll);
-        // connects to the listener from `vh`; err = why not, local = the address the connection came from
-        auto via = [&](const std::string& vh, std::string& err, std::string& local) {
+        // connects to the listener (target: where it listens, any family) from `vh`; err = why not, local = the address the connection came from
+        auto via = [&](const std::string& target, const std::string& vh, std::string& err, std::string& local) {
             Conn c;
             c.vhost = vh;
-            assert(c.connect("127.0.0.1", ntohs(la.sin_port), 0, "", ""));
+            assert(c.connect(target, ntohs(la.sin_port), 0, "", ""));
             std::string in;
             bool ok = true;
             for (int i = 0; i < 500 && ok && c.st != Conn::OPEN; i++) {
@@ -1580,25 +1583,84 @@ int main() {
             }
             err = c.err, local.clear();
             if (ok && c.st == Conn::OPEN) {
-                sockaddr_in a{};
+                sockaddr_storage a{};
                 socklen_t l = sizeof a;
-                char ip[INET_ADDRSTRLEN];
+                char ip[NI_MAXHOST] = "";
                 getsockname(c.fd, (sockaddr*)&a, &l);
-                local = inet_ntop(AF_INET, &a.sin_addr, ip, sizeof ip);
+                getnameinfo((sockaddr*)&a, l, ip, sizeof ip, nullptr, 0, NI_NUMERICHOST);
+                local = ip;
             }
             return ok && c.st == Conn::OPEN;
         };
         std::string err, local;
-        assert(via("", err, local) && local == "127.0.0.1");
-        assert(via("127.0.0.1", err, local) && local == "127.0.0.1");
-        assert(!via("::1", err, local) && err == "vhost ::1 has no IPv4 address");  // a v6 vhost can't reach a v4 server
-        assert(!via("192.0.2.1", err, local) && err.rfind("vhost 192.0.2.1: ", 0) == 0);  // not one of this machine's addresses
-        assert(!via("no-such-host.invalid", err, local) && err.rfind("vhost no-such-host.invalid: ", 0) == 0);
+        assert(via("127.0.0.1", "", err, local) && local == "127.0.0.1");
+        assert(via("127.0.0.1", "127.0.0.1", err, local) && local == "127.0.0.1");
+        assert(!via("127.0.0.1", "::1", err, local) && err == "vhost ::1 is IPv6 but 127.0.0.1 only has IPv4 addresses: -host needs one of the server's family");
+        assert(!via("127.0.0.1", "192.0.2.1", err, local) && err.rfind("vhost 192.0.2.1: ", 0) == 0);  // not one of this machine's addresses
+        assert(!via("127.0.0.1", "no-such-host.invalid", err, local) && err.rfind("vhost no-such-host.invalid: ", 0) == 0);
         int probe = socket(AF_INET, SOCK_STREAM, 0);  // Linux has all of 127/8, macOS only 127.0.0.1
         sockaddr_in two{};
         two.sin_family = AF_INET, two.sin_addr.s_addr = htonl(0x7f000002);
-        if (bind(probe, (sockaddr*)&two, sizeof two) == 0) assert(via("127.0.0.2", err, local) && local == "127.0.0.2");
-        close(probe), close(lfd);
+        if (bind(probe, (sockaddr*)&two, sizeof two) == 0) assert(via("127.0.0.1", "127.0.0.2", err, local) && local == "127.0.0.2");
+        close(probe);
+        // IPv6 (where the machine has ::1): a v6 vhost to a v6 server, and the families that can't meet
+        int l6 = listen_tcp("::1", ntohs(la.sin_port), derr);
+        if (l6 >= 0) {
+            assert(via("::1", "::1", err, local) && local == "::1");
+            assert(via("::1", "", err, local) && local == "::1");
+            assert(!via("::1", "127.0.0.1", err, local) && err == "vhost 127.0.0.1 is IPv4 but ::1 only has IPv6 addresses: -host needs one of the server's family");
+            addrinfo hs{}, *lh = nullptr;  // a name with both: the vhost's family picks the address, in either order
+            hs.ai_socktype = SOCK_STREAM;
+            bool both4 = false, both6 = false;
+            if (getaddrinfo("localhost", nullptr, &hs, &lh) == 0) {
+                for (addrinfo* x = lh; x; x = x->ai_next) both4 |= x->ai_family == AF_INET, both6 |= x->ai_family == AF_INET6;
+                freeaddrinfo(lh);
+            }
+            if (both4 && both6) {
+                assert(via("localhost", "127.0.0.1", err, local) && local == "127.0.0.1");
+                assert(via("localhost", "::1", err, local) && local == "::1");
+            }
+            close(l6);
+        }
+        close(lfd);
+    }
+
+    // /server -cap -nocap -cmdspeed -cmdmax -noproxy -rawlog: kept as the network's keys, on a known one too, and used by its connection
+    {
+        std::string path = "build/test-srvopts.conf";
+        std::swap(core.cfg_path, path);
+        auto srv = [&](const std::string& n) {
+            for (auto& sv : core.servers)
+                if (sv->cfg.name == n) return sv.get();
+            return (Server*)nullptr;
+        };
+        core.exec(home, "/server 127.0.0.1 1 -name so1");
+        assert(srv("so1") && srv("so1")->cfg.cap && !srv("so1")->cfg.noproxy && srv("so1")->conn.out.find("CAP LS 302") != std::string::npos);
+        assert(srv("so1")->flood_burst == 5 && srv("so1")->flood_ms == 2000 && !core.find(srv("so1"), "*raw"));
+        core.exec(home, "/server 127.0.0.1 1 -name so2 -nocap -noproxy -cmdspeed 500 -cmdmax 3 -rawlog");
+        Server* t = srv("so2");
+        assert(t && !t->cfg.cap && t->cfg.noproxy && core.cfg["server.so2"]["cap"] == "false" && core.cfg["server.so2"]["noproxy"] == "true");
+        assert(t->flood_ms == 500 && t->flood_burst == 3 && core.cfg["server.so2"]["flood_interval_ms"] == "500");
+        assert(t->conn.out.find("CAP") == std::string::npos && t->conn.out.find("NICK ") != std::string::npos);  // registers without CAP LS
+        assert(core.find(t, "*raw"));  // opened before the connection: its first lines are in it
+        core.exec(home, "/server 127.0.0.1 1 -name so2 -cap -cmdspeed 0");  // a known one: kept, then the reconnect with CAP
+        assert(srv("so2") == t && t->cfg.cap && t->flood_ms == 0 && t->conn.out.find("CAP LS 302") != std::string::npos);
+        // the options before the address, like irssi's /server -host vhost irc... : same as after it
+        core.exec(home, "/server -host 127.0.0.1 -nocap 127.0.0.1 -name so4 2 -tls");
+        assert(core.cfg["server.so4"]["host"] == "127.0.0.1" && core.cfg["server.so4"]["port"] == "2" && core.cfg["server.so4"]["vhost"] == "127.0.0.1" &&
+               core.cfg["server.so4"]["tls"] == "true" && core.cfg["server.so4"]["cap"] == "false" && !core.cfg.count("server.-host"));
+        core.exec(home, "/server -tls 127.0.0.1 -name so5");
+        assert(core.cfg["server.so5"]["host"] == "127.0.0.1" && core.cfg["server.so5"]["port"] == "6697");
+        core.exec(home, "/server 127.0.0.1 -name so6 -bogus");
+        assert(!srv("so6") && !core.cfg.count("server.so6") && home->lines.back().text == "No option -bogus (/help server)");
+        for (auto n : {"so4", "so5"}) core.exec(home, std::string("/server del ") + n);
+        for (auto bad : {"-cmdspeed x", "-cmdspeed -5", "-cmdmax 0", "-cmdmax 1.5", "-cmdmax"}) {  // nothing is made
+            core.exec(home, std::string("/server 127.0.0.1 1 -name so3 ") + bad);
+            assert(!srv("so3") && !core.cfg.count("server.so3"));
+        }
+        for (auto n : {"so1", "so2"}) core.exec(home, std::string("/server del ") + n);
+        remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
     }
 
     // every key the settings know is in the template (where it can be set), and every key there is known

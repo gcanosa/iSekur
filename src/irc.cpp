@@ -324,7 +324,9 @@ void Core::connect(Server* s) {
     s->conn.ws = s->cfg.ws;
     s->conn.vhost = s->cfg.vhost;
     plugin_emit("connect", s, "");  // a proxy plugin calls isekur.proxy(srv, url) here
+    if (s->cfg.noproxy) s->conn.px = {};
     std::string how = tls ? "TLS" + why : "";
+    if (!s->cfg.cap) how += (how.empty() ? "" : ", ") + std::string("no CAP");
     if (!s->cfg.ws.empty()) how += (how.empty() ? "WebSocket " : ", WebSocket ") + s->cfg.ws;
     print(s->status, LK::INFO,
           "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (how.empty() ? "" : " (" + how + ")") +
@@ -344,7 +346,11 @@ void Core::connect(Server* s) {
         // bouncers: ZNC "user/network:pass", soju "user/network" in user or SASL
         const std::string& pw = s->cfg.pass;
         if (!pw.empty()) s->send("PASS " + std::string(pw[0] == ':' || pw.find(' ') != std::string::npos ? ":" : "") + pw);
-        s->send("CAP LS 302");
+        if (s->cfg.cap) s->send("CAP LS 302");
+        else {
+            s->cap_done = true;  // nothing to end
+            if (sasl_wanted(s)) info_note(s->status, "cap is off, so SASL isn't tried: /server " + s->cfg.name + " -cap turns it back on");
+        }
     }
     s->send("NICK " + s->nick);
     s->send("USER " + s->cfg.user + " 0 * :" + s->cfg.realname);

@@ -424,7 +424,7 @@ std::vector<Core::Setting> Core::settings() const {
 // it (opt() reads it that way). A key added here belongs in iSekur.conf.example too (the tests check both ways)
 static const std::vector<KeyInfo> KEYS = {
     {"name", "Connection", 'n'}, {"host", "Connection", 'n'}, {"port", "Connection", 'n'}, {"tls", "Connection", 'n'},
-    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'}, {"vhost", "Connection", 'n'},
+    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'}, {"vhost", "Connection", 'n'}, {"cap", "Connection", 'n'}, {"noproxy", "Connection", 'n'},
     {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
@@ -759,7 +759,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         ServerCfg d = server_cfg(sec.substr(7));
         std::map<std::string, std::string> uses = {
             {"name", d.name}, {"host", d.host}, {"port", std::to_string(d.port)}, {"tls", d.tls ? "true" : "false"},
-            {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"},
+            {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"}, {"cap", d.cap ? "true" : "false"}, {"noproxy", d.noproxy ? "true" : "false"},
             {"auto_identify", d.auto_identify ? "true" : "false"}, {"encoding", d.encoding.empty() ? "utf-8" : d.encoding}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}, {"join_wait", d.join_wait ? "on" : "off"}};
         for (auto& k : KEYS) {
             if (k.scope == 'g') continue;
@@ -869,6 +869,9 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.auto_identify = is_on(ini_get(cfg, sec, "auto_identify", "true"));
     sc.encoding = ini_get(cfg, sec, "encoding");
     sc.vhost = ini_get(cfg, sec, "vhost");
+    if (sc.vhost.size() > 2 && sc.vhost.front() == '[' && sc.vhost.back() == ']') sc.vhost = sc.vhost.substr(1, sc.vhost.size() - 2);  // [2001:db8::1] as in /server
+    sc.cap = is_on(ini_get(cfg, sec, "cap", "true"));
+    sc.noproxy = is_on(ini_get(cfg, sec, "noproxy", "false"));
     std::string enc = sc.encoding;
     if (to_lower(enc) == "utf-8" || enc == "utf8") sc.encoding.clear();  // the default, spelled out
     sc.nick = ini_get(cfg, sec, "nick", gnick);
@@ -2333,29 +2336,54 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-login method] | del name"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-rawlog] [-login method] | del name"); return; }
+        std::string nick, port, login, name;
+        std::vector<std::string> pos;  // the address, then the port
+        std::vector<std::pair<std::string, std::string>> sets;  // config keys the options write: -host, -cap, -nocap, -cmdspeed, -cmdmax, -noproxy
+        bool tls = false, verify = true, rawlog_on = false;
+        // the options come before or after the address, like irssi's: /server -host vhost irc.sekurnet.org 6697 -tls
+        for (size_t i = 0; i < argv.size(); i++) {
+            const std::string& a = argv[i];
+            if (a.empty() || a[0] != '-') { pos.push_back(a); continue; }
+            if (a == "-tls") tls = true;
+            else if (a == "-noverify") verify = false;
+            else if (a == "-cap" || a == "-nocap") sets.push_back({"cap", a == "-cap" ? "true" : "false"});
+            else if (a == "-noproxy") sets.push_back({"noproxy", "true"});
+            else if (a == "-rawlog") rawlog_on = true;
+            else if (a == "-name" || a == "-nick" || a == "-login" || a == "-host" || a == "-cmdspeed" || a == "-cmdmax") {
+                if (i + 1 >= argv.size()) { print(b, LK::ERROR, a + " takes a value (/help server)"); return; }
+                const std::string& v = argv[++i];
+                if (a == "-name") name = v;
+                else if (a == "-nick") nick = v;
+                else if (a == "-login") login = v, to_lower(login);
+                else if (a == "-host") sets.push_back({"vhost", v});
+                else {
+                    bool speed = a == "-cmdspeed";
+                    if (v.size() > 6 || v.find_first_not_of("0123456789") != std::string::npos || (!speed && atoi(v.c_str()) < 1)) {
+                        print(b, LK::ERROR, speed ? "-cmdspeed takes milliseconds (0: no flood protection)" : "-cmdmax takes a number of commands, 1 or more");
+                        return;
+                    }
+                    sets.push_back({speed ? "flood_interval_ms" : "flood_burst", v});
+                }
+            }
+            else { print(b, LK::ERROR, "No option " + a + " (/help server)"); return; }
+        }
+        if (pos.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [options]  (/help server)"); return; }
         // an IPv6 address: bare (2001:db8::1) or in brackets with a port ([2001:db8::1]:6697); the lookup takes it bare
-        std::string host = argv[0], nick, port, login, vhost;
+        std::string host = pos[0];
         if (host[0] == '[') {
             size_t e = host.find(']');
             if (e != std::string::npos && e + 1 < host.size() && host[e + 1] == ':') port = host.substr(e + 2);
             host = host.substr(1, e == std::string::npos ? std::string::npos : e - 1);
         }
+        if (pos.size() > 1) port = pos.back();
         // no -name: the host is the name, and what a [server.x] can't have (an address's :) turns to -
-        std::string name = host, wh, wpath;
+        std::string wh, wpath, dname = host;
         int wport;
         bool wtls;
-        if (ws_url(host, wh, wport, wpath, wtls)) name = wh;  // wss://irc.sekurnet.org/ws: named irc.sekurnet.org
-        for (char& ch : name) if (!server_name_ok(std::string(1, ch))) ch = '-';
-        bool tls = false, verify = true;
-        for (size_t i = 1; i < argv.size(); i++) {
-            if (argv[i] == "-tls") tls = true;
-            else if (argv[i] == "-noverify") verify = false;
-            else if ((argv[i] == "-name" || argv[i] == "-nick") && i + 1 < argv.size()) (argv[i] == "-name" ? name : nick) = argv[i + 1], i++;
-            else if (argv[i] == "-login" && i + 1 < argv.size()) login = to_lower(argv[++i]);
-            else if (argv[i] == "-host" && i + 1 < argv.size()) vhost = argv[++i];
-            else port = argv[i];
-        }
+        if (ws_url(host, wh, wport, wpath, wtls)) dname = wh;  // wss://irc.sekurnet.org/ws: named irc.sekurnet.org
+        for (char& ch : dname) if (!server_name_ok(std::string(1, ch))) ch = '-';
+        if (name.empty()) name = dname;
         // the name is a config section: [server.<name>]
         if (!server_name_ok(name)) {
             print(b, LK::ERROR, "A server name can have letters, digits, . _ and - only");
@@ -2364,9 +2392,12 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (!login.empty() && !login_kind(login)) { print(b, LK::ERROR, "-login takes sasl, cert, nickserv or password"); return; }
         std::string sec = "server." + name;
         for (auto& sv : servers)
-            if (sv->cfg.name == name) {
-                if (!vhost.empty()) cfg[sec]["vhost"] = unsaved[sec]["vhost"] = vhost, sv->cfg = server_cfg(name);  // -host on a known one: the new vhost, then the reconnect
-                connect(sv.get()), select(sv->status);
+            if (sv->cfg.name == name) {  // the options of a known one that set something: kept, then the reconnect
+                for (auto& [k, v] : sets) cfg[sec][k] = unsaved[sec][k] = v;
+                sv->cfg = server_cfg(name), load_flood(sv.get());
+                if (rawlog_on) rawlog(sv->status, "on");
+                connect(sv.get());
+                select(sv->status);
                 return;
             }
         if (port.empty() || (tls && port == "6667")) port = tls ? "6697" : "6667";
@@ -2376,10 +2407,11 @@ void Core::exec(Buffer* b, const std::string& input) {
                  {"tls", tls ? "true" : "false"}, {"tls_verify", verify ? "true" : "false"}})
             cfg[sec][k] = unsaved[sec][k] = v;
         if (!nick.empty()) cfg[sec]["nick"] = unsaved[sec]["nick"] = nick;
-        if (!vhost.empty()) cfg[sec]["vhost"] = unsaved[sec]["vhost"] = vhost;
+        for (auto& [k, v] : sets) cfg[sec][k] = unsaved[sec][k] = v;
         ServerCfg sc = server_cfg(name);
         Server* ns = add_server(sc);
         select(ns->status);
+        if (rawlog_on) rawlog(ns->status, "on");  // before it connects: the handshake is in it
         // -login: its questions first, since the password and the certificate go out with the connection
         if (login.empty()) connect(ns);
         else {
