@@ -3531,9 +3531,9 @@ isekur.command("sp", "", function() print(isekur.run({"espeak", "-v", "x"}, "hel
         assert(mkdtemp(d));
         std::string dir = d, fake = dir + "/bin", oldpath = getenv("PATH") ? getenv("PATH") : "";
         mkdir_p(fake), mkdir_p(dir + "/plugins");
-        auto script = [&](const std::string& name, const std::string& body) {  // absolute paths inside: PATH holds only these
+        auto script = [&](const std::string& name, const std::string& body) {  // the test's PATH holds only these; the script gets the system's too (OpenBSD's ksh has no printf builtin)
             FILE* f = fopen((fake + "/" + name).c_str(), "w");
-            fputs(("#!/bin/sh\n" + body + "\n").c_str(), f), fclose(f);
+            fputs(("#!/bin/sh\nPATH=$PATH:/usr/bin:/bin\n" + body + "\n").c_str(), f), fclose(f);
             chmod((fake + "/" + name).c_str(), 0755);
         };
         auto slurp = [](const std::string& path) { std::ifstream in(path, std::ios::binary); return std::string((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()); };
