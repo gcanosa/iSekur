@@ -2,7 +2,7 @@
 
 [![Latest release](https://img.shields.io/github/v/release/gcanosa/iSekur?color=c792ea)](https://github.com/gcanosa/iSekur/releases/latest)
 [![License: GPL-3.0](https://img.shields.io/badge/license-GPL--3.0-ff5fd7)](LICENSE)
-[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20FreeBSD-7dcfff)](#install)
+[![Platforms](https://img.shields.io/badge/platforms-macOS%20%7C%20Linux%20%7C%20FreeBSD%20%7C%20OpenBSD%20%7C%20NetBSD-7dcfff)](#install)
 [![Website](https://img.shields.io/badge/website-isekur--site-9ece6a)](https://gcanosa.github.io/isekur-site/)
 [![IRC](https://img.shields.io/badge/IRC-%23iSekur%20on%20irc.sekurnet.org-ffcb6b)](#support)
 
@@ -56,6 +56,10 @@ Prebuilt packages of the latest release:
 From source (C++17, GNU make, OpenSSL 1.1+/LibreSSL, PAM; termbox2 and libvterm are vendored):
 
     make && sudo make install     # gmake on *BSD
+
+Every push is built and tested on macOS, Linux (glibc and Alpine's musl), FreeBSD, OpenBSD, NetBSD and Cygwin.
+On the BSDs install GNU make first: `pkg install gmake` (FreeBSD), `pkg_add gmake` (NetBSD),
+`pkg_add gmake libiconv` (OpenBSD, which has no PAM, so no `/shell` login there).
 
 Run `isekur`. The first start writes `~/.config/isekur/isekur.conf` and opens a short guide.
 After that, `/server irc.sekurnet.org 6697 -tls` and `/join #iSekur`. All the rest is in the
