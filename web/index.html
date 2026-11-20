@@ -702,6 +702,10 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   /* a phone on its side: the notch is left or right (0 when upright), keep the text out from under it */
   #msgs { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); }
   #status { padding-left: max(14px, env(safe-area-inset-left)); padding-right: max(14px, env(safe-area-inset-right)); }
+  /* the status line is longer than the phone (many tabs in Act:, status_info): swipe it sideways instead of cutting it off */
+  #status { overflow-x: auto; overscroll-behavior-x: contain; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+  #status::-webkit-scrollbar { display: none; }
+  #stl, #sti, #dccbar { flex: none; overflow: visible; text-overflow: clip; }
   #side { padding-left: env(safe-area-inset-left); } #nicks { padding-right: env(safe-area-inset-right); }
   #zoom { right: max(14px, calc(env(safe-area-inset-right) + 4px)); }
   #side { display: none; grid-area: msgs; justify-self: start; width: 70%; min-height: 0; z-index: 5; box-shadow: 0 0 40px #000; }  /* over the messages only: the status line and the input stay visible */
