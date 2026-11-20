@@ -46,6 +46,10 @@ else
     ifneq ($(filter %BSD DragonFly,$(shell uname -s)),)
       PAM_LIBS += -lexecinfo  # backtrace() isn't in the BSDs' libc
     endif
+    ifeq ($(shell uname -s),OpenBSD)
+      OPENSSL_CFLAGS += -I/usr/local/include  # iconv.h: OpenBSD's libc has no iconv, pkg_add libiconv
+      ICONV_LIBS := -L/usr/local/lib -liconv
+    endif
   else
     PAM_LIBS := -framework IOKit -framework CoreFoundation  # /statusbar bat
     ICONV_LIBS := -liconv  # legacy charsets (config.cpp); glibc has iconv in libc

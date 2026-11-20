@@ -8,12 +8,12 @@
 #include <security/pam_appl.h>
 #endif
 #include <sys/ioctl.h>
-#if defined(__APPLE__)
+#if defined(__APPLE__) || defined(__NetBSD__) || defined(__OpenBSD__)
 #include <util.h>
 #elif defined(__linux__) || defined(__CYGWIN__)
 #include <pty.h>
 #else
-#include <libutil.h>
+#include <libutil.h>  // FreeBSD, DragonFly
 #endif
 #include "vterm.h"
 #include <sys/stat.h>
