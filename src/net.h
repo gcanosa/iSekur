@@ -41,6 +41,7 @@ struct Conn {
     std::vector<sockaddr_storage> from;
     std::vector<std::string> vfail;  // why each vhost address couldn't be used, for the error when none could
     bool vbind_failed = false;
+    int family = 0;  // set before connect() like px: AF_INET or AF_INET6 = only that IP version (/server -4, -6), 0 = either
     std::string vhost;  // set before connect() like px: the local name or address to connect from, "" = the OS picks
     std::shared_ptr<Resolve> res;  // while RESOLVING; fd is then the wakeup pipe
     size_t ai = 0;

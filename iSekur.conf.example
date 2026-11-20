@@ -194,6 +194,7 @@ notify    =                  ; nicks to watch: "bob is online" / "went offline" 
 ; cap = false            ; no IRCv3 negotiation (CAP LS) for this network, for a server that chokes on it; no SASL then (/server ... -nocap)
 ; noproxy = true         ; connect direct whatever a proxy plugin says (/server ... -noproxy)
 ; vhost = 203.0.113.7     ; connect from this local address or hostname (one of this machine's own; /server ... -host); empty: the OS picks
+; ip_version = 6         ; 4 or 6: connect over that IP version only, no try of the other (/server ... -4, -6); auto: either
 ; sasl_user = mynick
 ; sasl_pass = secret
 ; sasl_mech = PLAIN          ; PLAIN | SCRAM-SHA-256 | EXTERNAL (default: PLAIN, or EXTERNAL with cert)

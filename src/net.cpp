@@ -52,10 +52,10 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
     std::string port_s = std::to_string(port);
     // Detached: if we give up first (close()), the thread just finishes into
     // its own copy of `r` and a pipe nobody reads.
-    std::thread([r, h = rh, port_s, vh = vhost, wfd = p[1]] {
+    std::thread([r, h = rh, port_s, vh = vhost, fam = family, wfd = p[1]] {
         addrinfo hints{}, *ai = nullptr;
         hints.ai_socktype = SOCK_STREAM;
-        hints.ai_family = AF_UNSPEC;
+        hints.ai_family = fam;  // AF_UNSPEC unless /server -4 or -6
         // unmapped: no ::ffff:a.b.c.d (macOS answers an AF_INET6 lookup of a v4-only name with those): it is IPv4 to the network
         // takes the list by reference and nulls it: a failed getaddrinfo leaves its result untouched on glibc, so the
         // second lookup's copy() would free the vhost's list again
@@ -71,21 +71,24 @@ bool Conn::connect(const std::string& h, int port, int t, const std::string& c,
         };
         bool v4 = false, v6 = false, sv4 = false, sv6 = false;
         int e = 0;
+        bool by_vhost = false;
         if (!vh.empty()) {  // the vhost first: its family says which of the server's addresses can be used at all
             if ((e = getaddrinfo(vh.c_str(), nullptr, &hints, &ai))) r->err = "vhost " + vh + ": " + gai_strerror(e);
             copy(ai, r->local, v4, v6);
             hints.ai_flags = 0;
             // an IPv6 vhost asks for the server's IPv6 addresses (and v4 for v4), so a resolver that leaves
             // AAAA out when it sees no IPv6 route, or lists v4 first, can't give a family the vhost can't use
-            if (!e && v4 != v6) hints.ai_family = v6 ? AF_INET6 : AF_INET;
+            if (!e && v4 != v6) hints.ai_family = v6 ? AF_INET6 : AF_INET, by_vhost = true;
         }
         if (!e) {
             e = getaddrinfo(h.c_str(), port_s.c_str(), &hints, &ai);
             copy(ai, r->addrs, sv4, sv6, hints.ai_family == AF_INET6);
-            if (e || r->addrs.empty())
-                r->err = hints.ai_family == AF_UNSPEC ? gai_strerror(e)
-                                                      : "vhost " + vh + " is " + (v6 ? "IPv6" : "IPv4") + " only, but " + h + " has no " +
-                                                            (v6 ? "IPv6" : "IPv4") + " address" + (e ? std::string(" (") + gai_strerror(e) + ")" : "");
+            if (e || r->addrs.empty()) {
+                std::string why = e ? std::string(" (") + gai_strerror(e) + ")" : "";
+                r->err = by_vhost ? "vhost " + vh + " is " + (v6 ? "IPv6" : "IPv4") + " only, but " + h + " has no " + (v6 ? "IPv6" : "IPv4") + " address" + why
+                         : hints.ai_family == AF_UNSPEC ? gai_strerror(e)
+                                                        : h + " has no " + (hints.ai_family == AF_INET6 ? "IPv6" : "IPv4") + " address" + why;
+            }
         }
         r->done.store(true, std::memory_order_release);
         char one = 1;
@@ -848,6 +851,7 @@ bool Conn::spawn_ssh() {
                 dest = (px.user.empty() ? "" : px.user + "@") + px.host, port = std::to_string(px.port);
     std::vector<const char*> argv = {"ssh", "-W", w.c_str(), "-p", port.c_str(), "-o", "BatchMode=yes", "-o", "ExitOnForwardFailure=yes",
                                      "-o", "LogLevel=ERROR", "-o", "ServerAliveInterval=60"};
+    if (family) argv.push_back(family == AF_INET6 ? "-6" : "-4");  // ssh's own lookup of the jump host
     if (!vhost.empty()) {  // ssh's own source address: the jump host sees the vhost
         if (!host_ok(vhost)) { err = "vhost " + vhost + " isn't a name or an address"; ::close(sv[0]), ::close(sv[1]), ::close(ep[0]), ::close(ep[1]); return false; }
         argv.insert(argv.end(), {"-b", vhost.c_str()});

@@ -424,7 +424,7 @@ std::vector<Core::Setting> Core::settings() const {
 // it (opt() reads it that way). A key added here belongs in iSekur.conf.example too (the tests check both ways)
 static const std::vector<KeyInfo> KEYS = {
     {"name", "Connection", 'n'}, {"host", "Connection", 'n'}, {"port", "Connection", 'n'}, {"tls", "Connection", 'n'},
-    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'}, {"vhost", "Connection", 'n'}, {"cap", "Connection", 'n'}, {"noproxy", "Connection", 'n'},
+    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'}, {"vhost", "Connection", 'n'}, {"ip_version", "Connection", 'n'}, {"cap", "Connection", 'n'}, {"noproxy", "Connection", 'n'},
     {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
@@ -549,7 +549,7 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
 std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> CHOICES = {
         {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
-        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}};
+        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
     if (sec == "web" && key == "tls") return v == "auto" || v == "true" ? "" : key + " = " + v + ": takes auto (HTTPS unless bound to localhost) or true (HTTPS on localhost too)";
@@ -723,6 +723,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         else if (sec == "general" && k == "timestamp_hover") r.choices = {"off", "web", "term", "both"};
         else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
         else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
+        else if (srv && k == "ip_version") r.choices = {"auto", "4", "6"};
         else if (sec == "web" && k == "tls") r.choices = {"auto", "true"};  // false never did anything: plain HTTP is only on localhost, which is auto
         else if (v == "on" || v == "off") r.choices = {"on", "off"};
         else if (v == "true" || v == "false") r.choices = {"true", "false"};
@@ -760,7 +761,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         ServerCfg d = server_cfg(sec.substr(7));
         std::map<std::string, std::string> uses = {
             {"name", d.name}, {"host", d.host}, {"port", std::to_string(d.port)}, {"tls", d.tls ? "true" : "false"},
-            {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"}, {"cap", d.cap ? "true" : "false"}, {"noproxy", d.noproxy ? "true" : "false"},
+            {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"}, {"cap", d.cap ? "true" : "false"}, {"noproxy", d.noproxy ? "true" : "false"}, {"ip_version", d.ipv ? std::to_string(d.ipv) : "auto"},
             {"auto_identify", d.auto_identify ? "true" : "false"}, {"encoding", d.encoding.empty() ? "utf-8" : d.encoding}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}, {"join_wait", d.join_wait ? "on" : "off"}};
         for (auto& k : KEYS) {
             if (k.scope == 'g') continue;
@@ -873,6 +874,7 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     if (sc.vhost.size() > 2 && sc.vhost.front() == '[' && sc.vhost.back() == ']') sc.vhost = sc.vhost.substr(1, sc.vhost.size() - 2);  // [2001:db8::1] as in /server
     sc.cap = is_on(ini_get(cfg, sec, "cap", "true"));
     sc.noproxy = is_on(ini_get(cfg, sec, "noproxy", "false"));
+    sc.ipv = ini_get(cfg, sec, "ip_version") == "4" ? 4 : ini_get(cfg, sec, "ip_version") == "6" ? 6 : 0;
     std::string enc = sc.encoding;
     if (to_lower(enc) == "utf-8" || enc == "utf8") sc.encoding.clear();  // the default, spelled out
     sc.nick = ini_get(cfg, sec, "nick", gnick);
@@ -2341,10 +2343,10 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-rawlog] [-login method] | del name"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] | del name"); return; }
         std::string nick, port, login, name;
         std::vector<std::string> pos;  // the address, then the port
-        std::vector<std::pair<std::string, std::string>> sets;  // config keys the options write: -host, -cap, -nocap, -cmdspeed, -cmdmax, -noproxy
+        std::vector<std::pair<std::string, std::string>> sets;  // config keys the options write: -host, -cap, -nocap, -cmdspeed, -cmdmax, -noproxy, -4, -6
         bool tls = false, verify = true, rawlog_on = false;
         // the options come before or after the address, like irssi's: /server -host vhost irc.sekurnet.org 6697 -tls
         for (size_t i = 0; i < argv.size(); i++) {
@@ -2354,6 +2356,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             else if (a == "-noverify") verify = false;
             else if (a == "-cap" || a == "-nocap") sets.push_back({"cap", a == "-cap" ? "true" : "false"});
             else if (a == "-noproxy") sets.push_back({"noproxy", "true"});
+            else if (a == "-4" || a == "-6") sets.push_back({"ip_version", a.substr(1)});
             else if (a == "-rawlog") rawlog_on = true;
             else if (a == "-name" || a == "-nick" || a == "-login" || a == "-host" || a == "-cmdspeed" || a == "-cmdmax") {
                 if (i + 1 >= argv.size()) { print(b, LK::ERROR, a + " takes a value (/help server)"); return; }

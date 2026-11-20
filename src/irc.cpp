@@ -323,9 +323,11 @@ void Core::connect(Server* s) {
     s->conn.px = {};
     s->conn.ws = s->cfg.ws;
     s->conn.vhost = s->cfg.vhost;
+    s->conn.family = s->cfg.ipv == 4 ? AF_INET : s->cfg.ipv == 6 ? AF_INET6 : AF_UNSPEC;
     plugin_emit("connect", s, "");  // a proxy plugin calls isekur.proxy(srv, url) here
     if (s->cfg.noproxy) s->conn.px = {};
     std::string how = tls ? "TLS" + why : "";
+    if (s->cfg.ipv) how += (how.empty() ? "IPv" : ", IPv") + std::to_string(s->cfg.ipv) + " only";
     if (!s->cfg.cap) how += (how.empty() ? "" : ", ") + std::string("no CAP");
     if (!s->cfg.ws.empty()) how += (how.empty() ? "WebSocket " : ", WebSocket ") + s->cfg.ws;
     print(s->status, LK::INFO,

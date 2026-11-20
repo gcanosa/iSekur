@@ -1591,9 +1591,9 @@ int main() {
         socklen_t ll = sizeof la;
         getsockname(lfd, (sockaddr*)&la, &ll);
         // connects to the listener (target: where it listens, any family) from `vh`; err = why not, local = the address the connection came from
-        auto via = [&](const std::string& target, const std::string& vh, std::string& err, std::string& local) {
+        auto via = [&](const std::string& target, const std::string& vh, std::string& err, std::string& local, int fam = 0) {
             Conn c;
-            c.vhost = vh;
+            c.vhost = vh, c.family = fam;
             assert(c.connect(target, ntohs(la.sin_port), 0, "", ""));
             std::string in;
             bool ok = true;
@@ -1618,6 +1618,11 @@ int main() {
         std::string err, local;
         assert(via("127.0.0.1", "", err, local) && local == "127.0.0.1");
         assert(via("127.0.0.1", "127.0.0.1", err, local) && local == "127.0.0.1");
+        // /server -4, -6: only that family is looked up, so an address of the other one is "no IPv6 address", not a failed connect
+        assert(via("127.0.0.1", "", err, local, AF_INET) && local == "127.0.0.1");
+        assert(!via("127.0.0.1", "", err, local, AF_INET6) && err.rfind("127.0.0.1 has no IPv6 address", 0) == 0);
+        assert(!via("127.0.0.1", "::1", err, local, AF_INET) && err.rfind("vhost ::1: ", 0) == 0);  // a vhost of the other family
+        assert(!via("127.0.0.1", "::1", err, local) && err.rfind("vhost ::1 is IPv6 only, but 127.0.0.1 has no IPv6 address", 0) == 0);
         assert(!via("127.0.0.1", "::1", err, local) && err.rfind("vhost ::1 is IPv6 only, but 127.0.0.1 has no IPv6 address", 0) == 0);
         assert(!via("127.0.0.1", "192.0.2.1", err, local) && err.rfind("vhost 192.0.2.1: 192.0.2.1 (", 0) == 0 &&
                err.find(": it has to be an address of this machine") != std::string::npos);  // not one of this machine's addresses: which one, and why
@@ -1632,6 +1637,8 @@ int main() {
         if (l6 >= 0) {
             assert(via("::1", "::1", err, local) && local == "::1");
             assert(via("::1", "", err, local) && local == "::1");
+            assert(via("::1", "", err, local, AF_INET6) && local == "::1");
+            assert(!via("::1", "", err, local, AF_INET) && err.rfind("::1 has no IPv4 address", 0) == 0);
             assert(!via("::1", "127.0.0.1", err, local) && err.rfind("vhost 127.0.0.1 is IPv4 only, but ::1 has no IPv4 address", 0) == 0);
             addrinfo hs{}, *lh = nullptr;  // a name with both: the vhost's family picks the address, in either order
             hs.ai_socktype = SOCK_STREAM;
@@ -1672,6 +1679,18 @@ int main() {
         assert(core.find(t, "*raw"));  // opened before the connection: its first lines are in it
         core.exec(home, "/server 127.0.0.1 1 -name so2 -cap -cmdspeed 0");  // a known one: kept, then the reconnect with CAP
         assert(srv("so2") == t && t->cfg.cap && t->flood_ms == 0 && t->conn.out.find("CAP LS 302") != std::string::npos);
+        // -4 and -6: kept as ip_version, handed to the connection, said in "Connecting to", and the last one wins; on a known server too
+        core.exec(home, "/server 127.0.0.1 1 -name so7 -6");
+        assert(srv("so7") && core.cfg["server.so7"]["ip_version"] == "6" && srv("so7")->cfg.ipv == 6 && srv("so7")->conn.family == AF_INET6);
+        bool said = false;
+        for (auto& l : srv("so7")->status->lines) said |= l.text.find("(IPv6 only)") != std::string::npos;
+        assert(said);
+        core.exec(home, "/server 127.0.0.1 1 -name so7 -6 -4");
+        assert(core.cfg["server.so7"]["ip_version"] == "4" && srv("so7")->cfg.ipv == 4 && srv("so7")->conn.family == AF_INET);
+        core.cfg["server.so7"]["ip_version"] = "auto";
+        assert(core.server_cfg("so7").ipv == 0 && bad_value("server.so7", "ip_version", "auto").empty() && bad_value("server.so7", "ip_version", "6").empty());
+        assert(!bad_value("server.so7", "ip_version", "5").empty());
+        core.exec(home, "/server del so7");
         // the options before the address, like irssi's /server -host vhost irc... : same as after it
         core.exec(home, "/server -host 127.0.0.1 -nocap 127.0.0.1 -name so4 2 -tls");
         assert(core.cfg["server.so4"]["host"] == "127.0.0.1" && core.cfg["server.so4"]["port"] == "2" && core.cfg["server.so4"]["vhost"] == "127.0.0.1" &&

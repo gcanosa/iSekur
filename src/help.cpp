@@ -12,7 +12,7 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-rawlog] [-login method] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. The options can come before the address too, as in irssi: /server -host vhost.example.org irc.sekurnet.org 6697 -tls. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick), -host the local hostname or IP to connect from "
@@ -21,6 +21,9 @@ static const std::vector<CmdInfo> CMDS = {
      "-nocap skips the IRCv3 capability negotiation (CAP LS) for a server or bouncer that chokes on it: no SASL then, NickServ still works; -cap puts it back "
      "(server.<name>.cap). -cmdspeed is the milliseconds between commands once the flood protection starts and -cmdmax how many go out at once before it does "
      "(this network's flood_interval_ms and flood_burst; 0 ms: no protection). -noproxy connects direct whatever a proxy plugin says (server.<name>.noproxy). "
+     "-4 or -6 connects over IPv4 or IPv6 only: the name is looked up for that family alone, and a server with no address of it is an error, not a try of the other one "
+     "(server.<name>.ip_version = 4, 6 or auto; the last of -4 and -6 wins, and /set server.<name>.ip_version auto goes back to either; over a proxy it is the connection to the proxy, "
+     "and ssh gets it as -4 or -6). "
      "-rawlog opens the /rawlog tab before it connects, so the handshake is in it (not kept). -login sasl, cert, nickserv or password asks for that login "
      "before it connects (see /login). An IPv6 address works bare or "
      "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). A ws:// or wss:// URL as the host "
@@ -36,7 +39,7 @@ static const std::vector<CmdInfo> CMDS = {
      "its [server.<name>] in the config (saved at once, comments kept), its tab, its logs folder and kept history follow, "
      "no reconnect needed (the name is only yours). Without the names it asks, for the tab you're in; the settings window's "
      "name row and r do the same.",
-     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify", "/server irc.sekurnet.org 6697 -tls -host vhost.example.org", "/server irc.sekurnet.org 6697 -tls -cmdspeed 1000 -cmdmax 8 -rawlog",
+     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify", "/server irc.sekurnet.org 6697 -tls -host vhost.example.org", "/server irc.sekurnet.org 6697 -tls -6", "/server irc.sekurnet.org 6697 -tls -cmdspeed 1000 -cmdmax 8 -rawlog",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "
