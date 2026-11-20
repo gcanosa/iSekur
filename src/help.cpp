@@ -357,7 +357,7 @@ static const std::vector<CmdInfo> CMDS = {
      "Space switches on/off (and steps through the themes, applied at once), d or Del puts the default "
      "back, s or Ctrl+S saves, q or Esc closes; the mouse works too. The webchat's ⚙ is the same, with "
      "switches and a theme list. With a key it shows it; with a value it changes it right away, if the key can "
-     "take it: a wrong one (tab_bar middle, scrollback lots, tab_bar_width 200) is refused and says what the key takes. "
+     "take it: a wrong one (tab_bar_position middle, scrollback lots, tab_bar_width 200) is refused and says what the key takes. "
      "Only keys iSekur reads are taken, in the section that reads them ([plugin.*] takes any); "
      "one already in the config can still be shown or cleared. "
      "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
@@ -899,7 +899,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/set timestamp_hover both") " the time shows only under the mouse (or web, term)",
         "  " G_CMD("/set nick_width 16") "     room for longer nicks before they're cut (0: no column)",
         "  " G_CMD("/set own_nick_color off") " your nick in the theme's own color, one other nicks can share (on: a color of its own)",
-        "  " G_CMD("/set tab_bar left") "     the tabs as a tree down the left side (or right; " G_CMD("tab_bar_width") ", or drag its edge)",
+        "  " G_CMD("/set tab_bar_position left") "     the tabs as a tree down the left side (or right; " G_CMD("tab_bar_width") ", or drag its edge)",
         "  " G_CMD("/set nicklist_side left") " the user list at the left of the chat (" G_CMD("nicklist_width") ", or drag its │)",
     }},
     {"Plugins", {

@@ -430,7 +430,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
     {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_autohide", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
-    {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"own_nick_color", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'}, {"tab_bar", "Look", 'g'}, {"tab_bar_width", "Look", 'g'}, {"nicklist_side", "Look", 'g'}, {"nicklist_width", "Look", 'g'},
+    {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"own_nick_color", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'}, {"tab_bar_position", "Look", 'g'}, {"tab_bar_width", "Look", 'g'}, {"nicklist_side", "Look", 'g'}, {"nicklist_width", "Look", 'g'},
     {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
     {"hilight_words", "Messages", 'n'}, {"hilight_window", "Messages", 'b'}, {"bell_notifications", "Messages", 'b'},
@@ -532,6 +532,7 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
     bool g = sec == "general", srv = sec.rfind("server.", 0) == 0;
     if ((g || srv) && key_info(key))
         return key + (g ? " goes in a [server.<name>] section, not [general]: ignored here" : " goes in [general], not a network's section: ignored here");
+    if (g && key == "tab_bar") return "tab_bar is tab_bar_position now: ignored here";  // ponytail: just this one renamed key; a table if more come
     std::string best;
     size_t bd = 3;  // ponytail: 2 edits at most, closer than that it's a different word
     auto near = [&](const std::string& k) { if (size_t d = edit_dist(key, k); d < bd) bd = d, best = k; };
@@ -548,7 +549,7 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
 std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> CHOICES = {
         {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
-        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}};
+        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
     if (sec == "web" && key == "tls") return v == "auto" || v == "true" ? "" : key + " = " + v + ": takes auto (HTTPS unless bound to localhost) or true (HTTPS on localhost too)";
@@ -717,7 +718,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         to_lower(v);
         if (sec == "general" && k == "theme") r.choices = themes;
         else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
-        else if (sec == "general" && k == "tab_bar") r.choices = {"top", "left", "right"};
+        else if (sec == "general" && k == "tab_bar_position") r.choices = {"top", "left", "right"};
         else if (sec == "general" && k == "nicklist_side") r.choices = {"right", "left"};
         else if (sec == "general" && k == "timestamp_hover") r.choices = {"off", "web", "term", "both"};
         else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono

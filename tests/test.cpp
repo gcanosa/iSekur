@@ -468,21 +468,21 @@ int main() {
         core.active = was && core.index_of(was) >= 0 ? was : core.bufs.front().get();
     }
     {  // /set refuses what the key can't take, before it's in the config; the webchat's settings dialog hears why
-        std::string was = ini_get(core.cfg, "general", "tab_bar");
-        for (const char* bad : {"/set tab_bar middle", "/set mouse maybe", "/set scrollback 50", "/set scrollback lots", "/set tab_bar_width 200",
+        std::string was = ini_get(core.cfg, "general", "tab_bar_position");
+        for (const char* bad : {"/set tab_bar_position middle", "/set mouse maybe", "/set scrollback 50", "/set scrollback lots", "/set tab_bar_width 200",
                                 "/set nick_width x", "/set history_fetch 501", "/set log_keep 5x", "/set web_tree_width 90"}) {
             core.exec(home, bad);
             assert(home->lines.back().kind == LK::ERROR && home->lines.back().text.find("(unchanged)") != std::string::npos);
         }
-        assert(ini_get(core.cfg, "general", "tab_bar") == was && !core.cfg["general"].count("tab_bar_width") && !core.cfg["general"].count("log_keep"));
+        assert(ini_get(core.cfg, "general", "tab_bar_position") == was && !core.cfg["general"].count("tab_bar_width") && !core.cfg["general"].count("log_keep"));
         assert(bad_value("general", "tab_bar_width", "200") == "tab_bar_width = 200: takes 10-60" && bad_value("general", "scrollback", "50") == "scrollback = 50: takes 100 or more");
         for (const char* ok : {"/set log_keep 6m", "/set tab_bar_width 30", "/set nick_width 0", "/set history_fetch 500", "/set tab_bar_width \"\""})
             core.exec(home, ok), assert(home->lines.back().kind != LK::ERROR);
         assert(ini_get(core.cfg, "general", "log_keep") == "6m" && ini_get(core.cfg, "general", "tab_bar_width").empty());
         core.from_web = true;
-        core.exec(home, "/set log_keep 1q"), core.exec(home, "/set tab_bar up");
+        core.exec(home, "/set log_keep 1q"), core.exec(home, "/set tab_bar_position up");
         core.from_web = false;
-        assert(core.set_refused == "log_keep = 1q: takes days (30), or 2w, 6m, 1y; 0 keeps all · tab_bar = up: takes top, left, right");
+        assert(core.set_refused == "log_keep = 1q: takes days (30), or 2w, 6m, 1y; 0 keeps all · tab_bar_position = up: takes top, left, right");
         core.set_refused.clear();
         for (const char* k : {"log_keep", "tab_bar_width", "nick_width", "history_fetch"}) core.cfg["general"].erase(k), core.unsaved["general"].erase(k), core.set_was["general"].erase(k);
         if (core.unsaved["general"].empty()) core.unsaved.erase("general");
@@ -1729,6 +1729,9 @@ int main() {
         std::ofstream(p) << "[general]\ntab_bar_width = 99\nnick_width = wide\nlog_keep = 2w\nlog_keep = soon\n";
         r = conf_check(p);
         assert(has(2, "10-60") && has(3, "number") && !has(4, "takes") && has(5, "2w, 6m, 1y"));
+        std::ofstream(p) << "[general]\ntab_bar = left\n";  // renamed to tab_bar_position: the old name says so
+        r = conf_check(p);
+        assert(r.size() == 1 && has(2, "tab_bar_position"));
         std::filesystem::remove_all(d);
     }
 

@@ -51,8 +51,8 @@ private:
     void set_mouse();  // the input mode, and 1003 (every move) while timestamp_hover wants it
     bool zen = false;  // the focus view (Core::view) is on the terminal: no bars, no nicklist, a centered chat (set by draw())
     int top_row() const { return zen ? 1 : (topicbar ? topic_h : 0) + tab_h; }  // first chat row, under the topic and tab bars
-    int tab_h = 1;  // tab bar rows, set by draw() (0 with tab_bar = left)
-    // tab_bar = left | right: the tabs as a tree in side_w columns from side_x, a │ at sep_x, the chat from chat_x
+    int tab_h = 1;  // tab bar rows, set by draw() (0 with tab_bar_position = left)
+    // tab_bar_position = left | right: the tabs as a tree in side_w columns from side_x, a │ at sep_x, the chat from chat_x
     // to chat_end (side_w 0: tabs on top)
     int side_w = 0, side_x = 0, sep_x = -1, chat_x = 0, chat_end = 0, side_top = 0, side_act = -1;  // side_top: first row shown; side_act: the tab it last scrolled to
     bool wdrag_moved = false;  // ...and the width changed: only then is it saved (a click would pin the theme's)

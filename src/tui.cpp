@@ -879,9 +879,9 @@ void Tui::draw() {
         labels.push_back(r);
         vis.push_back((int)i), lsty.push_back(s), lhid.push_back(hid);
     }
-    // tab_bar = left | right: when the chat keeps 40 columns beside it
+    // tab_bar_position = left | right: when the chat keeps 40 columns beside it
     side_w = 0;
-    std::string tbar = zen ? "" : ini_get(c.cfg, "general", "tab_bar");
+    std::string tbar = zen ? "" : ini_get(c.cfg, "general", "tab_bar_position");
     if (tbar == "left" || tbar == "right") {
         int sw0 = std::clamp(atoi(ini_get(c.cfg, "general", "tab_bar_width", T.lay("tab_bar_width", "20")).c_str()), 10, 60);  // /set beats the theme's
         if (W - sw0 - 1 >= 40) side_w = sw0;
