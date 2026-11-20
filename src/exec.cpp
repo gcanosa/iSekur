@@ -252,6 +252,9 @@ void Core::shell_cmd(Buffer* b) {
 #if defined(ISEKUR_NO_PAM) && defined(__CYGWIN__)
     print(b, LK::ERROR, "/shell needs PAM to check the login, and Cygwin has none");
     return;
+#elif defined(ISEKUR_NO_PAM) && defined(__OpenBSD__)
+    print(b, LK::ERROR, "/shell needs PAM to check the login, and OpenBSD has none");
+    return;
 #elif defined(ISEKUR_NO_PAM)
     print(b, LK::ERROR, "/shell needs PAM to check the login, and this build has none: install the PAM "
                         "headers (libpam0g-dev on Debian/Ubuntu, pam-devel on Fedora) and rebuild iSekur");
