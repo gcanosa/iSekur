@@ -781,6 +781,7 @@ std::string b64(const std::string& s);
 bool rank_ok(const Server* s, const std::string& pfx, char need);  // chanops.cpp
 std::string unb64(const std::string& s);  // "" on bad input
 std::string e2e_key(const std::string& pass, const std::string& salt);  // e2e.cpp
+bool scrypt_rfc7914(const std::string& pass, const std::string& salt, uint32_t N, uint32_t r, uint32_t p, unsigned char* out, size_t outlen);  // e2e.cpp: LibreSSL has no EVP_PBE_scrypt
 std::string e2e_seal(const std::string& key, const std::string& plain, const std::string& aad = "");  // b64(nonce|ct|tag)
 bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain, const std::string& aad = "");
 bool e2e_on(const Buffer* b);  // a 🔒 tab: an encrypted query, or a channel with a key

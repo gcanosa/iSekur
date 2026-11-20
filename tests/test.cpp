@@ -130,6 +130,24 @@ int main() {
 
     assert(unb64(b64("hello!")) == "hello!" && b64("") == "" && unb64("!!!") == "");
 
+    {  // scrypt for LibreSSL: RFC 7914's vectors, iSekur's own parameters, and where OpenSSL has its own, the same answers as it
+        auto hex = [](const unsigned char* d, size_t n) { std::string s; char b[3]; for (size_t i = 0; i < n; i++) snprintf(b, sizeof b, "%02x", d[i]), s += b; return s; };
+        unsigned char o[64];
+        assert(scrypt_rfc7914("", "", 16, 1, 1, o, 64) && hex(o, 64) == "77d6576238657b203b19ca42c18a0497f16b4844e3074ae8dfdffa3fede21442fcd0069ded0948f8326a753a0fc81f17e8d3e0fb2e0d3628cf35e20c38d18906");
+        assert(scrypt_rfc7914("password", "NaCl", 1024, 8, 16, o, 64) && hex(o, 64) == "fdbabe1c9d3472007856e7190d01e9fe7c6ad7cbc8237830e77376634b3731622eaf30d92e22a3886ff109279d9830dac727afb94a83ee6d8360cbdfa2cc0640");
+        assert(scrypt_rfc7914("pleaseletmein", "SodiumChloride", 16384, 8, 1, o, 64) && hex(o, 64) == "7023bdcb3afd7348461c06cd81fd38ebfda8fbba904f8e3ea9b543f6545da1f2d5432955613f0fcf62d49705242a9af9e61e85dc0d651e40dfcf017b45575887");
+        assert(!scrypt_rfc7914("x", "y", 3, 1, 1, o, 64) && !scrypt_rfc7914("x", "y", 16, 0, 1, o, 64));  // N is a power of two, r and p aren't 0
+        assert(scrypt_rfc7914("hunter2", "0123456789abcdef", 1 << 15, 8, 1, o, 32) && hex(o, 32) == "bb1c4a9190f062fa022fb5f9cf030aee479bbce7c0ea2f0a13a854e60fd31c83");
+        assert(e2e_key("hunter2", "0123456789abcdef") == std::string((char*)o, 32));  // what /e2e really uses
+#ifndef LIBRESSL_VERSION_NUMBER
+        for (const std::string& pw : std::vector<std::string>{"", "a", "contraseña ñandú", std::string(200, 'z')}) {
+            unsigned char a[40], b[40];
+            assert(scrypt_rfc7914(pw, "isekur-chan:#x", 1024, 4, 2, a, 40));
+            assert(EVP_PBE_scrypt(pw.data(), pw.size(), (const unsigned char*)"isekur-chan:#x", 14, 1024, 4, 2, 64 << 20, b, 40) == 1 && !memcmp(a, b, 40));
+        }
+#endif
+    }
+
     {  // /e2e: same password opens, a wrong one or a flipped byte is caught
         std::string k = e2e_key("hunter2", "0123456789abcdef"), bad = e2e_key("hunter3", "0123456789abcdef"), out;
         assert(k.size() == 32 && k == e2e_key("hunter2", "0123456789abcdef") && k != bad);
@@ -210,7 +228,10 @@ int main() {
     assert(check_password("s3cret", h) && !check_password("s3cre", h) && !check_password("x", "junk"));
 
     {  // Face ID (WebAuthn): a P-256 key like a phone's, its answers signed here
-        EVP_PKEY* k = EVP_EC_gen("P-256");
+        EVP_PKEY* k = nullptr;  // not EVP_EC_gen("P-256"): that is OpenSSL 3 only, LibreSSL and 1.1 have this
+        EVP_PKEY_CTX* kc = EVP_PKEY_CTX_new_id(EVP_PKEY_EC, nullptr);
+        assert(kc && EVP_PKEY_keygen_init(kc) > 0 && EVP_PKEY_CTX_set_ec_paramgen_curve_nid(kc, NID_X9_62_prime256v1) > 0 && EVP_PKEY_keygen(kc, &k) > 0);
+        EVP_PKEY_CTX_free(kc);
         unsigned char* der = nullptr;
         int dn = i2d_PUBKEY(k, &der);
         std::string spki((char*)der, dn);

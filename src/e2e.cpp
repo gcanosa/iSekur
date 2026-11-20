@@ -14,19 +14,98 @@
 // ponytail: password only, no forward secrecy; an X25519 exchange
 // authenticated by the password is the upgrade if that matters. No replay check in
 // channels: chathistory replays old lines on purpose; a timestamp inside would be the fix.
+#include <cstring>
+#include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <openssl/rand.h>
+#include <vector>
 #include "core.h"
 
 static const char* OK_TOKEN = "isekur-e2e-ok";
 static const char* ACK_TOKEN = "isekur-e2e-ack";  // differs from OK: a reflected OK is no ACK
 static const char* OFF_TOKEN = "isekur-e2e-off";  // sealed with the chat's key: only its holders can end it
 
+// scrypt, RFC 7914. LibreSSL (OpenBSD) has PBKDF2 but no EVP_PBE_scrypt, so it uses this one; OpenSSL builds keep
+// theirs. Same output either way, so a key made on one system opens on the other. The tests check it against the
+// RFC's vectors, and against OpenSSL's own where there is one. ponytail: plain and unoptimised, N = 2^15 takes
+// about a tenth of a second; N must be a power of two.
+static void salsa8(uint32_t B[16]) {
+    uint32_t x[16];
+    memcpy(x, B, sizeof x);
+    auto R = [](uint32_t a, int b) { return (a << b) | (a >> (32 - b)); };
+    for (int i = 0; i < 8; i += 2) {
+        x[4] ^= R(x[0] + x[12], 7);    x[8] ^= R(x[4] + x[0], 9);
+        x[12] ^= R(x[8] + x[4], 13);   x[0] ^= R(x[12] + x[8], 18);
+        x[9] ^= R(x[5] + x[1], 7);     x[13] ^= R(x[9] + x[5], 9);
+        x[1] ^= R(x[13] + x[9], 13);   x[5] ^= R(x[1] + x[13], 18);
+        x[14] ^= R(x[10] + x[6], 7);   x[2] ^= R(x[14] + x[10], 9);
+        x[6] ^= R(x[2] + x[14], 13);   x[10] ^= R(x[6] + x[2], 18);
+        x[3] ^= R(x[15] + x[11], 7);   x[7] ^= R(x[3] + x[15], 9);
+        x[11] ^= R(x[7] + x[3], 13);   x[15] ^= R(x[11] + x[7], 18);
+        x[1] ^= R(x[0] + x[3], 7);     x[2] ^= R(x[1] + x[0], 9);
+        x[3] ^= R(x[2] + x[1], 13);    x[0] ^= R(x[3] + x[2], 18);
+        x[6] ^= R(x[5] + x[4], 7);     x[7] ^= R(x[6] + x[5], 9);
+        x[4] ^= R(x[7] + x[6], 13);    x[5] ^= R(x[4] + x[7], 18);
+        x[11] ^= R(x[10] + x[9], 7);   x[8] ^= R(x[11] + x[10], 9);
+        x[9] ^= R(x[8] + x[11], 13);   x[10] ^= R(x[9] + x[8], 18);
+        x[12] ^= R(x[15] + x[14], 7);  x[13] ^= R(x[12] + x[15], 9);
+        x[14] ^= R(x[13] + x[12], 13); x[15] ^= R(x[14] + x[13], 18);
+    }
+    for (int i = 0; i < 16; i++) B[i] += x[i];
+}
+
+// B: 2r blocks of 16 words, mixed in place; Y is scratch of the same size
+static void scrypt_blockmix(uint32_t* B, uint32_t* Y, size_t r) {
+    uint32_t X[16];
+    memcpy(X, B + (2 * r - 1) * 16, sizeof X);
+    for (size_t i = 0; i < 2 * r; i++) {
+        for (size_t k = 0; k < 16; k++) X[k] ^= B[i * 16 + k];
+        salsa8(X);
+        memcpy(Y + i * 16, X, sizeof X);
+    }
+    for (size_t i = 0; i < r; i++) {  // even blocks first, then the odd ones
+        memcpy(B + i * 16, Y + 2 * i * 16, 64);
+        memcpy(B + (i + r) * 16, Y + (2 * i + 1) * 16, 64);
+    }
+}
+
+bool scrypt_rfc7914(const std::string& pass, const std::string& salt, uint32_t N, uint32_t r, uint32_t p, unsigned char* out, size_t outlen) {
+    if (N < 2 || (N & (N - 1)) || !r || !p || r > 1024 || p > 1024 || N > (1u << 20)) return false;  // the RFC's N is a power of two
+    const size_t w = 32 * (size_t)r;  // words in a block of 2r*64 bytes
+    std::vector<unsigned char> B(p * w * 4);
+    if (PKCS5_PBKDF2_HMAC(pass.data(), (int)pass.size(), (const unsigned char*)salt.data(), (int)salt.size(), 1, EVP_sha256(), (int)B.size(), B.data()) != 1)
+        return false;
+    std::vector<uint32_t> X(w), Y(w), V((size_t)N * w);
+    for (uint32_t i = 0; i < p; i++) {
+        unsigned char* b = &B[i * w * 4];
+        for (size_t k = 0; k < w; k++)  // little-endian words whatever the machine is
+            X[k] = (uint32_t)b[4 * k] | (uint32_t)b[4 * k + 1] << 8 | (uint32_t)b[4 * k + 2] << 16 | (uint32_t)b[4 * k + 3] << 24;
+        for (uint32_t n = 0; n < N; n++) {
+            memcpy(&V[(size_t)n * w], X.data(), w * 4);
+            scrypt_blockmix(X.data(), Y.data(), r);
+        }
+        for (uint32_t n = 0; n < N; n++) {
+            size_t j = X[(2 * r - 1) * 16] & (N - 1);  // Integerify: the low bits of the last block's first word
+            for (size_t k = 0; k < w; k++) X[k] ^= V[j * w + k];
+            scrypt_blockmix(X.data(), Y.data(), r);
+        }
+        for (size_t k = 0; k < w; k++)
+            for (int s = 0; s < 4; s++) b[4 * k + s] = (unsigned char)(X[k] >> (8 * s));
+    }
+    bool ok = PKCS5_PBKDF2_HMAC(pass.data(), (int)pass.size(), B.data(), (int)B.size(), 1, EVP_sha256(), (int)outlen, out) == 1;
+    OPENSSL_cleanse(B.data(), B.size()), OPENSSL_cleanse(X.data(), X.size() * 4), OPENSSL_cleanse(Y.data(), Y.size() * 4), OPENSSL_cleanse(V.data(), V.size() * 4);
+    return ok;
+}
+
 std::string e2e_key(const std::string& pass, const std::string& salt) {
     unsigned char k[32];
+#ifdef LIBRESSL_VERSION_NUMBER
+    if (!scrypt_rfc7914(pass, salt, 1 << 15, 8, 1, k, sizeof k)) return "";
+#else
     if (EVP_PBE_scrypt(pass.data(), pass.size(), (const unsigned char*)salt.data(), salt.size(),
                        1 << 15, 8, 1, 64 << 20, k, sizeof k) != 1)
         return "";
+#endif
     return std::string((char*)k, sizeof k);
 }
 
