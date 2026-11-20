@@ -134,6 +134,8 @@ void Server::send_now(const std::string& line) {
 
 void Server::send(const std::string& line) {
     std::string l = line;
+    // an AWAY of our own (autoaway, /away, /back) replaces the pre-away AWAY *: attaching mustn't clear it
+    if (pre_away && l.rfind("AWAY", 0) == 0 && l != "AWAY *") pre_away = false;
     // labeled-response: what a typed command makes the server say comes back with its label (its tab)
     if (label_buf && caps.count("labeled-response") && !l.empty() && l[0] != '@' && l.rfind("BATCH ", 0) && l.rfind("QUIT", 0)) {
         std::string id = "i" + std::to_string(label_next++);
@@ -451,6 +453,13 @@ void Core::tick(time_t now) {
     check_update(now);
     int lock_idle = atoi(opt(nullptr, "lock_idle", "0").c_str());  // minutes without input, 0 = never
     if (lock_idle > 0 && !locked && now - last_input >= lock_idle * 60 && lock_on()) set_lock(true);
+    // /quiet smart: a speaker older than SMART_SECS no longer counts; once a minute, so a busy channel (Twitch) isn't scanned per message
+    static time_t spoke_pruned = 0;
+    if (now - spoke_pruned >= 60) {
+        spoke_pruned = now;
+        for (auto& b : bufs)
+            for (auto it = b->spoke.begin(); it != b->spoke.end();) it = now - it->second > SMART_SECS ? b->spoke.erase(it) : std::next(it);
+    }
     for (auto& sp : servers) {
         Server* s = sp.get();
         if (s->state == SS::DISCONNECTED) {
@@ -602,13 +611,11 @@ static std::string host_of(const Msg& m) {
     return bang == std::string::npos ? "" : m.prefix.substr(bang + 1);
 }
 
-// /quiet smart: who said something here lately. The map is pruned past 500 entries (old ones go first)
+// /quiet smart: who said something here lately. Core::tick drops the stale ones once a minute
 static void spoke_note(Server* s, Buffer* b, const std::string& nick, time_t ts) {
     if (b->type != BT::CHANNEL || nick.empty()) return;
     time_t& t = b->spoke[s->lower(nick)];
     t = std::max(t, ts);
-    if (b->spoke.size() > 500)
-        for (auto it = b->spoke.begin(); it != b->spoke.end();) it = ts - it->second > SMART_SECS ? b->spoke.erase(it) : std::next(it);
 }
 
 void Core::handle(Server* s, const Msg& m) {

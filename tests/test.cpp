@@ -2146,6 +2146,12 @@ int main() {
         core.set_attached(true);
         assert(sent() == "AWAY\r\n" && !ts->pre_away);
         feed(":srv 305 me :You are no longer marked as being away");
+        // autoaway (or /away) set its own away while detached: attaching leaves that to its owner
+        core.attached = false, ts->pre_away = true;
+        ts->send("AWAY :Not here right now");
+        assert(!ts->pre_away);
+        core.set_attached(true);
+        assert(sent() == "AWAY :Not here right now\r\n");
         core.exec(chb, "/set pre_away off");
         ts->flood_ms = 0;
         core.attached = false, ts->state = SS::REGISTERING, ts->caps.erase("draft/pre-away"), sent();  // off: nothing sent
