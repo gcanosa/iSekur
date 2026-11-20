@@ -1351,16 +1351,17 @@ void Core::handle(Server* s, const Msg& m) {
         bool snote = notice && server_msg && s->state == SS::CONNECTED && text.rfind("*** ", 0) == 0 &&
                      s->umodes.find_first_of("os") != std::string::npos;
         bool locked = false;  // /e2e: decrypted
-        if (!notice && text.rfind("+iSE ", 0) == 0 && s->is_chan(tgt)) {
+        if (!notice && e2e_line(text) && s->is_chan(tgt)) {
             auto e = s->chan_e2e.find(irc_lower(tgt));
             std::string plain;
-            if (e != s->chan_e2e.end() && e2e_open(e->second, text.substr(5), plain, irc_lower(tgt))) text = plain, locked = true;
+            if (e != s->chan_e2e.end() && e2e_line_open(e->second, text, plain, e2e_aad_c(tgt, m.nick), irc_lower(tgt))) text = plain, locked = true;
             else text = std::string("[\xf0\x9f\x94\x92 encrypted message: can't decrypt, ") +
                         (e == s->chan_e2e.end() ? "no password (/e2e " + tgt + ")" : "wrong password?") + "]";
-        } else if (!notice && text.rfind("+iSE ", 0) == 0) {
+        } else if (!notice && e2e_line(text)) {
             auto e = s->e2e.find(irc_lower(self ? tgt : m.nick));
             std::string plain;
-            if (e != s->e2e.end() && e2e_open(e->second.key, text.substr(5), plain)) text = plain, locked = true;
+            // the sender is the one who invited when it is us and we invited, or it is them and we didn't
+            if (e != s->e2e.end() && e2e_line_open(e->second.key, text, plain, e2e_aad_q(self == e->second.mine), "")) text = plain, locked = true;
             else text = std::string("[\xf0\x9f\x94\x92 encrypted message: can't decrypt, ") +
                         (e == s->e2e.end() ? "no /e2e session" : "wrong password?") + "]";
         }

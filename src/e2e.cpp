@@ -5,15 +5,24 @@
 //   A: /e2e B      -> password prompt, CTCP ISEKUR-E2E <salt>
 //   B: /e2e A      -> password prompt, CTCP ISEKUR-E2E-OK <seal("ok")>
 //   A: opens it    -> CTCP ISEKUR-E2E-ACK <seal("ack")>, or ISEKUR-E2E-BAD
-//   messages: PRIVMSG B :+iSE <b64(nonce | ciphertext | tag)>
+//   messages: PRIVMSG B :+iSE2 <b64(nonce | ciphertext | tag)>
+//
+// The GCM AAD says who sent the line. A query has one key for both ways, so without it the
+// server could send you your own line back as your peer's: the AAD is the sender's role
+// ("i" invited, "r" answered). A channel's is the channel and the sender's nick, so a line
+// copied to another channel, or moved under another nick by the server, doesn't open.
 //
 // /e2e #chan: no handshake, everyone who types the same password has the same key
-// (salt "isekur-chan:" + channel); the channel name is the GCM AAD, so a line copied
-// to another channel doesn't open. People without it see "+iSE ..." lines.
+// (salt "isekur-chan:" + channel). People without it see "+iSE2 ..." lines. Anyone with
+// the password can still write as anyone: one shared key can't tell its holders apart.
+//
+// "+iSE " lines (before +iSE2) still open, with their old AAD: the channel name, or none.
+// ponytail: drop that on receive in a release or two. An old iSekur can't read +iSE2 lines.
 //
 // ponytail: password only, no forward secrecy; an X25519 exchange
 // authenticated by the password is the upgrade if that matters. No replay check in
 // channels: chathistory replays old lines on purpose; a timestamp inside would be the fix.
+#include <cstdlib>
 #include <cstring>
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -109,9 +118,14 @@ std::string e2e_key(const std::string& pass, const std::string& salt) {
     return std::string((char*)k, sizeof k);
 }
 
+// ponytail: a failed RNG is fatal: an unchecked nonce or salt would be whatever the stack held
+static void rand_bytes(unsigned char* p, int n) {
+    if (RAND_bytes(p, n) != 1) abort();
+}
+
 std::string e2e_seal(const std::string& key, const std::string& plain, const std::string& aad) {
     unsigned char nonce[12], tag[16];
-    RAND_bytes(nonce, sizeof nonce);
+    rand_bytes(nonce, sizeof nonce);
     std::string ct(plain.size(), '\0');
     int n = 0;
     EVP_CIPHER_CTX* x = EVP_CIPHER_CTX_new();
@@ -140,6 +154,22 @@ bool e2e_open(const std::string& key, const std::string& sealed, std::string& pl
     EVP_CIPHER_CTX_free(x);
     if (!ok) plain.clear();
     return ok;
+}
+
+std::string e2e_aad_q(bool from_initiator) { return from_initiator ? "i" : "r"; }
+
+std::string e2e_aad_c(const std::string& chan, const std::string& sender) { return irc_lower(chan) + " " + irc_lower(sender); }
+
+bool e2e_line(const std::string& text) { return text.rfind("+iSE2 ", 0) == 0 || text.rfind("+iSE ", 0) == 0; }
+
+std::string e2e_line_seal(const std::string& key, const std::string& plain, const std::string& aad) {
+    return "+iSE2 " + e2e_seal(key, plain, aad);
+}
+
+bool e2e_line_open(const std::string& key, const std::string& text, std::string& plain, const std::string& aad,
+                   const std::string& old_aad) {
+    bool v2 = text.rfind("+iSE2 ", 0) == 0;
+    return e2e_open(key, text.substr(v2 ? 6 : 5), plain, v2 ? aad : old_aad);
 }
 
 bool e2e_on(const Buffer* b) {
@@ -258,7 +288,7 @@ void Core::e2e_pass(Buffer* q, const std::string& pass) {
     bool accept = !e.salt.empty() && e.key.empty() && !e.mine;
     if (!accept) {
         unsigned char salt[16];
-        RAND_bytes(salt, sizeof salt);
+        rand_bytes(salt, sizeof salt);
         e = E2E{nick, std::string((char*)salt, 16), "", true, false, ""};
     }
     e.key = e2e_key(pass, e.salt);

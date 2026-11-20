@@ -1639,13 +1639,14 @@ void Core::say(Buffer* b, const std::string& text, bool action) {
         print(b, LK::ERROR, "Not a channel or query window"); return; }
     if (s->state != SS::CONNECTED) { print(b, LK::ERROR, "Not connected"); return; }
     if (query_offline(b)) return;
-    // /e2e: "+iSE " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes
-    // (a channel also has its name as AAD, so the 400 bytes count it: long names get less text)
+    // /e2e: "+iSE2 " + b64(12 nonce + text + 16 tag) must fit the same 400 bytes (the AAD isn't sent)
     bool enc = e2e_on(b), chan = b->type == BT::CHANNEL;
-    std::string key = !enc ? "" : chan ? s->chan_e2e[irc_lower(b->name)] : s->e2e[irc_lower(b->name)].key;
+    std::string key, aad;
+    if (enc && chan) key = s->chan_e2e[irc_lower(b->name)], aad = e2e_aad_c(b->name, s->nick);
+    else if (enc) { E2E& e = s->e2e[irc_lower(b->name)]; key = e.key, aad = e2e_aad_q(e.mine); }
     for (auto& part : chunk(text, enc ? 250 : 400)) {
         std::string body = action ? "\x01" "ACTION " + part + "\x01" : part;
-        s->send("PRIVMSG " + b->name + " :" + (enc ? "+iSE " + e2e_seal(key, body, chan ? irc_lower(b->name) : "") : body));
+        s->send("PRIVMSG " + b->name + " :" + (enc ? e2e_line_seal(key, body, aad) : body));
         if (!s->caps.count("echo-message")) {
             Line l{time(nullptr), action ? LK::ACTION : LK::MSG, s->nick, enc ? part : mask_services(b->name, part), true};
             l.e2e = enc;

@@ -158,11 +158,25 @@ int main() {
         std::string raw = unb64(sealed);
         raw[14] ^= 1;
         assert(!e2e_open(k, b64(raw), out) && !e2e_open(k, "short", out));
-        assert(("+iSE " + e2e_seal(k, std::string(259, 'x'))).size() <= 400);  // say() chunk fits
-        // channels: the channel name is AAD, a line copied to another channel doesn't open
+        assert(e2e_line_seal(k, std::string(259, 'x'), e2e_aad_c("#a", "Alice")).size() <= 400);  // say() chunk fits
+        // channels: the AAD is the channel and the sender; a line moved to another channel or nick doesn't open
         std::string cs = e2e_seal(k, "hi", "#a");
         assert(e2e_open(k, cs, out, "#a") && out == "hi");
         assert(!e2e_open(k, cs, out, "#b") && !e2e_open(k, cs, out));
+        std::string cl = e2e_line_seal(k, "hi", e2e_aad_c("#A", "Alice"));
+        assert(e2e_line(cl) && cl.rfind("+iSE2 ", 0) == 0);
+        assert(e2e_line_open(k, cl, out, e2e_aad_c("#a", "alice"), "#a") && out == "hi");  // case doesn't matter
+        assert(!e2e_line_open(k, cl, out, e2e_aad_c("#a", "bob"), "#a") && out.empty());    // the server moved it to bob
+        assert(!e2e_line_open(k, cl, out, e2e_aad_c("#b", "alice"), "#b"));
+        // an old "+iSE " line opens with the old AAD; a v2 line given the old prefix doesn't (the AAD is in the tag)
+        assert(e2e_line_open(k, "+iSE " + cs, out, e2e_aad_c("#a", "bob"), "#a") && out == "hi");
+        assert(!e2e_line_open(k, "+iSE " + cl.substr(6), out, e2e_aad_c("#a", "alice"), "#a"));
+        assert(!e2e_line("+iSEx y") && !e2e_line("iSE x") && e2e_line("+iSE x"));
+        // queries: the AAD is the sender's role, so a line sent back to its author doesn't open as the peer's
+        std::string ql = e2e_line_seal(k, "yes", e2e_aad_q(true));
+        assert(e2e_line_open(k, ql, out, e2e_aad_q(true), "") && out == "yes");
+        assert(!e2e_line_open(k, ql, out, e2e_aad_q(false), ""));
+        assert(e2e_line_open(k, "+iSE " + e2e_seal(k, "old"), out, e2e_aad_q(false), "") && out == "old");  // before +iSE2
     }
 
     int op;
@@ -1266,8 +1280,14 @@ int main() {
         assert(e2e_on(chb) && core.tab_menu(chb)[3].second == "/e2e off");
         core.say(chb, "secret", false);
         std::string line = sent();
-        assert(line.rfind("PRIVMSG #c :+iSE ", 0) == 0 && line.find("secret") == std::string::npos);
-        feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
+        assert(line.rfind("PRIVMSG #c :+iSE2 ", 0) == 0 && line.find("secret") == std::string::npos);
+        std::string sealed = line.substr(0, line.size() - 2);
+        feed(":" + ts->nick + "!u@h2 " + sealed);  // the AAD names the sender: it opens as ours...
+        assert(chb->lines.back().text == "secret" && chb->lines.back().e2e);
+        feed(":r1!u@h2 " + sealed);  // ...and not moved under another nick, same key and channel
+        assert(chb->lines.back().text.find("wrong password?") != std::string::npos && !chb->lines.back().e2e);
+        std::string theirs = "PRIVMSG #c :" + e2e_line_seal(ts->chan_e2e["#c"], "secret", e2e_aad_c("#c", "r1"));  // r1's line
+        feed(":r1!u@h2 " + theirs);
         assert(chb->lines.back().text == "secret" && chb->lines.back().e2e);
         {  // e2e_effect takes /typing's place on encrypted lines only; off, they type out like the rest
             core.cfg["general"]["typing_effect"] = "on";
@@ -1275,7 +1295,7 @@ int main() {
             feed(":r1!u@h2 PRIVMSG #c :plain");
             assert(!chb->lines.back().e2e && !chb->lines.back().fx_at && chb->lines.back().typed_at);
             core.cfg["general"]["e2e_effect"] = "off";
-            feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
+            feed(":r1!u@h2 " + theirs);
             assert(chb->lines.back().e2e && !chb->lines.back().fx_at && chb->lines.back().typed_at);
             feed(":r1!u@h2 PRIVMSG #c :\xf0\x9f\x94\x92 fake");  // a typed lock is text, not the flag
             assert(!chb->lines.back().e2e);
@@ -1285,7 +1305,7 @@ int main() {
             core.cfg["general"].erase("typing_effect"), core.cfg["general"].erase("e2e_effect");
         }
         ts->chan_e2e["#c"] = e2e_key("nope", "isekur-chan:#c");
-        feed(":r1!u@h2 " + line.substr(0, line.size() - 2));
+        feed(":" + ts->nick + "!u@h2 " + sealed);
         assert(chb->lines.back().text.find("wrong password?") != std::string::npos);
         core.exec(chb, "/e2e off");
         assert(!e2e_on(chb) && core.tab_menu(chb)[3].second == "/e2e #c");
@@ -1341,9 +1361,23 @@ int main() {
         std::string key3 = establish("pw3");
         core.exec(chb, "/e2e off bob");  // and so do we: the line we send proves it
         assert(!ts->e2e.count("bob") && e2e_open(key3, arg_of(sent(), "ISEKUR-E2E-OFF"), plain) && plain == "isekur-e2e-off");
-        establish("pw4");
+        std::string key4 = establish("pw4");
         ctcp_in("ISEKUR-E2E-OFF", "");  // an old iSekur's bare OFF can't end a chat that is on
         assert(ts->e2e.count("bob"));
+        {  // lines: we invited, so ours carry "i" and bob's "r"; our own line sent back as bob's doesn't open
+            Buffer* bq = core.find(ts, "bob");
+            core.say(bq, "hola", false);
+            std::string l = sent(), body = l.substr(l.find(" :") + 2, l.size() - l.find(" :") - 4);
+            assert(body.rfind("+iSE2 ", 0) == 0 && body.find("hola") == std::string::npos);
+            feed(":bob!u@h PRIVMSG " + ts->nick + " :" + body);  // the server sends it back as bob's
+            assert(bq->lines.back().text.find("wrong password?") != std::string::npos && !bq->lines.back().e2e);
+            feed(":" + ts->nick + "!u@h PRIVMSG bob :" + body);  // an echo of ours is ours
+            assert(bq->lines.back().text == "hola" && bq->lines.back().e2e);
+            feed(":bob!u@h PRIVMSG " + ts->nick + " :" + e2e_line_seal(key4, "hi", e2e_aad_q(false)));
+            assert(bq->lines.back().text == "hi" && bq->lines.back().e2e);
+            feed(":bob!u@h PRIVMSG " + ts->nick + " :+iSE " + e2e_seal(key4, "old"));  // an old iSekur's line, no AAD
+            assert(bq->lines.back().text == "old" && bq->lines.back().e2e);
+        }
         core.exec(chb, "/e2e off bob");
         sent();
         if (!had) core.close(core.find(ts, "bob"));

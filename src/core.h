@@ -793,6 +793,13 @@ std::string e2e_key(const std::string& pass, const std::string& salt);  // e2e.c
 bool scrypt_rfc7914(const std::string& pass, const std::string& salt, uint32_t N, uint32_t r, uint32_t p, unsigned char* out, size_t outlen);  // e2e.cpp: LibreSSL has no EVP_PBE_scrypt
 std::string e2e_seal(const std::string& key, const std::string& plain, const std::string& aad = "");  // b64(nonce|ct|tag)
 bool e2e_open(const std::string& key, const std::string& sealed, std::string& plain, const std::string& aad = "");
+// +iSE2 lines (e2e.cpp): the AAD names the sender. A query's is the sender's role, a channel's the channel and the nick;
+// e2e_line_open reads an old "+iSE " line with old_aad (the channel name, or none)
+std::string e2e_aad_q(bool from_initiator);
+std::string e2e_aad_c(const std::string& chan, const std::string& sender);
+bool e2e_line(const std::string& text);  // starts with +iSE or +iSE2
+std::string e2e_line_seal(const std::string& key, const std::string& plain, const std::string& aad);
+bool e2e_line_open(const std::string& key, const std::string& text, std::string& plain, const std::string& aad, const std::string& old_aad);
 bool e2e_on(const Buffer* b);  // a 🔒 tab: an encrypted query, or a channel with a key
 std::string fmt_time(time_t t, const std::string& fmt);
 std::string human_bytes(unsigned long long n);  // 512M, 3.2G
