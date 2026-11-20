@@ -502,7 +502,7 @@ static int l_proxy(lua_State* L) {
     s->conn.px = px;
     return 0;
 }
-static int l_away(lua_State* L) { Server* s = srv_arg(L, 1); lua_pushboolean(L, s && s->away); return 1; }
+static int l_away(lua_State* L) { Server* s = srv_arg(L, 1); lua_pushboolean(L, s && s->away && !s->pre_away); return 1; }  // our AWAY * isn't a message of its own: autoaway may still set one
 static int l_attached(lua_State* L) { lua_pushboolean(L, self(L)->c->attached); return 1; }
 static int l_idle(lua_State* L) { lua_pushinteger(L, time(nullptr) - self(L)->c->last_input); return 1; }
 static int l_detached_for(lua_State* L) {

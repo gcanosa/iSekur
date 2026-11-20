@@ -658,9 +658,10 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
         return;
     }
     bool hide = b->quiet || (zen && !c.view.events);  // join/part/quit lines: a quiet tab's, and the focus view's unless it shows them
+    auto hidden = [&](const Line& l) { return noise(l) && (hide || (b->smart && l.idle)); };  // smart: only those of people who haven't spoken lately
     if (b->scroll)  // scrolled back: the lines that came in since push the view up by all their rows, not one
         for (auto it = b->lines.rbegin(); it != b->lines.rend() && b->scroll_new > 0; ++it, b->scroll_new--)
-            if (!(hide && noise(*it))) b->scroll += (int)wrap(c, *it, b, w, true).size();
+            if (!hidden(*it)) b->scroll += (int)wrap(c, *it, b, w, true).size();
     b->scroll_new = 0;
     std::vector<Row> rows;  // bottom-up
     std::vector<CopyRow> meta;  // rows' copy info, y filled in when drawn
@@ -676,7 +677,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             cells(mk, bar, sty(T, "marker", "separator"), false);
             rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1}), lof.push_back(nullptr), dim.push_back(zen && !b->scroll && nth >= c.view.lines);  // with the older lines it marks
         }
-        if (hide && noise(*it)) continue;
+        if (hidden(*it)) continue;
         WrapInfo wi;
         auto r = wrap(c, *it, b, w, b->scroll > 0, nullptr, &wi);
         int id = (int)n + 1000000 * (x + 1);  // one per line, per pane

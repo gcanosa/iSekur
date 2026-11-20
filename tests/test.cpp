@@ -2041,6 +2041,98 @@ int main() {
     assert(chb->quiet);
     core.exec(chb, "/quiet off");
 
+    {  // /quiet: off | smart | all; alone it toggles off <-> all; kicks are never noise
+        core.exec(chb, "/quiet smart");
+        assert(chb->smart && !chb->quiet);
+        feed(":lurk!u@h JOIN #c");
+        assert(chb->lines.back().kind == LK::JOIN && chb->lines.back().idle && quieted(*chb, chb->lines.back()));
+        feed(":talk!u@h JOIN #c");
+        feed(":talk!u@h PRIVMSG #c :hi all");
+        assert(!quieted(*chb, chb->lines.back()));
+        feed(":talk!u@h NICK talk2");  // spoke under the old name: shown, and the new name inherits it
+        assert(chb->lines.back().kind == LK::NICK && !chb->lines.back().idle);
+        feed(":talk2!u@h QUIT :bye");
+        assert(chb->lines.back().kind == LK::QUIT && !chb->lines.back().idle && !quieted(*chb, chb->lines.back()));
+        feed(":lurk!u@h QUIT :bye");
+        assert(chb->lines.back().idle && quieted(*chb, chb->lines.back()));
+        feed("@time=2020-01-01T00:00:00.000Z :old!u@h PRIVMSG #c :hello");  // 4 minutes, then 6: past the window
+        feed("@time=2020-01-01T00:04:00.000Z :old!u@h PART #c");
+        assert(!chb->lines.back().idle);
+        feed("@time=2020-01-01T00:06:00.000Z :old!u@h JOIN #c");
+        assert(chb->lines.back().idle);
+        feed(":op!u@h KICK #c victim :out");  // a kick shows in every mode
+        assert(chb->lines.back().text.find("victim was kicked by op") != std::string::npos && !noise(chb->lines.back()));
+        core.exec(chb, "/quiet all");
+        assert(chb->quiet && !chb->smart && !quieted(*chb, chb->lines.back()));
+        feed(":talk3!u@h JOIN #c");
+        assert(quieted(*chb, chb->lines.back()));
+        core.exec(chb, "/quiet");
+        assert(!chb->quiet && !chb->smart);
+        core.exec(chb, "/quiet");
+        assert(chb->quiet && !chb->smart);
+        core.exec(chb, "/quiet smart");
+        core.exec(chb, "/quiet");  // smart toggles to off
+        assert(!chb->quiet && !chb->smart);
+        core.exec(chb, "/quiet bogus");
+        assert(chb->lines.back().kind == LK::ERROR && !chb->quiet);
+        core.exec(chb, "/set join_filter smart");  // the default of a channel tab opened later
+        feed(":me!u@h JOIN #smartc");
+        assert(core.find(ts, "#smartc")->smart && !core.find(ts, "#smartc")->quiet);
+        core.exec(chb, "/set join_filter all");
+        feed(":me!u@h JOIN #allc");
+        assert(core.find(ts, "#allc")->quiet && !core.find(ts, "#allc")->smart);
+        core.exec(chb, "/set join_filter off");
+        feed(":me!u@h JOIN #offc");
+        assert(!core.find(ts, "#offc")->quiet && !core.find(ts, "#offc")->smart);
+        for (const char* c : {"#smartc", "#allc", "#offc"}) core.close(core.find(ts, c));
+    }
+    int flood_was = ts->flood_ms;  // the next blocks read what went out: no flood limit, and nothing left in the queue
+    ts->flood_ms = 0, ts->sendq.clear();
+    {  // /cycle: part and join again, with the key we know
+        sent();
+        core.exec(chb, "/cycle off for a bit");
+        assert(sent() == "PART #c :off for a bit\r\nJOIN #c\r\n");
+        ts->chan_keys["#c"] = "s3";
+        core.exec(chb, "/cycle #c");
+        assert(sent().find("JOIN #c s3\r\n") != std::string::npos);
+        ts->chan_keys.erase("#c");
+        core.exec(core.find(ts, "bob") ? core.find(ts, "bob") : ts->status, "/cycle");
+        assert(sent().empty());  // not a channel
+    }
+    {  // invite_join: off by default; on joins what we're invited to, once
+        sent();
+        feed(":op!u@h INVITE me #inv");
+        assert(sent().empty());
+        core.exec(chb, "/set invite_join on");
+        ts->flood_ms = 0;  // /set applies the server's flood settings again
+        feed(":op!u@h INVITE me #inv");
+        assert(sent() == "JOIN #inv\r\n");
+        feed(":op!u@h INVITE someone #inv");  // invite-notify: for somebody else
+        feed(":op!u@h INVITE me #c");          // a channel we're in
+        assert(sent().empty());
+        core.exec(chb, "/set invite_join off");
+    }
+    {  // draft/pre-away: AWAY * once the cap is on and nobody is attached, cleared when somebody attaches
+        core.exec(chb, "/set pre_away on");
+        ts->flood_ms = 0;
+        core.attached = false, ts->state = SS::REGISTERING, ts->cap_done = false, sent();
+        feed(":srv CAP * ACK :draft/pre-away");
+        assert(sent().find("AWAY *\r\n") != std::string::npos && ts->pre_away);
+        ts->state = SS::CONNECTED, ts->cap_done = true, sent();
+        feed(":srv 306 me :You have been marked as being away");
+        assert(ts->away && ts->pre_away);
+        core.set_attached(true);
+        assert(sent() == "AWAY\r\n" && !ts->pre_away);
+        feed(":srv 305 me :You are no longer marked as being away");
+        core.exec(chb, "/set pre_away off");
+        ts->flood_ms = 0;
+        core.attached = false, ts->state = SS::REGISTERING, ts->caps.erase("draft/pre-away"), sent();  // off: nothing sent
+        feed(":srv CAP * ACK :draft/pre-away");
+        assert(sent().find("AWAY") == std::string::npos && !ts->pre_away);
+        core.set_attached(true), ts->state = SS::CONNECTED, ts->cap_done = true, ts->caps.erase("draft/pre-away"), sent();
+    }
+    ts->flood_ms = flood_was, ts->tokens = ts->flood_burst, ts->tokens_at = now_ms(), ts->sendq.clear(), sent();  // as the next tests found it
+
     // /set takes only keys iSekur reads, in the section that reads them; [plugin.*] are the plugins'
     for (const char* bad : {"/set gera asdasd", "/set cpu off", "/set host x", "/set server.t.theme x", "/set web.nope 1", "/set keys.nope C-x", "/set foo.bar 1"}) {
         core.exec(chb, bad);

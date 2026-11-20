@@ -129,6 +129,11 @@ static const std::vector<CmdInfo> CMDS = {
      "The message, or else part_message, goes with it (not on Twitch, which has none); the server's tab "
      "notes that you left.",
      {"/part", "/part #linux off to bed"}},
+    {"cycle", "Chat", "[#channel] [message]", "Leave a channel and join it again",
+     "Parts and joins right away, and the tab stays: to get ops back from ChanServ, drop out of a stuck state or "
+     "clear the nicklist. The key of a +k channel is the one /join or autojoin gave. The message, or else "
+     "part_message, goes with the part.",
+     {"/cycle", "/cycle #isekur brb"}},
     {"msg", "Chat", "target text", "Send a private message",
      "Sends text to a nick or channel without opening a tab. If a tab for the target is "
      "already open the message shows there.",
@@ -166,10 +171,13 @@ static const std::vector<CmdInfo> CMDS = {
      "A #channel first works on that one from any tab. A double click "
      "on the topic bar opens it in a box to edit, in the terminal and the webchat, when you may change it.",
      {"/topic", "/topic Welcome! Rules: be nice | https://example.org", "/topic -delete", "/topic #isekur"}},
-    {"quiet", "Chat", "[on|off]", "Hide joins, parts, quits and nick changes in this tab",
-     "Toggles for the current tab only. Hidden lines are still logged and come back with /quiet off. "
-     "Your own joins and parts stay visible.",
-     {"/quiet", "/quiet off"}},
+    {"quiet", "Chat", "[off|smart|all]", "Hide joins, parts, quits and nick changes in this tab",
+     "For the current tab only, until restart: set join_filter to have it in every channel. all (or on) hides every one of "
+     "them; smart hides them unless the person spoke in the last 5 minutes, so lurkers' comings and goings vanish "
+     "but a quit from the conversation you're in stays; off shows all. Without an argument it toggles between "
+     "off and all. Hidden lines are still logged and come back with /quiet off. Your own joins and parts, kicks "
+     "and mode changes always show.",
+     {"/quiet", "/quiet smart", "/quiet off"}},
     {"mute", "Chat", "[on|off]", "Mute hilights and alerts from this tab",
      "Toggles for the current tab and saves it in the network's mute setting right away. Your nick and hilight_words stop highlighting, "
      "ringing and being copied to window 1; messages still show and light up the tab. Muted tabs show 🔇. "

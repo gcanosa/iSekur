@@ -437,10 +437,10 @@ static const std::vector<KeyInfo> KEYS = {
     {"paste_confirm", "Messages", 'b'}, {"complete_suffix", "Messages", 'g'}, {"send_typing", "Messages", 'b'}, {"quit_message", "Messages", 'b'}, {"part_message", "Messages", 'b'},
     {"ignore", "Messages", 'b'}, {"mute", "Messages", 'n'}, {"notify", "Messages", 'n'},
     {"ctcp_version", "Messages", 'b'}, {"ctcp_time", "Messages", 'b'}, {"ctcp_ping", "Messages", 'b'},
-    {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
+    {"autojoin", "Channels", 'n'}, {"rejoin_on_kick", "Channels", 'b'}, {"invite_join", "Channels", 'b'}, {"join_filter", "Channels", 'b'}, {"history_fetch", "Channels", 'b'}, {"e2e_keys", "Channels", 'n'},
     {"e2e_effect", "Channels", 'b'},
     {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"log_keep", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
-    {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'},
+    {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'}, {"pre_away", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
     {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_grace", "Security", 'g'}, {"lock_prompt_timeout", "Security", 'g'}, {"lock_biometric", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
     {"exec_timeout", "Security", 'g'}, {"exec_web", "Security", 'g'}, {"fifo", "Session", 'g'}, {"fifo_path", "Session", 'g'},
@@ -548,7 +548,7 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
 std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> CHOICES = {
         {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
-        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}};
+        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
     if (sec == "web" && key == "tls") return v == "auto" || v == "true" ? "" : key + " = " + v + ": takes auto (HTTPS unless bound to localhost) or true (HTTPS on localhost too)";
@@ -1016,7 +1016,11 @@ Buffer* Core::open(Server* s, BT t, const std::string& name) {
         if (Buffer* b = find(s, name)) return b;
     auto b = std::make_unique<Buffer>();
     b->id = next_id++, b->type = t, b->name = name, b->srv = s;
-    if (t == BT::CHANNEL && opt_on(s, "typing_effect", false)) b->quiet = b->quiet_typing = true;  // joins and parts would be noise among typed lines
+    if (t == BT::CHANNEL) {
+        std::string jf = opt(s, "join_filter", "off");  // the default of /quiet, per server too
+        b->quiet = jf == "all", b->smart = jf == "smart";
+        if (!b->quiet && opt_on(s, "typing_effect", false)) b->quiet = b->quiet_typing = true;  // joins and parts would be noise among typed lines
+    }
     Buffer* bp = b.get();
     // keep each server's buffers together, status first
     size_t pos = bufs.size();
@@ -1147,7 +1151,7 @@ void Core::add(Buffer* b, Line l) {
     while (b->lines.size() > max_lines) b->lines.pop_front();
     if (b->scroll) b->scroll_new++;  // keep the scrolled view still: the tui knows how many rows it wraps to
     const Line& ln = b->lines.back();
-    int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : b->quiet && noise(ln) ? 0 : 1;
+    int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : quieted(*b, ln) ? 0 : 1;
     if (quiet_add || (lvl == 1 && time(nullptr) < b->sync_until)) lvl = 0;  // server tab: a fixed 5s window (end it at 376/422 if a slow MOTD outlasts it); a channel: 30s past its MODE reply
     // the "new" marker goes above the first message you missed, then counts everything after it
     if (b->unread || (b != active && b != split_buf && lvl >= 2)) b->unread++;
@@ -2517,12 +2521,15 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "split") { split_cmd(b, args); return; }
     if (cmd == "rawlog") { rawlog(b, args); return; }
     if (cmd == "unsplit" || cmd == "merge") { split_cmd(b, "off"); return; }
-    if (cmd == "quiet") {  // per tab, until restart
-        b->quiet = args == "on" || (args != "off" && !b->quiet);
+    if (cmd == "quiet") {  // per tab, until restart: on|all, smart or off; alone it toggles off <-> all
+        if (!args.empty() && args != "on" && args != "all" && args != "smart" && args != "off") { print(b, LK::ERROR, "Usage: /quiet [off|smart|all]"); return; }
+        bool on = args == "on" || args == "all" || (args.empty() && !b->quiet && !b->smart);
+        b->quiet = on, b->smart = args == "smart";
         b->quiet_typing = false;  // your choice now: /typing off leaves it
         notify(Ev::BUFFER, b);
-        print(b, LK::INFO, std::string("Quiet mode ") + (b->quiet ? "on: joins, parts, quits and nick changes are hidden here"
-                                                                  : "off: showing joins, parts, quits and nick changes"));
+        print(b, LK::INFO, b->quiet   ? "Quiet mode on: joins, parts, quits and nick changes are hidden here"
+                           : b->smart ? "Quiet mode smart: joins, parts, quits and nick changes show only for people who spoke in the last 5 minutes"
+                                      : "Quiet mode off: showing joins, parts, quits and nick changes");
         return;
     }
     if (cmd == "mute") {  // [server.X] mute: channels (or queries) that never hilight; saved now
@@ -2897,6 +2904,16 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (Buffer* cb = find(s, ch)) { close(cb, msg); return; }  // like /close and Ctrl+W: the tab goes too
         if (s->twitch()) s->send("PART " + irc_lower(ch));
         else s->send("PART " + ch + " :" + (msg.empty() ? bye(s, "part_message") : msg));
+        return;
+    }
+    if (cmd == "cycle") {  // leave and join again, the tab stays; the key is the one /join or autojoin gave
+        std::string ch = !argv.empty() && s->is_chan(argv[0]) ? argv[0] : b->name;
+        std::string msg = !argv.empty() && s->is_chan(argv[0]) ? rest(1) : args;
+        if (!s->is_chan(ch)) { print(b, LK::ERROR, "Not a channel"); return; }
+        auto k = s->chan_keys.find(s->lower(ch));
+        if (s->twitch()) s->send("PART " + irc_lower(ch));
+        else s->send("PART " + ch + " :" + (msg.empty() ? bye(s, "part_message") : msg));
+        s->send("JOIN " + ch + (k == s->chan_keys.end() || k->second.empty() ? "" : " " + k->second));
         return;
     }
     if (cmd == "msg" || cmd == "query" || cmd == "notice") {

@@ -14,7 +14,7 @@ static const char* WANT_CAPS[] = {
     "echo-message", "batch", "server-time", "message-tags", "userhost-in-names",
     "invite-notify", "setname", "cap-notify", "account-tag", "sasl", "draft/chathistory",
     "labeled-response", "draft/multiline", "extended-monitor", "draft/read-marker", "draft/message-redaction",
-    "draft/channel-rename", "draft/account-registration", "standard-replies",
+    "draft/channel-rename", "draft/account-registration", "standard-replies", "draft/pre-away",
     // not asked for: sts (never requested, only read), no-implicit-names (the nick list needs NAMES)
     // ZNC: other clients' messages (self-message), backlog on request (playback, see 001),
     // and the pre-IRCv3 names of server-time and batch that ZNC 1.6 still offers
@@ -301,7 +301,7 @@ void Core::connect(Server* s) {
     s->user_quit = false;
     s->caps.clear(), s->caps_ls.clear();
     s->sasl_step = 0, s->cap_done = false, s->sasl_ok = false, s->nick_tries = 0, s->whois.clear(), s->list.clear(), s->listing = false;
-    s->away = false;
+    s->away = s->pre_away = false;
     s->status->sync_until = time(nullptr) + 5;  // the handshake's own lines (hostname lookup, CAP) aren't activity either
     s->hist_batches.clear(), s->cap_vals.clear(), s->isupport.clear(), s->casemap = 0;
     s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear();
@@ -493,8 +493,11 @@ void Core::tick(time_t now) {
 void Core::set_attached(bool a) {
     if (a == attached) return;
     attached = a;
-    if (a) last_input = active_at = time(nullptr);  // coming back counts as activity
-    else detached_at = time(nullptr);
+    if (a) {
+        last_input = active_at = time(nullptr);  // coming back counts as activity
+        for (auto& sv : servers)  // the AWAY * we sent while nobody was here
+            if (sv->pre_away && sv->state != SS::DISCONNECTED) sv->send("AWAY"), sv->pre_away = false;
+    } else detached_at = time(nullptr);
     plugin_emit(a ? "attach" : "detach", nullptr, "");
 }
 
@@ -597,6 +600,15 @@ static std::string host_of(const Msg& m) {
     return bang == std::string::npos ? "" : m.prefix.substr(bang + 1);
 }
 
+// /quiet smart: who said something here lately. The map is pruned past 500 entries (old ones go first)
+static void spoke_note(Server* s, Buffer* b, const std::string& nick, time_t ts) {
+    if (b->type != BT::CHANNEL || nick.empty()) return;
+    time_t& t = b->spoke[s->lower(nick)];
+    t = std::max(t, ts);
+    if (b->spoke.size() > 500)
+        for (auto it = b->spoke.begin(); it != b->spoke.end();) it = ts - it->second > SMART_SECS ? b->spoke.erase(it) : std::next(it);
+}
+
 void Core::handle(Server* s, const Msg& m) {
     // a join's own replies come late behind the flood limit (many channels: minutes): never activity
     static const std::set<std::string> join_replies = {"324", "328", "329", "331", "332", "333", "353", "366"};
@@ -622,7 +634,12 @@ void Core::handle(Server* s, const Msg& m) {
     auto line = [&](Buffer* b, LK k, const std::string& nick, const std::string& text,
                     bool self = false, bool hl = false) {
         if (hide_jpq && (k == LK::JOIN || k == LK::PART || k == LK::QUIT || k == LK::NICK)) return;
-        add(b, Line{ts, k, nick, text, self, hl});
+        Line l{ts, k, nick, text, self, hl};
+        if (b->type == BT::CHANNEL && noise(l)) {  // /quiet smart hides it unless they spoke lately
+            auto sp = b->spoke.find(s->lower(nick));
+            l.idle = sp == b->spoke.end() || ts - sp->second > SMART_SECS;
+        }
+        add(b, std::move(l));
     };
     auto is_me = [&](const std::string& n) { return s->lower(n) == s->lower(s->nick); };
     const std::string& cmd = m.cmd;
@@ -732,6 +749,10 @@ void Core::handle(Server* s, const Msg& m) {
                 if (c[0] == '-') { s->caps.erase(c.substr(1)); continue; }
                 s->caps.insert(c);
                 if (c == "sasl") sasl = true;
+                // draft/pre-away: connecting with nobody at the keyboard (a detached daemon): away from the start, not
+                // present for the second until autoaway or a plugin notices; cleared when someone attaches
+                if (c == "draft/pre-away" && !attached && s->state != SS::CONNECTED && opt_on(s, "pre_away", false))
+                    s->send("AWAY *"), s->pre_away = true;
             }
             if (sasl && s->state != SS::CONNECTED) {
                 s->send("AUTHENTICATE " + sasl_mech(s));
@@ -753,7 +774,11 @@ void Core::handle(Server* s, const Msg& m) {
         cap_end(s);
         return;
     }
-    if (cmd == "305" || cmd == "306") s->away = cmd == "306", plugin_emit("away", s, "", {{"away", s->away}});  // then printed as usual
+    if (cmd == "305" || cmd == "306") {
+        s->away = cmd == "306";
+        if (!s->away) s->pre_away = false;
+        plugin_emit("away", s, "", {{"away", s->away}});  // then printed as usual
+    }
     if (cmd == "001") {
         s->status->sync_until = time(nullptr) + 5;
         s->state = SS::CONNECTED;
@@ -1015,6 +1040,10 @@ void Core::handle(Server* s, const Msg& m) {
             }
             line(b, LK::NICK, m.nick,
                  me ? "You are now known as " + nn : m.nick + " is now known as " + nn, me);
+            if (auto sp = b->spoke.find(s->lower(m.nick)); sp != b->spoke.end()) {  // they spoke under the old name
+                time_t t = sp->second;
+                b->spoke.erase(sp), b->spoke[s->lower(nn)] = t;
+            }
             shown |= b == active;
             notify(Ev::BUFFER, b);
         }
@@ -1279,7 +1308,15 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "INVITE") {
         print(reply_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));
-        if (is_me(m.p(0))) ring(s, true);
+        if (is_me(m.p(0))) {
+            ring(s, true);
+            // invite_join: an ignored inviter never got here (/ignore -i); a channel we're in already isn't joined twice
+            Buffer* jb = find(s, m.p(1));
+            if (opt_on(s, "invite_join", false) && s->is_chan(m.p(1)) && !(jb && jb->joined) && !s->twitch()) {
+                info_note(reply_buf(), "Joining " + m.p(1) + ", " + m.nick + " invited you (invite_join)");
+                s->send("JOIN " + m.p(1));
+            }
+        }
         return;
     }
     if (cmd == "PRIVMSG" || cmd == "NOTICE") {
@@ -1409,6 +1446,7 @@ void Core::handle(Server* s, const Msg& m) {
             if (t && t->self && !self && !muted(b) && !replay && !snote) hl = true;  // a reply to you is a mention
             text = "\x1d\x03" "14\xe2\x86\xaa " + (t ? t->nick + ": " + reply_snippet(t->text) : std::string("an earlier message")) + "\x0f " + text;
         }
+        if (kind != LK::NOTICE && !self) spoke_note(s, b, who, ts);
         Line l{ts, kind, who, text, self, hl};
         l.e2e = locked;
         if (auto id = m.tags.find("msgid"); id != m.tags.end()) l.msgid = id->second;
@@ -1499,7 +1537,7 @@ void Core::handle(Server* s, const Msg& m) {
                 }
                 txt = ln;
             }
-            else if (cmd == "301") txt = "away: " + m.p(2);
+            else if (cmd == "301") txt = m.p(2) == "*" && s->caps.count("draft/pre-away") ? "away" : "away: " + m.p(2);  // pre-away: * = not present, no reason
             else if (cmd == "330" && m.params.size() > 3) txt = "logged in as " + m.p(2);
             else for (size_t i = 2; i < m.params.size(); i++) txt += (i > 2 ? " " : "") + m.params[i];
             boxed(txt);

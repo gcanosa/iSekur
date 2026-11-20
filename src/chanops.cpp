@@ -436,7 +436,8 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
     if (b->type != BT::CHANNEL || !s) return m;
     auto& aj = s->cfg.autojoin;
     bool in_aj = std::any_of(aj.begin(), aj.end(), [&](const std::string& e) { return s->lower(split(e, ' ')[0]) == s->lower(b->name); });
-    m.push_back({b->quiet ? "Quiet mode off" : "Quiet mode on", b->quiet ? "/quiet off" : "/quiet on"});
+    // one item, stepping off -> all -> smart -> off: the menu keeps its length
+    m.push_back(b->smart ? std::make_pair("Quiet mode off", "/quiet off") : b->quiet ? std::make_pair("Quiet mode smart", "/quiet smart") : std::make_pair("Quiet mode on", "/quiet on"));
     m.push_back({muted(b) ? "Unmute channel" : "Mute channel", muted(b) ? "/mute off" : "/mute on"});
     m.push_back({"Clear", "/clear"});
     m.push_back({e2e_on(b) ? "Turn off E2E" : "Turn on E2E...", e2e_on(b) ? "/e2e off" : "/e2e " + b->name});

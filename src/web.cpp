@@ -889,7 +889,7 @@ static std::string ts_fmt(const Core& c) { return ini_get(c.cfg, "general", "tim
 static std::string line_json(const Line& l, const std::string& fmt) {
     return "{\"ts\":" + std::to_string((long long)l.ts) + ",\"tf\":" + json_str(fmt_time(l.ts, fmt)) + ",\"k\":\"" + KIND[(int)l.kind] +
            "\",\"n\":" + json_str(l.nick) + ",\"x\":" + json_str(l.text) +
-           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.e2e ? ",\"e\":1" : "") + (l.fx_at ? ",\"fx\":1" : "") + (l.badge.empty() ? "" : ",\"bd\":" + json_str(l.badge) + ",\"bk\":\"" + std::string(1, l.badge_kind) + "\"") +
+           ",\"s\":" + (l.self ? "1" : "0") + ",\"h\":" + (l.hilight ? "1" : "0") + (l.typed_at ? ",\"ty\":1" : "") + (l.e2e ? ",\"e\":1" : "") + (l.fx_at ? ",\"fx\":1" : "") + (l.idle ? ",\"i\":1" : "") + (l.badge.empty() ? "" : ",\"bd\":" + json_str(l.badge) + ",\"bk\":\"" + std::string(1, l.badge_kind) + "\"") +
            (l.color >= 0 ? ",\"c\":\"" + rgb_hex(l.color) + "\"" : "") + (l.id ? ",\"id\":" + std::to_string(l.id) : "") +
            (l.embeds.empty() ? "" : ",\"em\":[" + l.embeds + "]") + "}";
 }
@@ -923,7 +923,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) + ",\"net\":" + json_str(s ? s->cfg.name : "") +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
-           ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : "0") + ",\"mute\":" + (c.muted(b) ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
+           ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : b->smart ? "2" : "0") + ",\"mute\":" + (c.muted(b) ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
            (b->term && !b->term->host.empty() ? ",\"host\":" + json_str(b->term->host) : "") +
            ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(s && c.plugin_hooks("paste", s, b->name) ? 0 : atoi(c.opt(s, "paste_confirm", "5").c_str())) +

@@ -132,6 +132,7 @@ struct Line {
     std::string said = {};      // what was said, when a plugin's show event changed text (lolcat); "" = text is it
     bool e2e = false;           // /e2e: sent or opened with a key; the screens draw the 🔒, nobody can type it in
     long long fx_at = 0;        // e2e_effect: when it started (de)crypting itself on screen (ms), 0 = shown at once
+    bool idle = false;          // a join, part, quit or nick change of someone who hadn't spoken lately: /quiet smart hides it
 };
 // e2e_effect: a line (de)crypts in E2E_FX_MS. Incoming: noise settles into the text, left to right with a little scatter;
 // your own: a band of noise sweeps over it. Text char i of n at now: the glyph to draw instead, or 0 to draw it as is.
@@ -154,9 +155,10 @@ inline size_t typed_chars(const Line& l, size_t len, long long now) {
     long long per = len ? std::min<long long>(33, 2000 / (long long)len) : 33;
     return now <= l.typed_at ? 0 : (size_t)((now - l.typed_at) / std::max<long long>(per, 1));
 }
-// what /quiet hides: other people coming, going and renaming
+// what /quiet hides: other people coming, going and renaming. A kick is a PART line, but it isn't noise (the webchat's lineEl says the same)
 inline bool noise(const Line& l) {
-    return !l.self && (l.kind == LK::JOIN || l.kind == LK::PART || l.kind == LK::QUIT || l.kind == LK::NICK);
+    return !l.self && (l.kind == LK::JOIN || l.kind == LK::PART || l.kind == LK::QUIT || l.kind == LK::NICK) &&
+           !(l.kind == LK::PART && l.text.find(" was kicked by ") != std::string::npos);
 }
 
 // /logs: one log file; day YYYY-MM-DD (the current <name>.log: the day it was last written)
@@ -201,6 +203,8 @@ struct Buffer {
     int scroll_new = 0;                      // lines added while scrolled back: the tui adds their rows to scroll
     bool joined = false;
     bool quiet = false;                      // /quiet: hide joins, parts, quits, nick changes
+    bool smart = false;                      // /quiet smart: hide those of people who haven't spoken in SMART_SECS (Line::idle); quiet wins
+    std::map<std::string, time_t> spoke;     // smart: irc_lower(nick) -> when they last said something here
     bool quiet_typing = false;               // quiet only because /typing turned it on: /typing off undoes it
     bool collapsed = false;                  // a server tab hiding its channels in the tab bar (right click)
     bool placed = false;                     // /move (or a drag) put it here: isekur.sort_tabs leaves it where it is
@@ -217,6 +221,9 @@ struct Buffer {
     time_t read_sent = 0;                     // the newest MARKREAD we sent
     ~Buffer() { if (log) fclose(log); }
 };
+constexpr time_t SMART_SECS = 300;  // /quiet smart: someone who spoke in the last 5 minutes still shows their joins, parts, quits and nick changes
+// hidden in this tab by /quiet or /quiet smart?
+inline bool quieted(const Buffer& b, const Line& l) { return noise(l) && (b.quiet || (b.smart && l.idle)); }
 
 // ---- servers ---------------------------------------------------------------
 struct ServerCfg {
@@ -379,6 +386,7 @@ struct Server {
     double lag = 0;
     bool user_quit = false;
     bool away = false;  // 305/306 state
+    bool pre_away = false;  // our AWAY * sent before registration (draft/pre-away, nobody attached): cleared when someone attaches
     Buffer* status = nullptr;
 
     // Flood control: once registered, lines go through a token bucket

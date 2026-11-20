@@ -591,7 +591,7 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 .l.hl { background: var(--hilight_line-bg, #ff00aa10); }
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
 #msgs .older { color: var(--muted); text-align: center; font-size: calc(12px * var(--z, 1)); padding: 4px; }
-.quiet .l.noise { display: none; }  /* /quiet: joins, parts, quits and nick changes */
+.quiet .l.noise, .smart .l.noise.idle { display: none; }  /* /quiet: joins, parts, quits and nick changes; smart: of people who haven't spoken lately */
 /* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
    before the last few dimmed (zenDim marks those with .zf); Esc on an empty line leaves it */
 #app.zen { grid-template-columns: 1fr !important; grid-template-rows: 1fr auto !important; grid-template-areas: "msgs" "input" !important; }
@@ -1131,10 +1131,12 @@ function alignEm(d) {
   em.style.marginLeft = Math.max(0, r.left - d.getBoundingClientRect().left - parseFloat(getComputedStyle(d).paddingLeft)) + "px";
 }
 
+function quietClass(el, q) { el.classList.toggle("quiet", q === 1); el.classList.toggle("smart", q === 2); }  // /quiet: 1 all, 2 smart
 const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
 function lineEl(b, l) {
   const d = document.createElement("div");
-  d.className = "l k-" + l.k + (l.h ? " hl" : "") + (!l.s && /^(join|part|quit|nick)$/.test(l.k) ? " noise" : "");
+  // noise: a join, part, quit or nick change of someone else (a kick isn't); idle: they hadn't spoken lately (/quiet smart hides those)
+  d.className = "l k-" + l.k + (l.h ? " hl" : "") + (!l.s && /^(join|part|quit|nick)$/.test(l.k) && !(l.k === "part" && l.x.includes(" was kicked by ")) ? " noise" + (l.i ? " idle" : "") : "");
   const ts = document.createElement("span"); ts.className = "ts";
   ts.textContent = l.tf || new Date(l.ts * 1000).toTimeString().slice(0, 5);  // tf: the [general] timestamp format, done by iSekur
   const nk = document.createElement("span"); nk.className = "nk";
@@ -1442,7 +1444,7 @@ function renderMsgs() {
   if (was) was.top = atBottom() ? null : m.scrollTop;
   shownId = active; m.textContent = "";
   if (!b) return;
-  m.classList.toggle("quiet", !!b.q);
+  quietClass(m, b.q);
   const frag = document.createDocumentFragment();
   const mark = b.unread > 0 && b.unread < b.lines.length ? b.lines.length - b.unread : -1;
   b.lines.forEach((l, i) => {
@@ -1461,7 +1463,7 @@ function renderPane2() {
   const m = $("#msgs2"), b = bufs.get(split), lab = id => (order.indexOf(id) + 1) + ":" + label(bufs.get(id));
   m.textContent = "";
   if (!b) { $("#nicks2").textContent = ""; return; }
-  m.classList.toggle("quiet", !!b.q);
+  quietClass(m, b.q);
   const frag = document.createDocumentFragment();
   b.lines.forEach(l => frag.append(lineEl(b, l)));
   m.append(frag); m.scrollTop = m.scrollHeight;
@@ -1729,7 +1731,7 @@ function onMsg(ev) {
     if ((m.id === active || m.id === split) && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
     later(renderSide);
     if (dsrv.open && m.type === "status") later(renderSrv);  // the servers' dots follow their state
-    if (m.id === active) { renderTopic(); if (fresh || !old || !old.nc !== !m.nc) later(renderNicks); $("#msgs").classList.toggle("quiet", !!m.q); } else renderStatus();
+    if (m.id === active) { renderTopic(); if (fresh || !old || !old.nc !== !m.nc) later(renderNicks); quietClass($("#msgs"), m.q); } else renderStatus();
     if (m.id === split && (fresh || !old || !old.nc !== !m.nc)) later(renderNicks2);
   } else if (m.t === "lines") {
     const b = bufs.get(m.buf); if (b) b.lines = m.lines, b.first = m.first, b.noMore = b.loading = false;
