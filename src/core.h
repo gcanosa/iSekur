@@ -71,6 +71,7 @@ extern std::string theme_dir;  // [general] theme_dir: searched first for <name>
 bool load_theme(const std::string& name, Theme& out, std::string& err);
 Style note_style(const Theme& t);  // the INFO badge on iSekur's own notices: [colors] note, else made from hilight
 Style plugin_style(const Theme& t);  // a plugin's badge: [colors] plugin, else made from tab_active
+Style fold_style(const Theme& t);   // eventshidemgr's row: [colors] fold, else an accent apart from the chat and event lines that reads on the background, bold
 std::vector<std::string> theme_names();  // installed themes, sorted
 std::string theme_name(const std::string& v);  // "dracula.theme" -> "dracula": theme = takes either
 std::vector<std::string> theme_dirs();   // where themes are looked for, in order
@@ -533,8 +534,8 @@ struct Core {
     // a plugin's colored user list (isekur.nicklist_colors, nickcolors): each nick in the color its lines have, in the tabs where the plugin is on
     std::string nicklist_by;
     bool nicklist_colored(const Buffer* b) const;
-    // a plugin's folded runs of joins, parts, quits and nick changes (isekur.fold, eventshidemgr): one row per run ("3 joined,
-    // 2 left ▸") that a click opens, in the tabs where the plugin is on. Display only. The plugin's settings `names`, `nicks`
+    // a plugin's folded runs of joins, parts, quits and nick changes (isekur.fold, eventshidemgr): one row per run ("› 3 joined,
+    // 2 left") that a click opens, in the tabs where the plugin is on. Display only. The plugin's settings `names`, `nicks`
     // and `quiet` (hide | fold) say how: quiet = fold keeps the summary rows in a /quiet tab (the lines themselves stay hidden)
     std::string fold_by;
     struct FoldCfg { bool on = false, names = false, nicks = true, quiet = false; };

@@ -596,8 +596,7 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
    changes with nicks off), so /quiet still hides it even when it keeps the summary rows (.evq) */
 .quiet.evq .l.noise.nf, .l.fc, .l.fsum.off { display: none !important; }
 .l.fsum { cursor: pointer; }
-.l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); }  /* the theme's accent, made to read: applyTheme sets --fold-fg */
-.l.fsum .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); font-weight: 700; }  /* iSekur sends the row's color as the theme element "fold" (fold_style), so --fold-fg comes from applyTheme's loop */
 .l.fsum:hover .tx, .l.fsum:focus-visible .tx { text-decoration: underline; }
 /* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
    before the last few dimmed (zenDim marks those with .zf); Esc on an empty line leaves it */
@@ -1178,7 +1177,7 @@ function lineEl(b, l) {
   return d;
 }
 
-// eventshidemgr (isekur.fold): a run of joins, parts, quits and nick changes folds into one row, "⇄ 3 joined, 2 left ▸"; a click opens it, and
+// eventshidemgr (isekur.fold): a run of joins, parts, quits and nick changes folds into one row, "⇄ 3 joined, 2 left ▸" (▾ when open); a click opens it, and
 // the tab drawn again folds them all up. b.ef: 1 on, 2 names, 4 nick changes too, 8 kept in a /quiet tab. ponytail: a run whose top lines
 // scroll off the 2000 kept loses them from its count, and a run cut where older lines are loaded is two rows
 const FOLD_W = ["joined", "left", "renamed"];
@@ -1216,7 +1215,7 @@ function foldPaint(r) {
   r.sum.classList.toggle("off", !on);
   for (const e of r.lines) e.classList.toggle("fc", on && !r.open);
   const part = k => r.cnt[k] ? r.cnt[k] + " " + FOLD_W[k] + (r.ef & 2 ? " (" + r.who[k].slice(0, 3).join(", ") + (r.who[k].length > 3 ? ", +" + (r.who[k].length - 3) : "") + ")" : "") : "";
-  r.sum.querySelector(".tx").textContent = "\u21C4 " + [0, 1, 2].map(part).filter(Boolean).join(", ") + (r.open ? " \u25BE" : " \u25B8");
+  r.sum.querySelector(".tx").textContent = "\u21C4 " + [0, 1, 2].map(part).filter(Boolean).join(", ") + (r.open ? " \u25BE" : " \u25B8");  // the page can draw these; the terminal's row uses › and v (one cell in every font)
   r.sum.querySelector(".ts").textContent = r.open ? r.ts0 : r.ts1;
   r.sum.title = [0, 1, 2].filter(k => r.who[k].length).map(k => FOLD_W[k] + ": " + r.who[k].slice(0, 40).join(", ") + (r.who[k].length > 40 ? " …" : "")).join("\n");
   r.sum.setAttribute("aria-expanded", r.open);
@@ -1655,8 +1654,6 @@ function applyTheme() {
   const dc = dialogColors();
   set("--dlg-bg", dc.bg), set("--dlg-dim", dc.dim), set("--dlg-sel-fg", dc.selFg), set("--dlg-sel-bg", dc.selBg), set("--dlg-title", dc.title), set("--more-fg", dc.more), set("--sth-fg", dc.sth);
   set("--on-accent", oa.text), set("--accent-veil", oa.veil);
-  const fa = rgb((el.plugin || {}).bg), ff = fa && chatBg && readOn([fa], chatBg);  // eventshidemgr's rows: the plugin badge's accent, until it reads on the chat
-  set("--fold-fg", ff && hexc(ff));
   // light or dark by the background's brightness: native controls, scrollbars and hovers match
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
   document.documentElement.style.colorScheme = lum > 140 ? "light" : "dark";

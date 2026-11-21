@@ -956,7 +956,7 @@ std::string Web::theme_json() {
              ",\"bg\":" + json_str(rgb_hex(st.bg)) + ",\"a\":" + std::to_string(st.attr) + "}";
         first = false;
     }
-    for (auto [k, n] : {std::pair<const char*, Style>{"note", note_style(T)}, {"plugin", plugin_style(T)}})  // the badges, made like the terminal's
+    for (auto [k, n] : {std::pair<const char*, Style>{"note", note_style(T)}, {"plugin", plugin_style(T)}, {"fold", fold_style(T)}})  // the badges and eventshidemgr's row, made like the terminal's
         if (!T.el.count(k)) o += std::string(first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}", first = false;
     o += "},\"lay\":{";
     first = true;

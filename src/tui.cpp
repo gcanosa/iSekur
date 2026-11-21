@@ -216,13 +216,6 @@ static RGB readable(RGB c, RGB bg) {
     return out;
 }
 
-// eventshidemgr's row: the theme's accent (the plugin badge's color) as text, moved until it reads on the chat's background
-static Style fold_style(const Theme& T) {
-    Style s = T.get("default");
-    s.fg = readable(plugin_style(T).bg, s.bg);
-    return s;
-}
-
 // a word-wrapped question for a yes/no box
 static std::vector<std::string> wrap_words(const std::string& s, int w) {
     std::vector<std::string> out;
@@ -656,8 +649,9 @@ void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool 
     for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, x0, xend, T.get("nicklist"));
 }
 
-// eventshidemgr: the row for a run of join, part, quit and nick lines (newest first): "⇄ 3 joined (a, b, +1), 2 left ▸" (▾ open),
-// drawn in the theme's accent (badge_kind 'f', see fold_style) so it stands out from the chat on every theme
+// eventshidemgr: the row for a run of join, part, quit and nick lines (newest first): "› 3 joined (a, b, +1), 2 left" ("v" when open),
+// drawn in the theme's accent (badge_kind 'f', see fold_style) so it stands out from the chat on every theme. The marks are the two
+// that are one cell wide in every monospace font (Iosevka draws ▸ ▾ ⇄ and all other arrows two cells wide, over what follows)
 static Line fold_line(const std::vector<const Line*>& run, bool open, bool names) {
     int n[3] = {0, 0, 0};
     std::vector<std::string> who[3];
@@ -668,16 +662,17 @@ static Line fold_line(const std::vector<const Line*>& run, bool open, bool names
         if (std::find(who[k].begin(), who[k].end(), l.nick) == who[k].end()) who[k].push_back(l.nick);
     }
     static const char* W[3] = {"joined", "left", "renamed"};
-    std::string t = "\u21C4 ";
+    std::string t = open ? "v " : "\u203A ";
+    bool first = true;
     for (int k = 0; k < 3; k++) {
         if (!n[k]) continue;
-        t += (t.size() > 4 ? ", " : "") + std::to_string(n[k]) + " " + W[k];
+        t += (first ? "" : ", ") + std::to_string(n[k]) + " " + W[k], first = false;
         if (!names) continue;
         t += " (";
         for (size_t i = 0; i < who[k].size() && i < 3; i++) t += (i ? ", " : "") + who[k][i];
         t += (who[k].size() > 3 ? ", +" + std::to_string(who[k].size() - 3) : "") + ")";
     }
-    Line row{(open ? run.back() : run.front())->ts, LK::NICK, "", t + (open ? " \u25BE" : " \u25B8")};
+    Line row{(open ? run.back() : run.front())->ts, LK::NICK, "", t};
     row.badge_kind = 'f';
     return row;
 }
@@ -727,7 +722,10 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             Row mk;
             std::string bar = "── new ";
             for (int k = 7; k < w; k++) bar += "─";
-            cells(mk, bar, sty(T, "marker", "separator"), false);
+            Style mst = sty(T, "marker", "separator");
+            if (mst.bg < 0) mst.bg = T.get("default").bg;  // the chat's own background, not the terminal's (mono-light's black marker was black on a dark terminal)
+            mst.fg = readable(mst.fg, mst.bg);              // "new" is text: it reads on it
+            cells(mk, bar, mst, false);
             rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1}), lof.push_back(nullptr), fk.push_back(-1), dim.push_back(zen && !b->scroll && nth >= c.view.lines);  // with the older lines it marks
         }
         const Line& ln = b->lines[(size_t)(nl - 1 - n)];

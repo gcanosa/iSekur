@@ -510,6 +510,34 @@ static double delta_e(const Lab& x, const Lab& y) { return std::sqrt((x.L - y.L)
 
 double color_distance(RGB a, RGB b) { return delta_e(to_lab(a), to_lab(b)); }
 
+// eventshidemgr's row: the theme's own `fold`, else the first accent (the tab_active color, the new-line marker's, the hilight's)
+// that is clearly apart from the chat's text and the event lines (so it can't pass for either) and reads on the chat's
+// background (4.5:1, moved toward black or white until it does), in bold. A theme with only grays (mono) has no such
+// color: the first accent, in bold
+Style fold_style(const Theme& t) {
+    if (t.el.count("fold")) return t.get("fold");
+    Style d = t.get("default"), ev = t.get(t.el.count("event") ? "event" : "info"), a = t.get("tab_active"), m = t.get(t.el.count("marker") ? "marker" : "separator"), h = t.get("hilight");
+    auto accent = [&](const Style& x) { return x.bg >= 0 && x.bg != d.bg ? x.bg : x.fg; };
+    auto reads = [&](RGB c) {
+        if (c < 0 || d.bg < 0 || ratio(c, d.bg) >= 4.5) return c;
+        RGB to = ratio(0x000000, d.bg) > ratio(0xffffff, d.bg) ? 0x000000 : 0xffffff, out = c;
+        for (double k = 0.05; ratio(out, d.bg) < 4.5 && k <= 1.0; k += 0.05) {
+            auto mix = [&](int sh) { int p = c >> sh & 255, q = to >> sh & 255; return (int)std::lround(p + (q - p) * k) << sh; };
+            out = mix(16) | mix(8) | mix(0);
+        }
+        return out;
+    };
+    RGB pick = -1;
+    for (RGB c : {accent(a), m.fg, accent(h)}) {
+        if (c < 0) continue;
+        RGB r = reads(c);
+        if (pick < 0) pick = r;
+        if ((d.fg < 0 || color_distance(r, d.fg) >= 25) && (ev.fg < 0 || color_distance(r, ev.fg) >= 25)) { pick = r; break; }
+    }
+    d.fg = pick, d.attr |= A_BOLD;
+    return d;
+}
+
 // A tab with activity (data, messages, a mention) has to look different from a quiet one: a theme whose color for it is
 // within a few steps of the quiet tab's (dracula's data is the quiet color itself) gets it moved away from the
 // background, lighter on a dark theme and darker on a light one, until it is plainly another color. Its hue stays
