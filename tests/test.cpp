@@ -102,6 +102,15 @@ int main() {
     assert(ini["a"]["k"] == "v" && ini["a"]["c"] == "#chan" && ini_get(ini, "b", "x") == "1");
     assert(ini_get(ini, "b", "missing", "d") == "d");
     assert(ini_get(ini_parse("[a]\nk =    ; placeholder\n"), "a", "k", "d") == "d");  // empty = default
+    // a tab before the ';' ends the value too: "user = Ident<TAB>; the ident part" once went out as the USER line
+    assert(ini_get(ini_parse("[a]\nk = Ident\t; the ident (user@) part; default: the nick\n"), "a", "k") == "Ident");
+    assert(ini_get(ini_parse("[a]\nk = Ident ; the ident (user@) part\n"), "a", "k") == "Ident");
+    {   // /set keeps a tab-separated comment on the line, as it does a space-separated one
+        Ini ch;
+        ch["a"]["k"] = "Other";
+        Ini back = ini_parse(ini_update("[a]\nk = Ident\t; note\n", ch));
+        assert(back["a"]["k"] == "Other" && ini_update("[a]\nk = Ident\t; note\n", ch).find("; note") != std::string::npos);
+    }
     {  // the banner keeps its art under the colors, with or without a theme
         Theme th;
         th.nicks = {0xff0000, 0x00ff00};
@@ -1705,6 +1714,14 @@ int main() {
         core.exec(home, "/server 127.0.0.1 1 -name so1");
         assert(srv("so1") && srv("so1")->cfg.cap && !srv("so1")->cfg.noproxy && srv("so1")->conn.out.find("CAP LS 302") != std::string::npos);
         assert(srv("so1")->flood_burst == 5 && srv("so1")->flood_ms == 2000 && !core.find(srv("so1"), "*raw"));
+        // a user with spaces would be extra USER parameters (ngIRCd answers 461 and never registers): only its first word goes out
+        core.cfg["general"]["user"] = "Ident the ident (user@) part";
+        core.exec(home, "/server 127.0.0.1 1 -name so1u");
+        assert(srv("so1u") && srv("so1u")->conn.out.find("USER Ident 0 * :") != std::string::npos);
+        core.cfg["general"]["user"] = " ";
+        core.exec(home, "/server 127.0.0.1 1 -name so1v");
+        assert(srv("so1v") && srv("so1v")->conn.out.find("USER " + srv("so1v")->nick + " 0 * :") != std::string::npos);  // nothing left: the nick
+        core.cfg["general"].erase("user");
         core.exec(home, "/server 127.0.0.1 1 -name so2 -nocap -noproxy -cmdspeed 500 -cmdmax 3 -rawlog");
         Server* t = srv("so2");
         assert(t && !t->cfg.cap && t->cfg.noproxy && core.cfg["server.so2"]["cap"] == "false" && core.cfg["server.so2"]["noproxy"] == "true");

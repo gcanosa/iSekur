@@ -23,6 +23,9 @@ std::string trim(const std::string& s) {
     return a == std::string::npos ? "" : s.substr(a, b - a + 1);
 }
 
+// where a line's inline comment starts (the space or tab before its ';'), or npos; '#' can't be one: #chan, #rrggbb
+static size_t comment_at(const std::string& s, size_t from = 0) { return std::min(s.find(" ;", from), s.find("\t;", from)); }
+
 Ini ini_parse(const std::string& text) {
     Ini ini;
     std::string sec, line;
@@ -38,8 +41,7 @@ Ini ini_parse(const std::string& text) {
         size_t eq = line.find('=');
         if (eq == std::string::npos) continue;
         std::string val = line.substr(eq + 1);
-        size_t sc = val.find(" ;");  // inline comment; '#' can't be one: #chan, #rrggbb
-        if (sc != std::string::npos) val.erase(sc);
+        if (size_t sc = comment_at(val); sc != std::string::npos) val.erase(sc);
         std::string k = trim(line.substr(0, eq)), v = trim(val), &cur = ini[sec][k];
         // perform = one command per line, as many lines as you like: "a && b" here (perform_lines splits it)
         if (k == "perform" && !cur.empty()) { if (!v.empty()) cur += " && " + v; }
@@ -165,7 +167,7 @@ std::string ini_update(const std::string& text, const Ini& changes) {
             std::string k = trim(t.substr(0, t.find('=')));
             auto it = changes.find(sec);
             if (it != changes.end() && it->second.count(k)) {
-                size_t sc = line.find(" ;", line.find('='));  // keep the line's comment, aligned as it was
+                size_t sc = comment_at(line, line.find('='));  // keep the line's comment, aligned as it was
                 std::string kv = ini_lines(k, it->second.at(k)), note = sc == std::string::npos ? "" : line.substr(sc + 1);
                 if (!note.empty() && kv.find('\n') == std::string::npos) kv += std::string(sc + 1 > kv.size() ? sc + 1 - kv.size() : 1, ' ') + note;
                 if (done.insert({sec, k}).second) out += kv + "\n";
