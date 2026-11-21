@@ -24,6 +24,7 @@ struct Web {
     bool running() const { return !lfds.empty(); }
     bool attached() const;  // a logged-in browser is connected
     std::string stat_json();  // the status line: per network umodes, lag and away, status_info
+    std::string theme_json();  // the page's theme message: the theme (in the tint's colors, if one is on), its layout, the themes' names
     void radio_data(const char* d, size_t n);  // the radio's MP3 to every /radio/stream; (nullptr, 0): it ended, they close
     std::map<std::string, std::pair<int, time_t>> fails;  // failed logins: ip (or "via <proxy peer>") -> (count, locked until)
 
@@ -70,7 +71,6 @@ private:
     std::string lines_json(Buffer* b);  // the last BACKLOG, for a new tab or browser
     std::string lines_json(Buffer* b, const char* t, size_t from, size_t to);
     void flush_buf(Buffer* b);
-    std::string theme_json();
     std::string dcc_json(std::string* sig = nullptr);  // the transfers going on; sig: just which and their states
     std::string last_dcc, last_dcc_sig;
     time_t last_dcc_at = 0;

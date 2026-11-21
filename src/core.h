@@ -66,6 +66,19 @@ struct Theme {
 };
 RGB nick_rgb(const Theme& t, const std::string& nick);  // a nick's color: its hash picks one of the theme's (-1: the theme has none)
 double color_distance(RGB a, RGB b);  // how far apart two colors look (CIE76 ΔE: 25 is plainly another color)
+// a plugin's color tint (API 15, isekur.tint: the twilight plugin): every color the terminal and the webchat draw is multiplied by r, g, b and
+// darkened by dim. It never jumps: a change, and the plugin going, glide over `secs` (the screen may be the only light in a dark room)
+struct Tint {
+    std::string by;                 // the plugin holding it, "" = none (a fade-out may still be running)
+    bool term = true, web = true;   // which screens it covers
+    double to[4] = {1, 1, 1, 0}, from[4] = {1, 1, 1, 0}, now[4] = {1, 1, 1, 0};  // r, g, b, dim: where it is going, where the fade started, what is shown
+    long long t0 = 0;               // when the fade started (ms)
+    double secs = 0, out = 0;       // the fade's length; how long the plugin going takes
+    unsigned ver = 0;               // changes with what is shown
+    bool on() const { return now[0] < 0.999 || now[1] < 0.999 || now[2] < 0.999 || now[3] > 0.001; }
+};
+RGB tint_color(RGB c, const Tint& t);            // c under the tint (-1: the terminal's own, stays)
+RGB tint_fg(RGB fg, RGB bg, const Tint& t);      // fg under the tint, moved toward black or white if the tint took its contrast against bg below what the theme gave it (4.5:1 at most)
 RGB distinct_nick(const Theme& t);  // the color for your own nick: the palette's lightness and chroma, a hue none of them has, near msg_self
 extern std::string theme_dir;  // [general] theme_dir: searched first for <name>.theme
 bool load_theme(const std::string& name, Theme& out, std::string& err);
@@ -319,7 +332,7 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 14 // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 15 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings, booleans and whole numbers
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool, int>>>;
@@ -425,7 +438,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS, RADIO, PWIN };  // CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null; l non-null: the soft one); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab); RADIO: the radio started, changed state or stopped (b is null); PWIN: a plugin's window opened, changed or closed (b is null)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS, RADIO, PWIN, TINT };  // TINT: the shown tint changed (b is null); CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null; l non-null: the soft one); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab); RADIO: the radio started, changed state or stopped (b is null); PWIN: a plugin's window opened, changed or closed (b is null)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -527,6 +540,14 @@ struct Core {
     bool view_on(bool web) const { return !view.by.empty() && (web ? view.web : view.term); }
     const Theme& look(bool web) const { return view_on(web) && view.own ? view.theme : theme; }  // what that side draws with
     void view_end();
+    // a plugin's color tint (API 15, isekur.tint, api_ui.cpp): tint_set starts a fade to the target over secs, tint_end the one back to
+    // none over tint.out (the plugin went), tint_step (every second) moves it along and tells the screens when what is shown changed
+    Tint tint;
+    long long tint_instant_ms = 10000;  // iSekur just started: a tint set in this time (from none) shows at once, a fade in from bright would flash
+    void tint_set(const std::string& by, const double to[4], bool term, bool web, double secs, double out);
+    void tint_end();
+    void tint_step(long long ms);
+    void tint_at(long long ms, double v[4]) const;  // where the fade is at ms: a new fade starts from here, not from the last step drawn
     // the nicks' colors (the nick column and a plugin's): your own is its own color when own_nick_color is on. -1: the theme's text color
     bool own_nick_on() const;
     RGB self_nick(const Theme& t) const { return own_nick_on() && t.self_nick >= 0 ? t.self_nick : t.get("msg_self").fg; }
@@ -576,10 +597,11 @@ struct Core {
         std::vector<std::string> display, items, buttons, icons;  // icons: a short symbol before each button's label
         int sel = 0, mark = 0, star = 0;  // star: a row drawn with a ★ in its own column (the radio's favorite)
         int reels = -1;  // a cassette in the display: -1 none, 0 its reels still, 1 turning
+        double sky = -1;  // a sun and a moon in the display (twilight): -1 none, 0 day .. 1 night, in steps of 1/20
         int slider = -1, slider_max = 100, slider_step = 5;  // a slider (the radio's volume): its value, -1 none; the icon before it
         std::string slider_icon;
         bool open = false;
-        bool same(const PWin& o) const { return by == o.by && title == o.title && display == o.display && items == o.items && buttons == o.buttons && icons == o.icons && sel == o.sel && mark == o.mark && star == o.star && reels == o.reels && slider == o.slider && slider_max == o.slider_max && slider_step == o.slider_step && slider_icon == o.slider_icon && open == o.open; }
+        bool same(const PWin& o) const { return by == o.by && title == o.title && display == o.display && items == o.items && buttons == o.buttons && icons == o.icons && sel == o.sel && mark == o.mark && star == o.star && reels == o.reels && slider == o.slider && slider_max == o.slider_max && slider_step == o.slider_step && slider_icon == o.slider_icon && sky == o.sky && open == o.open; }
     } pwin;
     void pwin_act(const std::string& action, int index, int button = 0);  // a click or a key in it: "pick", "button" (button: 1-based; index: its list row), "slider" (index: its value), "close"
     std::string emit_only;  // plugin_emit: only this plugin gets the event (a window's)

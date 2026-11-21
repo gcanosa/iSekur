@@ -946,18 +946,29 @@ std::string Web::theme_json() {
     bool logs = c.opt_on(nullptr, "log", false);  // on anywhere: the Logs button
     for (auto& sv : c.servers) logs |= c.opt_on(sv.get(), "log", false);
     const Theme& T = c.look(true);  // the focus view's theme while it's on here; "name" stays the configured one (the picker's)
+    // isekur.tint (twilight): the page gets the colors the terminal draws, worked out by the same code; the tint itself goes along for mIRC colors
+    const Tint& tn = c.tint;
+    bool tw = tn.web && tn.on();
+    RGB dbg = T.get("default").bg;
+    auto shade = [&](Style s) { if (tw) s.fg = tint_fg(s.fg, s.bg >= 0 ? s.bg : dbg, tn), s.bg = tint_color(s.bg, tn); return s; };
+    char tj[96] = "null";
+    if (tw) snprintf(tj, sizeof tj, "[%.4f,%.4f,%.4f,%.4f]", tn.now[0], tn.now[1], tn.now[2], tn.now[3]);
     std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"sb\":" + std::to_string(c.max_lines) +
                     ",\"font\":" + json_str(ini_get(c.cfg, "general", "web_font")) + ",\"fsize\":" + json_str(ini_get(c.cfg, "general", "web_font_size")) +
                     ",\"tsa\":" + json_str(ini_get(c.cfg, "general", "timestamp_align")) + ",\"tsh\":" + json_str(ini_get(c.cfg, "general", "timestamp_hover")) + ",\"tree\":" + json_str(ini_get(c.cfg, "general", "web_tree_lines")) + ",\"treew\":" + json_str(ini_get(c.cfg, "general", "web_tree_width")) + ",\"ah\":" + json_str(ini_get(c.cfg, "general", "web_tree_autohide")) + ",\"ub\":" + json_str(ini_get(c.cfg, "general", "web_unread_badge")) + ",\"logs\":" + (logs ? "1" : "0") +
-                    ",\"zen\":" + (c.view_on(true) ? "{\"w\":" + std::to_string(c.view.width) + ",\"n\":" + std::to_string(c.view.lines) + ",\"ev\":" + (c.view.events ? "1" : "0") + "}" : "null") + ",\"el\":{";
+                    ",\"zen\":" + (c.view_on(true) ? "{\"w\":" + std::to_string(c.view.width) + ",\"n\":" + std::to_string(c.view.lines) + ",\"ev\":" + (c.view.events ? "1" : "0") + "}" : "null") + ",\"tint\":" + tj + ",\"el\":{";
     bool first = true;
-    for (auto& [k, st] : T.el) {
+    for (auto& [k, st0] : T.el) {
+        Style st = shade(st0);
         o += (first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(st.fg)) +
              ",\"bg\":" + json_str(rgb_hex(st.bg)) + ",\"a\":" + std::to_string(st.attr) + "}";
         first = false;
     }
-    for (auto [k, n] : {std::pair<const char*, Style>{"note", note_style(T)}, {"plugin", plugin_style(T)}, {"fold", fold_style(T)}})  // the badges and eventshidemgr's row, made like the terminal's
-        if (!T.el.count(k)) o += std::string(first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}", first = false;
+    for (auto [k, n0] : {std::pair<const char*, Style>{"note", note_style(T)}, {"plugin", plugin_style(T)}, {"fold", fold_style(T)}})  // the badges and eventshidemgr's row, made like the terminal's
+        if (!T.el.count(k)) {
+            Style n = shade(n0);
+            o += std::string(first ? "" : ",") + json_str(k) + ":{\"fg\":" + json_str(rgb_hex(n.fg)) + ",\"bg\":" + json_str(rgb_hex(n.bg)) + ",\"a\":1}", first = false;
+        }
     o += "},\"lay\":{";
     first = true;
     auto lay = T.layout;
@@ -965,8 +976,9 @@ std::string Web::theme_json() {
     lay["complete_suffix"] = c.complete_suffix();  // nick completion at a line's start, like the terminal's
     for (auto& [k, v] : lay) o += (first ? "" : ",") + json_str(k) + ":" + json_str(v), first = false;
     o += "},\"nicks\":[";
-    for (size_t i = 0; i < T.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(T.nicks[i]));
-    o += "],\"self\":" + json_str(rgb_hex(c.own_nick_on() ? T.self_nick : -1)) + ",\"themes\":[";  // self: your nick's own color (own_nick_color); the installed themes, for the /theme picker
+    auto nk = [&](RGB n) { return tw ? tint_fg(n, dbg, tn) : n; };
+    for (size_t i = 0; i < T.nicks.size(); i++) o += (i ? "," : "") + json_str(rgb_hex(nk(T.nicks[i])));
+    o += "],\"self\":" + json_str(rgb_hex(c.own_nick_on() ? nk(T.self_nick) : -1)) + ",\"themes\":[";  // self: your nick's own color (own_nick_color); the installed themes, for the /theme picker
     first = true;
     for (auto& n : theme_names()) o += (first ? "" : ",") + json_str(n), first = false;
     return o + "]}";
@@ -1154,7 +1166,7 @@ std::string Web::pwin_json() {
     };
     const Core::PWin& w = c.pwin;
     return std::string("{\"t\":\"pwin\",\"open\":") + (w.open ? "true" : "false") + ",\"title\":" + json_str(w.title) + ",\"display\":" + arr(w.display) +
-           ",\"items\":" + arr(w.items) + ",\"buttons\":" + arr(w.buttons) + ",\"icons\":" + arr(w.icons) + ",\"sel\":" + std::to_string(w.sel) + ",\"mark\":" + std::to_string(w.mark) + ",\"star\":" + std::to_string(w.star) + ",\"reels\":" + std::to_string(w.reels) + ",\"slider\":" + std::to_string(w.slider) + ",\"smax\":" + std::to_string(w.slider_max) + ",\"sstep\":" + std::to_string(w.slider_step) + ",\"sicon\":" + json_str(w.slider_icon) + "}";
+           ",\"items\":" + arr(w.items) + ",\"buttons\":" + arr(w.buttons) + ",\"icons\":" + arr(w.icons) + ",\"sel\":" + std::to_string(w.sel) + ",\"mark\":" + std::to_string(w.mark) + ",\"star\":" + std::to_string(w.star) + ",\"reels\":" + std::to_string(w.reels) + ",\"sky\":" + std::to_string(w.sky) + ",\"slider\":" + std::to_string(w.slider) + ",\"smax\":" + std::to_string(w.slider_max) + ",\"sstep\":" + std::to_string(w.slider_step) + ",\"sicon\":" + json_str(w.slider_icon) + "}";
 }
 
 void Web::broadcast(const std::string& json) {
@@ -1295,6 +1307,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
         broadcast(last_order = o + "]}");
         break;
     }
+    case Ev::TINT: broadcast(theme_json()); break;  // the theme again in the tint's colors; the page keeps its lines
     case Ev::THEME:  // also /set timestamp or scrollback: every tab's lines again, in the new format
         broadcast(theme_json());
         for (auto& x : c.bufs) known.erase(x->id), pending.insert(x->id);

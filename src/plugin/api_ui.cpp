@@ -160,6 +160,76 @@ static int l_view(lua_State* L) {
     return lua_pushboolean(L, 1), 1;
 }
 
+// isekur.tint{r, g, b, dim, term, web, fade, out}: every color the terminal and the webchat draw is multiplied by r, g, b (0 to 1, default 1)
+// and darkened by dim (0 to 0.9), on the screens `term` and `web` say (both by default). It glides there over `fade` seconds (0 to 600,
+// default 0: at once), and when your plugin goes (disabled, removed, failing) it glides back over `out` (default: fade): never a jump to
+// bright in a dark room. isekur.tint(false) starts that too, isekur.tint() says whether yours is on. One plugin at a time: a new one takes over
+static int l_tint(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (lua_isnone(L, 1)) return lua_pushboolean(L, c.tint.by == p->name), 1;
+    if (!lua_istable(L, 1)) {
+        if (c.tint.by == p->name) c.tint_end();
+        return 0;
+    }
+    auto num = [&](const char* k, double def, double lo, double hi) {
+        lua_getfield(L, 1, k);
+        double v = lua_isnumber(L, -1) ? lua_tonumber(L, -1) : def;
+        lua_pop(L, 1);
+        return std::isfinite(v) ? std::clamp(v, lo, hi) : def;
+    };
+    auto flag = [&](const char* k) { lua_getfield(L, 1, k); bool r = lua_isnil(L, -1) ? true : lua_toboolean(L, -1); lua_pop(L, 1); return r; };
+    double to[4] = {num("r", 1, 0, 1), num("g", 1, 0, 1), num("b", 1, 0, 1), num("dim", 0, 0, 0.9)};
+    double fade = num("fade", 0, 0, 600);
+    c.tint_set(p->name, to, flag("term"), flag("web"), fade, num("out", fade, 0, 600));
+    return 0;
+}
+
+static const long long BOOT_MS = now_ms();  // when iSekur started: a tint set in its first seconds shows at once (see Core::tint_instant_ms)
+
+void Core::tint_set(const std::string& by, const double to[4], bool tm, bool wb, double secs, double out) {
+    long long ms = now_ms();
+    if (!tint.on() && ms - BOOT_MS < tint_instant_ms) secs = 0;
+    bool screens = tm != tint.term || wb != tint.web;
+    tint_at(ms, tint.from);
+    std::copy(to, to + 4, tint.to);
+    tint.by = by, tint.term = tm, tint.web = wb, tint.t0 = ms, tint.secs = secs, tint.out = out;
+    if (screens) tint.ver++, dirty = true, notify(Ev::TINT, nullptr);
+    tint_step(ms);
+}
+
+void Core::tint_end() {  // the plugin went: back to no tint over tint.out
+    if (tint.by.empty()) return;
+    static const double none[4] = {1, 1, 1, 0};
+    long long ms = now_ms();
+    tint.by.clear();
+    tint_at(ms, tint.from);  // from where the fade is now: read before t0 moves
+    std::copy(none, none + 4, tint.to);
+    tint.t0 = ms, tint.secs = tint.out;
+    tint_step(ms);
+}
+
+void Core::tint_at(long long ms, double v[4]) const {
+    auto& t = tint;
+    double k = t.secs <= 0 ? 1 : std::clamp((ms - t.t0) / (t.secs * 1000.0), 0.0, 1.0), e = k * k * (3 - 2 * k);
+    for (int i = 0; i < 4; i++) v[i] = k >= 1 ? t.to[i] : t.from[i] + (t.to[i] - t.from[i]) * e;
+}
+
+// smoothstep from where the fade started to its target. What is shown moves in steps of at least 1.2% (a long ramp is a few dozen
+// redraws and webchat updates, not one a second) and lands exactly on the target
+void Core::tint_step(long long ms) {
+    auto& t = tint;
+    if (std::equal(t.now, t.now + 4, t.to)) return;
+    double v[4];
+    tint_at(ms, v);
+    bool big = false;
+    for (int i = 0; i < 4; i++) big |= std::fabs(v[i] - t.now[i]) >= 0.012;
+    if (!big && !(t.secs <= 0 || ms - t.t0 >= t.secs * 1000.0)) return;
+    std::copy(v, v + 4, t.now);
+    t.ver++, dirty = true;
+    notify(Ev::TINT, nullptr);
+}
+
 // the strings of t[key] (a list), one line each, at most n of them and len bytes each (never cut inside a UTF-8 character)
 static std::vector<std::string> str_list(lua_State* L, int t, const char* key, size_t n, size_t len) {
     std::vector<std::string> v;
@@ -208,6 +278,9 @@ static int l_window(lua_State* L) {
     w.sel = row("sel"), w.mark = row("mark"), w.star = row("star");
     lua_getfield(L, 1, "reels");
     w.reels = lua_isboolean(L, -1) ? lua_toboolean(L, -1) : -1;
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "sky");  // a sun and a moon in the display: 0 day .. 1 night
+    w.sky = lua_isnumber(L, -1) ? std::round(std::clamp<lua_Number>(lua_tonumber(L, -1), 0, 1) * 20) / 20 : -1;
     lua_pop(L, 1);
     lua_getfield(L, 1, "slider");  // {value, max, step, icon}: a bar under the list (the radio's volume)
     if (lua_istable(L, -1)) {
@@ -298,6 +371,6 @@ Core::FoldCfg Core::fold_cfg(const Buffer* b) const {
 // what the isekur table gets from this file (host.cpp's load registers it)
 const luaL_Reg plug::api_ui[] = {
     {"window", l_window}, {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view},
-    {"lock", l_lock}, {"sort_tabs", l_sort_tabs}, {"theme", l_theme}, {"nick_color", l_nick_color},
+    {"lock", l_lock}, {"tint", l_tint}, {"sort_tabs", l_sort_tabs}, {"theme", l_theme}, {"nick_color", l_nick_color},
     {"nicklist_colors", l_nicklist_colors}, {"fold", l_fold},
     {nullptr, nullptr}};

@@ -804,6 +804,12 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #dpw .lcd .txt { flex: 1; min-width: 0; }
 #dpw .lcd .txt div:first-child { color: var(--dlg-title, var(--accent)); text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 40%, transparent); }
 #dpw .lcd .dim { color: var(--muted); font-weight: 400; font-size: calc(13px * var(--z, 1)); }
+#dpw .sky { flex: none; width: 76px; height: 46px; color: var(--dlg-title, var(--accent)); }  /* twilight's: the sun sets behind the line, the moon rises, from --sky (0 day .. 1 night) */
+#dpw .sky .sun, #dpw .sky .moon, #dpw .sky .stars { transition: transform .9s ease, opacity .9s ease; }
+#dpw .sky .sun { transform: translateY(calc(var(--sky, 0) * 32px)); opacity: calc(1 - var(--sky, 0)); }
+#dpw .sky .moon { transform: translateY(calc((1 - var(--sky, 0)) * 32px)); opacity: var(--sky, 0); }
+#dpw .sky .stars { opacity: calc(var(--sky, 0) * var(--sky, 0)); }
+@media (prefers-reduced-motion: reduce) { #dpw .sky .sun, #dpw .sky .moon, #dpw .sky .stars { transition: none; } }
 #dpw .cass { flex: none; width: 76px; height: 46px; color: var(--dlg-title, var(--accent)); }  /* the reels turn while it plays */
 #dpw .cass .reel { transform-box: fill-box; transform-origin: center; }
 #dpw[data-reels="1"] .cass .reel { animation: reelspin 2.2s linear infinite; }
@@ -816,6 +822,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #dpw .pwlist .none { color: var(--muted); padding: 6px 8px; cursor: default; }
 @media (hover: hover) { #dpw .pwlist .r:not(.on):hover { background: #ffffff0a; } }
 #dpw .vol { display: flex; align-items: center; gap: 10px; }
+#dpw [hidden] { display: none !important; }  /* a window without a slider, a cassette or a sky (twilight's): the page's own display rules beat the UA's [hidden] */
 #dpw .vol .ic { width: 2.2em; text-align: center; color: var(--dlg-title, var(--accent)); } #dpw .vol input { flex: 1; min-width: 0; accent-color: var(--accent); cursor: pointer; }
 #dpw .vol output { width: 3.8em; text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
 .win-95 #dpw .vol { accent-color: #000080; } .win-95 #dpw .vol .ic { color: #000; } .win-95 #dpw .vol input { accent-color: #000080; } .win-95 #dpw .vol output { color: #000; }
@@ -826,7 +833,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #radtap { position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); bottom: calc(64px + env(safe-area-inset-bottom)); padding: 8px 16px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--line); background: var(--dlg-bg, var(--panel)); color: var(--fg); font: inherit; box-shadow: 0 6px 24px -8px var(--accent); }
 .win-95 #dpw .lcd { background: #000; color: #00ff66; border-radius: 0; border: 2px solid; border-color: #808080 #fff #fff #808080; }
-.win-95 #dpw .cass { color: #00ff66; }
+.win-95 #dpw .cass, .win-95 #dpw .sky { color: #00ff66; }
 .win-95 #dpw .lcd .txt div:first-child, .win-95 #dpw .lcd .dim { color: #00ff66; text-shadow: none; }
 .win-95 #dpw .pwlist { background: #fff; color: #000; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; }
 .win-95 #dpw .pwlist .r { border-radius: 0; } .win-95 #dpw .pwlist .r .m { color: #000; } .win-95 #dpw .pwlist .r.on { background: #000080; color: #fff; } .win-95 #dpw .pwlist .r.on .m { color: #fff; }
@@ -969,6 +976,15 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
       <rect x="1" y="1" width="74" height="44" rx="5" stroke-width="2"/><rect x="12" y="6" width="52" height="12" rx="3" opacity=".55"/><path d="M17 45l5-9h32l5 9" opacity=".55"/>
       <g class="reel"><circle cx="24" cy="27" r="7"/><path d="M24 27v-6M24 27l5.2 3M24 27l-5.2 3"/></g>
       <g class="reel"><circle cx="52" cy="27" r="7"/><path d="M52 27v-6M52 27l5.2 3M52 27l-5.2 3"/></g>
+    </svg>
+    <svg class="sky" viewBox="0 0 76 46" aria-hidden="true" hidden fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+      <defs><clipPath id="skyclip"><rect x="0" y="0" width="76" height="36"/></clipPath></defs>
+      <g clip-path="url(#skyclip)">
+        <g class="sun"><circle cx="38" cy="22" r="6"/><path d="M38 10v3M38 31v3M26 22h3M47 22h3M29.5 13.5l2 2M46.5 13.5l-2 2M29.5 30.5l2-2M46.5 30.5l-2-2"/></g>
+        <g class="moon"><path d="M47 22.8A9 9 0 1 1 37.2 13 7 7 0 0 0 47 22.8z"/></g>
+        <path class="stars" d="M17 12v3M15.5 13.5h3M58 9v3M56.5 10.5h3M63 24v2M62 25h2M12 26v2M11 27h2" stroke-width="1.2"/>
+      </g>
+      <path d="M5 36h66" opacity=".7"/><path d="M14 40h48M24 44h28" opacity=".35"/>
     </svg></div>
   <input id="dpw-q" type="text" inputmode="search" enterkeyhint="search" placeholder="Filter the list" autocomplete="off" spellcheck="false" aria-label="Filter the list">
   <div class="pwlist" id="dpw-list" role="listbox"></div>
@@ -1061,6 +1077,8 @@ function addText(parent, text, st) {
   span.append(text.slice(last));
   parent.append(span);
 }
+// isekur.tint (twilight): the server already tinted the theme; mIRC colors are the page's own, so they get the same multiply
+const tintc = c => { const t = theme.tint, v = rgb(c); return t && v ? hexc(v.map((x, i) => Math.round(x * t[i] * (1 - t[3])))) : c; };
 function mirc(parent, s) {
   let st = {}, buf = "";
   const flush = () => { addText(parent, buf, st); buf = ""; };
@@ -1077,14 +1095,14 @@ function mirc(parent, s) {
       const m = /^(\d{1,2})(?:,(\d{1,2}))?/.exec(s.slice(i + 1));
       st = {...st};
       if (!m) { st.fg = st.bg = undefined; continue; }
-      if (theme.lay?.mirc_colors !== "off") { st.fg = MIRC[+m[1]]; if (m[2] !== undefined) st.bg = MIRC[+m[2]]; }
+      if (theme.lay?.mirc_colors !== "off") { st.fg = tintc(MIRC[+m[1]]); if (m[2] !== undefined) st.bg = tintc(MIRC[+m[2]]); }
       i += m[0].length;
     } else if (c === "\x04") {
       flush();
       const m = /^([0-9a-fA-F]{6})(?:,([0-9a-fA-F]{6}))?/.exec(s.slice(i + 1));
       st = {...st};
       if (!m) { st.fg = st.bg = undefined; continue; }
-      if (theme.lay?.mirc_colors !== "off") { st.fg = "#" + m[1]; if (m[2]) st.bg = "#" + m[2]; }
+      if (theme.lay?.mirc_colors !== "off") { st.fg = tintc("#" + m[1]); if (m[2]) st.bg = tintc("#" + m[2]); }
       i += m[0].length;
     } else if (c >= " ") buf += c;
   }
@@ -3729,7 +3747,8 @@ const pwVis = () => { const q = $("#dpw-q").value.trim().toLowerCase(); return p
 function renderPwin() {
   const w = pwin;
   $("#dpw-h").textContent = w.title;
-  dpw.dataset.reels = w.reels; $("#dpw .cass").hidden = w.reels < 0;
+  dpw.dataset.reels = w.reels; $("#dpw .cass").toggleAttribute("hidden", w.reels < 0);  // an SVG has no .hidden property
+  const sky = $("#dpw .sky"); sky.toggleAttribute("hidden", !(w.sky >= 0)); if (w.sky >= 0) sky.style.setProperty("--sky", w.sky);  // twilight's sun and moon
   $("#dpw-lcd").replaceChildren(...(radBlocked ? [...w.display, "Press Play to hear it here"] : w.display).map((t, i) => { const d = document.createElement("div"); d.textContent = t || "\u00a0"; if (i) d.className = "dim"; return d; }));
   $("#dpw-q").hidden = w.items.length < 6;
   const vis = pwVis();

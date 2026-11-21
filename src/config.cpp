@@ -484,6 +484,26 @@ struct Lab { double L, a, b; };
 static double lin(int c8) { double c = c8 / 255.0; return c <= 0.04045 ? c / 12.92 : std::pow((c + 0.055) / 1.055, 2.4); }
 static double lum(RGB c) { return 0.2126 * lin(c >> 16 & 255) + 0.7152 * lin(c >> 8 & 255) + 0.0722 * lin(c & 255); }
 static double ratio(RGB a, RGB b) { double x = lum(a) + 0.05, y = lum(b) + 0.05; return x > y ? x / y : y / x; }
+
+// ---- the tint (isekur.tint) ---------------------------------------------------------
+RGB tint_color(RGB c, const Tint& t) {
+    if (c < 0) return c;
+    auto ch = [&](int sh, double m) { return std::clamp((int)std::lround((c >> sh & 255) * m * (1 - t.now[3])), 0, 255) << sh; };
+    return ch(16, t.now[0]) | ch(8, t.now[1]) | ch(0, t.now[2]);
+}
+RGB tint_fg(RGB fg, RGB bg, const Tint& t) {
+    RGB f = tint_color(fg, t);
+    if (fg < 0 || bg < 0) return f;
+    RGB b = tint_color(bg, t);
+    double need = std::min(ratio(fg, bg), 4.5);  // the contrast the theme gave it, up to one that reads
+    if (ratio(f, b) >= need) return f;
+    RGB to = ratio(0x000000, b) > ratio(0xffffff, b) ? 0x000000 : 0xffffff, out = f;
+    for (double k = 0.05; ratio(out, b) < need && k <= 1.0; k += 0.05) {
+        auto mix = [&](int sh) { int a = f >> sh & 255, z = to >> sh & 255; return (int)std::lround(a + (z - a) * k) << sh; };
+        out = mix(16) | mix(8) | mix(0);
+    }
+    return out;
+}
 static Lab to_lab(RGB c) {
     double r = lin(c >> 16 & 255), g = lin(c >> 8 & 255), b = lin(c & 255);
     double X = (0.4124564 * r + 0.3575761 * g + 0.1804375 * b) / 0.95047, Y = 0.2126729 * r + 0.7151522 * g + 0.0721750 * b,

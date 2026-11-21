@@ -3713,6 +3713,67 @@ isekur.command("fo", "", function() print(isekur.fold(), isekur.api >= 14) iseku
             sy.exec(ph, "/plugin disable fo@other");
             assert(sy.fold_by.empty() && !sy.fold_cfg(yb).on);  // it went with its plugin
         }
+        {  // API 15: isekur.tint (twilight): multiplies every color on both screens, glides, and never jumps when its plugin goes
+            FILE* f = fopen((dir + "/plugins/tn.lua").c_str(), "w");
+            fputs(R"LUA(
+isekur.command("tn", "", function(a)
+  if a == "off" then isekur.tint(false)
+  elseif a == "slow" then isekur.tint{r = 1, g = 0.5, b = 0.25, dim = 0.2, fade = 60, out = 30}
+  else print(tostring(isekur.tint()), isekur.api >= 15) isekur.tint{r = 1, g = 0.5, b = 0.25, dim = 0.2} end
+end)
+)LUA", f), fclose(f);
+            sy.exec(ph, "/plugin enable tn");
+            sy.tint_instant_ms = 0;
+            sy.exec(yb, "/tn");  // no fade asked: at once
+            assert(ph->lines.back().text == "false true" && sy.tint.by == "tn" && sy.tint.on() && sy.tint.now[1] == 0.5 && sy.tint.now[3] == 0.2);
+            Tint tt = sy.tint;
+            assert(tint_color(0xffffff, tt) == 0xcc6633 && tint_color(-1, tt) == -1);  // 255 * (1, .5, .25) * (1 - .2)
+            // blue on black had 2.4:1: the tint dims it to less, so it is moved toward white until it has the 2.4 again
+            auto lum = [](RGB c) { auto f = [](int v) { double x = v / 255.0; return x <= 0.04045 ? x / 12.92 : std::pow((x + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c >> 16 & 255) + 0.7152 * f(c >> 8 & 255) + 0.0722 * f(c & 255); };
+            auto cr = [&](RGB a, RGB b) { double x = lum(a) + 0.05, y = lum(b) + 0.05; return x > y ? x / y : y / x; };
+            RGB tf = tint_fg(0x0000ff, 0x000000, tt);
+            assert(cr(0x0000ff, 0) < 2.5 && cr(tf, 0) >= cr(0x0000ff, 0) - 0.01 && tf != tint_color(0x0000ff, tt));
+            assert(tint_fg(0xffffff, 0x000000, tt) == tint_color(0xffffff, tt));  // white on black still reads: just tinted
+            sy.theme.el["default"] = Style{0xffffff, 0x101010, 0};
+            Web tw(sy);
+            std::string tj = tw.theme_json();  // the webchat gets the colors the terminal draws, and the tint for the mIRC ones
+            assert(tj.find("\"tint\":[1.0000,0.5000,0.2500,0.2000]") != std::string::npos && tj.find("\"bg\":\"#0d0603\"") != std::string::npos);
+            sy.tint.web = false;
+            assert(tw.theme_json().find("\"tint\":null") != std::string::npos && tw.theme_json().find("#0d0603") == std::string::npos);  // `where`: terminal only
+            sy.tint.web = true;
+            // a fade: halfway through, half way there (smoothstep); at the end exactly there. The plugin going fades out the same way.
+            // Time passes by moving the fade's start back, as the real clock would
+            auto elapse = [&](long long ms) { sy.tint.t0 -= ms; sy.tint_step(now_ms()); };
+            sy.exec(yb, "/tn off");
+            sy.exec(yb, "/tn slow");  // fade 60, out 30, from none
+            elapse(61000);
+            assert(sy.tint.now[1] == 0.5 && sy.tint.now[3] == 0.2);  // there, exactly
+            sy.exec(ph, "/plugin disable tn");  // out = 30 s
+            assert(sy.tint.by.empty() && sy.tint.on() && std::fabs(sy.tint.now[1] - 0.5) < 0.02);  // not a jump
+            elapse(15000);
+            assert(std::fabs(sy.tint.now[1] - 0.75) < 0.02 && std::fabs(sy.tint.now[3] - 0.1) < 0.02 && sy.tint.on());
+            elapse(16000);
+            assert(!sy.tint.on() && sy.tint.now[1] == 1 && sy.tint.now[3] == 0);  // gone, exactly
+            // a first tint from none, with a fade asked: it fades in
+            sy.exec(ph, "/plugin enable tn");
+            sy.exec(yb, "/tn slow");
+            assert(sy.tint.by == "tn" && sy.tint.now[1] > 0.99);  // not there yet
+            elapse(30000);
+            assert(std::fabs(sy.tint.now[1] - 0.75) < 0.02);
+            {  // a new fade starts from where this one is in time, not from the last step drawn: 59 s in, it is all but there
+                double at[4];
+                sy.tint_at(now_ms() + 29000, at);
+                assert(at[1] < 0.505 && at[1] > 0.5 - 1e-9 && sy.tint.now[1] > 0.7);
+            }
+            sy.tint_instant_ms = 1LL << 40;  // "just started" (the test has run longer than the real window): a first tint shows at once, a fade in from bright would flash
+            sy.exec(ph, "/plugin disable tn");
+            elapse(31000);
+            assert(!sy.tint.on());
+            sy.exec(ph, "/plugin enable tn");
+            sy.exec(yb, "/tn slow");
+            assert(sy.tint.now[1] == 0.5);  // at once
+            sy.exec(ph, "/plugin disable tn");
+        }
         sy.plugins.clear();
         assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
     }

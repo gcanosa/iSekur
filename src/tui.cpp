@@ -6,6 +6,7 @@
 #include <cstring>
 #include <cwchar>
 #include <random>
+#include <unordered_map>
 #include "core.h"
 #include "termbox2.h"
 #include <termios.h>
@@ -40,8 +41,21 @@ static uintattr_t tbc(RGB c) {
     return i == 0 ? TB_HI_BLACK : (uintattr_t)i;
 }
 
+// isekur.tint (API 15): the tint being drawn with (null: none). Each (fg, bg) pair is worked out once per change of the tint
+static const Tint* g_tint = nullptr;
+static unsigned g_tint_ver = 0;
+static std::unordered_map<uint64_t, std::pair<RGB, RGB>> g_tint_memo;
+static std::pair<RGB, RGB> tinted(RGB fg, RGB bg) {
+    if (!g_tint) return {fg, bg};
+    uint64_t k = (uint64_t)(uint32_t)(fg + 1) << 32 | (uint32_t)(bg + 1);
+    if (auto it = g_tint_memo.find(k); it != g_tint_memo.end()) return it->second;
+    if (g_tint_memo.size() > 8192) g_tint_memo.clear();
+    return g_tint_memo[k] = {tint_fg(fg, bg, *g_tint), tint_color(bg, *g_tint)};
+}
+
 static void cell(int x, int y, uint32_t cp, const Style& s) {
-    uintattr_t fg = tbc(s.fg), bg = tbc(s.bg);
+    auto [sf, sb] = tinted(s.fg, s.bg);
+    uintattr_t fg = tbc(sf), bg = tbc(sb);
     if (s.attr & A_BOLD) fg |= TB_BOLD;
     if (s.attr & A_ITALIC) fg |= TB_ITALIC;
     if (s.attr & A_UNDER) fg |= TB_UNDERLINE;
@@ -818,7 +832,10 @@ void Tui::draw() {
     if (c.bell) c.bell = false, tb_send("\a", 1);
     const Theme& T = c.look(false);
     Style def = T.get("default");
-    tb_set_clear_attrs(tbc(def.fg), tbc(def.bg));
+    g_tint = c.tint.term && c.tint.on() ? &c.tint : nullptr;
+    if (c.tint.ver != g_tint_ver) g_tint_memo.clear(), g_tint_ver = c.tint.ver;
+    auto [dfg, dbg] = tinted(def.fg, def.bg);
+    tb_set_clear_attrs(tbc(dfg), tbc(dbg));
     tb_clear();
     isekur_links_begin(), frame_urls.clear();
     int W = tb_width(), H = tb_height();
@@ -846,7 +863,7 @@ void Tui::draw() {
         if (c.screen_frame(W, H, "term", g))
             for (int y = 0; y < H; y++)
                 for (int x = 0; x < W; x++)
-                    if (auto& sc = g[(size_t)y * W + x]; sc.ch) tb_set_cell(x, y, sc.ch, tbc(sc.fg ? sc.fg : 0x010101), tbc(0));
+                    if (auto& sc = g[(size_t)y * W + x]; sc.ch) tb_set_cell(x, y, sc.ch, tbc(g_tint ? tint_color(sc.fg ? sc.fg : 0x010101, *g_tint) : sc.fg ? sc.fg : 0x010101), tbc(0));
         if (long long to = atoi(c.opt(nullptr, "lock_prompt_timeout", "30").c_str()) * 1000LL; peek_at && to > 0 && now_ms() - peek_at > to) peek_at = 0, lock_in.clear();
         if (c.locked && peek_at) draw_lock(W, H, la);  // the password box over it: Esc or its X and the screensaver goes on
         else tb_hide_cursor();
@@ -2561,7 +2578,7 @@ void Tui::draw_pwin(int W, int H) {
     int n = (int)vis.size(), at = (int)(std::find(vis.begin(), vis.end(), pu.cur) - vis.begin());
     if (at >= n) at = 0, pu.cur = n ? vis[0] : 0;  // the cursor's row is filtered out: the first one
     int fr = w.items.size() >= 6 ? 1 : 0;  // the filter row
-    int nd = std::max(1, std::min((int)w.display.size(), 4));
+    int nd = std::max(w.sky >= 0 ? 3 : 1, std::min((int)w.display.size(), 4));  // a sky is three rows tall
     int sr = w.slider >= 0 ? 1 : 0;  // the slider row (volume)
     pu.rows = n ? std::max(1, std::min({n, H - nd - 9 - fr - sr, 12})) : 0;
     pu.w = std::min(W - 2, 64), pu.x0 = (W - pu.w) / 2;
@@ -2588,7 +2605,14 @@ void Tui::draw_pwin(int W, int H) {
     for (int yy = ly; yy <= ly + nd + 1; yy++) cell(lx0, yy, U'│', ls), cell(lx1 - 1, yy, U'│', ls);
     cell(lx0, ly, U'┌', ls), cell(lx1 - 1, ly, U'┐', ls), cell(lx0, ly + nd + 1, U'└', ls), cell(lx1 - 1, ly + nd + 1, U'┘', ls);
     for (int i = 0; i < nd; i++)
-        if (i < (int)w.display.size()) text(lx0 + 2, ly + 1 + i, i || w.reels < 0 ? lx1 - 2 : lx1 - 10, w.display[(size_t)i], i ? dim : keyst, false);
+        if (i < (int)w.display.size()) text(lx0 + 2, ly + 1 + i, w.sky >= 0 && i < 3 ? lx1 - 13 : i || w.reels < 0 ? lx1 - 2 : lx1 - 10, w.display[(size_t)i], i ? dim : keyst, false);
+    if (w.sky >= 0) {  // twilight's sky: the sun by day, the sun on the horizon at dusk, the moon at night. ASCII: one cell in every font
+        static const char* const art[3][3] = {{" \\  |  / ", " --(O)-- ", " /  |  \\ "}, {"  \\ | /  ", "  .-'-.  ", "~~~~~~~~~"}, {"  .--.  *", " (  (     ", "  `--'  ."}};
+        const char* const* a = art[w.sky < 0.25 ? 0 : w.sky < 0.75 ? 1 : 2];
+        for (int r = 0; r < 3; r++)
+            for (int k = 0; k < 9; k++)
+                if (a[r][k] != ' ') cell(lx1 - 12 + k, ly + 1 + r, (char32_t)a[r][k], strchr("*.~", a[r][k]) ? dim : keyst);
+    }
     if (w.reels >= 0) {  // a cassette's two reels, turning ~8 times a second while it plays
         static const char32_t arc[] = {U'◜', U'◝', U'◞', U'◟'};
         char32_t r = w.reels ? arc[(now_ms() / 120) % 4] : U'○';

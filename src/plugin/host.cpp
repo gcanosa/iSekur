@@ -135,6 +135,7 @@ void plug::view_gone(Core& c) {  // a plugin went (disabled, removed, unloaded):
     if (!c.view.by.empty() && !up(c.view.by)) c.view_end();
     if (!c.nicklist_by.empty() && !up(c.nicklist_by)) nicklist_by(c, "");
     if (!c.fold_by.empty() && !up(c.fold_by)) fold_by(c, "");
+    if (!c.tint.by.empty() && !up(c.tint.by)) c.tint_end();  // glides back, it doesn't jump
     if (c.radio_on() && !up(c.radio.by)) c.radio_stop();
     if (c.pwin.open && !up(c.pwin.by)) c.pwin = Core::PWin{}, c.dirty = true, c.notify(Ev::PWIN, nullptr);
 }
