@@ -57,6 +57,9 @@ From source (C++17, GNU make, OpenSSL 1.1+/LibreSSL, PAM; termbox2 and libvterm 
 
     make && sudo make install     # gmake on *BSD
 
+On Debian, Ubuntu and WSL the headers come from `sudo apt install build-essential libssl-dev libpam0g-dev`
+(Fedora: `openssl-devel pam-devel`).
+
 Every push is built and tested on macOS, Linux (glibc and Alpine's musl), FreeBSD, OpenBSD, NetBSD and Cygwin.
 On the BSDs install GNU make first: `pkg install gmake` (FreeBSD), `pkg_add gmake` (NetBSD),
 `pkg_add gmake libiconv` (OpenBSD, which has no PAM, so no `/shell` login there).
