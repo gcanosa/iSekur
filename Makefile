@@ -6,9 +6,16 @@
 #   make install  PREFIX=/usr/local (default) DESTDIR= for staging; use the
 #                 same PREFIX for build and install: the themes path is compiled in
 #   make clean
+#   make JOBS=n   compile n files at once (default: one per core)
 
 CXX      ?= c++
 CC       ?= cc
+
+# one compile job per core; make JOBS=1 (or your own -j on GNU make 4+) to change it
+JOBS ?= $(shell getconf _NPROCESSORS_ONLN 2>/dev/null || echo 1)
+ifeq ($(findstring j,$(filter-out --%,$(MAKEFLAGS))),)
+  MAKEFLAGS += -j$(JOBS)
+endif
 
 # OpenSSL: pkg-config first, then Homebrew prefixes (macOS ships no headers),
 # then plain -lssl -lcrypto.
