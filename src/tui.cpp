@@ -216,6 +216,13 @@ static RGB readable(RGB c, RGB bg) {
     return out;
 }
 
+// eventshidemgr's row: the theme's accent (the plugin badge's color) as text, moved until it reads on the chat's background
+static Style fold_style(const Theme& T) {
+    Style s = T.get("default");
+    s.fg = readable(plugin_style(T).bg, s.bg);
+    return s;
+}
+
 // a word-wrapped question for a yes/no box
 static std::vector<std::string> wrap_words(const std::string& s, int w) {
     std::vector<std::string> out;
@@ -491,6 +498,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     case LK::NICK: case LK::MODE: case LK::TOPIC: marker = "--", ms = body = sty(T, "event", "info"); break;  // mirc: green, like joins
     default: marker = "--", ms = body = T.get("info"); break;
     }
+    if (l.badge_kind == 'f') body = fold_style(T);  // eventshidemgr's row: the theme's accent, apart from the chat
     if (auto em = T.lay("event_marker", ""); !em.empty() && l.kind != LK::MSG && l.kind != LK::NOTICE)  // mirc: "*"
         marker = l.kind == LK::INFO && !b->srv && b->type != BT::SHELL ? "" : em;  // home tab's banner and welcome: bare
     // the 🔒 (drawn, not in the text: a typed one can't pass for it) in a column of its own, opposite the time: at the
@@ -648,7 +656,8 @@ void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool 
     for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, x0, xend, T.get("nicklist"));
 }
 
-// eventshidemgr: the row for a run of join, part, quit and nick lines (newest first): "⇄ 3 joined (a, b, +1), 2 left ▸" (▾ open)
+// eventshidemgr: the row for a run of join, part, quit and nick lines (newest first): "⇄ 3 joined (a, b, +1), 2 left ▸" (▾ open),
+// drawn in the theme's accent (badge_kind 'f', see fold_style) so it stands out from the chat on every theme
 static Line fold_line(const std::vector<const Line*>& run, bool open, bool names) {
     int n[3] = {0, 0, 0};
     std::vector<std::string> who[3];
@@ -668,7 +677,9 @@ static Line fold_line(const std::vector<const Line*>& run, bool open, bool names
         for (size_t i = 0; i < who[k].size() && i < 3; i++) t += (i ? ", " : "") + who[k][i];
         t += (who[k].size() > 3 ? ", +" + std::to_string(who[k].size() - 3) : "") + ")";
     }
-    return Line{(open ? run.back() : run.front())->ts, LK::NICK, "", t + (open ? " \u25BE" : " \u25B8")};
+    Line row{(open ? run.back() : run.front())->ts, LK::NICK, "", t + (open ? " \u25BE" : " \u25B8")};
+    row.badge_kind = 'f';
+    return row;
 }
 
 void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {

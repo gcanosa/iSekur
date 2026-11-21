@@ -592,10 +592,11 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
 #msgs .older { color: var(--muted); text-align: center; font-size: calc(12px * var(--z, 1)); padding: 4px; }
 .quiet:not(.evq) .l.noise, .smart .l.noise.idle { display: none; }  /* /quiet: joins, parts, quits and nick changes; smart: of people who haven't spoken lately */
-/* eventshidemgr (isekur.fold): a run of them is one row, "⇄ 3 joined, 2 left ▸", a click opens it. .fc: a line in a folded run; .nf: not folded (nick
+/* eventshidemgr (isekur.fold): a run of them is one row, "⇄ 3 joined, 2 left ▸" in the theme's accent, a click opens it. .fc: a line in a folded run; .nf: not folded (nick
    changes with nicks off), so /quiet still hides it even when it keeps the summary rows (.evq) */
 .quiet.evq .l.noise.nf, .l.fc, .l.fsum.off { display: none !important; }
 .l.fsum { cursor: pointer; }
+.l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); }  /* the theme's accent, made to read: applyTheme sets --fold-fg */
 .l.fsum .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .l.fsum:hover .tx, .l.fsum:focus-visible .tx { text-decoration: underline; }
 /* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
@@ -1654,6 +1655,8 @@ function applyTheme() {
   const dc = dialogColors();
   set("--dlg-bg", dc.bg), set("--dlg-dim", dc.dim), set("--dlg-sel-fg", dc.selFg), set("--dlg-sel-bg", dc.selBg), set("--dlg-title", dc.title), set("--more-fg", dc.more), set("--sth-fg", dc.sth);
   set("--on-accent", oa.text), set("--accent-veil", oa.veil);
+  const fa = rgb((el.plugin || {}).bg), ff = fa && chatBg && readOn([fa], chatBg);  // eventshidemgr's rows: the plugin badge's accent, until it reads on the chat
+  set("--fold-fg", ff && hexc(ff));
   // light or dark by the background's brightness: native controls, scrollbars and hovers match
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
   document.documentElement.style.colorScheme = lum > 140 ? "light" : "dark";
