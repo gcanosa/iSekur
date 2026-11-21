@@ -81,7 +81,9 @@ CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
 LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS) $(ICONV_LIBS)
 
-SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/bnc.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp src/plugin.cpp src/logs.cpp src/fifo.cpp src/radio.cpp
+# the plugin engine (src/plugin/): see internal.h for what each file holds
+PLUG := host api_core api_ui api_media catalog radio
+SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/bnc.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp src/logs.cpp src/fifo.cpp $(PLUG:%=src/plugin/%.cpp)
 VTERM := $(wildcard vendor/libvterm/src/*.c)
 LUA  := $(wildcard vendor/lua/*.c)
 OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
@@ -92,6 +94,7 @@ isekur: $(OBJ)
 	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 build/%.o: src/%.cpp | build
+	@mkdir -p $(@D)
 	$(CXX) $(CXXFLAGS) -MMD -MP -c -o $@ $<
 
 build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
@@ -149,7 +152,7 @@ TEST_FLAGS := $(shell $(CXX) -fno-var-tracking-assignments -E -x c++ /dev/null >
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/bnc.o build/e2e.o build/exec.o build/fifo.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o build/plugin.o build/radio.o build/logs.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/bnc.o build/e2e.o build/exec.o build/fifo.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o $(PLUG:%=build/plugin/%.o) build/logs.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
 	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:
@@ -170,5 +173,5 @@ uninstall:
 clean:
 	rm -rf build isekur
 
--include $(wildcard build/*.d)
+-include $(wildcard build/*.d build/plugin/*.d)
 .PHONY: all test debug notwitch install uninstall clean FORCE

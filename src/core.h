@@ -299,7 +299,7 @@ struct Dcc {
 };
 
 struct Core;
-struct Plugin;  // plugin.cpp
+struct Plugin;  // src/plugin/internal.h
 struct CatalogJob;
 std::string sha256_of(const std::string& s);  // hex
 // a plugin catalog's index.json: [{"name": ..., "version": ..., "api": 1, "description": ..., "sha256": ...}]
@@ -517,7 +517,7 @@ struct Core {
     // ox, oy: where in the cell, in eighths (isekur.put at x = 3.5: 3, ox 4); the webchat draws there, the terminal can't
     struct SCell { uint32_t ch = 0; int fg = 0; uint8_t ox = 0, oy = 0;
                    bool operator!=(const SCell& o) const { return ch != o.ch || fg != o.fg || ox != o.ox || oy != o.oy; } };
-    bool screen_frame(int w, int h, const char* ui, std::vector<SCell>& g);  // plugin.cpp; false: none (or it failed and ended)
+    bool screen_frame(int w, int h, const char* ui, std::vector<SCell>& g);  // src/plugin/api_ui.cpp; false: none (or it failed and ended)
     void screen_end();
     // a plugin's focus view (isekur.view, the zen plugin): only the chat, in a centered column, the lines before the last
     // `lines` dimmed, in the view's own theme, on the terminal and/or the webchat. Nothing is saved: ending it, or the
@@ -540,7 +540,7 @@ struct Core {
     std::string fold_by;
     struct FoldCfg { bool on = false, names = false, nicks = true, quiet = false; };
     FoldCfg fold_cfg(const Buffer* b) const;
-    // a plugin's radio (API 12, radio.cpp): one stream at a time, decoded by ffmpeg to MP3 and fanned out to the webchat's
+    // a plugin's radio (API 12, src/plugin/radio.cpp): one stream at a time, decoded by ffmpeg to MP3 and fanned out to the webchat's
     // <audio> (GET /radio/stream) and, when asked, a player on this machine. A YouTube link (a 24/7 live) goes through yt-dlp
     // first: the audio-only URL it finds works only from this machine's address, so the audio can't go to a phone directly
     struct Radio {
@@ -756,7 +756,7 @@ struct Core {
     void e2e_chan(Buffer* b, const std::string& pass);
     void e2e_keep(Server* s, bool now);
 
-    // Lua plugins (plugin.cpp): <config dir>/plugins/<name>.lua, loaded while [plugin.<name>] (or an
+    // Lua plugins (src/plugin/): <config dir>/plugins/<name>.lua, loaded while [plugin.<name>] (or an
     // @net, @net/#chan override) says enabled = on. Last member: unloaded first, with the rest still there
     std::string plugin_dir() const;
     void plugins_sync();  // load the enabled ones, unload the rest
