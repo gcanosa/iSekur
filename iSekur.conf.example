@@ -23,7 +23,7 @@ scrollback = 2000           ; lines kept in memory per tab (min 100); fewer = le
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
 mouse     = on               ; click tabs/nicks, wheel scrolls, drag copies; F3 toggles
 tab_bar_position = top       ; top | left | right: the terminal's tabs as a tree down that side, like the webchat's
-tab_bar_width =              ; that side tab list's width in columns, 10-60 (empty: the theme's, 20); a drag on its edge sets it too
+tab_bar_width =              ; the terminal's side tab list width in columns, 10-60 (empty: the theme's, 20); a drag on its edge sets it too (webchat: web_tree_width)
 nicklist_side = right        ; right | left: the terminal's user list beside the chat
 nicklist_width =             ; its width in columns, 8-40 (empty: the theme's, 18); a drag on its │ sets it too
 show_guide = on              ; open the first steps guide (/guide) at startup

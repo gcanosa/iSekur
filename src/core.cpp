@@ -2171,14 +2171,16 @@ void Core::exec(Buffer* b, const std::string& input) {
         }
         dirty = true;
         std::string shown = val.empty() ? "(default)" : secret(key) ? "********" : key == "perform" || sec == "aliases" ? perform_show(val) : val;  // "": back to the default
-        if (saved_now) { print(b, LK::INFO, argv[0] + " = " + shown + "  (saved)"); return; }
+        // the two tab list widths look alike: say which one this was
+        std::string twin = key == "tab_bar_width" ? "  (the terminal's; the webchat's is web_tree_width)" : key == "web_tree_width" ? "  (the webchat's; the terminal's is tab_bar_width)" : "";
+        if (saved_now) { print(b, LK::INFO, argv[0] + " = " + shown + twin + "  (saved)"); return; }
         print(b, LK::INFO, argv[0] + " = " + shown +
                                (sec.rfind("server.", 0) == 0 ? "  (used on the next /connect)"
                                 : svc_now                   ? ""
                                 : sec == "web"              ? "  (applies after /web restart)"
                                 : sec == "bnc"              ? "  (applies after /bnc restart)"
                                                             : "") +
-                               "  - /save writes it to the config");
+                               twin + "  - /save writes it to the config");
         return;
     }
     if (cmd == "ignore" || cmd == "unignore") {  // mIRC's: /ignore [-pcntidjkx] [-w] [-r] [-uN] nick|mask [type]
