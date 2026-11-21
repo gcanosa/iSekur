@@ -429,6 +429,8 @@ enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOC
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
     Ini set_was;       // /set: a key's value before its first unsaved change; set back to it, it's no longer unsaved
+    std::set<std::string> temp_servers;  // /server without -save: not in /servers, skipped by /save; /autojoin snap, /server -save or any command that saves its whole section keeps it
+    bool temp(const std::string& name) const { auto u = unsaved.find("server." + name); return temp_servers.count(name) && u != unsaved.end() && u->second.count("host"); }
     Ini defaults;      // iSekur.conf.example (compiled in) minus its example servers
     // what /set lists: every key in the config or the template, the config's value winning
     struct Setting { std::string key, val; };  // key: "nick", "web.port", "server.x.host"

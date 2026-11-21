@@ -543,14 +543,14 @@ void Bnc::control(Client& cl, const std::string& text) {
         Server* s = c.servers.size() > n ? c.servers.back().get() : c.active != was && c.active ? c.active->srv : nullptr;
         if (!s) { tell(cl, "Not added: iSekur's console says why"); return; }
         attach(cl, s, "");
-        tell(cl, s->cfg.name + " added; /msg *isekur save keeps it, then log in as " + user + "/" + s->cfg.name + ":<password>");
+        tell(cl, s->cfg.name + " added (add -save to keep it), then log in as " + user + "/" + s->cfg.name + ":<password>");
         c.print(c.bufs.front().get(), LK::INFO, "▶ BNC attached: " + cl.ip + " (" + cl.net + ")");
         return;
     }
     if (verb == "save") { c.exec(c.bufs.front().get(), "/save"); tell(cl, "Saved to iSekur's config"); return; }
     tell(cl, "networks: the networks iSekur has");
     tell(cl, "use <network>: go to one");
-    tell(cl, "server <host> [port] [-tls] [-name network]: add one and connect, e.g. server irc.sekurnet.org 6697 -tls -name sekurnet");
+    tell(cl, "server <host> [port] [-tls] [-name network] [-save]: add one and connect (-save keeps it), e.g. server irc.sekurnet.org 6697 -tls -name sekurnet -save");
     tell(cl, "save: write iSekur's config");
 }
 

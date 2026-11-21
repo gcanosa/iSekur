@@ -65,7 +65,7 @@ On the BSDs install GNU make first: `pkg install gmake` (FreeBSD), `pkg_add gmak
 `pkg_add gmake libiconv` (OpenBSD, which has no PAM, so no `/shell` login there).
 
 Run `isekur`. The first start writes `~/.config/isekur/isekur.conf` and opens a short guide.
-After that, `/server irc.sekurnet.org 6697 -tls` and `/join #iSekur`. All the rest is in the
+After that, `/server irc.sekurnet.org 6697 -tls -save` (without `-save` it is only for this run) and `/join #iSekur`. All the rest is in the
 [docs](https://gcanosa.github.io/isekur-site/docs.html), the man page and `/help`.
 
 ## Support

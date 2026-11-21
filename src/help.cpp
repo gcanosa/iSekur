@@ -12,7 +12,7 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. The options can come before the address too, as in irssi: /server -host vhost.example.org irc.sekurnet.org 6697 -tls. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick), -host the local hostname or IP to connect from "
@@ -28,8 +28,10 @@ static const std::vector<CmdInfo> CMDS = {
      "before it connects (see /login). An IPv6 address works bare or "
      "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). A ws:// or wss:// URL as the host "
      "is IRC over WebSocket (IRCv3), for a network that only listens that way or sits behind an HTTPS proxy: the scheme "
-     "says TLS, the URL the port (443 or 80 without one) and the path, -noverify still applies. The server is remembered "
-     "like /set does, so /save keeps it for the next start. Naming a server you already have "
+     "says TLS, the URL the port (443 or 80 without one) and the path, -noverify still applies. Without -save the "
+     "server is temporary: it stays out of /servers and the config, /save leaves it out, and it is gone at the next start. "
+     "/autojoin snap saves it with its channels, and so does -save (written at once, as in /server irc.sekurnet.org 6697 -tls -name sekurnet -save, "
+     "or /server sekurnet -save for one already open); so does anything else that saves a network's keys, like /autojoin add or /login. Naming a server you already have "
      "reconnects it. Twitch chat works too: /server irc.chat.twitch.tv 6697 -tls -name twitch -nick "
      "yourlogin, then /set server.twitch.password oauth:yourtoken and /connect twitch; /join #streamer "
      "(lowercase is done for you). Names, colors, badges, subs, raids, timeouts and room modes show up; "
@@ -39,7 +41,7 @@ static const std::vector<CmdInfo> CMDS = {
      "its [server.<name>] in the config (saved at once, comments kept), its tab, its logs folder and kept history follow, "
      "no reconnect needed (the name is only yours). Without the names it asks, for the tab you're in; the settings window's "
      "name row and r do the same.",
-     {"/server irc.sekurnet.org 6697 -tls -name sekurnet", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify", "/server irc.sekurnet.org 6697 -tls -host vhost.example.org", "/server irc.sekurnet.org 6697 -tls -6", "/server irc.sekurnet.org 6697 -tls -cmdspeed 1000 -cmdmax 8 -rawlog",
+     {"/server irc.sekurnet.org 6697 -tls -name sekurnet -save", "/server irc.sekurnet.org 6697 -tls", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify", "/server irc.sekurnet.org 6697 -tls -host vhost.example.org", "/server irc.sekurnet.org 6697 -tls -6", "/server irc.sekurnet.org 6697 -tls -cmdspeed 1000 -cmdmax 8 -rawlog",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "
@@ -511,7 +513,7 @@ static const std::vector<CmdInfo> CMDS = {
      "plain IRC on 127.0.0.1), then /bnc password. In the other client, add a server at the BNC's address and port "
      "with the server password user/network:password (e.g. me/sekurnet:secret; one network: me:secret). Each "
      "connection is one network. With no network (or one iSekur doesn't have) it still logs in, and /msg *isekur lists "
-     "(networks), picks (use name) or adds one (server irc.sekurnet.org 6697 -tls -name sekurnet; save keeps it). IRCv3 clients get what they ask for: chathistory (from iSekur's tabs, so they get no "
+     "(networks), picks (use name) or adds one (server irc.sekurnet.org 6697 -tls -name sekurnet -save keeps it). IRCv3 clients get what they ask for: chathistory (from iSekur's tabs, so they get no "
      "backlog and load their own), message-tags, echo-message, labeled-response, server-time, away, account and host "
      "changes, extended-join, multi-prefix; another iSekur is a full client of this one (/server host 6698 -tls -noverify, "
      "then its password). A bnc.motd file in the config's folder is their MOTD, read at each login. A client with a certificate whose SHA-256 is in /set bnc.certfp logs in with SASL EXTERNAL, no password (TLS only). /bnc alone shows where it listens and who is on; /bnc restart picks up changed "
@@ -746,10 +748,10 @@ static const std::vector<GuidePage> GUIDE = {
         G_TIP "Already connected? " G_CMD("/nick ") G_VAL("newnick") " changes it now, and iSekur remembers it.",
     }},
     {"Your first server", {
-        "One command connects, opens a tab for the server and remembers it:",
+        "One command connects, opens a tab for the server and, with " G_CMD("-save") ", remembers it:",
         "",
-        "  " G_CMD("/server irc.SekurNet.org 6697 -tls -name sekurnet"),
-        "  " G_CMD("/save") "         so it connects by itself next time",
+        "  " G_CMD("/server irc.SekurNet.org 6697 -tls -name sekurnet -save"),
+        "  " G_NOTE "without " G_CMD("-save") " it is for this run only (" G_CMD("/autojoin snap") " keeps it later)",
         "  " G_CMD("/join #iSekur") " say hi: iSekur's home, with help, news and feedback",
         "",
         G_HEAD("The pieces"),
@@ -993,7 +995,7 @@ static const std::vector<GuidePage> GUIDE = {
     }},
     {"You're ready", {
         G_OK "Set your nick:  " G_CMD("/set nick ") G_VAL("yournick"),
-        G_OK "Connect:        " G_CMD("/server irc.SekurNet.org 6697 -tls -name sekurnet"),
+        G_OK "Connect:        " G_CMD("/server irc.SekurNet.org 6697 -tls -name sekurnet -save"),
         G_OK "Join:           " G_CMD("/join #iSekur"),
         G_OK "Every time:     " G_CMD("/autojoin snap"),
         G_OK "Keep the rest:  " G_CMD("/save") "  (themes and autojoin keep themselves)",

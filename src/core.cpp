@@ -54,10 +54,10 @@ void Core::load_config() {
     for (auto& l : banner_lines(theme, opt_on(nullptr, "banner_mono", false))) print(home, LK::INFO, l);
     if (created)
         print(home, LK::INFO, "Wrote " + cfg_path + " with every setting: edit it, or /set key value and /save. "
-                              "Add a server with /server irc.sekurnet.org 6697 -tls -name sekurnet");
+                              "Add a server with /server irc.sekurnet.org 6697 -tls -name sekurnet -save");
     else if (!found)
         print(home, LK::INFO, "No config at " + cfg_path +
-                                  " - see iSekur.conf.example. Try /server irc.sekurnet.org 6697 -tls -name sekurnet");
+                                  " - see iSekur.conf.example. Try /server irc.sekurnet.org 6697 -tls -name sekurnet -save");
     print(home, LK::INFO, "Welcome to " + version_string() + ". /help lists commands.");
     print(home, LK::INFO, "\x03" "01,09" "\x02" " NEW HERE? " "\x0f" " Type " "\x03" "11" "\x02" "/guide" "\x0f"
                           " for a quick tour of the first steps and features");
@@ -739,7 +739,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
     };
     std::vector<std::string> nets;
     for (auto& [sec, kv] : cfg)
-        if (sec.rfind("server.", 0) == 0) nets.push_back(sec);
+        if (sec.rfind("server.", 0) == 0 && !temp(sec.substr(7))) nets.push_back(sec);  // a temporary /server isn't one to manage
     // [general], by topic; a key a network overrides says where
     for (auto& k : KEYS) {
         if (k.scope == 'n') continue;
@@ -816,6 +816,7 @@ bool Core::rename_server(Buffer* b, const std::string& from, const std::string& 
     std::string old_logs = t ? log_folder(t) : "";
     for (Ini* m : {&cfg, &unsaved, &set_was})
         if (m->count(os)) (*m)[ns] = std::move((*m)[os]), m->erase(os);
+    if (temp_servers.erase(from)) temp_servers.insert(to);
     auto ord = split(ini_get(cfg, "general", "server_order"), ',');
     if (std::find(ord.begin(), ord.end(), from) != ord.end()) {
         std::string v;
@@ -1053,6 +1054,7 @@ void Core::close(Buffer* b, const std::string& part_msg) {
         // a /server one not saved yet goes too, or a later /save would bring it back on the next start
         std::string sec = "server." + s->cfg.name;
         if (unsaved.count(sec) && unsaved[sec].count("host")) cfg.erase(sec), unsaved.erase(sec);
+        temp_servers.erase(s->cfg.name);
     } else if (b->type == BT::CHANNEL && b->joined && s) {  // /part, /close and Ctrl+W all end here
         std::string msg = part_msg.empty() ? bye(s, "part_message") : part_msg;
         s->send("PART " + b->name + (s->twitch() || msg.empty() ? "" : " :" + msg));  // Twitch has no part messages
@@ -2280,11 +2282,16 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "save") {
         if (!gate_what.empty() && pass_buf) { gate_save = true, print(b, LK::INFO, "Saving once the lock password is answered"); return; }  // a guarded /set waits for it: it goes in the file too
-        std::string err;
-        if (unsaved.empty()) { print(b, LK::INFO, "Nothing to save"); return; }
-        if (!ini_save(cfg_path, unsaved, err)) { print(b, LK::ERROR, err); return; }
-        unsaved.clear(), set_was.clear();
-        print(b, LK::INFO, "Saved " + cfg_path);
+        std::string err, held;  // held: temporary /server ones, kept out of the file
+        Ini part;
+        for (auto& [sec, kv] : unsaved)
+            if (sec.rfind("server.", 0) == 0 && temp(sec.substr(7))) held += (held.empty() ? "" : ", ") + sec.substr(7);
+            else part[sec] = kv;
+        std::string note = held.empty() ? "" : " (not " + held + ": a /server without -save; /autojoin snap or /server -save keeps it)";
+        if (part.empty()) { print(b, LK::INFO, "Nothing to save" + note); return; }
+        if (!ini_save(cfg_path, part, err)) { print(b, LK::ERROR, err); return; }
+        for (auto& [sec, kv] : part) unsaved.erase(sec), set_was.erase(sec);
+        print(b, LK::INFO, "Saved " + cfg_path + note);
         return;
     }
     if (cmd == "quit") {  // this tab's server only (mIRC's way); /exit closes iSekur
@@ -2346,11 +2353,11 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] | del name"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] | del name"); return; }
         std::string nick, port, login, name;
         std::vector<std::string> pos;  // the address, then the port
         std::vector<std::pair<std::string, std::string>> sets;  // config keys the options write: -host, -cap, -nocap, -cmdspeed, -cmdmax, -noproxy, -4, -6
-        bool tls = false, verify = true, rawlog_on = false;
+        bool tls = false, verify = true, rawlog_on = false, keep = false;
         // the options come before or after the address, like irssi's: /server -host vhost irc.sekurnet.org 6697 -tls
         for (size_t i = 0; i < argv.size(); i++) {
             const std::string& a = argv[i];
@@ -2361,6 +2368,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             else if (a == "-noproxy") sets.push_back({"noproxy", "true"});
             else if (a == "-4" || a == "-6") sets.push_back({"ip_version", a.substr(1)});
             else if (a == "-rawlog") rawlog_on = true;
+            else if (a == "-save") keep = true;
             else if (a == "-name" || a == "-nick" || a == "-login" || a == "-host" || a == "-cmdspeed" || a == "-cmdmax") {
                 if (i + 1 >= argv.size()) { print(b, LK::ERROR, a + " takes a value (/help server)"); return; }
                 const std::string& v = argv[++i];
@@ -2406,13 +2414,14 @@ void Core::exec(Buffer* b, const std::string& input) {
             if (sv->cfg.name == name) {  // the options of a known one that set something: kept, then the reconnect
                 for (auto& [k, v] : sets) cfg[sec][k] = unsaved[sec][k] = v;
                 sv->cfg = server_cfg(name), load_flood(sv.get());
+                if (keep && save_section(*this, sec, b)) print(b, LK::INFO, name + " saved");
                 if (rawlog_on) rawlog(sv->status, "on");
                 connect(sv.get());
                 select(sv->status);
                 return;
             }
         if (port.empty() || (tls && port == "6667")) port = tls ? "6697" : "6667";
-        // remembered like /set, so /save keeps it for the next start
+        // in the config for this run (unsaved: /autojoin snap writes the whole section), a /save leaves it out; -save writes it now
         for (auto& [k, v] : std::map<std::string, std::string>{
                  {"host", host}, {"port", port},
                  {"tls", tls ? "true" : "false"}, {"tls_verify", verify ? "true" : "false"}})
@@ -2422,6 +2431,10 @@ void Core::exec(Buffer* b, const std::string& input) {
         ServerCfg sc = server_cfg(name);
         Server* ns = add_server(sc);
         select(ns->status);
+        if (!keep) {
+            temp_servers.insert(name);
+            info_note(ns->status, "Not kept: gone at the next start. /autojoin snap saves it with its channels, or /server " + name + " -save");
+        } else if (save_section(*this, sec, ns->status)) print(ns->status, LK::INFO, name + " saved");
         if (rawlog_on) rawlog(ns->status, "on");  // before it connects: the handshake is in it
         // -login: its questions first, since the password and the certificate go out with the connection
         if (login.empty()) connect(ns);

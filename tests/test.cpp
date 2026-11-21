@@ -1549,6 +1549,38 @@ int main() {
         std::swap(core.cfg_path, path);
     }
 
+    // /server without -save is temporary: out of /servers (setting_rows), left out by /save, kept by -save or /autojoin snap
+    {
+        std::string path = "build/test-servertemp.conf";
+        { std::ofstream f(path); f << "[general]\nnick = me\n"; }
+        std::swap(core.cfg_path, path);
+        auto listed = [&](const char* n) {
+            for (auto& r : core.setting_rows())
+                if (r.sec == std::string("server.") + n) return true;
+            return false;
+        };
+        auto in_file = [&](const char* n) { Ini f; return ini_load(core.cfg_path, f) && f.count(std::string("server.") + n); };
+        core.exec(home, "/server 127.0.0.1 1 -name tmp1");
+        assert(core.temp("tmp1") && !listed("tmp1"));
+        core.exec(home, "/save");
+        assert(!in_file("tmp1") && core.temp("tmp1") && home->lines.back().text.find("not tmp1") != std::string::npos);
+        core.exec(home, "/server tmp1 -save");  // a known one: written now
+        assert(!core.temp("tmp1") && listed("tmp1") && in_file("tmp1"));
+        core.exec(home, "/server 127.0.0.1 1 -name tmp2 -save");
+        assert(!core.temp("tmp2") && listed("tmp2") && in_file("tmp2"));
+        core.exec(home, "/server 127.0.0.1 1 -name tmp3");
+        assert(core.temp("tmp3") && !in_file("tmp3"));
+        for (auto& sv : core.servers)
+            if (sv->cfg.name == "tmp3") core.exec(sv->status, "/autojoin snap here");  // what is open on it, with its channels
+        assert(!core.temp("tmp3") && listed("tmp3") && in_file("tmp3"));
+        core.exec(home, "/server 127.0.0.1 1 -name tmp4");
+        core.exec(home, "/server del tmp4");
+        assert(!core.temp("tmp4") && !in_file("tmp4"));
+        for (auto n : {"tmp1", "tmp2", "tmp3"}) core.exec(home, std::string("/server del ") + n);
+        remove(core.cfg_path.c_str());
+        std::swap(core.cfg_path, path);
+    }
+
     // /server with an IPv6 address: bare, or [addr]:port; the name is the address with - for its :
     {
         std::string path = "build/test-server6.conf";
