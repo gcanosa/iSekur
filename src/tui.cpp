@@ -648,6 +648,29 @@ void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool 
     for (int y = top + 1 + (int)v.size(); y < top + ch; y++) fill(y, x0, xend, T.get("nicklist"));
 }
 
+// eventshidemgr: the row for a run of join, part, quit and nick lines (newest first): "⇄ 3 joined (a, b, +1), 2 left ▸" (▾ open)
+static Line fold_line(const std::vector<const Line*>& run, bool open, bool names) {
+    int n[3] = {0, 0, 0};
+    std::vector<std::string> who[3];
+    for (auto it = run.rbegin(); it != run.rend(); ++it) {
+        const Line& l = **it;
+        int k = l.kind == LK::JOIN ? 0 : l.kind == LK::NICK ? 2 : 1;  // parts and quits both left
+        n[k]++;
+        if (std::find(who[k].begin(), who[k].end(), l.nick) == who[k].end()) who[k].push_back(l.nick);
+    }
+    static const char* W[3] = {"joined", "left", "renamed"};
+    std::string t = "\u21C4 ";
+    for (int k = 0; k < 3; k++) {
+        if (!n[k]) continue;
+        t += (t.size() > 4 ? ", " : "") + std::to_string(n[k]) + " " + W[k];
+        if (!names) continue;
+        t += " (";
+        for (size_t i = 0; i < who[k].size() && i < 3; i++) t += (i ? ", " : "") + who[k][i];
+        t += (who[k].size() > 3 ? ", +" + std::to_string(who[k].size() - 3) : "") + ")";
+    }
+    return Line{(open ? run.back() : run.front())->ts, LK::NICK, "", t + (open ? " \u25BE" : " \u25B8")};
+}
+
 void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
     const Theme& T = c.look(false);
     // a shell tab: its terminal screen, unless scrolled back into what went off the top
@@ -657,39 +680,70 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
         draw_term(term, y, h, w, x);
         return;
     }
-    bool hide = b->quiet || (zen && !c.view.events);  // join/part/quit lines: a quiet tab's, and the focus view's unless it shows them
-    auto hidden = [&](const Line& l) { return noise(l) && (hide || (b->smart && l.idle)); };  // smart: only those of people who haven't spoken lately
+    auto fc = c.fold_cfg(b);  // eventshidemgr: runs of join/part/quit lines as one row, a click opens them
+    bool zhide = zen && !c.view.events;  // the focus view hides them unless it shows them
+    bool hide = zhide || (b->quiet && !(fc.on && fc.quiet));  // join/part/quit lines: a quiet tab's (its summary rows stay when the plugin keeps them) and the focus view's
+    bool fold = fc.on && !zhide;
+    auto foldable = [&](const Line& l) { return noise(l) && (fc.nicks || l.kind != LK::NICK); };
+    auto hidden = [&](const Line& l) { return noise(l) && (hide || (b->smart && l.idle) || (fold && b->quiet && !foldable(l))); };  // smart: only those of people who haven't spoken lately
     if (b->scroll)  // scrolled back: the lines that came in since push the view up by all their rows, not one
         for (auto it = b->lines.rbegin(); it != b->lines.rend() && b->scroll_new > 0; ++it, b->scroll_new--)
-            if (!hidden(*it)) b->scroll += (int)wrap(c, *it, b, w, true).size();
+            if (!hidden(*it) && !(fold && foldable(*it))) b->scroll += (int)wrap(c, *it, b, w, true).size();  // ponytail: a folded line counts no rows, so a new join may shift the view by one
     b->scroll_new = 0;
     std::vector<Row> rows;  // bottom-up
     std::vector<CopyRow> meta;  // rows' copy info, y filled in when drawn
     std::vector<const Line*> lof;  // each row's line (timestamp_hover)
     std::vector<char> dim;  // the focus view: rows of the lines before the last c.view.lines (none while scrolled back)
+    std::vector<long long> fk;  // a folded run's row: the run's key (its first line's number), else -1
+    std::deque<Line> synth;  // the summary rows' lines, alive while this frame is drawn
     int need = h + b->scroll, nth = 0;
-    size_t n = 0;
-    for (auto it = b->lines.rbegin(); it != b->lines.rend() && (int)rows.size() < need; ++it, ++n) {
-        if (b->unread && n == (size_t)b->unread) {  // read marker above the new lines
-            Row mk;
-            std::string bar = "── new ";
-            for (int k = 7; k < w; k++) bar += "─";
-            cells(mk, bar, sty(T, "marker", "separator"), false);
-            rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1}), lof.push_back(nullptr), dim.push_back(zen && !b->scroll && nth >= c.view.lines);  // with the older lines it marks
-        }
-        if (hidden(*it)) continue;
+    long long nl = (long long)b->lines.size();
+    auto put = [&](const Line& ln, int id, long long key, const Line* hov) {
         WrapInfo wi;
-        auto r = wrap(c, *it, b, w, b->scroll > 0, nullptr, &wi);
-        int id = (int)n + 1000000 * (x + 1);  // one per line, per pane
+        auto r = wrap(c, ln, b, w, b->scroll > 0, nullptr, &wi);
         for (size_t k = r.size(); k-- > 0;) {
             CopyRow cr{0, x, x + wi.indent, 0, id, k == 0, wi.ts, wi.marker, -1, -1};
             if (k < wi.bw.size()) cr.bend = cr.bx + wi.bw[k];
             else cr.bend = x + width(r[k]), cr.id = -1;  // a link preview's row: a line of its own
             if (k == 0 && wi.tsx >= 0) cr.tsx0 = x + wi.tsx, cr.tsx1 = cr.tsx0 + wi.tsw;
-            meta.push_back(cr), lof.push_back(&*it);
+            meta.push_back(cr), lof.push_back(hov ? hov : &ln), fk.push_back(key);
         }
         rows.insert(rows.end(), r.rbegin(), r.rend());
         dim.insert(dim.end(), r.size(), zen && !b->scroll && nth++ >= c.view.lines);
+    };
+    for (long long n = 0; n < nl && (int)rows.size() < need; n++) {
+        if (b->unread && n == b->unread) {  // read marker above the new lines
+            Row mk;
+            std::string bar = "── new ";
+            for (int k = 7; k < w; k++) bar += "─";
+            cells(mk, bar, sty(T, "marker", "separator"), false);
+            rows.push_back(mk), meta.push_back({0, x, x, x, -2, false, "", "", -1, -1}), lof.push_back(nullptr), fk.push_back(-1), dim.push_back(zen && !b->scroll && nth >= c.view.lines);  // with the older lines it marks
+        }
+        const Line& ln = b->lines[(size_t)(nl - 1 - n)];
+        if (hidden(ln)) continue;
+        int base = 1000000 * (x + 1);  // one id per line, per pane
+        if (!fold || !foldable(ln)) { put(ln, (int)n + base, -1, nullptr); continue; }
+        std::vector<const Line*> run;  // this run of join/part/quit lines, newest first (ri: how far from the end each is)
+        std::vector<long long> ri;
+        long long last = n, n2 = n;
+        for (; n2 < nl && !(b->unread && n2 == b->unread && n2 > n); n2++) {  // the read marker ends a run
+            const Line& l2 = b->lines[(size_t)(nl - 1 - n2)];
+            if (hidden(l2)) continue;
+            if (!foldable(l2)) break;
+            run.push_back(&l2), ri.push_back(n2), last = n2;
+        }
+        if (run.size() < (b->quiet ? 1u : 2u)) {  // a lone join stays a line (in a quiet tab it has no other way to show)
+            for (size_t i = 0; i < run.size(); i++) put(*run[i], (int)ri[i] + base, -1, nullptr);
+            n = n2 - 1;
+            continue;
+        }
+        long long key = b->added - 1 - last;
+        bool open = fold_open.count({b->id, key}) > 0;
+        if (open)
+            for (size_t i = 0; i < run.size(); i++) put(*run[i], (int)ri[i] + base, -1, nullptr);
+        synth.push_back(fold_line(run, open, fc.names));
+        put(synth.back(), -2, key, open ? run.back() : run.front());
+        n = n2 - 1;
     }
     if ((int)rows.size() < need) b->scroll = std::max(0, (int)rows.size() - h);
     if (ts_hover && mouse_on) {  // the times show only on the line under the mouse, fading in and out
@@ -732,6 +786,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             }
         draw_row(x, y + h - 1 - k, x + w, rows[idx]);
         meta[idx].y = y + h - 1 - k, crows.push_back(meta[idx]);
+        if (fk[idx] >= 0) fhits.push_back({y + h - 1 - k, x, x + w, b->id, fk[idx]});
     }
 }
 
@@ -769,7 +824,8 @@ void Tui::draw() {
                  c.screen_by.empty() ? "-" : c.screen_by.c_str());
         crumb_state(st);
     }
-    hits.clear(), crows.clear(), nl_x = -1;
+    hits.clear(), crows.clear(), fhits.clear(), nl_x = -1;
+    if (b && b->id != fold_tab) fold_tab = b->id, fold_open.clear();  // another tab: every opened run folds up again
     zen = c.view_on(false);
     if (!c.locked || c.screen_by.empty()) peek_at = 0;
     long long la = c.lock_anim ? now_ms() - c.lock_anim_at : 0;
@@ -3699,6 +3755,12 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (over_chat) {
+        for (auto& fh : fhits)  // eventshidemgr's row: a click opens or folds the run
+            if (fh.y == y && x >= fh.x0 && x < fh.x1) {
+                if (!fold_open.erase({fh.bid, fh.key})) fold_open.insert({fh.bid, fh.key});
+                c.dirty = true;
+                return;
+            }
         Buffer* b = c.active;
         std::string w = word_at(x, y);
         // *channels: a click on the Channel or Users header sorts by it

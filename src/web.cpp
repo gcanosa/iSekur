@@ -920,6 +920,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
         if (last == nicks) nicks.clear();
         else last = nicks;
     }
+    auto fc = c.fold_cfg(b);  // eventshidemgr: how the page folds runs of joins, parts and quits (1 on, 2 names, 4 nicks, 8 keep in /quiet)
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) + ",\"net\":" + json_str(s ? s->cfg.name : "") +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
@@ -931,6 +932,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
                                                 ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
            ",\"typing\":[" + typing + "]" + (c.nicklist_colored(b) ? ",\"nc\":1" : "") +
+           (fc.on ? ",\"ef\":" + std::to_string(1 | (fc.names ? 2 : 0) | (fc.nicks ? 4 : 0) | (fc.quiet ? 8 : 0)) : "") +
            ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + (nicks.empty() ? "" : ",\"nicks\":" + nicks) + "}";
 }
 

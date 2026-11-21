@@ -1194,6 +1194,9 @@ void Core::plugins_reshow() {
         for (auto& l : bp->lines) changed |= show(bp.get(), l);
         if (changed) dirty = true, notify(Ev::CLEAR, bp.get());  // the webchat gets the tab's lines again
     }
+    if (!fold_by.empty())  // eventshidemgr's settings (names, nicks, quiet, enabled) may have changed: the screens draw the rows again
+        for (auto& bp : bufs)
+            if (bp->type == BT::CHANNEL) dirty = true, notify(Ev::BUFFER, bp.get());
 }
 
 void Core::fold(Buffer* st) {

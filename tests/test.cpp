@@ -3684,6 +3684,33 @@ end)
             sy.exec(ph, "/plugin disable nc@other");
             assert(sy.nicklist_by.empty() && !sy.nicklist_colored(yb));  // it went with its plugin
         }
+        {  // API 14: isekur.fold (eventshidemgr): on where the plugin is, its names / nicks / quiet settings per channel, gone with the plugin
+            FILE* f = fopen((dir + "/plugins/fo.lua").c_str(), "w");
+            fputs(R"LUA(
+isekur.setting("names", false, "c", "n")
+isekur.setting("nicks", true, "c", "k")
+isekur.setting("quiet", "hide", "c", "q", {"hide", "fold"})
+isekur.command("fo", "", function() print(isekur.fold(), isekur.api >= 14) isekur.fold(true) end)
+)LUA", f), fclose(f);
+            sy.exec(ph, "/plugin enable fo");
+            sy.exec(yb, "/fo");
+            assert(ph->lines.back().text == "false true" && sy.fold_by == "fo");
+            auto fc = sy.fold_cfg(yb);
+            assert(fc.on && !fc.names && fc.nicks && !fc.quiet);
+            assert(!sy.fold_cfg(ph).on);  // the console has no network
+            sy.exec(ph, "/plugin set fo names on");
+            sy.exec(ph, "/plugin set fo@y quiet fold");
+            sy.exec(ph, "/plugin set fo@y/#y nicks off");
+            fc = sy.fold_cfg(yb);
+            assert(fc.on && fc.names && !fc.nicks && fc.quiet);
+            Buffer* yq = sy.open(ys, BT::QUERY, "bob");
+            assert(!sy.fold_cfg(yq).on);  // channels only
+            sy.exec(ph, "/plugin enable fo@other");
+            sy.exec(ph, "/plugin disable fo");  // on in another network only: loaded, not folding here
+            assert(sy.fold_by == "fo" && !sy.fold_cfg(yb).on);
+            sy.exec(ph, "/plugin disable fo@other");
+            assert(sy.fold_by.empty() && !sy.fold_cfg(yb).on);  // it went with its plugin
+        }
         sy.plugins.clear();
         assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
     }

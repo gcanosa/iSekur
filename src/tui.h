@@ -86,6 +86,12 @@ private:
     // id: the line it shows (rows of one id join up), -2 the "new" marker (never copied). bx..bend: its text
     struct CopyRow { int y, x0, bx, bend, id; bool first; std::string ts, marker; int tsx0, tsx1; };
     std::vector<CopyRow> crows;
+    // eventshidemgr (isekur.fold): a run of joins, parts and quits is one row; a click opens it. fold_open: the runs opened (tab id,
+    // the number of the run's first line), all closed again when another tab comes up. fhits: those rows as last drawn
+    std::set<std::pair<int, long long>> fold_open;
+    int fold_tab = -1;
+    struct FoldHit { int y, x0, x1, bid; long long key; };
+    std::vector<FoldHit> fhits;
     // clickable regions from the last draw(): tabs, activity numbers, nicks
     struct Hit { int y, x0, x1; int tab; std::string nick; };
     int tab_drag = -1;  // the id of the tab pressed on: released on another of its server's tabs, it moves there

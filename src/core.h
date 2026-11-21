@@ -318,7 +318,7 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 13 // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 14 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // a plugin event's fields besides srv and target: strings, booleans and whole numbers
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool, int>>>;
@@ -533,6 +533,12 @@ struct Core {
     // a plugin's colored user list (isekur.nicklist_colors, nickcolors): each nick in the color its lines have, in the tabs where the plugin is on
     std::string nicklist_by;
     bool nicklist_colored(const Buffer* b) const;
+    // a plugin's folded runs of joins, parts, quits and nick changes (isekur.fold, eventshidemgr): one row per run ("3 joined,
+    // 2 left ▸") that a click opens, in the tabs where the plugin is on. Display only. The plugin's settings `names`, `nicks`
+    // and `quiet` (hide | fold) say how: quiet = fold keeps the summary rows in a /quiet tab (the lines themselves stay hidden)
+    std::string fold_by;
+    struct FoldCfg { bool on = false, names = false, nicks = true, quiet = false; };
+    FoldCfg fold_cfg(const Buffer* b) const;
     // a plugin's radio (API 12, radio.cpp): one stream at a time, decoded by ffmpeg to MP3 and fanned out to the webchat's
     // <audio> (GET /radio/stream) and, when asked, a player on this machine. A YouTube link (a 24/7 live) goes through yt-dlp
     // first: the audio-only URL it finds works only from this machine's address, so the audio can't go to a phone directly

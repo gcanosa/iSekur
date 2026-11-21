@@ -591,7 +591,13 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 .l.hl { background: var(--hilight_line-bg, #ff00aa10); }
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
 #msgs .older { color: var(--muted); text-align: center; font-size: calc(12px * var(--z, 1)); padding: 4px; }
-.quiet .l.noise, .smart .l.noise.idle { display: none; }  /* /quiet: joins, parts, quits and nick changes; smart: of people who haven't spoken lately */
+.quiet:not(.evq) .l.noise, .smart .l.noise.idle { display: none; }  /* /quiet: joins, parts, quits and nick changes; smart: of people who haven't spoken lately */
+/* eventshidemgr (isekur.fold): a run of them is one row, "⇄ 3 joined, 2 left ▸", a click opens it. .fc: a line in a folded run; .nf: not folded (nick
+   changes with nicks off), so /quiet still hides it even when it keeps the summary rows (.evq) */
+.quiet.evq .l.noise.nf, .l.fc, .l.fsum.off { display: none !important; }
+.l.fsum { cursor: pointer; }
+.l.fsum .tx { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.l.fsum:hover .tx, .l.fsum:focus-visible .tx { text-decoration: underline; }
 /* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
    before the last few dimmed (zenDim marks those with .zf); Esc on an empty line leaves it */
 #app.zen { grid-template-columns: 1fr !important; grid-template-rows: 1fr auto !important; grid-template-areas: "msgs" "input" !important; }
@@ -599,7 +605,7 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 #app.zen #msgs, #app.zen #input { padding-left: max(16px, calc((100% - var(--zenw, 80ch)) / 2)); padding-right: max(16px, calc((100% - var(--zenw, 80ch)) / 2)); }
 #app.zen #msgs { padding-top: 2em; display: flex; flex-direction: column; }
 #app.zen #msgs > :first-child { margin-top: auto; }  /* a short chat rests on the input, where the eyes are */
-#app.zen:not(.zenev) #msgs .l.noise { display: none; }
+#app.zen:not(.zenev) #msgs .l.noise, #app.zen:not(.zenev) #msgs .l.fsum { display: none; }
 #app.zen #msgs .l:not(.zf) { opacity: .45; transition: opacity .2s; }
 @media (hover: hover) { #app.zen #msgs .l:not(.zf):hover { opacity: .9; } }
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
@@ -1131,7 +1137,8 @@ function alignEm(d) {
   em.style.marginLeft = Math.max(0, r.left - d.getBoundingClientRect().left - parseFloat(getComputedStyle(d).paddingLeft)) + "px";
 }
 
-function quietClass(el, q) { el.classList.toggle("quiet", q === 1); el.classList.toggle("smart", q === 2); }  // /quiet: 1 all, 2 smart
+// ef (eventshidemgr, 1 on, 2 names, 4 nicks, 8 keep in /quiet): evq = a /quiet tab that still shows its summary rows
+function quietClass(el, q, ef) { el.classList.toggle("quiet", q === 1); el.classList.toggle("smart", q === 2); el.classList.toggle("evq", q === 1 && (ef & 9) === 9); }  // /quiet: 1 all, 2 smart
 const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
 function lineEl(b, l) {
   const d = document.createElement("div");
@@ -1168,6 +1175,50 @@ function lineEl(b, l) {
   if (l.id) d.dataset.lid = l.id;
   const em = l.em && embedsEl(l.em); if (em) d.append(em), requestAnimationFrame(() => alignEm(d));
   return d;
+}
+
+// eventshidemgr (isekur.fold): a run of joins, parts, quits and nick changes folds into one row, "⇄ 3 joined, 2 left ▸"; a click opens it, and
+// the tab drawn again folds them all up. b.ef: 1 on, 2 names, 4 nick changes too, 8 kept in a /quiet tab. ponytail: a run whose top lines
+// scroll off the 2000 kept loses them from its count, and a run cut where older lines are loaded is two rows
+const FOLD_W = ["joined", "left", "renamed"];
+function addLine(parent, b, l) { const d = lineEl(b, l); parent.append(d); foldAdd(d, b, l); return d; }
+function foldAdd(d, b, l) {
+  const ef = b.ef | 0;
+  if (!(ef & 1) || !d.classList.contains("noise")) return;
+  if (!(ef & 4) && l.k === "nick") { d.classList.add("nf"); return; }  // a plain line then, which /quiet still hides
+  if (b.q === 1 && !(ef & 8)) return;  // /quiet hides them all
+  const p = d.previousElementSibling;
+  let r = p && p.run_;
+  if (!r) {
+    r = {lines: [], cnt: [0, 0, 0], who: [[], [], []], open: false, ef, min: b.q === 1 ? 1 : 2, ts0: "", ts1: ""};
+    const s = r.sum = lineEl(b, {ts: l.ts, tf: l.tf, k: "info", n: "", x: "", s: 0, h: 0});
+    s.classList.replace("k-info", "k-nick"); s.classList.add("fsum", "off");
+    s.tabIndex = 0; s.setAttribute("role", "button");
+    const flip = () => {
+      const m = s.parentElement, at = m && m.scrollHeight - m.scrollTop - m.clientHeight < 40;
+      r.open = !r.open; foldPaint(r); if (at) m.scrollTop = m.scrollHeight;  // at the bottom, the opened lines show
+    };
+    s.onclick = flip; s.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } };
+    d.before(s);
+  }
+  d.run_ = r; r.lines.push(d);
+  if (!(b.q === 2 && l.i)) {  // smart hides those of people who hadn't spoken lately: not counted
+    const k = l.k === "join" ? 0 : l.k === "nick" ? 2 : 1;
+    r.cnt[k]++; if (!r.who[k].includes(l.n)) r.who[k].push(l.n);
+    const ts = d.querySelector(".ts").textContent;
+    r.ts0 = r.ts0 || ts; r.ts1 = ts;
+  }
+  foldPaint(r);
+}
+function foldPaint(r) {
+  const n = r.cnt[0] + r.cnt[1] + r.cnt[2], on = n >= r.min;
+  r.sum.classList.toggle("off", !on);
+  for (const e of r.lines) e.classList.toggle("fc", on && !r.open);
+  const part = k => r.cnt[k] ? r.cnt[k] + " " + FOLD_W[k] + (r.ef & 2 ? " (" + r.who[k].slice(0, 3).join(", ") + (r.who[k].length > 3 ? ", +" + (r.who[k].length - 3) : "") + ")" : "") : "";
+  r.sum.querySelector(".tx").textContent = "\u21C4 " + [0, 1, 2].map(part).filter(Boolean).join(", ") + (r.open ? " \u25BE" : " \u25B8");
+  r.sum.querySelector(".ts").textContent = r.open ? r.ts0 : r.ts1;
+  r.sum.title = [0, 1, 2].filter(k => r.who[k].length).map(k => FOLD_W[k] + ": " + r.who[k].slice(0, 40).join(", ") + (r.who[k].length > 40 ? " …" : "")).join("\n");
+  r.sum.setAttribute("aria-expanded", r.open);
 }
 
 // nicks in the text (the channel's, the line's own, a query's peer, not yours): underlined on hover, right click = the nick menu
@@ -1444,12 +1495,12 @@ function renderMsgs() {
   if (was) was.top = atBottom() ? null : m.scrollTop;
   shownId = active; m.textContent = "";
   if (!b) return;
-  quietClass(m, b.q);
+  quietClass(m, b.q, b.ef);
   const frag = document.createDocumentFragment();
   const mark = b.unread > 0 && b.unread < b.lines.length ? b.lines.length - b.unread : -1;
   b.lines.forEach((l, i) => {
     if (i === mark) { const d = document.createElement("div"); d.className = "newmark"; d.textContent = "new"; frag.append(d); }
-    frag.append(lineEl(b, l));
+    addLine(frag, b, l);
   });
   m.append(frag); m.scrollTop = b.top != null ? b.top : b.name === "*channels" ? 0 : m.scrollHeight;  // the /list table opens at its top
   renderPane2();
@@ -1463,9 +1514,9 @@ function renderPane2() {
   const m = $("#msgs2"), b = bufs.get(split), lab = id => (order.indexOf(id) + 1) + ":" + label(bufs.get(id));
   m.textContent = "";
   if (!b) { $("#nicks2").textContent = ""; return; }
-  quietClass(m, b.q);
+  quietClass(m, b.q, b.ef);
   const frag = document.createDocumentFragment();
-  b.lines.forEach(l => frag.append(lineEl(b, l)));
+  b.lines.forEach(l => addLine(frag, b, l));
   m.append(frag); m.scrollTop = m.scrollHeight;
   if (bufs.has(active)) $("#msgs").dataset.label = lab(active);
   m.dataset.label = lab(split) + "   · click, F6 or Alt+O: type here";
@@ -1731,8 +1782,10 @@ function onMsg(ev) {
     if ((m.id === active || m.id === split) && m.act && document.hasFocus()) { m.act = 0; send({t: "read", buf: m.id}); }
     later(renderSide);
     if (dsrv.open && m.type === "status") later(renderSrv);  // the servers' dots follow their state
-    if (m.id === active) { renderTopic(); if (fresh || !old || !old.nc !== !m.nc) later(renderNicks); quietClass($("#msgs"), m.q); } else renderStatus();
+    const refold = old && ((old.ef | 0) !== (m.ef | 0) || ((m.ef | 0) & 1 && old.q !== m.q));  // eventshidemgr: how runs of joins and parts fold changed
+    if (m.id === active) { renderTopic(); if (fresh || !old || !old.nc !== !m.nc) later(renderNicks); quietClass($("#msgs"), m.q, m.ef); if (refold) renderMsgs(); } else renderStatus();
     if (m.id === split && (fresh || !old || !old.nc !== !m.nc)) later(renderNicks2);
+    if (m.id === split && refold) renderPane2();
   } else if (m.t === "lines") {
     const b = bufs.get(m.buf); if (b) b.lines = m.lines, b.first = m.first, b.noMore = b.loading = false;
     if (m.buf === active) renderMsgs(); else if (m.buf === split) renderPane2();
@@ -1744,7 +1797,7 @@ function onMsg(ev) {
     b.lines = m.lines.concat(b.lines); b.first = m.first;
     if (m.buf !== active) return;
     const box = $("#msgs"), h = box.scrollHeight, frag = document.createDocumentFragment();
-    for (const l of m.lines) frag.append(lineEl(b, l));
+    for (const l of m.lines) addLine(frag, b, l);
     box.prepend(frag); box.scrollTop += box.scrollHeight - h;  // what you were reading stays put
   } else if (m.t === "line") {
     const b = bufs.get(m.buf); if (!b) return;
@@ -1754,15 +1807,14 @@ function onMsg(ev) {
     if (m.buf !== active && m.buf !== split && !m.line.s && (m.line.k === "msg" || m.line.k === "action")) renderSideSoon();  // its badge
     if (m.buf === active) {
       const box = $("#msgs"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-      const el = lineEl(b, m.line);
-      box.append(el);
+      const el = addLine(box, b, m.line);
       if (m.line.fx) cryptFx(el.querySelector(".tx"), m.line.s);
       else if (m.line.ty) typeOut(el.querySelector(".tx"));
       while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
       if (atBottom && b.name !== "*channels") box.scrollTop = box.scrollHeight;  // the /list table arriving row by row stays at its top
     } else if (m.buf === split) {
       const box = $("#msgs2"), atBottom = box.scrollHeight - box.scrollTop - box.clientHeight < 40;
-      box.append(lineEl(b, m.line));
+      addLine(box, b, m.line);
       while (box.childElementCount > (theme.sb || 2000)) box.firstChild.remove();
       if (atBottom) box.scrollTop = box.scrollHeight;
     }

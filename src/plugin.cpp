@@ -293,6 +293,23 @@ static int l_nicklist_colors(lua_State* L) {
     else if (c.nicklist_by == p->name) nicklist_by(c, "");
     return 0;
 }
+static void fold_by(Core& c, const std::string& by) {
+    if (by == c.fold_by) return;
+    c.fold_by = by, c.dirty = true;
+    for (auto& b : c.bufs)
+        if (b->type == BT::CHANNEL) c.notify(Ev::BUFFER, b.get());  // the webchat re-reads how to draw it
+}
+// isekur.fold(on): runs of joins, parts, quits and nick changes show as one row, a click opens them, in the tabs where your
+// plugin is on (display only). It reads your settings names, nicks (booleans) and quiet ("hide" | "fold"). One plugin at a
+// time; it ends with the plugin. isekur.fold() says whether yours is on
+static int l_fold(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    if (lua_isnone(L, 1)) return lua_pushboolean(L, c.fold_by == p->name), 1;
+    if (lua_toboolean(L, 1)) fold_by(c, p->name);
+    else if (c.fold_by == p->name) fold_by(c, "");
+    return 0;
+}
 // isekur.which(name): the program's full path on PATH, nil when it isn't there
 static int l_which(lua_State* L) {
     std::string n = str_arg(L, 1);
@@ -897,7 +914,7 @@ static std::shared_ptr<Plugin> load(Core& c, const std::string& name, std::strin
         {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
         {"radio", l_radio}, {"radio_mute", l_radio_mute}, {"radio_volume", l_radio_volume}, {"window", l_window}, {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view}, {"lock", l_lock}, {"sort_tabs", l_sort_tabs},
         {"platform", l_platform}, {"which", l_which}, {"run", l_run}, {"speak_web", l_speak_web}, {"theme", l_theme},
-        {"nick_color", l_nick_color}, {"nicklist_colors", l_nicklist_colors},
+        {"nick_color", l_nick_color}, {"nicklist_colors", l_nicklist_colors}, {"fold", l_fold},
         {nullptr, nullptr}};
     luaL_newlib(L, api);
     lua_pushstring(L, name.c_str()), lua_setfield(L, -2, "name");
@@ -956,6 +973,7 @@ static void view_gone(Core& c) {  // a plugin went (disabled, removed, unloaded)
     auto up = [&](const std::string& n) { return std::any_of(c.plugins.begin(), c.plugins.end(), [&](auto& p) { return p->name == n && !p->dead; }); };
     if (!c.view.by.empty() && !up(c.view.by)) c.view_end();
     if (!c.nicklist_by.empty() && !up(c.nicklist_by)) nicklist_by(c, "");
+    if (!c.fold_by.empty() && !up(c.fold_by)) fold_by(c, "");
     if (c.radio_on() && !up(c.radio.by)) c.radio_stop();
     if (c.pwin.open && !up(c.pwin.by)) c.pwin = Core::PWin{}, c.dirty = true, c.notify(Ev::PWIN, nullptr);
 }
@@ -1005,6 +1023,16 @@ static void menu_items(lua_State* L, std::vector<std::pair<std::string, std::str
 // the user list of b is painted: a plugin asked (isekur.nicklist_colors) and is on in that channel
 bool Core::nicklist_colored(const Buffer* b) const {
     return !nicklist_by.empty() && b->srv && b->type == BT::CHANNEL && truthy(plugin_opt(nicklist_by, "enabled", b->srv, b->name, "off", 'c'));
+}
+
+Core::FoldCfg Core::fold_cfg(const Buffer* b) const {
+    FoldCfg f;
+    if (fold_by.empty() || !b->srv || b->type != BT::CHANNEL || !truthy(plugin_opt(fold_by, "enabled", b->srv, b->name, "off", 'c'))) return f;
+    f.on = true;
+    f.names = truthy(plugin_opt(fold_by, "names", b->srv, b->name, "off", 'c'));
+    f.nicks = truthy(plugin_opt(fold_by, "nicks", b->srv, b->name, "on", 'c'));
+    f.quiet = plugin_opt(fold_by, "quiet", b->srv, b->name, "hide", 'c') == "fold";
+    return f;
 }
 
 bool Core::plugin_hooks(const char* ev, const Server* s, const std::string& target) {
