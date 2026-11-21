@@ -1718,6 +1718,9 @@ int main() {
         core.cfg["general"]["user"] = "Ident the ident (user@) part";
         core.exec(home, "/server 127.0.0.1 1 -name so1u");
         assert(srv("so1u") && srv("so1u")->conn.out.find("USER Ident 0 * :") != std::string::npos);
+        core.cfg["general"]["user"] = "Ident2; the ident part";  // a comment glued to the value, no space before the ';'
+        core.exec(home, "/server 127.0.0.1 1 -name so1w");
+        assert(srv("so1w") && srv("so1w")->conn.out.find("USER Ident2 0 * :") != std::string::npos);
         core.cfg["general"]["user"] = " ";
         core.exec(home, "/server 127.0.0.1 1 -name so1v");
         assert(srv("so1v") && srv("so1v")->conn.out.find("USER " + srv("so1v")->nick + " 0 * :") != std::string::npos);  // nothing left: the nick

@@ -357,8 +357,9 @@ void Core::connect(Server* s) {
         }
     }
     s->send("NICK " + s->nick);
-    // a space in the user makes extra USER parameters: ngIRCd answers 461 and never registers you
-    std::string ident = s->cfg.user.substr(0, s->cfg.user.find_first_of(" \t"));
+    // a space in the user makes extra USER parameters: ngIRCd answers 461 and never registers you; a ';' is a
+    // comment glued to the value ("Ident; the ident part"), never part of an ident
+    std::string ident = s->cfg.user.substr(0, s->cfg.user.find_first_of(" \t;"));
     s->send("USER " + (ident.empty() ? s->nick : ident) + " 0 * :" + s->cfg.realname);
     notify(Ev::BUFFER, s->status);
 }
