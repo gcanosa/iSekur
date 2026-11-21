@@ -3585,6 +3585,8 @@ int main() {
         sc.open(zn, BT::CHANNEL, "#aaa");
         sc.exec(ph, "/srt");
         assert(last(ph) == "true" && names() == "console zn bob #aaa #zeta an #Alpha #beta");
+        sc.plugins.clear();
+        assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
     }
     {  // API 8: the show event changes what the screens show (not what's sent or logged), isekur.theme() the theme's colors
         char d[] = "/tmp/isekur-show-XXXXXX";
@@ -3758,6 +3760,8 @@ isekur.command("sp", "", function() print(isekur.run({"espeak", "-v", "x"}, "hel
         }
         assert(text == "hello there");
         setenv("PATH", oldpath.c_str(), 1);
+        sp.plugins.clear();
+        assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
     }
     {  // the plugin radio (API 12): what it refuses, ffmpeg's MP3 to the sink and a player, mute, direct, stop; isekur.window and its events
         char d[] = "/tmp/isekur-radio-XXXXXX";
