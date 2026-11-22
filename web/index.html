@@ -603,7 +603,7 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
    changes with nicks off), so /quiet still hides it even when it keeps the summary rows (.evq) */
 .quiet.evq .l.noise.nf, .l.fc, .l.fsum.off { display: none !important; }
 .l.fsum { cursor: pointer; }
-.l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); font-weight: 700; }  /* iSekur sends the row's color as the theme element "fold" (fold_style), so --fold-fg comes from applyTheme's loop */
+.l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); }  /* iSekur sends the row's color as the theme element "fold" (fold_style), so --fold-fg comes from applyTheme's loop */
 .l.fsum:hover .tx, .l.fsum:focus-visible .tx { text-decoration: underline; }
 /* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
    before the last few dimmed (zenDim marks those with .zf); Esc on an empty line leaves it */

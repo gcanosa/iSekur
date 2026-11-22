@@ -554,7 +554,7 @@ Style fold_style(const Theme& t) {
         if (pick < 0) pick = r;
         if ((d.fg < 0 || color_distance(r, d.fg) >= 25) && (ev.fg < 0 || color_distance(r, ev.fg) >= 25)) { pick = r; break; }
     }
-    d.fg = pick, d.attr |= A_BOLD;
+    d.fg = pick, d.attr = 0;  // the weight is the chat's: the color sets the row apart
     return d;
 }
 
