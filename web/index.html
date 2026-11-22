@@ -1562,10 +1562,34 @@ function setSplit(id) {  // null: one pane again
   $("#app").classList.toggle("split", split !== null);
   splitLayout(); renderPane2(); renderSide();
 }
-function note(text, err) {  // a line only this browser sees, like the terminal's own messages
+function note(text, err, badge) {  // a line only this browser sees, like the terminal's own messages; badge: the INFO one of Core::info_note
   const b = bufs.get(active); if (!b) return;
-  $("#msgs").append(lineEl(b, {ts: Date.now() / 1000, k: err ? "error" : "info", n: "", x: text, s: 0, h: 0}));
+  $("#msgs").append(lineEl(b, {ts: Date.now() / 1000, k: err ? "error" : "info", n: "", x: text, s: 0, h: 0, ...(badge ? {bd: "INFO", bk: "i"} : {})}));
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
+}
+// a theme's own font (mirc: Fixedsys) that this browser doesn't have: the page falls back to plain monospace, so say which one to get and how to install it, once
+const fontTold = new Set();
+function hasFont(f) {  // a font that's there measures differently from the generic fallbacks
+  const c = hasFont.c || (hasFont.c = document.createElement("canvas").getContext("2d"));
+  const w = face => (c.font = "72px " + face, c.measureText("mmmmmmmmmmlli").width);
+  return ["monospace", "serif", "sans-serif"].some(g => w('"' + f + '",' + g) !== w(g));
+}
+function fontCheck(list) {
+  const named = [];  // the families before the first generic one (what follows is the fallback chain)
+  for (const m of (list || "").matchAll(/"([^"]+)"|'([^']+)'|([^,\s][^,]*)/g)) {
+    const f = (m[1] || m[2] || m[3]).trim();
+    if (/^(ui-|system-ui|-apple-system|monospace$|sans-serif$|serif$)/i.test(f)) break;
+    named.push(f);
+  }
+  const phone = /Android|iPhone|iPad|iPod/.test(navigator.userAgent) || (/Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1);  // no fonts to install there
+  if (phone || !named.length || !bufs.get(active) || fontTold.has(named[0]) || named.some(hasFont)) return;
+  fontTold.add(named[0]);
+  const fix = /fixedsys/i.test(named[0]), name = fix ? "Fixedsys Excelsior" : named[0], get = fix ? "Download FSEX302.ttf from github.com/kika/fixedsys/releases" : "Get it";
+  const how = /Win/.test(navigator.platform) ? ", right-click it and choose Install, then close the browser completely (every window) and open it again."
+    : /Mac/.test(navigator.platform) ? ", open it and click Install Font, then quit the browser completely (Cmd+Q) and open it again."
+    : ", copy it to ~/.local/share/fonts, run fc-cache -f, then quit the browser completely (every window) and open it again.";
+  note("The " + theme.name + " theme is made for the font " + name + ", which this browser doesn't have, so it shows in a plain monospace.", false, true);
+  note(get + how, false, true);
 }
 function splitCmd(cmd, a) {
   const lab = id => (order.indexOf(id) + 1) + ":" + label(bufs.get(id)), how = ["", " side by side", " one over the other"];
@@ -1700,6 +1724,7 @@ function applyTheme() {
   // /set web_font wins; else the theme's (mirc: Fixedsys where it's installed); else ui-monospace...
   const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim().replace(/^theme$/, "");
   set("--mono", !uf ? (theme.lay || {}).font : uf in fonts ? fonts[uf] : uf);
+  if (!uf) fontCheck((theme.lay || {}).font);  // a /set web_font is the user's own pick: no hint for that
   const win = (theme.lay || {}).window || "";  // mac | win95: the window buttons
   document.documentElement.classList.toggle("win-mac", win === "mac");
   document.documentElement.classList.toggle("win-95", win === "win95");
