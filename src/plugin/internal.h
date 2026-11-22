@@ -50,6 +50,8 @@ struct Plugin {
     int screen_fn = LUA_NOREF;  // isekur.screen's frame function
     pid_t speaker = -1;         // isekur.run: the speech engine still running, -1 = none
     std::weak_ptr<Plugin> me;  // isekur.http: its answer comes back only to a plugin still loaded
+    struct Panel { std::vector<std::string> lines; double sky = -1; std::vector<std::pair<std::string, std::string>> actions; };
+    Panel panel;  // isekur.panel: what the plugin manager's page for this plugin shows above its settings
     ~Plugin();
 };
 

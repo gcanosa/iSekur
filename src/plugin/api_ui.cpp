@@ -321,6 +321,33 @@ void Core::pwin_act(const std::string& a, int i, int bt) {
     plugin_emit("window", nullptr, "", args);
     emit_only.clear();
 }
+// isekur.panel{lines = {up to 3}, sky = 0..1, actions = {{"Label", "/yourcommand ..."}, up to 4}}: what the plugin manager's page for your plugin
+// (/plugin, in the terminal and the webchat) shows above its settings: your status lines, a sun and moon (0 day .. 1 night) and buttons. A button runs
+// one of YOUR OWN commands (isekur.command) with its arguments, as if the user typed it; any other is left out. isekur.panel(false) clears it,
+// isekur.panel() says whether it is set. Call it again to update it: nothing is sent anywhere until the manager asks
+static int l_panel(lua_State* L) {
+    Plugin* p = self(L);
+    if (lua_isnone(L, 1)) return lua_pushboolean(L, !p->panel.lines.empty() || p->panel.sky >= 0 || !p->panel.actions.empty()), 1;
+    p->panel = {};
+    if (!lua_istable(L, 1)) return 0;
+    p->panel.lines = str_list(L, 1, "lines", 3, 120);
+    lua_getfield(L, 1, "sky");
+    p->panel.sky = lua_isnumber(L, -1) ? std::round(std::clamp<lua_Number>(lua_tonumber(L, -1), 0, 1) * 20) / 20 : -1;
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "actions");
+    if (lua_istable(L, -1))
+        for (lua_Integer i = 1; i <= 4; i++) {
+            lua_rawgeti(L, -1, i);
+            if (!lua_istable(L, -1)) { lua_pop(L, 1); break; }
+            lua_rawgeti(L, -1, 1), lua_rawgeti(L, -2, 2);
+            std::string lab = lua_type(L, -2) == LUA_TSTRING ? one_line(lua_tostring(L, -2)).substr(0, 16) : "",
+                        cmd = lua_type(L, -1) == LUA_TSTRING ? one_line(lua_tostring(L, -1)).substr(0, 200) : "";
+            lua_pop(L, 3);
+            if (!lab.empty() && cmd.size() > 1 && cmd[0] == '/') p->panel.actions.push_back({lab, cmd});
+        }
+    lua_pop(L, 1);
+    return 0;
+}
 static int l_inactive(lua_State* L) { lua_pushinteger(L, time(nullptr) - self(L)->c->active_at); return 1; }
 static int l_lock(lua_State* L) {  // lock(): locks like /lock when a lock password is set; false: none is
     Core& c = *self(L)->c;
@@ -371,6 +398,6 @@ Core::FoldCfg Core::fold_cfg(const Buffer* b) const {
 // what the isekur table gets from this file (host.cpp's load registers it)
 const luaL_Reg plug::api_ui[] = {
     {"window", l_window}, {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view},
-    {"lock", l_lock}, {"tint", l_tint}, {"sort_tabs", l_sort_tabs}, {"theme", l_theme}, {"nick_color", l_nick_color},
+    {"lock", l_lock}, {"tint", l_tint}, {"panel", l_panel}, {"sort_tabs", l_sort_tabs}, {"theme", l_theme}, {"nick_color", l_nick_color},
     {"nicklist_colors", l_nicklist_colors}, {"fold", l_fold},
     {nullptr, nullptr}};

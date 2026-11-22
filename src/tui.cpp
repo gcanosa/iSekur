@@ -208,6 +208,15 @@ static std::pair<int, int> box_title(const Theme& T, int x0, int x1, int y, cons
     return close;
 }
 
+// twilight's sky, three rows of ASCII (one cell wide in every font) from x, y: the sun by day, the sun on the horizon at dusk, the moon at night
+static void draw_sky(int x, int y, double sky, const Style& main, const Style& sub) {
+    static const char* const art[3][3] = {{" \\  |  / ", " --(O)-- ", " /  |  \\ "}, {"  \\ | /  ", "  .-'-.  ", "~~~~~~~~~"}, {"  .--.  *", " (  (     ", "  `--'  ."}};
+    const char* const* a = art[sky < 0.25 ? 0 : sky < 0.75 ? 1 : 2];
+    for (int r = 0; r < 3; r++)
+        for (int k = 0; k < 9; k++)
+            if (a[r][k] != ' ') cell(x + k, y + r, (char32_t)a[r][k], strchr("*.~", a[r][k]) ? sub : main);
+}
+
 // WCAG contrast of two colors (1..21), like the webchat's: picks colors that read whatever the theme
 static double contrast(RGB a, RGB b) {
     auto lum = [](RGB c) {
@@ -2242,10 +2251,11 @@ void Tui::draw_plugins(int W, int H) {
     for (auto& r : cat) ups += r.update;
 
     const int DET = 4;  // the selected one's details under the list
-    pw.rows = std::max(1, std::min({std::max(n, 1), H - 13, 12}));
+    const int PH = cp && cp->has_panel() ? 5 : 0;  // the plugin's panel (isekur.panel) above its settings: three lines and a sky, its buttons, a rule
+    pw.rows = std::max(1, std::min({std::max(n, 1), H - 13 - PH, 12}));
     pw.w = std::min(W - 2, 88), pw.x0 = (W - pw.w) / 2;
-    int bh = pw.rows + DET + 7, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pw.x0 + pw.w, xm = x1 - 2;
-    pw.tab_y = y0 + 1, pw.list_y = y0 + 3;
+    int bh = pw.rows + DET + 7 + PH, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pw.x0 + pw.w, xm = x1 - 2;
+    pw.tab_y = y0 + 1 + PH, pw.list_y = y0 + 3 + PH;
     int sep_y = pw.list_y + pw.rows, det_y = sep_y + 1, msg_y = det_y + DET, hint_y = msg_y + 1;
     if (pw.sel >= n) pw.sel = std::max(0, n - 1);
     if (pw.sel < pw.top) pw.top = pw.sel;
@@ -2257,6 +2267,21 @@ void Tui::draw_plugins(int W, int H) {
     cell(pw.x0, y0, U'┌', ls), cell(x1 - 1, y0, U'┐', ls), cell(pw.x0, y0 + bh - 1, U'└', ls), cell(x1 - 1, y0 + bh - 1, U'┘', ls);
     cell(pw.x0, sep_y, U'├', ls), cell(x1 - 1, sep_y, U'┤', ls);
     if (auto cb = box_title(T, pw.x0, x1 - 1, y0, cp ? "Plugins · " + cp->name : "Plugins", hs); cb.first >= 0) xbtn = {y0, cb.first, cb.second, 'g'};
+    pw.pbtn.clear();
+    if (PH) {  // its status lines (the first in the title color), the sun or moon at the right, the buttons, a rule under them
+        for (int i = 0; i < 3 && i < (int)cp->panel_lines.size(); i++)
+            text(pw.x0 + 2, y0 + 1 + i, cp->panel_sky >= 0 ? xm - 11 : xm, cp->panel_lines[(size_t)i], i ? dim : keyst, false);
+        if (cp->panel_sky >= 0) draw_sky(xm - 9, y0 + 1, cp->panel_sky, keyst, dim);
+        int bx = pw.x0 + 2;
+        for (size_t i = 0; i < cp->panel_actions.size(); i++) {
+            std::string lab = " " + cp->panel_actions[i].first + " ";
+            int ex = text(bx, y0 + 4, xm, lab, sel, false);
+            pw.pbtn.push_back({y0 + 4, bx, ex});
+            bx = ex + 2;
+        }
+        for (int xx = pw.x0 + 1; xx < x1 - 1; xx++) cell(xx, y0 + 5, U'─', ls);
+        cell(pw.x0, y0 + 5, U'├', ls), cell(x1 - 1, y0 + 5, U'┤', ls);
+    }
 
     // tabs (or the scope), then the column titles
     int ca = pw.x0 + 6, cb2 = ca + 17, cc = cb2 + (cp ? 33 : 14), cd = cc + (cp ? 0 : 13);  // cp: value, where from (cc - 11), what it is (cc)
@@ -2403,7 +2428,12 @@ void Tui::draw_plugins(int W, int H) {
     if (pw.editing) keys = {{"Enter", "set"}, {"empty", "inherit or the default"}, {"Esc", "cancel"}};
     else if (cp) {
         bool flag = n && cfg[(size_t)pw.sel].flag, pick = n && !cfg[(size_t)pw.sel].choices.empty();
-        keys = {{"Enter", flag ? "switch" : pick ? "next value" : "edit"}};
+        for (auto& a : cp->panel_actions) {  // the plugin's buttons: its first letter
+            std::string k1(1, (char)tolower((unsigned char)a.first[0])), w1 = a.first;
+            for (char& ch : w1) ch = (char)tolower((unsigned char)ch);
+            keys.push_back({k1, w1});
+        }
+        keys.push_back({"Enter", flag ? "switch" : pick ? "next value" : "edit"});
         if (flag) keys.push_back({"Space", "on/off"});
         if (pick) keys.push_back({"←→", "value"});
         keys.insert(keys.end(), {{"Del", "clear here"}, {pick ? "Tab" : "←→", "scope"}, {"Esc", "back"}});
@@ -2484,6 +2514,8 @@ void Tui::plugin_key(int k, uint32_t ch) {
             return;
         }
         std::string eff = c.plugin_eff(cp->name, st.key, scope, st.def, st.scope);
+        for (auto& a : cp->panel_actions)  // a button of the plugin's panel, by its first letter
+            if (ch && ch < 128 && ch != 'q' && tolower((int)ch) == tolower((unsigned char)a.first[0])) { plug_run(a.second); return; }
         if (k == TB_KEY_ESC || ch == 'q') pw.cfg.clear(), pw.sel = 0;
         else if (k == TB_KEY_ARROW_DOWN) pw.sel = std::min(n - 1, pw.sel + 1);
         else if (k == TB_KEY_ARROW_UP) pw.sel = std::max(0, pw.sel - 1);
@@ -2536,6 +2568,11 @@ void Tui::plugin_mouse(int k, int x, int y) {
     if (!pw.ask.empty() || !pw.about.empty()) return;
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { plugin_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
     if (k != TB_KEY_MOUSE_LEFT || x <= pw.x0 || x >= pw.x0 + pw.w - 1) return;
+    for (size_t i = 0; i < pw.pbtn.size(); i++)  // a button of the plugin's panel
+        if (y == pw.pbtn[i][0] && x >= pw.pbtn[i][1] && x < pw.pbtn[i][2]) {
+            for (auto& pi : c.plugin_info())
+                if (pi.name == pw.cfg && i < pi.panel_actions.size()) { plug_run(pi.panel_actions[i].second); return; }
+        }
     if (y == pw.tab_y) {
         if (pw.cfg.empty()) { if ((x >= pw.tab_mid) != pw.avail) plugin_key(TB_KEY_TAB, 0); }
         else plugin_key(x < pw.x0 + pw.w / 2 ? TB_KEY_ARROW_LEFT : TB_KEY_ARROW_RIGHT, 0);
@@ -2606,13 +2643,7 @@ void Tui::draw_pwin(int W, int H) {
     cell(lx0, ly, U'┌', ls), cell(lx1 - 1, ly, U'┐', ls), cell(lx0, ly + nd + 1, U'└', ls), cell(lx1 - 1, ly + nd + 1, U'┘', ls);
     for (int i = 0; i < nd; i++)
         if (i < (int)w.display.size()) text(lx0 + 2, ly + 1 + i, w.sky >= 0 && i < 3 ? lx1 - 13 : i || w.reels < 0 ? lx1 - 2 : lx1 - 10, w.display[(size_t)i], i ? dim : keyst, false);
-    if (w.sky >= 0) {  // twilight's sky: the sun by day, the sun on the horizon at dusk, the moon at night. ASCII: one cell in every font
-        static const char* const art[3][3] = {{" \\  |  / ", " --(O)-- ", " /  |  \\ "}, {"  \\ | /  ", "  .-'-.  ", "~~~~~~~~~"}, {"  .--.  *", " (  (     ", "  `--'  ."}};
-        const char* const* a = art[w.sky < 0.25 ? 0 : w.sky < 0.75 ? 1 : 2];
-        for (int r = 0; r < 3; r++)
-            for (int k = 0; k < 9; k++)
-                if (a[r][k] != ' ') cell(lx1 - 12 + k, ly + 1 + r, (char32_t)a[r][k], strchr("*.~", a[r][k]) ? dim : keyst);
-    }
+    if (w.sky >= 0) draw_sky(lx1 - 12, ly + 1, w.sky, keyst, dim);
     if (w.reels >= 0) {  // a cassette's two reels, turning ~8 times a second while it plays
         static const char32_t arc[] = {U'◜', U'◝', U'◞', U'◟'};
         char32_t r = w.reels ? arc[(now_ms() / 120) % 4] : U'○';

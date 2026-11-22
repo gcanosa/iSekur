@@ -398,6 +398,12 @@ std::vector<PluginInfo> Core::plugin_info() const {
                 pi.on_in.push_back(k.size() > n.size() + 7 ? k.substr(n.size() + 8) : "");
         if (p) {
             for (auto& [cmd, i] : p->cmds) pi.cmds.push_back(cmd);
+            pi.panel_lines = p->panel.lines, pi.panel_sky = p->panel.sky;
+            for (auto& a : p->panel.actions) {  // a button runs the plugin's own commands only
+                std::string w = a.second.substr(1, a.second.find(' ') - 1);
+                to_lower(w);
+                if (p->cmds.count(w)) pi.panel_actions.push_back(a);
+            }
             for (auto& k : p->order) {
                 auto& o = p->opts.at(k);
                 pi.sets.push_back({k, o.def, o.scope, o.type == LUA_TBOOLEAN, o.help, o.choices});

@@ -806,7 +806,14 @@ void Web::ws_frames(Client& cl) {
                 for (size_t i = 0; i < pi.sets.size(); i++)
                     o += std::string(i ? "," : "") + "{\"key\":" + json_str(pi.sets[i].key) + ",\"def\":" + json_str(pi.sets[i].def) +
                          ",\"scope\":\"" + pi.sets[i].scope + "\",\"flag\":" + (pi.sets[i].flag ? "1" : "0") + ",\"help\":" + json_str(pi.sets[i].help) + ",\"choices\":" + arr(pi.sets[i].choices) + "}";
-                o += "],\"cfg\":{";  // what each of its sections sets: {"": {...}, "sekurnet": {...}}
+                o += "],\"panel\":";  // isekur.panel: status lines, a sun and moon, buttons
+                if (pi.has_panel()) {
+                    o += "{\"lines\":" + arr(pi.panel_lines) + ",\"sky\":" + std::to_string(pi.panel_sky) + ",\"actions\":[";
+                    for (size_t i = 0; i < pi.panel_actions.size(); i++)
+                        o += std::string(i ? "," : "") + "[" + json_str(pi.panel_actions[i].first) + "," + json_str(pi.panel_actions[i].second) + "]";
+                    o += "]}";
+                } else o += "null";
+                o += ",\"cfg\":{";  // what each of its sections sets: {"": {...}, "sekurnet": {...}}
                 bool f2 = true;
                 for (auto& [sec, kv] : c.cfg) {
                     std::string base = "plugin." + pi.name;

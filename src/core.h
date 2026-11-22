@@ -327,6 +327,11 @@ struct PluginInfo {
     bool update = false, edited = false;     // the catalog has a newer version; the same version, other contents (edited here)
     std::vector<std::string> on_in, cmds;    // the scopes where enabled = on ("" everywhere, "net", "net/#chan"); its /commands
     std::vector<PluginSet> sets;             // what it declared (while loaded), in order
+    // isekur.panel: up to 3 status lines, a sun and moon (0 day .. 1 night, -1 none) and buttons (label, one of the plugin's own /commands), above its settings
+    std::vector<std::string> panel_lines;
+    double panel_sky = -1;
+    std::vector<std::pair<std::string, std::string>> panel_actions;
+    bool has_panel() const { return !panel_lines.empty() || panel_sky >= 0 || !panel_actions.empty(); }
 };
 struct CatalogRow { std::string name, version, local, desc; bool installed, update, edited, too_new; std::string author = {}, contact = {}; bool official = false; };  // local: the installed version
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none

@@ -310,6 +310,11 @@ dialog .btns .left { margin-right: auto; }
 #plugtabs button.on, #bkinds button.on { color: var(--fg); border-color: var(--accent); background: var(--accent-veil, #ffffff0d); }
 #pluglist { max-height: min(48vh, 420px); }
 #plugcfg { display: grid; gap: 8px; }
+#plugcfg .panel { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--dlg-bg, var(--bg)); }  /* a plugin's own header (isekur.panel): status lines, a sky, buttons */
+#plugcfg .panel .ptxt { min-width: 0; font: 600 calc(14px * var(--z, 1))/1.5 ui-monospace, Menlo, Consolas, monospace; overflow-wrap: anywhere; }
+#plugcfg .panel .ptxt div:first-child { color: var(--dlg-title, var(--accent)); }
+#plugcfg .panel .ptxt .dim { color: var(--muted); font-weight: 400; font-size: calc(13px * var(--z, 1)); }
+#plugcfg .panel .pbtns { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; }
 #plugcfg .top { display: flex; align-items: center; gap: 10px; font-size: calc(13px * var(--z, 1)); color: var(--muted); }
 #plugcfg .rows { display: grid; grid-template-columns: minmax(90px, max-content) 1fr; gap: 6px 14px; align-items: center; max-height: min(44vh, 400px); overflow-y: auto; font-size: calc(13px * var(--z, 1)); }
 #plugcfg .rows > span { font-family: var(--mono, monospace); color: var(--fg); }
@@ -805,12 +810,12 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #dpw .lcd .txt { flex: 1; min-width: 0; }
 #dpw .lcd .txt div:first-child { color: var(--dlg-title, var(--accent)); text-shadow: 0 0 10px color-mix(in srgb, var(--accent) 40%, transparent); }
 #dpw .lcd .dim { color: var(--muted); font-weight: 400; font-size: calc(13px * var(--z, 1)); }
-#dpw .sky { flex: none; width: 76px; height: 46px; color: var(--dlg-title, var(--accent)); }  /* twilight's: the sun sets behind the line, the moon rises, from --sky (0 day .. 1 night) */
-#dpw .sky .sun, #dpw .sky .moon, #dpw .sky .stars { transition: transform .9s ease, opacity .9s ease; }
-#dpw .sky .sun { transform: translateY(calc(var(--sky, 0) * 32px)); opacity: calc(1 - var(--sky, 0)); }
-#dpw .sky .moon { transform: translateY(calc((1 - var(--sky, 0)) * 32px)); opacity: var(--sky, 0); }
-#dpw .sky .stars { opacity: calc(var(--sky, 0) * var(--sky, 0)); }
-@media (prefers-reduced-motion: reduce) { #dpw .sky .sun, #dpw .sky .moon, #dpw .sky .stars { transition: none; } }
+:is(#dpw, #plugcfg) .sky { flex: none; width: 76px; height: 46px; color: var(--dlg-title, var(--accent)); }  /* twilight's: the sun sets behind the line, the moon rises, from --sky (0 day .. 1 night) */
+:is(#dpw, #plugcfg) .sky :is(.sun, .moon, .stars) { transition: transform .9s ease, opacity .9s ease; }
+:is(#dpw, #plugcfg) .sky .sun { transform: translateY(calc(var(--sky, 0) * 32px)); opacity: calc(1 - var(--sky, 0)); }
+:is(#dpw, #plugcfg) .sky .moon { transform: translateY(calc((1 - var(--sky, 0)) * 32px)); opacity: var(--sky, 0); }
+:is(#dpw, #plugcfg) .sky .stars { opacity: calc(var(--sky, 0) * var(--sky, 0)); }
+@media (prefers-reduced-motion: reduce) { :is(#dpw, #plugcfg) .sky :is(.sun, .moon, .stars) { transition: none; } }
 #dpw .cass { flex: none; width: 76px; height: 46px; color: var(--dlg-title, var(--accent)); }  /* the reels turn while it plays */
 #dpw .cass .reel { transform-box: fill-box; transform-origin: center; }
 #dpw[data-reels="1"] .cass .reel { animation: reelspin 2.2s linear infinite; }
@@ -834,7 +839,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #radtap { position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); bottom: calc(64px + env(safe-area-inset-bottom)); padding: 8px 16px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--line); background: var(--dlg-bg, var(--panel)); color: var(--fg); font: inherit; box-shadow: 0 6px 24px -8px var(--accent); }
 .win-95 #dpw .lcd { background: #000; color: #00ff66; border-radius: 0; border: 2px solid; border-color: #808080 #fff #fff #808080; }
-.win-95 #dpw .cass, .win-95 #dpw .sky { color: #00ff66; }
+.win-95 #dpw .cass, .win-95 :is(#dpw, #plugcfg) .sky { color: #00ff66; }
 .win-95 #dpw .lcd .txt div:first-child, .win-95 #dpw .lcd .dim { color: #00ff66; text-shadow: none; }
 .win-95 #dpw .pwlist { background: #fff; color: #000; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; }
 .win-95 #dpw .pwlist .r { border-radius: 0; } .win-95 #dpw .pwlist .r .m { color: #000; } .win-95 #dpw .pwlist .r.on { background: #000080; color: #fff; } .win-95 #dpw .pwlist .r.on .m { color: #fff; }
@@ -3037,6 +3042,28 @@ function plugAbout(p) {
   $("#dpab").showModal();
 }
 function plugBtn(ic, text, f, cls) { const b = btn(text, f); b.insertAdjacentHTML("afterbegin", plugIcon(ic, 14)); if (cls) b.className = cls; return b; }
+// the plugin's own header on its page (isekur.panel): status lines, a sun and moon, buttons that run its own commands. Updated in place each
+// refresh: the lines' text and the sky move, the buttons are rebuilt only when they change (a rebuild under the pointer would lose the click)
+function plugPanel(C, p) {
+  let P = C.querySelector(":scope > .panel");
+  if (!p.panel) { if (P) P.remove(); return; }
+  const pn = p.panel;
+  if (!P) { P = el("div", "panel"); P.append(el("div", "ptxt"), el("div", "pbtns")); C.prepend(P); }
+  const t = P.firstChild;
+  while (t.children.length > pn.lines.length) t.lastChild.remove();
+  pn.lines.forEach((s, i) => { (t.children[i] || t.appendChild(el("div", i ? "dim" : ""))).textContent = s; });
+  let sk = P.querySelector(".sky");
+  if (pn.sky >= 0) {
+    if (!sk) {  // the dialog's own sun and moon, copied (its clip path under another id: two of one id would point at the one in a closed dialog)
+      sk = $("#dpw .sky").cloneNode(true); sk.removeAttribute("hidden");
+      sk.querySelector("clipPath").id = "skyclip2"; sk.querySelector("[clip-path]").setAttribute("clip-path", "url(#skyclip2)");
+      P.insertBefore(sk, P.lastChild);
+    }
+    sk.style.setProperty("--sky", pn.sky);
+  } else if (sk) sk.remove();
+  const sig = JSON.stringify(pn.actions), b = P.lastChild;
+  if (b._sig !== sig) { b._sig = sig; b.replaceChildren(...pn.actions.map(([l, c]) => btn(l, () => plugRun(c)))); }
+}
 function renderPlugCfg() {
   const C = $("#plugcfg"), p = plug.installed.find(x => x.name === plugCfg);
   if (!p) { plugCfg = ""; return renderPlugins(); }
@@ -3044,7 +3071,7 @@ function renderPlugCfg() {
   if (!plug.scopes.includes(plugScope)) plugScope = "";
   // the 1s refresh rebuilds only on a change: rebuilding an open dropdown closed it before you could pick
   const sig = JSON.stringify([p.cfg, p.sets, plug.scopes, plugScope]);
-  if (sig === renderPlugCfg.sig && C.firstChild) return;
+  if (sig === renderPlugCfg.sig && C.firstChild) return plugPanel(C, p);
   renderPlugCfg.sig = sig;
   C.textContent = "";
   const top = el("div", "top"), sel = el("select");
@@ -3082,6 +3109,7 @@ function renderPlugCfg() {
     R.append(lab, cell);
   }
   C.append(top, R);
+  plugPanel(C, p);
 }
 function openAbout() { $("#side").classList.remove("open"); send({t: "about", buf: active}); dabout.showModal(); }
 dabout.onclose = () => clearInterval(typer);

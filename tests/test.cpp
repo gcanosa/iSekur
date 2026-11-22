@@ -3722,11 +3722,25 @@ isekur.command("tn", "", function(a)
   elseif a == "slow" then isekur.tint{r = 1, g = 0.5, b = 0.25, dim = 0.2, fade = 60, out = 30}
   else print(tostring(isekur.tint()), isekur.api >= 15) isekur.tint{r = 1, g = 0.5, b = 0.25, dim = 0.2} end
 end)
+isekur.command("pn", "", function(a)
+  if a == "off" then isekur.panel(false)
+  else isekur.panel{lines = {"one", "two\nx", "three", "four"}, sky = 0.52, actions = {{"Preview", "/pn go"}, {"Bad", "/exec ls"}, {"Other", "/tn x"}, {"No slash", "pn"}}} end
+end)
 )LUA", f), fclose(f);
             sy.exec(ph, "/plugin enable tn");
             sy.tint_instant_ms = 0;
             sy.exec(yb, "/tn");  // no fade asked: at once
             assert(ph->lines.back().text == "false true" && sy.tint.by == "tn" && sy.tint.on() && sy.tint.now[1] == 0.5 && sy.tint.now[3] == 0.2);
+            {  // isekur.panel: up to 3 lines of one line each, a sky in steps of 1/20, buttons that run the plugin's own commands only
+                sy.exec(yb, "/pn");
+                auto infos = sy.plugin_info();
+                const PluginInfo* tp = nullptr;
+                for (auto& pi : infos) if (pi.name == "tn") tp = &pi;
+                assert(tp && tp->has_panel() && tp->panel_lines.size() == 3 && tp->panel_lines[1] == "two x" && tp->panel_sky == 0.5);
+                assert(tp->panel_actions.size() == 2 && tp->panel_actions[0].first == "Preview" && tp->panel_actions[1].second == "/tn x");  // /exec, and a word that isn't a command, are left out
+                sy.exec(yb, "/pn off");
+                for (auto& pi : sy.plugin_info()) if (pi.name == "tn") assert(!pi.has_panel());
+            }
             Tint tt = sy.tint;
             assert(tint_color(0xffffff, tt) == 0xcc6633 && tint_color(-1, tt) == -1);  // 255 * (1, .5, .25) * (1 - .2)
             // blue on black had 2.4:1: the tint dims it to less, so it is moved toward white until it has the 2.4 again

@@ -196,6 +196,7 @@ private:
         bool editing = false;
         std::u32string ed;
         std::string ask;                   // remove this one? (y/n)
+        std::vector<std::array<int, 3>> pbtn;  // the plugin's panel buttons as last drawn: y, x0, x1
         std::string about;                 // the About box of this one (a)
         long long mark = -1;               // mb->added when an action ran: mb's newest line since then is the message
         Buffer* mb = nullptr;
