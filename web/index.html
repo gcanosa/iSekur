@@ -526,6 +526,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
   letter-spacing: .1em; color: var(--marker-fg, #c2185b); }
 .newmark::before, .newmark::after { content: ""; flex: 1; border-top: 1px solid currentColor; }
 .l { display: grid; grid-template-columns: auto var(--nw, 13ch) 1fr; gap: 0 10px; padding: 1px 14px; }
+.l.art { line-height: 1; padding-block: 0; }  /* the banner's block letters (██╗): rows touch, as in the terminal, instead of one gap of line spacing between them */
 .l:hover { background: #ffffff06; }
 .l .ts { color: var(--timestamp-fg, var(--muted)); }
 .l .nk { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -1158,10 +1159,12 @@ function alignEm(d) {
 // ef (eventshidemgr, 1 on, 2 names, 4 nicks, 8 keep in /quiet): evq = a /quiet tab that still shows its summary rows
 function quietClass(el, q, ef) { el.classList.toggle("quiet", q === 1); el.classList.toggle("smart", q === 2); el.classList.toggle("evq", q === 1 && (ef & 9) === 9); }  // /quiet: 1 all, 2 smart
 const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
+// a line made only of block and box-drawing characters (the startup banner's letters): its rows must touch, so no line spacing
+const isArt = x => { const p = (x || "").replace(/\x03(?:\d{1,2}(?:,\d{1,2})?)?|\x04(?:[0-9a-fA-F]{6}(?:,[0-9a-fA-F]{6})?)?|[\x02\x0f\x16\x1d\x1f]/g, ""); return /^[\s\u2500-\u259f]+$/.test(p) && /[\u2550-\u256c\u2580-\u259f]{4}/.test(p); };
 function lineEl(b, l) {
   const d = document.createElement("div");
   // noise: a join, part, quit or nick change of someone else (a kick isn't); idle: they hadn't spoken lately (/quiet smart hides those)
-  d.className = "l k-" + l.k + (l.h ? " hl" : "") + (!l.s && /^(join|part|quit|nick)$/.test(l.k) && !(l.k === "part" && l.x.includes(" was kicked by ")) ? " noise" + (l.i ? " idle" : "") : "");
+  d.className = "l k-" + l.k + (isArt(l.x) ? " art" : "") + (l.h ? " hl" : "") + (!l.s && /^(join|part|quit|nick)$/.test(l.k) && !(l.k === "part" && l.x.includes(" was kicked by ")) ? " noise" + (l.i ? " idle" : "") : "");
   const ts = document.createElement("span"); ts.className = "ts";
   ts.textContent = l.tf || new Date(l.ts * 1000).toTimeString().slice(0, 5);  // tf: the [general] timestamp format, done by iSekur
   const nk = document.createElement("span"); nk.className = "nk";
