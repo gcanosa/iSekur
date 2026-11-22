@@ -3752,7 +3752,10 @@ end)
             sy.theme.el["default"] = Style{0xffffff, 0x101010, 0};
             Web tw(sy);
             std::string tj = tw.theme_json();  // the webchat gets the colors the terminal draws, and the tint for the mIRC ones
-            assert(tj.find("\"tint\":[1.0000,0.5000,0.2500,0.2000]") != std::string::npos && tj.find("\"bg\":\"#0d0603\"") != std::string::npos);
+            assert(tj.find("\"tint\":[1.0000,0.5000,0.2500,0.2000,1]") != std::string::npos && tj.find("\"bg\":\"#0d0603\"") != std::string::npos);
+            sy.tint.media = false;
+            assert(tw.theme_json().find("\"tint\":[1.0000,0.5000,0.2500,0.2000,0]") != std::string::npos);  // `media`: the pictures and videos stay as they are
+            sy.tint.media = true;
             sy.tint.web = false;
             assert(tw.theme_json().find("\"tint\":null") != std::string::npos && tw.theme_json().find("#0d0603") == std::string::npos);  // `where`: terminal only
             sy.tint.web = true;

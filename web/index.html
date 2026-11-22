@@ -560,6 +560,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
 .l.hdr .tx { cursor: pointer; }
 /* previews a plugin put under a line (isekur.embed, the preview plugin): a link card, a picture, a player. Quiet, in the
    theme's own colors; native players follow its light or dark color-scheme */
+.twm .em :is(img, video) { filter: url(#twm); }  /* isekur.tint (twilight) with media on: the pictures and videos get the same multiply as the colors */
 .l .em { grid-column: 3; display: flex; flex-wrap: wrap; align-items: flex-start; gap: 6px; margin: 3px 0 5px; white-space: normal; min-width: 0; }
 .tsright .l .em { grid-column: 2; }
 .em a { color: inherit; text-decoration: none; }
@@ -967,6 +968,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div class="hint" id="loghint"></div>
   <div class="btns"><button class="go" value="ok">Close</button></div>
 </form></dialog>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><filter id="twm" color-interpolation-filters="sRGB"><feColorMatrix id="twm-m" type="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 1 0"/></filter></svg>  <!-- isekur.tint: the previews' pictures and videos -->
 <dialog id="dplug"><form method="dialog">
   <h2 id="dplug-h">Plugins</h2>
   <div id="plugtabs" role="tablist"><button type="button" role="tab" data-tab="inst">Installed</button><button type="button" role="tab" data-tab="cat">Available</button></div>
@@ -1704,6 +1706,10 @@ function applyTheme() {
     let off = ah; try { off = off || localStorage.getItem("side") === "0"; } catch (e) {}
     $("#app").classList.toggle("ah", ah); sideFold(off);
   }
+  // isekur.tint (twilight): the server tinted the theme; the previews' pictures and videos are the page's own, so one filter multiplies them the same way
+  const tm = theme.tint && theme.tint[4] ? theme.tint : null, tk = tm ? 1 - tm[3] : 1;
+  document.documentElement.classList.toggle("twm", !!tm);
+  if (tm) $("#twm-m").setAttribute("values", `${tm[0] * tk} 0 0 0 0  0 ${tm[1] * tk} 0 0 0  0 0 ${tm[2] * tk} 0 0  0 0 0 1 0`);
   $("#app").classList.toggle("zen", !!theme.zen);  // the zen plugin's focus view, from the terminal's isekur.view
   $("#app").classList.toggle("zenev", !!(theme.zen && theme.zen.ev));
   set("--zenw", theme.zen ? theme.zen.w + "ch" : "");

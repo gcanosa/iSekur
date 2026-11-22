@@ -958,8 +958,8 @@ std::string Web::theme_json() {
     bool tw = tn.web && tn.on();
     RGB dbg = T.get("default").bg;
     auto shade = [&](Style s) { if (tw) s.fg = tint_fg(s.fg, s.bg >= 0 ? s.bg : dbg, tn), s.bg = tint_color(s.bg, tn); return s; };
-    char tj[96] = "null";
-    if (tw) snprintf(tj, sizeof tj, "[%.4f,%.4f,%.4f,%.4f]", tn.now[0], tn.now[1], tn.now[2], tn.now[3]);
+    char tj[112] = "null";  // r, g, b, dim, and 1 when the pictures and videos are tinted too
+    if (tw) snprintf(tj, sizeof tj, "[%.4f,%.4f,%.4f,%.4f,%d]", tn.now[0], tn.now[1], tn.now[2], tn.now[3], tn.media ? 1 : 0);
     std::string o = "{\"t\":\"theme\",\"name\":" + json_str(c.theme.name) + ",\"sb\":" + std::to_string(c.max_lines) +
                     ",\"font\":" + json_str(ini_get(c.cfg, "general", "web_font")) + ",\"fsize\":" + json_str(ini_get(c.cfg, "general", "web_font_size")) +
                     ",\"tsa\":" + json_str(ini_get(c.cfg, "general", "timestamp_align")) + ",\"tsh\":" + json_str(ini_get(c.cfg, "general", "timestamp_hover")) + ",\"tree\":" + json_str(ini_get(c.cfg, "general", "web_tree_lines")) + ",\"treew\":" + json_str(ini_get(c.cfg, "general", "web_tree_width")) + ",\"ah\":" + json_str(ini_get(c.cfg, "general", "web_tree_autohide")) + ",\"ub\":" + json_str(ini_get(c.cfg, "general", "web_unread_badge")) + ",\"logs\":" + (logs ? "1" : "0") +

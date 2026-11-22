@@ -71,6 +71,7 @@ double color_distance(RGB a, RGB b);  // how far apart two colors look (CIE76 Δ
 struct Tint {
     std::string by;                 // the plugin holding it, "" = none (a fade-out may still be running)
     bool term = true, web = true;   // which screens it covers
+    bool media = true;              // the webchat's pictures and videos (a plugin's previews) too
     double to[4] = {1, 1, 1, 0}, from[4] = {1, 1, 1, 0}, now[4] = {1, 1, 1, 0};  // r, g, b, dim: where it is going, where the fade started, what is shown
     long long t0 = 0;               // when the fade started (ms)
     double secs = 0, out = 0;       // the fade's length; how long the plugin going takes
@@ -549,7 +550,7 @@ struct Core {
     // none over tint.out (the plugin went), tint_step (every second) moves it along and tells the screens when what is shown changed
     Tint tint;
     long long tint_instant_ms = 10000;  // iSekur just started: a tint set in this time (from none) shows at once, a fade in from bright would flash
-    void tint_set(const std::string& by, const double to[4], bool term, bool web, double secs, double out);
+    void tint_set(const std::string& by, const double to[4], bool term, bool web, bool media, double secs, double out);
     void tint_end();
     void tint_step(long long ms);
     void tint_at(long long ms, double v[4]) const;  // where the fade is at ms: a new fade starts from here, not from the last step drawn

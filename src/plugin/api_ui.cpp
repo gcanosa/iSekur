@@ -160,8 +160,8 @@ static int l_view(lua_State* L) {
     return lua_pushboolean(L, 1), 1;
 }
 
-// isekur.tint{r, g, b, dim, term, web, fade, out}: every color the terminal and the webchat draw is multiplied by r, g, b (0 to 1, default 1)
-// and darkened by dim (0 to 0.9), on the screens `term` and `web` say (both by default). It glides there over `fade` seconds (0 to 600,
+// isekur.tint{r, g, b, dim, term, web, media, fade, out}: every color the terminal and the webchat draw is multiplied by r, g, b (0 to 1, default 1)
+// and darkened by dim (0 to 0.9), on the screens `term` and `web` say (both by default); `media` (default true): the webchat's pictures and videos too. It glides there over `fade` seconds (0 to 600,
 // default 0: at once), and when your plugin goes (disabled, removed, failing) it glides back over `out` (default: fade): never a jump to
 // bright in a dark room. isekur.tint(false) starts that too, isekur.tint() says whether yours is on. One plugin at a time: a new one takes over
 static int l_tint(lua_State* L) {
@@ -181,19 +181,19 @@ static int l_tint(lua_State* L) {
     auto flag = [&](const char* k) { lua_getfield(L, 1, k); bool r = lua_isnil(L, -1) ? true : lua_toboolean(L, -1); lua_pop(L, 1); return r; };
     double to[4] = {num("r", 1, 0, 1), num("g", 1, 0, 1), num("b", 1, 0, 1), num("dim", 0, 0, 0.9)};
     double fade = num("fade", 0, 0, 600);
-    c.tint_set(p->name, to, flag("term"), flag("web"), fade, num("out", fade, 0, 600));
+    c.tint_set(p->name, to, flag("term"), flag("web"), flag("media"), fade, num("out", fade, 0, 600));
     return 0;
 }
 
 static const long long BOOT_MS = now_ms();  // when iSekur started: a tint set in its first seconds shows at once (see Core::tint_instant_ms)
 
-void Core::tint_set(const std::string& by, const double to[4], bool tm, bool wb, double secs, double out) {
+void Core::tint_set(const std::string& by, const double to[4], bool tm, bool wb, bool md, double secs, double out) {
     long long ms = now_ms();
     if (!tint.on() && ms - BOOT_MS < tint_instant_ms) secs = 0;
-    bool screens = tm != tint.term || wb != tint.web;
+    bool screens = tm != tint.term || wb != tint.web || md != tint.media;
     tint_at(ms, tint.from);
     std::copy(to, to + 4, tint.to);
-    tint.by = by, tint.term = tm, tint.web = wb, tint.t0 = ms, tint.secs = secs, tint.out = out;
+    tint.by = by, tint.term = tm, tint.web = wb, tint.media = md, tint.t0 = ms, tint.secs = secs, tint.out = out;
     if (screens) tint.ver++, dirty = true, notify(Ev::TINT, nullptr);
     tint_step(ms);
 }
