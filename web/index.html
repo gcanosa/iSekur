@@ -894,6 +894,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div class="row2"><label>Host or IP<input name="host" required placeholder="irc.sekurnet.org"></label><label>Port<input name="port" type="number" min="1" max="65535" value="6697"></label></div>
   <label>Network name (its [server.name] in the config; changing it renames it)<input name="name" pattern="[A-Za-z0-9._\-]+" placeholder="sekurnet" title="letters, digits, . _ and - only"></label>
   <label>Nickname<input name="nick" placeholder="(your default nick)"></label>
+  <label class="ck"><input type="checkbox" name="usevhost"> Connect from a vhost (most networks don't need one)</label>
+  <label id="srvvhost" hidden>vhost (an address or name of the machine that runs iSekur)<input name="vhost" placeholder="your own address or hostname" autocomplete="off" spellcheck="false" disabled></label>
   <label>Autojoin channels<input name="autojoin" placeholder="#channel, #other key" autocomplete="off"></label>
   <label class="ck"><input type="checkbox" name="tls" checked> SSL/TLS</label>
   <label class="ck"><input type="checkbox" name="verify" checked> Verify the certificate (off for self-signed servers)</label>
@@ -2424,21 +2426,25 @@ function renderSrv() {
   $("#srvsavebox").hidden = !!o;
   $("#srvgo").textContent = !o ? "Connect" : t && t.state !== "disconnected" ? "Save & reconnect" : "Save & connect";
   $("#srvhint").textContent = (srvNote ? srvNote + " " : "") + (!o ? "A new server: Connect adds it and connects." :
-    (t ? t.state[0].toUpperCase() + t.state.slice(1) : "Not connected") + ". Host, port and TLS changes take effect on the next connect.");
+    (t ? t.state[0].toUpperCase() + t.state.slice(1) : "Not connected") + ". Host, port, TLS and vhost changes take effect on the next connect.");
   srvLogin();
 }
+// the vhost box is there (and enabled) only while its check is on; off saves it as none
+const srvVhost = () => { $("#srvvhost").hidden = fs.vhost.disabled = !fs.usevhost.checked; };
+fs.usevhost.onchange = () => { srvVhost(); if (fs.usevhost.checked) fs.vhost.focus(); };
 function srvPick(name) {
   srvSel = name, srvNote = "";
   const f = dsrv.querySelector("form"); f.reset();
   const o = srvs.find(x => x.name === name);
   if (o) {
-    fs.host.value = o.host || ""; fs.port.value = o.port || ""; fs.name.value = o.name; fs.nick.value = o.nick || "";
+    fs.host.value = o.host || ""; fs.port.value = o.port || ""; fs.name.value = o.name; fs.nick.value = o.nick || ""; fs.usevhost.checked = !!o.vhost; fs.vhost.value = o.vhost || "";
     fs.autojoin.value = (o.autojoin || "").split(",").map(x => x.trim()).filter(Boolean).join(", ");
     fs.tls.checked = isOn(o.tls); fs.verify.checked = isOn(o.tls_verify ?? "true"); fs.auto.checked = isOn(o.autoconnect ?? "true");
     fs.umodes.value = o.umodes || ""; fs.jwait.checked = isOn(o.join_wait ?? "on");
     fs.login.value = loginOf(o);
     for (const k of ["sasl_user", "sasl_mech", "cert", "key"]) fs[k].value = o[k] || "";
   }
+  srvVhost();
   $("#srvlogin").open = !!loginOf(o);  // closed unless this network logs in
   $("#srvadv").open = !!(o && (o.umodes || o.perform || !isOn(o.join_wait ?? "on")));  // basic setup: closed unless this network uses it
   srvPB.reset(o ? o.perform : "");
@@ -2454,7 +2460,7 @@ function srvApply() {
     send({t: "input", buf: active, text: "/server rename " + o.name + " " + nm}), n++;
     o.name = srvSel = nm;
   }
-  const want = {host: fs.host.value.trim(), port: fs.port.value.trim(), nick: fs.nick.value.trim(),
+  const want = {host: fs.host.value.trim(), port: fs.port.value.trim(), nick: fs.nick.value.trim(), vhost: fs.usevhost.checked ? fs.vhost.value.trim() : "",
     autojoin: fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(","),
     tls: fs.tls.checked ? "true" : "false", tls_verify: fs.verify.checked ? "true" : "false", autoconnect: fs.auto.checked ? "true" : "false",
     umodes: fs.umodes.value.trim(), perform: srvPB.get(), join_wait: fs.jwait.checked ? "on" : "off"};
@@ -2498,6 +2504,8 @@ dsrv.onclose = () => {
   if (fs.tls.checked) cmd += " -tls" + (fs.verify.checked ? "" : " -noverify");
   cmd += " -name " + name;
   if (nick) cmd += " -nick " + nick;
+  if (fs.usevhost.checked && fs.vhost.value.trim()) cmd += " -host " + fs.vhost.value.trim();
+  if (fs.save.checked) cmd += " -save";  // else /server keeps it for this run only and the /save below leaves it out
   send({t: "input", buf: active, text: cmd});
   const aj = fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(",");
   if (aj) send({t: "input", buf: active, text: "/set " + sec + ".autojoin " + aj});

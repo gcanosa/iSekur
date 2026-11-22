@@ -1847,7 +1847,7 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
             if (auto i = std::find(w.begin(), w.end(), "-name"); i != w.end() && i + 1 != w.end()) nm = *(i + 1);
             menu = Menu{std::max(0, tb_width() / 2 - 14), std::max(0, tb_height() / 2 - 4), 0, "Log in to " + nm + "?",
                         login_items("/server " + v + " -login", "No login: connect", "/server " + v)};
-        }, false, "New server", {"host [port] [-tls] [-noverify] [-name name] [-nick nick]", "e.g. irc.sekurnet.org 6697 -tls -name sekurnet"});
+        }, false, "New server", {"host [port] [-tls] [-noverify] [-name name]", "[-nick nick] [-host vhost]", "e.g. irc.sekurnet.org 6697 -tls"});  // the box is 44 wide: a longer line is cut
         return;
     }
     if (ch == 'l' && !srv.empty()) { settings_login(srv); return; }
