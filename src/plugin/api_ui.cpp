@@ -390,7 +390,13 @@ Core::FoldCfg Core::fold_cfg(const Buffer* b) const {
     if (fold_by.empty() || !b->srv || b->type != BT::CHANNEL || !truthy(plugin_opt(fold_by, "enabled", b->srv, b->name, "off", 'c'))) return f;
     f.on = true;
     f.names = truthy(plugin_opt(fold_by, "names", b->srv, b->name, "off", 'c'));
+    f.joins = truthy(plugin_opt(fold_by, "joins", b->srv, b->name, "on", 'c'));
+    f.leaves = truthy(plugin_opt(fold_by, "leaves", b->srv, b->name, "on", 'c'));
     f.nicks = truthy(plugin_opt(fold_by, "nicks", b->srv, b->name, "on", 'c'));
+    f.hosts = truthy(plugin_opt(fold_by, "hosts", b->srv, b->name, "off", 'c'));
+    f.modes = truthy(plugin_opt(fold_by, "modes", b->srv, b->name, "off", 'c'));
+    f.kicks = truthy(plugin_opt(fold_by, "kicks", b->srv, b->name, "off", 'c'));
+    f.topics = truthy(plugin_opt(fold_by, "topics", b->srv, b->name, "off", 'c'));
     f.quiet = plugin_opt(fold_by, "quiet", b->srv, b->name, "hide", 'c') == "fold";
     return f;
 }

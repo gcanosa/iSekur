@@ -2044,7 +2044,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         int n = typing_quiet(on);
         print(b, LK::INFO, std::string("Typing effect ") + (on ? "on: messages type themselves out" : "off") + " (/save to keep it)");
         print(b, LK::INFO, on ? "Quiet mode is on as well" + std::string(n ? " in " + std::to_string(n) + " channel" + (n > 1 ? "s" : "") : "") +
-                                    ": joins, parts, quits and nick changes are hidden while typing is on"
+                                    ": joins, parts, quits, nick changes and mode changes are hidden while typing is on"
                               : n ? "Quiet mode is off again in " + std::to_string(n) + " channel" + (n > 1 ? "s" : "") +
                                         " (the ones you made quiet yourself stay quiet)"
                                   : "Quiet mode unchanged: the quiet channels were made quiet by you");
@@ -2550,9 +2550,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         b->quiet = on, b->smart = args == "smart";
         b->quiet_typing = false;  // your choice now: /typing off leaves it
         notify(Ev::BUFFER, b);
-        print(b, LK::INFO, b->quiet   ? "Quiet mode on: joins, parts, quits and nick changes are hidden here"
-                           : b->smart ? "Quiet mode smart: joins, parts, quits and nick changes show only for people who spoke in the last 5 minutes"
-                                      : "Quiet mode off: showing joins, parts, quits and nick changes");
+        print(b, LK::INFO, b->quiet   ? "Quiet mode on: joins, parts, quits, nick changes and mode changes are hidden here"
+                           : b->smart ? "Quiet mode smart: joins, parts, quits, nick changes and mode changes show only for people who spoke in the last 5 minutes"
+                                      : "Quiet mode off: showing joins, parts, quits, nick changes and mode changes");
         return;
     }
     if (cmd == "mute") {  // [server.X] mute: channels (or queries) that never hilight; saved now

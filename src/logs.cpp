@@ -91,6 +91,7 @@ static void classify(Line& l) {
     else if (has(" has left ") || has(" was kicked by ")) l.kind = LK::PART;
     else if (has(" has quit")) l.kind = LK::QUIT;
     else if (has(" is now known as ") || t.rfind("You are now known as ", 0) == 0) l.kind = LK::NICK;
+    else if (has(" changed host to ")) l.kind = LK::HOST;
     else if (has(" changed the topic to: ") || has(" removed the topic") || t.rfind("Topic: ", 0) == 0) l.kind = LK::TOPIC;
     else return;
     if (first != "You" && first != "Topic:") l.nick = first;

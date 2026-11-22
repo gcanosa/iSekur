@@ -888,7 +888,7 @@ void Web::ws_frames(Client& cl) {
 
 // ---- events -> JSON ----------------------------------------------------------
 static const char* KIND[] = {"msg", "action", "notice", "join", "part", "quit",
-                             "nick", "mode", "topic", "info", "error"};
+                             "nick", "mode", "topic", "info", "error", "host"};
 
 // the terminal's time stamp: [general] timestamp, else the theme's
 static std::string ts_fmt(const Core& c) { return ini_get(c.cfg, "general", "timestamp", c.theme.lay("timestamp", "%H:%M")); }
@@ -927,7 +927,8 @@ std::string Web::buf_json(Buffer* b, bool full) {
         if (last == nicks) nicks.clear();
         else last = nicks;
     }
-    auto fc = c.fold_cfg(b);  // eventshidemgr: how the page folds runs of joins, parts and quits (1 on, 2 names, 4 nicks, 8 keep in /quiet)
+    auto fc = c.fold_cfg(b);  // eventshidemgr: how the page folds runs of events (1 on, 2 names, 4 nicks, 8 keep in /quiet, 16 << kind: the kinds that fold)
+    auto fold_flags = [](const Core::FoldCfg& f) { int e = 1 | (f.names ? 2 : 0) | (f.nicks ? 4 : 0) | (f.quiet ? 8 : 0); for (int k = 0; k < 7; k++) if (f.has(k)) e |= 16 << k; return e; };
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) + ",\"net\":" + json_str(s ? s->cfg.name : "") +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
@@ -939,7 +940,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
                                                 ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
            ",\"typing\":[" + typing + "]" + (c.nicklist_colored(b) ? ",\"nc\":1" : "") +
-           (fc.on ? ",\"ef\":" + std::to_string(1 | (fc.names ? 2 : 0) | (fc.nicks ? 4 : 0) | (fc.quiet ? 8 : 0)) : "") +
+           (fc.on ? ",\"ef\":" + std::to_string(fold_flags(fc)) : "") +
            ",\"prefixes\":" + json_str(s ? s->prefix_chars : "") + (nicks.empty() ? "" : ",\"nicks\":" + nicks) + "}";
 }
 

@@ -3706,6 +3706,43 @@ isekur.command("fo", "", function() print(isekur.fold(), isekur.api >= 14) iseku
             sy.exec(ph, "/plugin set fo@y/#y nicks off");
             fc = sy.fold_cfg(yb);
             assert(fc.on && fc.names && !fc.nicks && fc.quiet);
+            {  // the kinds that fold: joins, leaves and nicks by default, the others only when asked, each its own setting
+                sy.exec(ph, "/plugin set fo@y/#y nicks on");
+                fc = sy.fold_cfg(yb);
+                assert(fc.joins && fc.leaves && fc.nicks && !fc.hosts && !fc.modes && !fc.kicks && !fc.topics && fc.has(0) && fc.has(2) && !fc.has(4) && !fc.has(7) && !fc.has(-1));
+                sy.exec(ph, "/plugin set fo modes on");
+                sy.exec(ph, "/plugin set fo@y/#y hosts on");
+                fc = sy.fold_cfg(yb);
+                assert(fc.modes && fc.hosts && !fc.kicks && !fc.topics && fc.has(3) && fc.has(4) && !fc.has(5));
+                // a host change was never a line: it is one now, only where `hosts` is on, and not for you
+                Msg hm;
+                yb->nicks[ys->lower("alice")] = {};
+                size_t before = yb->lines.size();
+                assert(irc_parse(":alice!a@h CHGHOST newu new.host", hm));
+                sy.handle(ys, hm);
+                assert(yb->lines.size() == before + 1 && yb->lines.back().kind == LK::HOST && yb->lines.back().text == "alice changed host to newu@new.host" &&
+                       noise(yb->lines.back()) && fold_kind(yb->lines.back()) == 3);
+                assert(irc_parse(":" + ys->nick + "!me@h CHGHOST mine my.host", hm));
+                before = yb->lines.size();
+                sy.handle(ys, hm);
+                assert(yb->lines.size() == before);  // yours: just the nicklist's host
+                sy.exec(ph, "/plugin set fo@y/#y hosts off");
+                assert(irc_parse(":alice!a@h CHGHOST newu again.host", hm));
+                sy.handle(ys, hm);
+                assert(yb->lines.size() == before);  // off here: no line
+                sy.exec(ph, "/plugin set fo@y/#y nicks off");
+            }
+            {  // fold_kind and noise: what is which kind of event; /quiet hides mode and host lines and leaves kicks and topic changes
+                auto L = [](LK k, const std::string& n, const std::string& t, bool self = false) { return Line{0, k, n, t, self, false}; };
+                assert(fold_kind(L(LK::JOIN, "a", "a has joined #c")) == 0 && fold_kind(L(LK::QUIT, "a", "a has quit")) == 1 && fold_kind(L(LK::PART, "a", "a has left #c")) == 1);
+                assert(fold_kind(L(LK::PART, "a", "a was kicked by op (bye)")) == 5 && fold_kind(L(LK::NICK, "a", "a is now known as b")) == 2 && fold_kind(L(LK::HOST, "a", "a changed host to u@h")) == 3);
+                assert(fold_kind(L(LK::MODE, "op", "mode/#c [+o bob] by op")) == 4 && fold_kind(L(LK::MODE, "", "Chat was cleared by a moderator")) == -1);  // Twitch's notices aren't mode changes
+                assert(fold_kind(L(LK::TOPIC, "op", "op changed the topic to: x")) == 6 && fold_kind(L(LK::TOPIC, "op", "op removed the topic")) == 6);
+                assert(fold_kind(L(LK::TOPIC, "srv", "Topic: op changed the topic to: x")) == -1 && fold_kind(L(LK::TOPIC, "", "No topic is set")) == -1);  // the topic shown on joining isn't a change
+                assert(fold_kind(L(LK::JOIN, "me", "You have joined #c", true)) == -1 && fold_kind(L(LK::MODE, "me", "mode/#c [+o x] by me", true)) == -1 && fold_kind(L(LK::MSG, "a", "hi")) == -1);
+                assert(noise(L(LK::MODE, "op", "mode/#c [+o bob] by op")) && noise(L(LK::HOST, "a", "a changed host to u@h")) && noise(L(LK::JOIN, "a", "a has joined #c")));
+                assert(!noise(L(LK::PART, "a", "a was kicked by op")) && !noise(L(LK::TOPIC, "op", "op changed the topic to: x")) && !noise(L(LK::MODE, "me", "mode/#c [+o x] by me", true)));
+            }
             Buffer* yq = sy.open(ys, BT::QUERY, "bob");
             assert(!sy.fold_cfg(yq).on);  // channels only
             sy.exec(ph, "/plugin enable fo@other");

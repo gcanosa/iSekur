@@ -598,9 +598,9 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 .l.hl { background: var(--hilight_line-bg, #ff00aa10); }
 .l.hl .tx { color: var(--hilight_text-fg, inherit); background: var(--hilight_text-bg, transparent); }  /* like the terminal's hilight_text */
 #msgs .older { color: var(--muted); text-align: center; font-size: calc(12px * var(--z, 1)); padding: 4px; }
-.quiet:not(.evq) .l.noise, .smart .l.noise.idle { display: none; }  /* /quiet: joins, parts, quits and nick changes; smart: of people who haven't spoken lately */
+.quiet:not(.evq) .l.noise, .smart .l.noise.idle { display: none; }  /* /quiet: joins, parts, quits, nick and host changes and mode changes; smart: of people who haven't spoken lately */
 /* eventshidemgr (isekur.fold): a run of them is one row, "⇄ 3 joined, 2 left ▸" in the theme's accent, a click opens it. .fc: a line in a folded run; .nf: not folded (nick
-   changes with nicks off), so /quiet still hides it even when it keeps the summary rows (.evq) */
+   a kind that isn't asked for), so /quiet still hides it even when it keeps the summary rows (.evq) */
 .quiet.evq .l.noise.nf, .l.fc, .l.fsum.off { display: none !important; }
 .l.fsum { cursor: pointer; }
 .l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); }  /* iSekur sends the row's color as the theme element "fold" (fold_style), so --fold-fg comes from applyTheme's loop */
@@ -618,8 +618,8 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 .k-join, .k-join .nk { color: var(--join-fg, var(--join)); }
 .k-part, .k-part .nk { color: var(--part-fg, var(--part)); }
 .k-quit, .k-quit .nk { color: var(--quit-fg, var(--part-fg, var(--part))); }
-.k-info .tx, .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-info .nk, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--info-fg, var(--info)); }
-.k-nick .tx, .k-mode .tx, .k-topic .tx, .k-nick .nk, .k-mode .nk, .k-topic .nk { color: var(--event-fg, var(--info-fg, var(--info))); }
+.k-info .tx, .k-nick .tx, .k-mode .tx, .k-topic .tx, .k-host .tx, .k-info .nk, .k-nick .nk, .k-mode .nk, .k-topic .nk, .k-host .nk { color: var(--info-fg, var(--info)); }
+.k-nick .tx, .k-mode .tx, .k-topic .tx, .k-host .tx, .k-nick .nk, .k-mode .nk, .k-topic .nk, .k-host .nk { color: var(--event-fg, var(--info-fg, var(--info))); }
 .k-error .tx, .k-error .nk { color: var(--error-fg, var(--err)); }
 .l .badge { background: var(--note-bg, var(--hilight-bg, var(--hl-bg))); color: var(--note-fg, var(--hilight-fg, #fff)); font-weight: 700; padding: 0 6px; border-radius: 4px; }
 .l .badge.p { background: var(--plugin-bg, var(--accent)); color: var(--plugin-fg, #000); }
@@ -1166,13 +1166,13 @@ function alignEm(d) {
 
 // ef (eventshidemgr, 1 on, 2 names, 4 nicks, 8 keep in /quiet): evq = a /quiet tab that still shows its summary rows
 function quietClass(el, q, ef) { el.classList.toggle("quiet", q === 1); el.classList.toggle("smart", q === 2); el.classList.toggle("evq", q === 1 && (ef & 9) === 9); }  // /quiet: 1 all, 2 smart
-const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--"};
+const MARK = {join: "-->", part: "<--", quit: "<--", error: "!!", info: "--", nick: "--", mode: "--", topic: "--", host: "--"};
 // a line made only of block and box-drawing characters (the startup banner's letters): its rows must touch, so no line spacing
 const isArt = x => { const p = (x || "").replace(/\x03(?:\d{1,2}(?:,\d{1,2})?)?|\x04(?:[0-9a-fA-F]{6}(?:,[0-9a-fA-F]{6})?)?|[\x02\x0f\x16\x1d\x1f]/g, ""); return /^[\s\u2500-\u259f]+$/.test(p) && /[\u2550-\u256c\u2580-\u259f]{4}/.test(p); };
 function lineEl(b, l) {
   const d = document.createElement("div");
-  // noise: a join, part, quit or nick change of someone else (a kick isn't); idle: they hadn't spoken lately (/quiet smart hides those)
-  d.className = "l k-" + l.k + (isArt(l.x) ? " art" : "") + (l.h ? " hl" : "") + (!l.s && /^(join|part|quit|nick)$/.test(l.k) && !(l.k === "part" && l.x.includes(" was kicked by ")) ? " noise" + (l.i ? " idle" : "") : "");
+  // noise: a join, part, quit, nick or host change of someone else, or a channel mode change (a kick and a topic change aren't); idle: they hadn't spoken lately (/quiet smart hides those)
+  d.className = "l k-" + l.k + (isArt(l.x) ? " art" : "") + (l.h ? " hl" : "") + (foldKind(l) >= 0 && foldKind(l) <= 4 ? " noise" + (l.i ? " idle" : "") : "");
   const ts = document.createElement("span"); ts.className = "ts";
   ts.textContent = l.tf || new Date(l.ts * 1000).toTimeString().slice(0, 5);  // tf: the [general] timestamp format, done by iSekur
   const nk = document.createElement("span"); nk.className = "nk";
@@ -1206,20 +1206,24 @@ function lineEl(b, l) {
   return d;
 }
 
-// eventshidemgr (isekur.fold): a run of joins, parts, quits and nick changes folds into one row, "⇄ 3 joined, 2 left ▸" (▾ when open); a click opens it, and
-// the tab drawn again folds them all up. b.ef: 1 on, 2 names, 4 nick changes too, 8 kept in a /quiet tab. ponytail: a run whose top lines
+// eventshidemgr (isekur.fold): a run of joins, parts, quits, nick changes and (when asked) host changes, mode changes, kicks and topic changes folds into one row, "⇄ 3 joined, 2 left ▸" (▾ when open); a click opens it, and
+// the tab drawn again folds them all up. b.ef: 1 on, 2 names, 4 nick changes too, 8 kept in a /quiet tab, 16 << kind for each kind that folds (foldKind's numbers). ponytail: a run whose top lines
 // scroll off the 2000 kept loses them from its count, and a run cut where older lines are loaded is two rows
-const FOLD_W = ["joined", "left", "renamed"];
+// eventshidemgr's kinds, as iSekur's fold_kind: 0 joined, 1 left (part or quit), 2 renamed, 3 host changed, 4 mode set, 5 kicked, 6 topic changed; -1: not one
+const FOLD_W = [["joined"], ["left"], ["renamed"], ["host changed", "hosts changed"], ["mode set", "modes set"], ["kicked"], ["topic changed", "topics changed"]];
+const fw = (k, n) => FOLD_W[k][n === 1 ? 0 : FOLD_W[k].length - 1];
+const foldKind = l => l.s ? -1 : l.k === "join" ? 0 : l.k === "quit" ? 1 : l.k === "part" ? (l.x.includes(" was kicked by ") ? 5 : 1) : l.k === "nick" ? 2 : l.k === "host" ? 3
+  : l.k === "mode" ? (l.x.startsWith("mode/") ? 4 : -1) : l.k === "topic" ? (!l.x.startsWith("Topic: ") && (l.x.includes(" changed the topic to: ") || l.x.includes(" removed the topic")) ? 6 : -1) : -1;
 function addLine(parent, b, l) { const d = lineEl(b, l); parent.append(d); foldAdd(d, b, l); return d; }
 function foldAdd(d, b, l) {
-  const ef = b.ef | 0;
-  if (!(ef & 1) || !d.classList.contains("noise")) return;
-  if (!(ef & 4) && l.k === "nick") { d.classList.add("nf"); return; }  // a plain line then, which /quiet still hides
-  if (b.q === 1 && !(ef & 8)) return;  // /quiet hides them all
+  const ef = b.ef | 0, fk = foldKind(l), noise = fk >= 0 && fk <= 4;
+  if (!(ef & 1) || fk < 0) return;
+  if (!(ef & (16 << fk))) { if (noise) d.classList.add("nf"); return; }  // a kind that doesn't fold: a plain line, which /quiet still hides if it is noise
+  if (noise && b.q === 1 && !(ef & 8)) return;  // /quiet hides them all
   const p = d.previousElementSibling;
   let r = p && p.run_;
   if (!r) {
-    r = {lines: [], cnt: [0, 0, 0], who: [[], [], []], open: false, ef, min: b.q === 1 ? 1 : 2, ts0: "", ts1: ""};
+    r = {lines: [], cnt: FOLD_W.map(() => 0), who: FOLD_W.map(() => []), open: false, ef, min: b.q === 1 ? 1 : 2, ts0: "", ts1: ""};
     const s = r.sum = lineEl(b, {ts: l.ts, tf: l.tf, k: "info", n: "", x: "", s: 0, h: 0});
     s.classList.replace("k-info", "k-nick"); s.classList.add("fsum", "off");
     s.tabIndex = 0; s.setAttribute("role", "button");
@@ -1232,7 +1236,7 @@ function foldAdd(d, b, l) {
   }
   d.run_ = r; r.lines.push(d);
   if (!(b.q === 2 && l.i)) {  // smart hides those of people who hadn't spoken lately: not counted
-    const k = l.k === "join" ? 0 : l.k === "nick" ? 2 : 1;
+    const k = fk;
     r.cnt[k]++; if (!r.who[k].includes(l.n)) r.who[k].push(l.n);
     const ts = d.querySelector(".ts").textContent;
     r.ts0 = r.ts0 || ts; r.ts1 = ts;
@@ -1240,13 +1244,13 @@ function foldAdd(d, b, l) {
   foldPaint(r);
 }
 function foldPaint(r) {
-  const n = r.cnt[0] + r.cnt[1] + r.cnt[2], on = n >= r.min;
+  const n = r.cnt.reduce((a, z) => a + z, 0), lone = n === 1 && r.min === 1 && r.lines.every(e => e.classList.contains("noise")), on = n >= (lone ? 1 : 2);  // a lone event stays a line (in a quiet tab a hidden kind has no other way to show)
   r.sum.classList.toggle("off", !on);
   for (const e of r.lines) e.classList.toggle("fc", on && !r.open);
-  const part = k => r.cnt[k] ? r.cnt[k] + " " + FOLD_W[k] + (r.ef & 2 ? " (" + r.who[k].slice(0, 3).join(", ") + (r.who[k].length > 3 ? ", +" + (r.who[k].length - 3) : "") + ")" : "") : "";
-  r.sum.querySelector(".tx").textContent = "\u21C4 " + [0, 1, 2].map(part).filter(Boolean).join(", ") + (r.open ? " \u25BE" : " \u25B8");  // the page can draw these; the terminal's row uses › and v (one cell in every font)
+  const part = k => r.cnt[k] ? r.cnt[k] + " " + fw(k, r.cnt[k]) + (r.ef & 2 ? " (" + r.who[k].slice(0, 3).join(", ") + (r.who[k].length > 3 ? ", +" + (r.who[k].length - 3) : "") + ")" : "") : "";
+  r.sum.querySelector(".tx").textContent = "\u21C4 " + FOLD_W.map((_, k) => part(k)).filter(Boolean).join(", ") + (r.open ? " \u25BE" : " \u25B8");  // the page can draw these; the terminal's row uses › and v (one cell in every font)
   r.sum.querySelector(".ts").textContent = r.open ? r.ts0 : r.ts1;
-  r.sum.title = [0, 1, 2].filter(k => r.who[k].length).map(k => FOLD_W[k] + ": " + r.who[k].slice(0, 40).join(", ") + (r.who[k].length > 40 ? " …" : "")).join("\n");
+  r.sum.title = FOLD_W.map((_, k) => k).filter(k => r.who[k].length).map(k => fw(k, 2) + ": " + r.who[k].slice(0, 40).join(", ") + (r.who[k].length > 40 ? " …" : "")).join("\n");
   r.sum.setAttribute("aria-expanded", r.open);
 }
 

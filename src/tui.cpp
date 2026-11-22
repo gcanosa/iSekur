@@ -519,7 +519,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     case LK::PART: marker = "<--", ms = body = T.get("part"); break;
     case LK::QUIT: marker = "<--", ms = body = sty(T, "quit", "part"); break;
     case LK::ERROR: marker = "!!", ms = body = T.get("error"); break;
-    case LK::NICK: case LK::MODE: case LK::TOPIC: marker = "--", ms = body = sty(T, "event", "info"); break;  // mirc: green, like joins
+    case LK::NICK: case LK::MODE: case LK::TOPIC: case LK::HOST: marker = "--", ms = body = sty(T, "event", "info"); break;  // mirc: green, like joins
     default: marker = "--", ms = body = T.get("info"); break;
     }
     if (l.badge_kind == 'f') body = fold_style(T);  // eventshidemgr's row: the theme's accent, apart from the chat
@@ -684,20 +684,22 @@ void Tui::draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int ch, bool 
 // drawn in the theme's accent (badge_kind 'f', see fold_style) so it stands out from the chat on every theme. The marks are the two
 // that are one cell wide in every monospace font (Iosevka draws ▸ ▾ ⇄ and all other arrows two cells wide, over what follows)
 static Line fold_line(const std::vector<const Line*>& run, bool open, bool names) {
-    int n[3] = {0, 0, 0};
-    std::vector<std::string> who[3];
+    int n[7] = {};
+    std::vector<std::string> who[7];
     for (auto it = run.rbegin(); it != run.rend(); ++it) {
         const Line& l = **it;
-        int k = l.kind == LK::JOIN ? 0 : l.kind == LK::NICK ? 2 : 1;  // parts and quits both left
+        int k = fold_kind(l);  // joined, left (parts and quits), renamed, host changed, mode set, kicked, topic changed
+        if (k < 0) continue;
         n[k]++;
         if (std::find(who[k].begin(), who[k].end(), l.nick) == who[k].end()) who[k].push_back(l.nick);
     }
-    static const char* W[3] = {"joined", "left", "renamed"};
+    static const char* W[7][2] = {{"joined", "joined"}, {"left", "left"}, {"renamed", "renamed"}, {"host changed", "hosts changed"},
+                                  {"mode set", "modes set"}, {"kicked", "kicked"}, {"topic changed", "topics changed"}};
     std::string t = open ? "v " : "\u203A ";
     bool first = true;
-    for (int k = 0; k < 3; k++) {
+    for (int k = 0; k < 7; k++) {
         if (!n[k]) continue;
-        t += (first ? "" : ", ") + std::to_string(n[k]) + " " + W[k], first = false;
+        t += (first ? "" : ", ") + std::to_string(n[k]) + " " + W[k][n[k] == 1 ? 0 : 1], first = false;
         if (!names) continue;
         t += " (";
         for (size_t i = 0; i < who[k].size() && i < 3; i++) t += (i ? ", " : "") + who[k][i];
@@ -721,7 +723,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
     bool zhide = zen && !c.view.events;  // the focus view hides them unless it shows them
     bool hide = zhide || (b->quiet && !(fc.on && fc.quiet));  // join/part/quit lines: a quiet tab's (its summary rows stay when the plugin keeps them) and the focus view's
     bool fold = fc.on && !zhide;
-    auto foldable = [&](const Line& l) { return noise(l) && (fc.nicks || l.kind != LK::NICK); };
+    auto foldable = [&](const Line& l) { return fc.has(fold_kind(l)); };  // the kinds the plugin was asked to fold
     auto hidden = [&](const Line& l) { return noise(l) && (hide || (b->smart && l.idle) || (fold && b->quiet && !foldable(l))); };  // smart: only those of people who haven't spoken lately
     if (b->scroll)  // scrolled back: the lines that came in since push the view up by all their rows, not one
         for (auto it = b->lines.rbegin(); it != b->lines.rend() && b->scroll_new > 0; ++it, b->scroll_new--)
@@ -772,7 +774,7 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
             if (!foldable(l2)) break;
             run.push_back(&l2), ri.push_back(n2), last = n2;
         }
-        if (run.size() < (b->quiet ? 1u : 2u)) {  // a lone join stays a line (in a quiet tab it has no other way to show)
+        if (run.size() < (b->quiet && run.size() == 1 && noise(*run[0]) ? 1u : 2u)) {  // a lone join stays a line (in a quiet tab a hidden kind has no other way to show)
             for (size_t i = 0; i < run.size(); i++) put(*run[i], (int)ri[i] + base, -1, nullptr);
             n = n2 - 1;
             continue;

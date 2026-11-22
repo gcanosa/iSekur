@@ -177,12 +177,12 @@ static const std::vector<CmdInfo> CMDS = {
      "A #channel first works on that one from any tab. A double click "
      "on the topic bar opens it in a box to edit, in the terminal and the webchat, when you may change it.",
      {"/topic", "/topic Welcome! Rules: be nice | https://example.org", "/topic -delete", "/topic #isekur"}},
-    {"quiet", "Chat", "[off|smart|all]", "Hide joins, parts, quits and nick changes in this tab",
+    {"quiet", "Chat", "[off|smart|all]", "Hide joins, parts, quits, nick changes and mode changes in this tab",
      "For the current tab only, until restart: set join_filter to have it in every channel. all (or on) hides every one of "
      "them; smart hides them unless the person spoke in the last 5 minutes, so lurkers' comings and goings vanish "
      "but a quit from the conversation you're in stays; off shows all. Without an argument it toggles between "
-     "off and all. Hidden lines are still logged and come back with /quiet off. Your own joins and parts, kicks "
-     "and mode changes always show.",
+     "off and all. Hidden lines are still logged and come back with /quiet off. Your own joins and parts, your own "
+     "mode changes, kicks and topic changes always show.",
      {"/quiet", "/quiet smart", "/quiet off"}},
     {"mute", "Chat", "[on|off]", "Mute hilights and alerts from this tab",
      "Toggles for the current tab and saves it in the network's mute setting right away. Your nick and hilight_words stop highlighting, "

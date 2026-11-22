@@ -128,7 +128,7 @@ time_t parse_server_time(const std::string& iso);
 std::string iso_utc(time_t t, const char* frac);  // "2024-01-02T03:04:05" + frac (".000Z")
 
 // ---- buffers ---------------------------------------------------------------
-enum class LK { MSG, ACTION, NOTICE, JOIN, PART, QUIT, NICK, MODE, TOPIC, INFO, ERROR };
+enum class LK { MSG, ACTION, NOTICE, JOIN, PART, QUIT, NICK, MODE, TOPIC, INFO, ERROR, HOST };  // HOST (last, the numbers are kept in files): someone's host changed (CHGHOST), only where eventshidemgr asks
 struct Line {
     time_t ts;
     LK kind;
@@ -170,11 +170,24 @@ inline size_t typed_chars(const Line& l, size_t len, long long now) {
     long long per = len ? std::min<long long>(33, 2000 / (long long)len) : 33;
     return now <= l.typed_at ? 0 : (size_t)((now - l.typed_at) / std::max<long long>(per, 1));
 }
-// what /quiet hides: other people coming, going and renaming. A kick is a PART line, but it isn't noise (the webchat's lineEl says the same)
-inline bool noise(const Line& l) {
-    return !l.self && (l.kind == LK::JOIN || l.kind == LK::PART || l.kind == LK::QUIT || l.kind == LK::NICK) &&
-           !(l.kind == LK::PART && l.text.find(" was kicked by ") != std::string::npos);
+// which kind of event a line is, for eventshidemgr's folded rows: 0 joined, 1 left (part or quit), 2 renamed, 3 host changed, 4 mode set,
+// 5 kicked, 6 topic changed; -1: not one (yours, a message, a topic shown on joining, Twitch's moderation notices). The webchat's foldKind says the same
+inline int fold_kind(const Line& l) {
+    if (l.self) return -1;
+    switch (l.kind) {
+        case LK::JOIN: return 0;
+        case LK::QUIT: return 1;
+        case LK::PART: return l.text.find(" was kicked by ") != std::string::npos ? 5 : 1;
+        case LK::NICK: return 2;
+        case LK::HOST: return 3;
+        case LK::MODE: return l.text.rfind("mode/", 0) == 0 ? 4 : -1;
+        case LK::TOPIC: return l.text.rfind("Topic: ", 0) != 0 && (l.text.find(" changed the topic to: ") != std::string::npos || l.text.find(" removed the topic") != std::string::npos) ? 6 : -1;
+        default: return -1;
+    }
 }
+// what /quiet hides: other people coming, going and renaming, their host changes and the channel's mode changes. A kick and a topic change
+// are folded by the plugin when it is asked to, but they aren't noise: /quiet leaves them (the webchat's lineEl says the same)
+inline bool noise(const Line& l) { int k = fold_kind(l); return k >= 0 && k <= 4; }
 
 // /logs: one log file; day YYYY-MM-DD (the current <name>.log: the day it was last written)
 struct LogFile { std::string net, name, day, path; long long size = 0; bool current = false; };
@@ -565,7 +578,11 @@ struct Core {
     // 2 left") that a click opens, in the tabs where the plugin is on. Display only. The plugin's settings `names`, `nicks`
     // and `quiet` (hide | fold) say how: quiet = fold keeps the summary rows in a /quiet tab (the lines themselves stay hidden)
     std::string fold_by;
-    struct FoldCfg { bool on = false, names = false, nicks = true, quiet = false; };
+    struct FoldCfg {
+        bool on = false, names = false, quiet = false;
+        bool joins = true, leaves = true, nicks = true, hosts = false, modes = false, kicks = false, topics = false;  // the kinds that fold (fold_kind's order)
+        bool has(int k) const { const bool v[7] = {joins, leaves, nicks, hosts, modes, kicks, topics}; return k >= 0 && k < 7 && v[k]; }
+    };
     FoldCfg fold_cfg(const Buffer* b) const;
     // a plugin's radio (API 12, src/plugin/radio.cpp): one stream at a time, decoded by ffmpeg to MP3 and fanned out to the webchat's
     // <audio> (GET /radio/stream) and, when asked, a player on this machine. A YouTube link (a 24/7 live) goes through yt-dlp

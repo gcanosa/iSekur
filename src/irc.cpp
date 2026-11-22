@@ -920,7 +920,7 @@ void Core::handle(Server* s, const Msg& m) {
         if (!b) return;
         b->topic = m.p(num ? 2 : 1);
         line(b, LK::TOPIC, m.nick,  // "TOPIC #c :" (empty): the topic is gone
-             num ? "Topic: " + b->topic : b->topic.empty() ? m.nick + " removed the topic" : m.nick + " changed the topic to: " + b->topic);
+             num ? "Topic: " + b->topic : b->topic.empty() ? m.nick + " removed the topic" : m.nick + " changed the topic to: " + b->topic, !num && is_me(m.nick));
         notify(Ev::BUFFER, b);
         return;
     }
@@ -1118,7 +1118,7 @@ void Core::handle(Server* s, const Msg& m) {
         }
         std::string args;
         for (size_t i = 1; i < m.params.size(); i++) args += (i > 1 ? " " : "") + m.params[i];
-        line(b, LK::MODE, m.nick, "mode/" + tgt + " [" + args + "] by " + m.nick);
+        line(b, LK::MODE, m.nick, "mode/" + tgt + " [" + args + "] by " + m.nick, is_me(m.nick));  // yours aren't noise: /quiet and the fold leave them
         notify(Ev::BUFFER, b);
         return;
     }
@@ -1157,7 +1157,14 @@ void Core::handle(Server* s, const Msg& m) {
         }
         return;
     }
-    if (cmd == "CHGHOST") { set_host(*this, s, m.nick, m.p(0) + "@" + m.p(1)); return; }
+    if (cmd == "CHGHOST") {
+        if (!is_me(m.nick))  // nothing showed these: now a line in the channels where eventshidemgr asks for host changes (hosts on), folded with the rest
+            for (auto& b : bufs)
+                if (b->srv == s && b->type == BT::CHANNEL && b->nicks.count(s->lower(m.nick)) && fold_cfg(b.get()).hosts)
+                    line(b.get(), LK::HOST, m.nick, m.nick + " changed host to " + m.p(0) + "@" + m.p(1));
+        set_host(*this, s, m.nick, m.p(0) + "@" + m.p(1));
+        return;
+    }
     if (cmd == "ACCOUNT") {  // account-notify: logged in as p(0), "*" = logged out
         std::string a = m.p(0) == "*" ? "" : m.p(0);
         each_entry(m.nick, [&](NickEntry& e) { bool ch = e.account != a; e.account = a; return ch; });

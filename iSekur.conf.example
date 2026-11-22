@@ -64,9 +64,9 @@ rejoin_on_kick = off
 # Join a channel you are invited to (/invite, not from someone you ignore with -i). Per server too.
 invite_join = off
 
-# What a channel tab does with other people's joins, parts, quits and nick changes: show them (off),
+# What a channel tab does with other people's joins, parts, quits, nick changes and mode changes: show them (off),
 # only those of people who spoke in the last 5 minutes (smart), or none (all). /quiet [off|smart|all]
-# changes one tab until you restart. Kicks and your own lines always show. Per server too.
+# changes one tab until you restart. Kicks, topic changes and your own lines always show. Per server too.
 join_filter = off
 
 # The iSekur banner at startup: in the theme's colors, or white and gray.
