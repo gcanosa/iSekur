@@ -1,10 +1,11 @@
 // /backup and /restore: the config folder's state (settings, servers, passwords with their secret.key, plugins and their data,
-// your themes, the BNC's certificate) in one file, <config dir>/backups/<name>.isebak. The file is compressed (zlib) and
-// sealed with a passphrase (scrypt + AES-256-GCM, the same as /e2e), so the passwords inside stay private on a USB stick.
+// your themes, the BNC's certificate) in one file, <config dir>/backups/<name>.isebak, sealed with a passphrase (scrypt +
+// AES-256-GCM, the same as /e2e), so the passwords inside stay private on a USB stick.
 //
-//   "iSEBAK1" 'z'|'p'  salt(16)  nonce|ciphertext|tag
+//   "iSEBAK1"  salt(16)  nonce|ciphertext|tag
 //
-// The ciphertext holds records "<size>\t<path>\n<bytes>", zlib-compressed behind a 4-byte size when the first letter is z.
+// The ciphertext holds records "<size>\t<path>\n<bytes>". Not compressed: a backup is a few KB to some tens of KB, and
+// zlib would be one more dependency for that.
 #include <algorithm>
 #include <cerrno>
 #include <cstring>
@@ -17,13 +18,10 @@
 #include <unistd.h>
 #include "core.h"
 #include "plugin/internal.h"
-#ifndef ISEKUR_NO_ZLIB
-#include <zlib.h>
-#endif
 
-static const char MAGIC[] = "iSEBAK1";  // 7 bytes, then z (compressed) or p
-static const size_t HEAD = 8, SALT = 16;
-[[maybe_unused]] static const size_t MAX_RAW = 64u << 20;  // a backup is a few KB: 64 MB is a corrupt (or hostile) file
+static const char MAGIC[] = "iSEBAK1";  // 7 bytes
+static const size_t HEAD = 7, SALT = 16;
+static const size_t MAX_FILE = 64u << 20;  // a backup is a few KB: a bigger file is not one (and /dev/zero is no file to read)
 
 static bool stem_ok(const std::string& s) {  // a backup's or theme's name: letters, digits, . _ - (never a path)
     if (s.empty() || s[0] == '.' || s.find("..") != std::string::npos) return false;
@@ -45,57 +43,24 @@ bool backup_path_ok(const std::string& p) {
     return false;
 }
 
-std::string backup_pack(const std::vector<BackupFile>& files, const std::string& pass, bool zip) {
+std::string backup_pack(const std::vector<BackupFile>& files, const std::string& pass) {
     std::string body;
     for (auto& f : files) body += std::to_string(f.data.size()) + "\t" + f.path + "\n" + f.data;
-    char kind = 'p';
-#ifndef ISEKUR_NO_ZLIB
-    if (zip) {
-        uLongf n = compressBound((uLong)body.size());
-        std::string c(n, '\0');
-        if (compress2((Bytef*)&c[0], &n, (const Bytef*)body.data(), (uLong)body.size(), 9) == Z_OK) {
-            uint32_t raw = (uint32_t)body.size();
-            body = std::string{(char)(raw >> 24), (char)(raw >> 16), (char)(raw >> 8), (char)raw} + c.substr(0, n);
-            kind = 'z';
-        }
-    }
-#else
-    (void)zip;
-#endif
-    std::string head = std::string(MAGIC) + kind;
     unsigned char r[SALT];
     if (RAND_bytes(r, sizeof r) != 1) return "";
     std::string salt((char*)r, sizeof r), key = e2e_key(pass, salt);
     if (key.empty()) return "";
-    return head + salt + unb64(e2e_seal(key, body, head));  // the header is authenticated too: it can't be switched to "plain"
+    return MAGIC + salt + unb64(e2e_seal(key, body, MAGIC));  // the header is authenticated too
 }
 
 bool backup_unpack(const std::string& in, const std::string& pass, std::vector<BackupFile>& out, std::string& err) {
     out.clear();
-    if (in.size() < HEAD + SALT + 28 || in.compare(0, 7, MAGIC) != 0) { err = "not an iSekur backup"; return false; }
-    char kind = in[7];
-    if (kind != 'z' && kind != 'p') { err = "a backup this iSekur doesn't know"; return false; }
-#ifdef ISEKUR_NO_ZLIB
-    if (kind == 'z') { err = "this backup is compressed and this iSekur was built without zlib: install its headers and build again"; return false; }
-#endif
+    if (in.size() < HEAD + SALT + 28 || in.compare(0, HEAD, MAGIC) != 0) { err = "not an iSekur backup"; return false; }
     std::string key = e2e_key(pass, in.substr(HEAD, SALT)), body;
-    if (key.empty() || !e2e_open(key, b64(in.substr(HEAD + SALT)), body, in.substr(0, HEAD))) {
+    if (key.empty() || !e2e_open(key, b64(in.substr(HEAD + SALT)), body, MAGIC)) {
         err = "wrong passphrase, or the file is damaged";
         return false;
     }
-#ifndef ISEKUR_NO_ZLIB
-    if (kind == 'z') {
-        if (body.size() < 5) { err = "the backup is damaged"; return false; }
-        uLongf n = (uLongf)((unsigned char)body[0] << 24 | (unsigned char)body[1] << 16 | (unsigned char)body[2] << 8 | (unsigned char)body[3]);
-        if (n > MAX_RAW) { err = "the backup is damaged"; return false; }
-        std::string raw(n, '\0');
-        if (uncompress((Bytef*)&raw[0], &n, (const Bytef*)body.data() + 4, (uLong)body.size() - 4) != Z_OK || n != raw.size()) {
-            err = "the backup is damaged";
-            return false;
-        }
-        body = std::move(raw);
-    }
-#endif
     for (size_t at = 0; at < body.size();) {
         size_t tab = body.find('\t', at), nl = body.find('\n', at);
         if (tab == std::string::npos || nl == std::string::npos || tab >= nl || tab == at ||
@@ -169,21 +134,20 @@ std::vector<BackupFile> Core::backup_files() const {  // what is on disk now (un
     return out;
 }
 
-struct BakStat { size_t files = 0, raw = 0, packed = 0; };
+struct BakStat { size_t files = 0, size = 0; };
 static bool make_backup(const Core& c, const std::string& path, const std::string& pass, BakStat& st, std::string& err) {
     auto files = c.backup_files();
     if (files.empty() || files[0].path != "isekur.conf") { err = "no config at " + c.cfg_path; return false; }
     char host[256] = "";
     gethostname(host, sizeof host - 1);
     st.files = files.size();
-    for (auto& f : files) st.raw += f.data.size();
     files.insert(files.begin(), {"MANIFEST", "created=" + std::to_string((long long)time(nullptr)) + "\nhost=" + host + "\nversion=" + version_string() +
                                                  "\ndir=" + c.cfg_path.substr(0, c.cfg_path.rfind('/') + 1) + "\n"});
     std::string bytes = backup_pack(files, pass);
     if (bytes.empty()) { err = "couldn't lock the file (no random numbers, or not enough memory for the key)"; return false; }
     mkdir_p(path.substr(0, path.rfind('/')));
     if (!write_atomic(path, bytes, err)) return false;
-    st.packed = bytes.size();
+    st.size = bytes.size();
     return true;
 }
 
@@ -210,7 +174,7 @@ void Core::backup_cmd(Buffer* b, const std::string& args) {
             std::string err;
             if (!make_backup(*this, path, p1, st, err)) { print(b, LK::ERROR, "Backup failed: " + err); return; }
             print(b, LK::INFO, "Backup saved: " + path);
-            print(b, LK::INFO, std::to_string(st.files) + (st.files == 1 ? " file, " : " files, ") + (st.packed < st.raw ? kb(st.raw) + " packed into " : "") + kb(st.packed) + ", locked with your passphrase (iSekur can't recover it)");
+            print(b, LK::INFO, std::to_string(st.files) + (st.files == 1 ? " file, " : " files, ") + kb(st.size) + ", locked with your passphrase (iSekur can't recover it)");
             info_note(b, "To move to another computer: install iSekur there, start it once, copy " + name + ".isebak into ~/.config/isekur/backups/ "
                          "(make the folder if it isn't there), and type /restore " + name + " in iSekur. /restore /any/folder/" + name + ".isebak works too");
         }, true, "Backup", {"Type it again"});
@@ -241,8 +205,9 @@ void Core::restore_cmd(Buffer* b, const std::string& args) {
     if (a.rfind("~/", 0) == 0)
         if (const char* h = getenv("HOME")) a = h + a.substr(1);
     path = a.find('/') != std::string::npos ? a : dir + "/" + (is_bak(a) ? a : a + ".isebak");
+    if (struct stat sb; stat(path.c_str(), &sb) == 0 && (!S_ISREG(sb.st_mode) || (size_t)sb.st_size > MAX_FILE)) { print(b, LK::ERROR, path + " isn't an iSekur backup"); return; }
     if (!slurp(path, bytes)) { print(b, LK::ERROR, "Can't read " + path + (a.find('/') == std::string::npos ? ": /restore lists the backups in " + dir : "")); return; }
-    if (bytes.compare(0, 7, MAGIC) != 0) { print(b, LK::ERROR, path + " isn't an iSekur backup"); return; }
+    if (bytes.compare(0, HEAD, MAGIC) != 0) { print(b, LK::ERROR, path + " isn't an iSekur backup"); return; }
     std::string snap = dir + "/before-restore-" + fmt_time(time(nullptr), "%Y%m%d-%H%M%S") + ".isebak";
     print(b, LK::ERROR, WIPE);
     ask_pass(b, "passphrase of the backup", [this, b, path, bytes, snap](const std::string& pass) { restore_apply(b, path, bytes, snap, pass); }, true,

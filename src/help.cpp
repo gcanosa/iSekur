@@ -381,7 +381,7 @@ static const std::vector<CmdInfo> CMDS = {
      {"/checkconf"}},
     {"backup", "Settings", "[name]", "Save all your settings in one locked file",
      "Packs the config file (servers, aliases, on-connect commands), secret.key (what opens the saved passwords), your plugins "
-     "and their data, your themes and the BNC's certificate into one compressed file, locked with a passphrase you type twice "
+     "and their data, your themes and the BNC's certificate into one file, locked with a passphrase you type twice "
      "(8 characters or more; nobody can recover it for you). It is saved as <name>.isebak in the backups folder next to the config "
      "(~/.config/isekur/backups/), named isekur-date-time when you give none; an existing backup is never overwritten, and the "
      "message says where it went. Logs, history and webchat sessions aren't in it, and neither are /set changes you haven't "

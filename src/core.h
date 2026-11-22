@@ -444,7 +444,7 @@ struct Server {
 // ---- /backup, /restore (backup.cpp) ---------------------------------------------
 struct BackupFile { std::string path, data; };  // path: relative to the config folder ("isekur.conf", "plugins/radio.lua"), or MANIFEST
 bool backup_path_ok(const std::string& rel);   // a file a backup may hold and /restore may write
-std::string backup_pack(const std::vector<BackupFile>& files, const std::string& pass, bool zip = true);  // the .isebak's bytes; "" if it failed
+std::string backup_pack(const std::vector<BackupFile>& files, const std::string& pass);  // the .isebak's bytes; "" if it failed
 bool backup_unpack(const std::string& bytes, const std::string& pass, std::vector<BackupFile>& out, std::string& err);
 
 // ---- command help (/help, Tab completion, webchat completion) ---------------

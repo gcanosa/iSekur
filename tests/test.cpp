@@ -4611,25 +4611,24 @@ print("loaded")
         rmdir(pdir.c_str()), unlink(pc.cfg_path.c_str()), rmdir(d);
     }
 
-    {  // /backup and /restore: the file locks and compresses, a wrong passphrase or a changed byte opens nothing, /restore replaces
+    {  // /backup and /restore: the file is locked, a wrong passphrase or a changed byte opens nothing, /restore replaces
         auto rd = [](const std::string& p) { std::ifstream f(p, std::ios::binary); return std::string(std::istreambuf_iterator<char>(f), {}); };
         auto wr = [](const std::string& p, const std::string& s) { std::ofstream(p, std::ios::binary) << s; };
         std::vector<BackupFile> in = {{"isekur.conf", std::string(4000, 'x') + "\n"}, {"secret.key", std::string("\0\xff\n\t", 4)}, {"plugins/a.lua", "-- a\n"}};
         std::string bak = backup_pack(in, "correct horse"), err;
         assert(bak.compare(0, 7, "iSEBAK1") == 0 && bak.find("xxxxxxxx") == std::string::npos);  // sealed: nothing readable
-#ifndef ISEKUR_NO_ZLIB
-        assert(bak[7] == 'z' && bak.size() < 500);  // 4 KB of one letter: compressed
-#endif
+        assert(bak.size() < 4100 + 120);  // the lock adds a header, a salt, a nonce and a tag, no more
         std::vector<BackupFile> out;
         assert(backup_unpack(bak, "correct horse", out, err) && out.size() == 3 && out[0].data == in[0].data && out[1].data == in[1].data && out[2].path == "plugins/a.lua");
         assert(!backup_unpack(bak, "wrong horse", out, err) && err.find("passphrase") != std::string::npos && out.empty());
         std::string bad = bak;
         bad[bad.size() / 2] ^= 1;
         assert(!backup_unpack(bad, "correct horse", out, err));  // a changed byte
-        bad = bak, bad[7] = bad[7] == 'z' ? 'p' : 'z';
-        assert(!backup_unpack(bad, "correct horse", out, err));  // the compressed/plain letter is sealed too
+        bad = bak, bad[8] ^= 1;
+        assert(!backup_unpack(bad, "correct horse", out, err));  // the salt is part of the key
+        bad = bak, bad[6] = '2';
+        assert(!backup_unpack(bad, "correct horse", out, err) && err == "not an iSekur backup");  // another version
         assert(!backup_unpack("hello", "x", out, err) && err == "not an iSekur backup");
-        assert(backup_unpack(backup_pack(in, "correct horse", false), "correct horse", out, err) && out.size() == 3 && backup_pack(in, "p", false)[7] == 'p');  // stored plain
         // only these files, and no way out of the config folder
         for (const char* ok : {"isekur.conf", "secret.key", "bnc.key", "plugins/radio.lua", "plugins/radio.data", "themes/my-night.theme"}) assert(backup_path_ok(ok));
         for (const char* no : {"", "../isekur.conf", "/etc/passwd", "plugins/../x.lua", "plugins/a/b.lua", "plugins/.catalog.json", "plugins/.lua", "themes/.theme", "themes/../x.theme",
@@ -4669,6 +4668,8 @@ print("loaded")
         wr(dir + "themes/extra.theme", "[colors]\n"), unlink((dir + "secret.key").c_str());
         bk.unsaved["general"]["nick"] = "carol";
         bk.exec(bh, "/restore nope");  // no such backup
+        assert(!bk.pass_buf);
+        bk.exec(bh, "/restore /dev/null");  // not a file to read
         assert(!bk.pass_buf);
         bk.exec(bh, "/restore");  // no name: lists them and asks which (the settings window's Restore button)
         assert(bk.pass_buf == bh && bk.pass_title == "Restore backup" && !bk.pass_hidden && bk.pass_info.size() >= 5 && bk.pass_info[0].find("WIPES") != std::string::npos);

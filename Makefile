@@ -71,16 +71,6 @@ else
   endif
 endif
 
-# zlib: /backup compresses its .isebak with it. Without the headers the files are stored uncompressed
-# (and a compressed one made elsewhere can't be restored here)
-ifeq ($(shell printf '\043include <zlib.h>\n' | $(CXX) -E -x c++ $(OPENSSL_CFLAGS) - >/dev/null 2>&1 && echo yes),yes)
-  ZLIB_LIBS := -lz
-else
-  $(warning no zlib headers: /backup files won't be compressed. For that, install them and run make again:)
-  $(warning   Debian/Ubuntu: sudo apt install zlib1g-dev   Fedora/RHEL: sudo dnf install zlib-devel   Alpine: sudo apk add zlib-dev)
-  OPENSSL_CFLAGS += -DISEKUR_NO_ZLIB
-endif
-
 PREFIX   ?= /usr/local
 DATADIR  ?= $(PREFIX)/share/isekur
 MANDIR   ?= $(PREFIX)/share/man
@@ -89,7 +79,7 @@ COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-stro
             -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Ivendor/libvterm/include -Isrc -Ibuild $(OPENSSL_CFLAGS)
 CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
-LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS) $(ICONV_LIBS) $(ZLIB_LIBS)
+LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS) $(ICONV_LIBS)
 
 # the plugin engine (src/plugin/): see internal.h for what each file holds
 PLUG := host api_core api_ui api_media catalog radio
