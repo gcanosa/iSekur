@@ -1232,6 +1232,8 @@ void Web::screen_poll() {
     ss_at = now;
     std::vector<Core::SCell> g;
     if (!c.screen_frame(ss_w, ss_h, "web", g)) return;
+    if (c.tint.web && c.tint.on())  // isekur.tint (twilight): a bright saver would undo it
+        for (auto& sc : g) if (sc.ch) sc.fg = tint_color(sc.fg, c.tint);
     bool full = ss_last.size() != g.size();
     std::string o = "{\"t\":\"ssf\",\"w\":" + std::to_string(ss_w) + ",\"h\":" + std::to_string(ss_h) + ",\"full\":" + (full ? "true" : "false") + ",\"c\":[";
     bool first = true;
@@ -1314,7 +1316,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
         broadcast(last_order = o + "]}");
         break;
     }
-    case Ev::TINT: broadcast(theme_json()); break;  // the theme again in the tint's colors; the page keeps its lines
+    case Ev::TINT: broadcast(theme_json()), broadcast(stat_json()); break;  // the theme and the status bar's items again in the tint's colors; the page keeps its lines
     case Ev::THEME:  // also /set timestamp or scrollback: every tab's lines again, in the new format
         broadcast(theme_json());
         for (auto& x : c.bufs) known.erase(x->id), pending.insert(x->id);

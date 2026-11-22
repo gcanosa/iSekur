@@ -1086,6 +1086,7 @@ function addText(parent, text, st) {
   parent.append(span);
 }
 // isekur.tint (twilight): the server already tinted the theme; mIRC colors are the page's own, so they get the same multiply
+const tintLine = c => { const t = theme.tint, v = t && rgb(tintc(c)); return v && chatBg ? hexc(readOn([v], chatBg)) : c; };  // a line's own color (l.c) under the tint, kept readable on the chat
 const tintc = c => { const t = theme.tint, v = rgb(c); return t && v ? hexc(v.map((x, i) => Math.round(x * t[i] * (1 - t[3])))) : c; };
 function mirc(parent, s) {
   let st = {}, buf = "";
@@ -1181,7 +1182,7 @@ function lineEl(b, l) {
     nk.textContent = (e && e[0] ? e[0][0] : "") + l.n;
     const br = (theme.lay || {}).nick_brackets || ""; if ([...br].length === 2) nk.textContent = [...br][0] + nk.textContent + [...br][1];
     if (l.s) nk.className += " self", theme.self && (nk.style.color = theme.self);  // own_nick_color: none of the others' colors
-    else if (!l.h) nk.style.color = l.c || nickColor(l.n);
+    else if (!l.h) nk.style.color = l.c ? tintLine(l.c) : nickColor(l.n);
     mirc(tx, l.x); tx.src_ = l.x;
   } else if (l.k === "action") { nk.textContent = "*"; mirc(tx, tx.src_ = l.n + " " + l.x); }
   else if (l.k === "notice") { nk.textContent = "-" + l.n + "-"; mirc(tx, tx.src_ = l.x); }

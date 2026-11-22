@@ -426,14 +426,22 @@ static std::vector<Row> status_info(const Core& c, Style st, bool dcc = true) {
 
 std::string json_str(const std::string& s);  // web.cpp
 std::string status_info_json(const Core& c) {
+    // isekur.tint (twilight): the page paints these with the colors given here (not the theme's), so they are tinted here, like the theme's
+    const Theme& T = c.look(true);
+    const Tint& tn = c.tint;
+    bool tw = tn.web && tn.on();
+    RGB ref = T.get("status").bg >= 0 ? T.get("status").bg : T.get("default").bg;  // what an item without a background of its own sits on
+    auto shade = [&](Style s) { if (tw) s.fg = tint_fg(s.fg, s.bg >= 0 ? s.bg : ref, tn), s.bg = tint_color(s.bg, tn); return s; };
     std::string o = "[";
-    for (auto& r : status_info(c, sty(c.look(true), "status_info", "status_hi"), false)) {
+    for (auto& r : status_info(c, sty(T, "status_info", "status_hi"), false)) {
         o += o.size() > 1 ? ",[" : "[";
         std::string run;
+        Style cur;
         const Style* at = nullptr;  // runs of one color: [text, fg, bg]
         auto put = [&] { if (at) o += std::string(o.back() == '[' ? "" : ",") + "[" + json_str(run) + "," + json_str(rgb_hex(at->fg)) + "," + json_str(rgb_hex(at->bg)) + "]"; };
         for (auto& cl : r) {
-            if (!at || cl.st.fg != at->fg || cl.st.bg != at->bg) put(), run.clear(), at = &cl.st;
+            Style st = shade(cl.st);
+            if (!at || st.fg != at->fg || st.bg != at->bg) put(), run.clear(), cur = st, at = &cur;
             run += to_utf8(std::u32string(1, (char32_t)cl.cp));
         }
         put();
