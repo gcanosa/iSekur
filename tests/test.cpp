@@ -1,6 +1,7 @@
 // Self-checks for the parsing code: run with `make test`.
 #include <algorithm>
 #include <cassert>
+#include <cmath>
 #include <sys/stat.h>
 #include <cstdio>
 #include <filesystem>
