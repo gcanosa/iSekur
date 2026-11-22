@@ -135,6 +135,11 @@ build/web.o: build/web_assets.h
 build/web_assets.h: web/index.html | build
 	{ printf 'static const char index_html[] = R"ISEKURHTML('; cat web/index.html; printf ')ISEKURHTML";\n'; } > $@
 
+# the favicon and the app icons (web/icons/) are compiled in as byte arrays: od and sed are in every POSIX
+build/web.o: build/icons.h
+build/icons.h: $(wildcard web/icons/*) | build
+	@for f in web/icons/*; do n=$$(basename $$f | tr -c 'A-Za-z0-9\n' _); printf 'static const unsigned char ICON_%s[] = {' $$n; od -An -v -tx1 $$f | sed 's/ \([0-9a-f][0-9a-f]\)/0x\1,/g'; printf '};\n'; done > $@
+
 # git build id (e.g. v0.2-4-g686b410-dirty) for --version and CTCP VERSION; the
 # file is only rewritten when it changes, so it doesn't force rebuilds
 build/core.o: build/version.h

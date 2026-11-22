@@ -3195,6 +3195,46 @@ int main() {
             assert(get().find("<html") != std::string::npos);
             core.cfg["web"].erase("html");
         }
+        {  // the favicon and the app icons: what the page's <link>s and the manifest name is served, as the kind and size they say
+            auto fetch = [&](const std::string& path) {
+                auto [fd, r] = talk("GET " + path + " HTTP/1.1\r\nHost: x\r\n\r\n", 1 << 30);
+                close(fd);
+                size_t b = r.find("\r\n\r\n");
+                return std::make_pair(r.substr(0, b == std::string::npos ? 0 : b), b == std::string::npos ? std::string() : r.substr(b + 4));
+            };
+            auto u32 = [](const std::string& d, size_t at) { return (uint32_t)((uint8_t)d[at] << 24 | (uint8_t)d[at + 1] << 16 | (uint8_t)d[at + 2] << 8 | (uint8_t)d[at + 3]); };
+            auto is_png = [&](const std::string& d, uint32_t w, uint32_t h) { return d.size() > 24 && d.compare(1, 3, "PNG") == 0 && u32(d, 16) == w && u32(d, 20) == h; };
+            auto [mh, mj] = fetch("/manifest.json");
+            assert(mh.find("application/manifest+json") != std::string::npos);
+            std::set<std::string> purposes;
+            int n_icons = 0;
+            const std::regex manifest_icon("\\{\"src\":\"([^\"]+)\",\"sizes\":\"(\\d+)x(\\d+)\",\"type\":\"image/png\",\"purpose\":\"(\\w+)\"\\}");
+            for (std::sregex_iterator it(mj.begin(), mj.end(), manifest_icon), end; it != end; ++it) {
+                auto [h, body] = fetch((*it)[1]);
+                assert(h.find("200 OK") != std::string::npos && h.find("image/png") != std::string::npos && is_png(body, (uint32_t)std::stoi((*it)[2]), (uint32_t)std::stoi((*it)[3])));
+                purposes.insert((*it)[4]), n_icons++;
+            }
+            assert(n_icons == 3 && purposes == std::set<std::string>({"any", "maskable"}));
+            auto [ph, page] = fetch("/");
+            int n_links = 0;
+            const std::regex page_icon("<link rel=\"(?:icon|apple-touch-icon)\"[^>]*?href=\"(/[^\"]+)\"");
+            for (std::sregex_iterator it(page.begin(), page.end(), page_icon), end; it != end; ++it, n_links++) {
+                auto [h, body] = fetch((*it)[1]);
+                assert(h.find("200 OK") != std::string::npos && body.size() > 100);
+            }
+            assert(n_links == 4 && page.find("<link rel=\"apple-touch-icon\" sizes=\"180x180\"") != std::string::npos);
+            auto [ih, ico] = fetch("/favicon.ico");  // 16, 32 and 48 px, PNG inside
+            assert(ih.find("image/x-icon") != std::string::npos && ico.size() > 22 && ico.compare(0, 6, std::string("\0\0\1\0\3\0", 6)) == 0);
+            for (int i = 0; i < 3; i++) {
+                uint8_t sz = (uint8_t)ico[6 + 16 * (size_t)i];
+                uint32_t sl = (uint32_t)((uint8_t)ico[14 + 16 * (size_t)i] | (uint8_t)ico[15 + 16 * (size_t)i] << 8 | (uint8_t)ico[16 + 16 * (size_t)i] << 16);
+                uint32_t off = (uint32_t)((uint8_t)ico[18 + 16 * (size_t)i] | (uint8_t)ico[19 + 16 * (size_t)i] << 8 | (uint8_t)ico[20 + 16 * (size_t)i] << 16);
+                assert(sz == 16 || sz == 32 || sz == 48);
+                assert(is_png(ico.substr(off, sl), sz, sz));
+            }
+            assert(is_png(fetch("/apple-touch-icon.png").second, 180, 180) && is_png(fetch("/icon.png").second, 512, 512) && is_png(fetch("/favicon-32.png").second, 32, 32));
+            assert(fetch("/icon-nope.png").first.find("404") != std::string::npos);
+        }
         auto [lfd2, login] = talk("POST /login HTTP/1.1\r\nHost: x\r\nContent-Length: 24\r\n\r\n{\"user\":\"u\",\"pass\":\"pw\"}", 1);
         close(lfd2);
         size_t ck = login.find("isekur_sid=");

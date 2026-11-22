@@ -16,6 +16,25 @@
 #include <openssl/ssl.h>
 #include <openssl/x509.h>
 #include "web_assets.h"
+#include "icons.h"  // web/icons/*: one ICON_<name> array each
+
+// the favicon and the app icons, served at the root: what the page's <link>s and the manifest name
+struct IconFile { const char* path; const char* type; const unsigned char* data; size_t len; };
+#define ICON(path, type, name) {path, type, name, sizeof name}
+static const IconFile ICONS[] = {
+    ICON("/favicon.ico", "image/x-icon", ICON_favicon_ico),
+    ICON("/favicon-32.png", "image/png", ICON_favicon_32_png),
+    ICON("/icon-192.png", "image/png", ICON_icon_192_png),
+    ICON("/icon-512.png", "image/png", ICON_icon_512_png),
+    ICON("/icon-maskable-512.png", "image/png", ICON_icon_maskable_512_png),
+    ICON("/apple-touch-icon.png", "image/png", ICON_apple_touch_icon_png),
+    ICON("/icon.png", "image/png", ICON_icon_512_png),  // what the first manifest named: an app installed back then still asks for it
+};
+static const IconFile* find_icon(const std::string& path) {
+    for (auto& i : ICONS)
+        if (path == i.path) return &i;
+    return nullptr;
+}
 #include <fstream>
 #include <iterator>
 
@@ -485,14 +504,16 @@ void Web::http(Client& cl) {
         if (i != std::string::npos) page.replace(i, k.size(), ISEKUR_VERSION);
         respond(cl.conn, 200, "OK", "text/html; charset=utf-8", page);
     } else if (method == "GET" && path == "/manifest.json") {  // PWA: install to the home screen or dock
+        // any: Chrome, Edge and the Mac dock show it as it is (a squircle with transparent corners); maskable: Android cuts its own shape
         respond(cl.conn, 200, "OK", "application/manifest+json",
-                "{\"name\":\"iSekur Webchat\",\"short_name\":\"iSekur\",\"start_url\":\"/\",\"display\":\"standalone\","
-                "\"background_color\":\"#0e0f17\",\"theme_color\":\"#0e0f17\",\"icons\":[{\"src\":\"/icon.png\","
-                "\"sizes\":\"512x512\",\"type\":\"image/png\",\"purpose\":\"any maskable\"}]}");
-    } else if (method == "GET" && path == "/icon.png") {
-        // ponytail: one 512px PNG (made by a script, purple square like the favicon) for every platform
-        static const std::string png = unb64("iVBORw0KGgoAAAANSUhEUgAAAgAAAAIACAIAAAB7GkOtAAAIOklEQVR42u3VUREAIAhEQRLoJ70tZRdTkAPcmU3A6L1YOwH4UDgBgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAgAC4AoAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAIAAuAKAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACAAAAgCAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAAACACAAAAgAAAIAAACAIAAACAAAAgAAAIAgAAAIAA0cM9jMC8cAbDyphBtQACMPoiBAGD3QQkEALsPSiAAmH6QAQHA9IMMCADWHw1AADD9yAACgPVHAxAATD8ygABg/dEABADrjwYgAFh/NAABwPqjAQgA1h8NQACw/mgAAmD9DQoagABYf9AABMD6gwYgAAIAAoAAWH/QAATA+oMGIAACAAKAAFh/0AAEwPqDBggAAgACIABYf9AAAUAAQAAEAOsPGiAACAAIgAAgACAAAoD1Bw0QAAQABEAAEAAQAAHA+oMGCAACAH69ACAACAACIAAgAAiA9QcNQAAEAAQAARAAEAAEQABAABAAAQABQAAEAAQAARAAEAAEQABAABAAAQABQACsP2gAAiAAIAACgACAAAgAAgACIAAIAAiAACAAIAACgACAAAgAAgACIAAIAAiAACAAIAACgACAAAgAAgACIAAIAFgAARAAEAAEQABAABAAAQABQAAEAAQAARAAEAAEQABAABAAAQABQAAEAAQAARAAEAAEQABAABAAAQABQAAEAARAABAAEAABQABAAAQAAQABEAAEAARAABAAEAABQABAAAQAAQABEAAEAARAABAAEAABQABAAAQAAQABEABMAAKAAAgACAACIAAgAAiAAIAAIAACAAKAAAgACAACIAAgAAiAAIAAIAACAAKAAAgACAACIAAgAAiAAIAACIATCAAIgAAgACAAAoAAgAAIAAIAAiAACAAIgAAgACAAAoAAgAAIAAIAAiAACAAIgAAgACAAAoAAgAAIAAKAABgBARAAEAAEQABAABAAAQABQAAEAAQAARAAEAAEQABAABAAAQABQAAEAAQAARAAEAAEQABAABAAAQABQAAEAARAABAAEAABQABAAAQAAQABEAAEAARAABAAEAABQABAAAQAAQABEAAEAARAABAAEAABQABAAAQAAQABEAABsAIIAAIgACAACIAAgAAgAAIAAoAACAAIAAIgACAACIAAgAAgAAIAAoAACAAIAAIgACAACIAAgAAgAAIAAiAAriAAIAACgACAAAgAAgACIAAIAAiAACAAIAACgACAAAgAAgACIAAIAAiAACAAIAACgACAAAgAAgACIAAIAAJgBARAAEAAEAABAAFAAAQABAABEAAQAARAAEAAEAABAAFAAAQABAABEAAQAARAAEAAEAABAAFAAAQABAABEAAQAAFAAEAABAABAAEQAAQABEAAEAAQAAFAAEAABAABAAEQAAQABEAAEAAQAAFAAEAABAABAAEQAAQABEAABMAKIAAIgACAACAAAgACgAAIAAgAAiAAIAAIgACAACAAAgACgAAIAAgAAiAAIAAIgACAACAAAgACgAAIAAiAALiCAIAACAACAAIgAAgACIAAIAAgAAKAAIAACAACAAIgAAgACIAAIAAgAAKAAIAACAACAAIgAAgACIAAIAAIAAIgACAACIAAgAAgAAIAAoAACAAIAAIgACAACIAAgAAgABoA1h8BEAAQAARAAEAAEAABAAFAAAQABAABEAAQAAFAAEAABAABAAEQAAQABEAA0ACw/gKAAIAACAACAAIgAAgACIAAoAFg/QUAAQABEAAEAARAANAArD8CgAAgAAiAAFgHBAAB0ACw/giAAIAAIAAaANYfARAAEAAEQAPA+iMAGgDWHwEQABAABEADwPojABoA1h8BEAAQAAFAA8D6CwAaANZfANAAsP4CgAaA9RcANACsvwCgAWD9BQANAH9TANAArD8CgAZg/REAZADTjwCgAVh/BAAZwPQjAGgA1h8BQAYw/QgAMoDpRwBQAuw+AoASYPcRAMQAo48AoA1YeQQAAAEAQAAAEAAABABAAAAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQBAAAAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABABAAAAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQBAAAAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQBAAAAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQBAAAAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQAQACcAEAAABAAAAQBAAAAQAAAEAAABAEAAABAAAAQAAAEAQAAAEAAABAAAAQBAAAAQAAAEAAABAEAAABAAAAQAAAEAEAAABAAAAQBAAAAQAAAEAIC2CrfxgVjW1LYlAAAAAElFTkSuQmCC");
-        respond(cl.conn, 200, "OK", "image/png", png);
+                "{\"name\":\"iSekur Webchat\",\"short_name\":\"iSekur\",\"description\":\"iSekur, the IRC client, in the browser\","
+                "\"id\":\"/\",\"start_url\":\"/\",\"scope\":\"/\",\"display\":\"standalone\","
+                "\"background_color\":\"#000000\",\"theme_color\":\"#0e0f17\",\"icons\":["
+                "{\"src\":\"/icon-192.png\",\"sizes\":\"192x192\",\"type\":\"image/png\",\"purpose\":\"any\"},"
+                "{\"src\":\"/icon-512.png\",\"sizes\":\"512x512\",\"type\":\"image/png\",\"purpose\":\"any\"},"
+                "{\"src\":\"/icon-maskable-512.png\",\"sizes\":\"512x512\",\"type\":\"image/png\",\"purpose\":\"maskable\"}]}");
+    } else if (const IconFile* ic = method == "GET" ? find_icon(path) : nullptr) {  // the favicon and the app icons
+        respond(cl.conn, 200, "OK", ic->type, std::string((const char*)ic->data, ic->len));
     } else if (method == "GET" && path == "/sw.js") {
         // notifications only, no offline cache: a chat is useless offline and a cached page goes stale.
         // A click focuses the page and tells it which window to show.
