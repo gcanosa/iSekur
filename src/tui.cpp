@@ -1593,6 +1593,11 @@ void Tui::draw_settings(int W, int H) {
     int sx = text(x0 + 2, y0 + 1, x1, "/ search: ", sw.searching ? keyst : dim, false);
     if (sw.searching || !sw.q.empty()) fill(y0 + 1, sx, x1 - 1, sw.searching ? fs : bs);
     text(sx, y0 + 1, x1 - 1, sw.q.empty() && !sw.searching ? "type / to search every key and value" : to_utf8(sw.q), sw.q.empty() && !sw.searching ? dim : sw.searching ? fs : val, false);
+    {  // the two keys that leave the window, at the right of the search line whatever the hint below says
+        std::string bk = "b: backup \u00b7 R: restore";
+        int bx = x1 - 2 - (int)from_utf8(bk).size();
+        if (bx > sx + (sw.searching || !sw.q.empty() ? (int)sw.q.size() + 4 : 42)) text(bx, y0 + 1, x1 - 1, bk, dim, false);
+    }
     if (sw.searching) tb_set_cursor(sx + (int)sw.q.size(), y0 + 1);
     else if (!sw.editing) tb_hide_cursor();
 
@@ -1826,6 +1831,11 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     if (k == TB_KEY_CTRL_S || ch == 's') {
         c.exec(c.active, "/save");
         sw.msg = "Saved to " + c.cfg_path;
+        return;
+    }
+    if (ch == 'b' || ch == 'R') {  // the passphrase boxes open over the chat: the window gives way, as for a new server
+        sw.open = false;
+        c.exec(c.active, ch == 'b' ? "/backup" : "/restore");
         return;
     }
     // servers, like the webchat's Servers window: c connects the selected one, x deletes it (asks first), n adds one

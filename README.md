@@ -31,6 +31,8 @@ your browser or phone shows the same live session.
   resize, `/set` settings window, tab completion with live suggestions, `/split` panes, tabs on top
   or as a side tree.
 - **Lua plugins** run in a sandbox and install from a catalog checked by sha256 (`/plugin install autoaway`).
+- **Backup and move.** `/backup` puts your settings, servers, passwords, plugins and themes in one small
+  compressed file locked with a passphrase; `/restore` on another computer gives the same iSekur.
 - **And more:** a real shell in a tab (`/shell`, behind a system login), another machine's iSekur in
   a tab (`/attach host`), Twitch chat, DCC with resume, a log browser, a master lock password, channel op tools.
 
@@ -53,12 +55,12 @@ Prebuilt packages of the latest release:
 [Windows x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-windows-x86_64.zip) (Cygwin build, without `/shell` or detach; WSL runs the Linux one),
 [source](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-src.tar.gz).
 
-From source (C++17, GNU make, OpenSSL 1.1+/LibreSSL, PAM; termbox2 and libvterm are vendored):
+From source (C++17, GNU make, OpenSSL 1.1+/LibreSSL, PAM, zlib for `/backup`'s compression; termbox2 and libvterm are vendored):
 
     make && sudo make install     # gmake on *BSD
 
-On Debian, Ubuntu and WSL the headers come from `sudo apt install build-essential libssl-dev libpam0g-dev`
-(Fedora: `openssl-devel pam-devel`).
+On Debian, Ubuntu and WSL the headers come from `sudo apt install build-essential libssl-dev zlib1g-dev libpam0g-dev`
+(Fedora: `openssl-devel zlib-devel pam-devel`). Without the zlib headers it still builds: backups are just not compressed.
 
 Every push is built and tested on macOS, Linux (glibc and Alpine's musl), FreeBSD, OpenBSD, NetBSD and Cygwin.
 On the BSDs install GNU make first: `pkg install gmake` (FreeBSD), `pkg_add gmake` (NetBSD),

@@ -207,6 +207,7 @@ dialog .btns .left { margin-right: auto; }
 #dsrv [hidden], #dask [hidden] { display: none !important; }
 #dask { width: min(440px, calc(100vw - 32px)); }
 #dask .dask-t { font-size: calc(13px * var(--z, 1)); white-space: pre-line; }
+#dask .dask-t .err { color: var(--dlg-err, var(--err)); font-weight: 700; }  /* a warning row (/restore: it wipes your configuration) */
 /* a plugin's About: who made it and how to reach them */
 #dpab { width: min(440px, calc(100vw - 32px)); }
 #dpab .top { display: flex; align-items: center; gap: 10px; }
@@ -936,7 +937,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <input id="setq" placeholder="Search every key, e.g. nick, tls, theme..." autocomplete="off">
   <div id="setbody"><div id="setnav"></div><div id="setlist"></div></div>
   <div class="hint" id="setmsg">Empty = the default. ● = changed and not saved yet.</div>
-  <div class="btns"><button value="cancel" formnovalidate>Close</button><button value="apply">Apply</button><button class="go" value="save">Apply &amp; save</button></div>
+  <div class="btns"><button type="button" id="setbak" title="Save all your settings in one locked file">Backup…</button><button type="button" id="setres" class="left" title="Replace everything with a backup's settings">Restore…</button><button value="cancel" formnovalidate>Close</button><button value="apply">Apply</button><button class="go" value="save">Apply &amp; save</button></div>
 </form></dialog>
 <dialog id="dtheme"><form method="dialog">
   <h2>Theme</h2>
@@ -1709,9 +1710,9 @@ function applyTheme() {
   set("--accent", (el.input_prompt || {}).fg);
   set("--accent2", (el.msg_self || {}).fg);
   const oa = onAccent((el.input_prompt || {}).fg, (el.msg_self || {}).fg);
-  for (const k of ["--dlg-bg", "--dlg-dim", "--dlg-sel-fg", "--dlg-sel-bg", "--dlg-title", "--more-fg", "--sth-fg"]) r.removeProperty(k);  // measured on the theme's own
+  for (const k of ["--dlg-err", "--dlg-bg", "--dlg-dim", "--dlg-sel-fg", "--dlg-sel-bg", "--dlg-title", "--more-fg", "--sth-fg"]) r.removeProperty(k);  // measured on the theme's own
   const dc = dialogColors();
-  set("--dlg-bg", dc.bg), set("--dlg-dim", dc.dim), set("--dlg-sel-fg", dc.selFg), set("--dlg-sel-bg", dc.selBg), set("--dlg-title", dc.title), set("--more-fg", dc.more), set("--sth-fg", dc.sth);
+  set("--dlg-err", dc.err), set("--dlg-bg", dc.bg), set("--dlg-dim", dc.dim), set("--dlg-sel-fg", dc.selFg), set("--dlg-sel-bg", dc.selBg), set("--dlg-title", dc.title), set("--more-fg", dc.more), set("--sth-fg", dc.sth);
   set("--on-accent", oa.text), set("--accent-veil", oa.veil);
   // light or dark by the background's brightness: native controls, scrollbars and hovers match
   const m = /^#(..)(..)(..)$/.exec(d.bg || ""), lum = m ? (0.299 * parseInt(m[1], 16) + 0.587 * parseInt(m[2], 16) + 0.114 * parseInt(m[3], 16)) : 0;
@@ -1797,7 +1798,8 @@ function dialogColors() {
   const sbg = v("--status-bg") || v("--panel") || bg;
   const more = readOn([v("--hilight-bg"), v("--hilight-fg"), v("--status_hi-fg"), fg], sbg) || fg;
   const sth = readOn([v("--status_hi-fg") || fg], sbg) || fg;  // the bar's bright text: time, tab, lag, status_info
-  return {bg: hexc(dbg), dim: hexc(dim), selFg: hexc(sel[0]), selBg: hexc(sel[1]), title: hexc(title), more: hexc(more), sth: hexc(sth)};
+  const errc = readOn([v("--error-fg"), v("--err")], dbg);  // a warning row in a dialog: the error color where it reads on the dialog
+  return {err: errc ? hexc(errc) : "", bg: hexc(dbg), dim: hexc(dim), selFg: hexc(sel[0]), selBg: hexc(sel[1]), title: hexc(title), more: hexc(more), sth: hexc(sth)};
 }
 function onAccent(a1, a2) {
   const ends = [rgb(a1), rgb(a2) || rgb(a1)].filter(Boolean);
@@ -2331,7 +2333,11 @@ const dask = $("#dask");
 let askDone = null;
 function askBox({title = "iSekur", text = "", label = "", value = "", hidden = false, ok = "OK"} = {}) {
   if (askDone) askDone(null);  // a newer question replaces an open one
-  $("#dask-h").textContent = title; $("#dask-t").textContent = text; $("#dask-t").hidden = !text;
+  $("#dask-h").textContent = title;
+  const tx = $("#dask-t"), lines = Array.isArray(text) ? text : [text];  // a list: one row each, "!" first = an error row (iSekur's own questions: b.ask.info)
+  tx.textContent = "";
+  for (const l of lines) { const d = document.createElement("div"), bad = Array.isArray(text) && l[0] === "!"; d.textContent = bad ? l.slice(1).replace(/^\u26a0 /, "\u26a0\ufe0e ") : l; if (bad) d.className = "err"; tx.append(d); }  // \ufe0e: the warning sign as text in the error color, not the color emoji
+  tx.hidden = !lines.some(Boolean);
   $("#dask-l").hidden = !label; $("#dask-l span").textContent = label;
   const i = $("#dask-i"); i.type = hidden ? "password" : "text"; i.autocomplete = hidden ? "new-password" : "off"; i.value = value; i.required = false;
   $("#dask-ok").textContent = ok;
@@ -2351,7 +2357,7 @@ function syncAsk() {
   askOpen = key;
   if (!a) { if (dask.open && dask.dataset.srv) { dask.dataset.srv = ""; askDone = null; dask.close(); } return; }
   const id = b.id;
-  askBox({title: a.title || "iSekur", label: a.label[0].toUpperCase() + a.label.slice(1), hidden: !!a.hidden}).then(v => {
+  askBox({title: a.title || "iSekur", text: a.info || "", label: a.label[0].toUpperCase() + a.label.slice(1), hidden: !!a.hidden}).then(v => {
     dask.dataset.srv = "";
     if (askOpen === key) askOpen = "";  // asked again (a wrong password): open it again
     send({t: "input", buf: id, text: v === null ? "" : v});
@@ -3243,6 +3249,10 @@ function renderAbout(m) {
 const dset = $("#dset"); let setRows = [];
 // switches and lists apply at once, as a preview: their value before, by key, until Apply keeps them or Close puts them back
 const setLive = new Map();
+// their passphrase boxes open over the chat: the window gives way. The command goes after the window's own close handler
+// (below) has sent its /set reverts: once iSekur asks a passphrase, the next line typed is the answer
+for (const [id, cmd] of [["setbak", "/backup"], ["setres", "/restore"]])
+  $("#" + id).onclick = () => { dset.addEventListener("close", () => send({t: "input", buf: active, text: cmd}), {once: true}); dset.close("cancel"); };
 $("#setbtn").onclick = () => { $("#side").classList.remove("open"); $("#setlist").textContent = "Loading..."; send({t: "settings", buf: active}); dset.showModal(); };
 let setCat = "";  // "" = All
 function renderSettings(list) {

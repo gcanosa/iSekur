@@ -361,8 +361,8 @@ static const std::vector<CmdInfo> CMDS = {
      "names the networks overriding it. "
      "/ searches, Up/Down moves, Tab or Left/Right goes between categories and keys, e or Enter edits, "
      "Space switches on/off (and steps through the themes, applied at once), d or Del puts the default "
-     "back, s or Ctrl+S saves, q or Esc closes; the mouse works too. The webchat's ⚙ is the same, with "
-     "switches and a theme list. With a key it shows it; with a value it changes it right away, if the key can "
+     "back, s or Ctrl+S saves, b starts /backup and R /restore (the window gives way to their boxes), q or Esc closes; the mouse works too. The webchat's ⚙ is the same, with "
+     "switches, a theme list and Backup and Restore buttons. With a key it shows it; with a value it changes it right away, if the key can "
      "take it: a wrong one (tab_bar_position middle, scrollback lots, tab_bar_width 200) is refused and says what the key takes. "
      "Only keys iSekur reads are taken, in the section that reads them ([plugin.*] takes any); "
      "one already in the config can still be shown or cleared. "
@@ -379,6 +379,27 @@ static const std::vector<CmdInfo> CMDS = {
      "decrypt. It changes nothing. Startup and /reload say when there are problems; isekur --check does the "
      "same from the shell. Unsaved /set changes aren't in the file yet: /save first.",
      {"/checkconf"}},
+    {"backup", "Settings", "[name]", "Save all your settings in one locked file",
+     "Packs the config file (servers, aliases, on-connect commands), secret.key (what opens the saved passwords), your plugins "
+     "and their data, your themes and the BNC's certificate into one compressed file, locked with a passphrase you type twice "
+     "(8 characters or more; nobody can recover it for you). It is saved as <name>.isebak in the backups folder next to the config "
+     "(~/.config/isekur/backups/), named isekur-date-time when you give none; an existing backup is never overwritten, and the "
+     "message says where it went. Logs, history and webchat sessions aren't in it, and neither are /set changes you haven't "
+     "saved: /save first. To move to another computer, install iSekur there, start it once, copy the file into "
+     "~/.config/isekur/backups/ (make the folder if it isn't there) and type /restore name; a file anywhere else works with "
+     "its whole path. Ask for the lock password first when one is set.",
+     {"/backup", "/backup before-upgrade"}},
+    {"restore", "Settings", "[name | path]", "Replace everything with a backup's settings",
+     "WIPES your current configuration (settings, servers, passwords, plugins, your themes, the BNC's certificate) and puts the "
+     "backup's in its place, so iSekur is as it was when the backup was made. It asks the passphrase first, and the box says "
+     "so. Before anything is replaced, what you have now is saved as before-restore-date-time.isebak in the backups folder "
+     "with the same passphrase: /restore that file to undo it. Plugins and themes the backup doesn't have are removed; logs, "
+     "history and the plugin catalog's cache are left alone. A wrong passphrase or a damaged file changes nothing. "
+     "Then it reloads the config and the plugins; restart iSekur to apply everything (connections that are open keep their old "
+     "settings until then), and /checkconf lists folders or certificates the backup names that aren't on this computer. "
+     "With a name it reads that backup from ~/.config/isekur/backups/ (the folder next to your config); with a path, any "
+     "file; with nothing, it lists the backups there and asks which one. With a lock password set, that password first.",
+     {"/restore", "/restore before-upgrade", "/restore ~/Downloads/isekur-20261122-1953.isebak"}},
     {"reload", "Settings", "", "Re-read the config file",
      "Applies an edited config without restarting: theme, keys, mouse, colors, bell, logging and "
      "the rest right away; server settings on the next /connect; [web] after /web restart. "

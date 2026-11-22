@@ -2052,6 +2052,13 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (plugin_depth && (cmd == "exec" || cmd == "sh" || cmd == "shell" || cmd == "attach")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: no programs
+    if (plugin_depth && (cmd == "backup" || cmd == "restore")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: a plugin never reads or replaces the config
+    if (cmd == "backup") { backup_cmd(b, args); return; }
+    if (cmd == "restore") {  // replaces everything, the lock password and web.* included: with a lock password, that password first
+        if (!trim(args).empty() && lock_gate(*this, b, in, "the whole configuration", false)) return;  // the bare /restore only lists and asks which one
+        restore_cmd(b, args);
+        return;
+    }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "dcc") { dcc_cmd(b, args); return; }
     if (cmd == "shell") { shell_cmd(b); return; }

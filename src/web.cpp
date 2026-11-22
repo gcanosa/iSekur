@@ -147,6 +147,11 @@ std::string json_str(const std::string& s) {
     }
     return o + "\"";
 }
+static std::string json_strs(const std::vector<std::string>& v) {  // ["a","b"]
+    std::string o = "[";
+    for (auto& s : v) o += (o.size() > 1 ? "," : "") + json_str(s);
+    return o + "]";
+}
 
 // Flat object of string/number/bool values -> map. Enough for client messages.
 std::map<std::string, std::string> json_flat(const std::string& s) {
@@ -937,7 +942,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
            (b->term && !b->term->host.empty() ? ",\"host\":" + json_str(b->term->host) : "") +
            ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(s && c.plugin_hooks("paste", s, b->name) ? 0 : atoi(c.opt(s, "paste_confirm", "5").c_str())) +
            (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +
-                                                ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + "}" : "") +
+                                                ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + ",\"info\":" + json_strs(c.pass_info) + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
            ",\"typing\":[" + typing + "]" + (c.nicklist_colored(b) ? ",\"nc\":1" : "") +
            (fc.on ? ",\"ef\":" + std::to_string(fold_flags(fc)) : "") +

@@ -441,6 +441,12 @@ struct Server {
     static inline std::function<void(Server*, bool out, const std::string&)> tap;
 };
 
+// ---- /backup, /restore (backup.cpp) ---------------------------------------------
+struct BackupFile { std::string path, data; };  // path: relative to the config folder ("isekur.conf", "plugins/radio.lua"), or MANIFEST
+bool backup_path_ok(const std::string& rel);   // a file a backup may hold and /restore may write
+std::string backup_pack(const std::vector<BackupFile>& files, const std::string& pass, bool zip = true);  // the .isebak's bytes; "" if it failed
+bool backup_unpack(const std::string& bytes, const std::string& pass, std::vector<BackupFile>& out, std::string& err);
+
 // ---- command help (/help, Tab completion, webchat completion) ---------------
 struct CmdInfo {
     const char *name, *group, *usage, *summary, *details;
@@ -667,6 +673,12 @@ struct Core {
 
     void load_config();
     void reload(Buffer* b);  // /reload
+    // /backup [name], /restore [name|path] (backup.cpp): <config dir>/backups/<name>.isebak
+    std::string backups_dir() const;
+    std::vector<BackupFile> backup_files() const;  // the config, secret.key, bnc.crt/key, plugins/ and themes/ as they are on disk
+    void backup_cmd(Buffer* b, const std::string& args);
+    void restore_cmd(Buffer* b, const std::string& args);
+    void restore_apply(Buffer* b, const std::string& path, const std::string& bytes, const std::string& snap, const std::string& pass);
     // [server.<name>] key, falling back to [general], then `def`
     std::string opt(const Server* s, const std::string& key, const std::string& def) const;
     bool muted(const Buffer* b) const;  // in [server.X] mute: no hilights, alerts or copies to window 1 from it

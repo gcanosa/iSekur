@@ -177,7 +177,7 @@ static void menu_items(lua_State* L, std::vector<std::pair<std::string, std::str
         std::string w = cmd.substr(1, cmd.find(' ') - 1);
         to_lower(w);
         if (!l.empty() && cmd.size() > 1 && cmd[0] == '/' &&
-            w != "plugin" && w != "exec" && w != "sh" && w != "shell" && w != "attach")
+            w != "plugin" && w != "exec" && w != "sh" && w != "shell" && w != "attach" && w != "backup" && w != "restore")
             out.push_back({l, cmd});
     }
 }

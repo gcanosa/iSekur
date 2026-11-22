@@ -173,6 +173,16 @@ section, also live with
 .BR /connect ", " /disconnect ", " /join ", " /part ", " /msg ", " /query ,
 .BR /me ", " /notice ", " /nick ", " /topic ", " /quiet " [off|smart|all], " /cycle ", " /close ", " /win " N, " /raw ", " /rawlog ,
 .BR /ctcp ", " /theme ", " /keys ", " /set " [section.]key [value], " /save ", " /reload ,
+.B /backup
+[name] saves the config, secret.key, plugins, themes and the BNC certificate in one compressed file, locked with a
+passphrase, as
+.IR ~/.config/isekur/backups/<name>.isebak ;
+.B /restore
+name (or a full path) wipes the whole current configuration and replaces it with the backup's, after saving the
+current one as
+.I before\-restore\-<date>.isebak
+in the same folder. To move to another computer, install iSekur there, start it once and copy the file into
+.IR ~/.config/isekur/backups/ .
 .BR /ignore " [-pcntidjkx] [-w] [-r] [-u time] [nick|mask [0-9]], " /unignore " mask, " /hilight " [add|del] word, " /grep " [-all] text, " /clear ", " /quit " (this tab's server), " /exit " [-y] (close iSekur; with a lock password set, it asks for it).
 .BR /reply " nick text, " /react " emoji [nick], " /redact ", " /notify " [add|del] nick, " /setname ,
 .BR /register " [email] and " /verify " use IRCv3 where the server has it.

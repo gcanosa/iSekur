@@ -3,6 +3,7 @@
 #include <cassert>
 #include <cmath>
 #include <sys/stat.h>
+#include <dirent.h>
 #include <cstdio>
 #include <filesystem>
 #include <sys/time.h>
@@ -4608,6 +4609,110 @@ print("loaded")
         unlink((cat + "/index.json").c_str()), unlink((cat + "/t2/t2.lua").c_str()), rmdir((cat + "/t2").c_str()), rmdir(cat.c_str());
         for (auto f : {"t.lua", "bad.lua", "t.data", ".catalog.json"}) unlink((pdir + "/" + f).c_str());
         rmdir(pdir.c_str()), unlink(pc.cfg_path.c_str()), rmdir(d);
+    }
+
+    {  // /backup and /restore: the file locks and compresses, a wrong passphrase or a changed byte opens nothing, /restore replaces
+        auto rd = [](const std::string& p) { std::ifstream f(p, std::ios::binary); return std::string(std::istreambuf_iterator<char>(f), {}); };
+        auto wr = [](const std::string& p, const std::string& s) { std::ofstream(p, std::ios::binary) << s; };
+        std::vector<BackupFile> in = {{"isekur.conf", std::string(4000, 'x') + "\n"}, {"secret.key", std::string("\0\xff\n\t", 4)}, {"plugins/a.lua", "-- a\n"}};
+        std::string bak = backup_pack(in, "correct horse"), err;
+        assert(bak.compare(0, 7, "iSEBAK1") == 0 && bak.find("xxxxxxxx") == std::string::npos);  // sealed: nothing readable
+#ifndef ISEKUR_NO_ZLIB
+        assert(bak[7] == 'z' && bak.size() < 500);  // 4 KB of one letter: compressed
+#endif
+        std::vector<BackupFile> out;
+        assert(backup_unpack(bak, "correct horse", out, err) && out.size() == 3 && out[0].data == in[0].data && out[1].data == in[1].data && out[2].path == "plugins/a.lua");
+        assert(!backup_unpack(bak, "wrong horse", out, err) && err.find("passphrase") != std::string::npos && out.empty());
+        std::string bad = bak;
+        bad[bad.size() / 2] ^= 1;
+        assert(!backup_unpack(bad, "correct horse", out, err));  // a changed byte
+        bad = bak, bad[7] = bad[7] == 'z' ? 'p' : 'z';
+        assert(!backup_unpack(bad, "correct horse", out, err));  // the compressed/plain letter is sealed too
+        assert(!backup_unpack("hello", "x", out, err) && err == "not an iSekur backup");
+        assert(backup_unpack(backup_pack(in, "correct horse", false), "correct horse", out, err) && out.size() == 3 && backup_pack(in, "p", false)[7] == 'p');  // stored plain
+        // only these files, and no way out of the config folder
+        for (const char* ok : {"isekur.conf", "secret.key", "bnc.key", "plugins/radio.lua", "plugins/radio.data", "themes/my-night.theme"}) assert(backup_path_ok(ok));
+        for (const char* no : {"", "../isekur.conf", "/etc/passwd", "plugins/../x.lua", "plugins/a/b.lua", "plugins/.catalog.json", "plugins/.lua", "themes/.theme", "themes/../x.theme",
+                               "themes/a/b.theme", "plugins/a.sh", "isekur.history", "web.sessions", "MANIFEST", "plugins/bad name.lua"})
+            assert(!backup_path_ok(no));
+
+        char d[] = "/tmp/isekur-bak-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = std::string(d) + "/", conf = "[general]\nnick = alice\ntheme = default\n[server.test]\nhost = bak-host.example\nautoconnect = off\n";
+        mkdir_p(dir + "plugins"), mkdir_p(dir + "themes");
+        wr(dir + "isekur.conf", conf), wr(dir + "secret.key", std::string(32, '\x07')), wr(dir + "plugins/t.lua", "-- t v1\n"), wr(dir + "plugins/t.data", "k\tv\n");
+        wr(dir + "plugins/.catalog.json", "{}"), wr(dir + "themes/mine.theme", "[colors]\n"), wr(dir + "notes.txt", "not part of it");
+        Core bk;
+        bk.cfg_path = dir + "isekur.conf";
+        Buffer* bh = bk.open(nullptr, BT::STATUS, "isekur");
+        std::string path = dir + "backups/first.isebak";
+        bk.exec(bh, "/backup first!");  // a name takes letters, digits and . _ -
+        assert(!bk.pass_buf && access(path.c_str(), F_OK) != 0);
+        bk.exec(bh, "/backup first");
+        assert(bk.pass_buf == bh);
+        bk.exec(bh, "short");  // 8 characters or more
+        assert(!bk.pass_buf && access(path.c_str(), F_OK) != 0);
+        bk.exec(bh, "/backup first"), bk.exec(bh, "correct horse"), bk.exec(bh, "correct horsE");  // the two don't match
+        assert(!bk.pass_buf && access(path.c_str(), F_OK) != 0);
+        bk.exec(bh, "/backup first"), bk.exec(bh, "correct horse"), bk.exec(bh, "correct horse");
+        assert(access(path.c_str(), F_OK) == 0 && !bk.pass_buf);
+        struct stat sb;
+        assert(stat(path.c_str(), &sb) == 0 && (sb.st_mode & 077) == 0);  // only you can read it
+        std::string packed = rd(path);
+        assert(packed.find("alice") == std::string::npos && packed.find("bak-host.example") == std::string::npos);
+        assert(backup_unpack(packed, "correct horse", out, err) && out.size() == 6 && out[0].path == "MANIFEST" && out[0].data.find("created=") == 0);  // + the 5 files, not notes.txt or .catalog.json
+        bk.exec(bh, "/backup first");  // never overwritten
+        assert(!bk.pass_buf && rd(path) == packed);
+
+        // the configuration changes: a new config, a changed plugin, one more plugin and theme, no secret.key
+        wr(dir + "isekur.conf", "[general]\nnick = bob\n"), wr(dir + "plugins/t.lua", "-- t v2\n"), wr(dir + "plugins/extra.lua", "-- extra\n");
+        wr(dir + "themes/extra.theme", "[colors]\n"), unlink((dir + "secret.key").c_str());
+        bk.unsaved["general"]["nick"] = "carol";
+        bk.exec(bh, "/restore nope");  // no such backup
+        assert(!bk.pass_buf);
+        bk.exec(bh, "/restore");  // no name: lists them and asks which (the settings window's Restore button)
+        assert(bk.pass_buf == bh && bk.pass_title == "Restore backup" && !bk.pass_hidden && bk.pass_info.size() >= 5 && bk.pass_info[0].find("WIPES") != std::string::npos);
+        bool lists_first = false;
+        for (auto& l : bk.pass_info) lists_first |= l == "  first";
+        assert(lists_first);
+        bk.exec(bh, "first");  // then its passphrase
+        assert(bk.pass_buf == bh && bk.pass_label == "passphrase of the backup" && bk.pass_hidden);
+        bk.exec(bh, "");  // cancelled
+        assert(!bk.pass_buf && rd(dir + "isekur.conf") == "[general]\nnick = bob\n");
+        wr(dir + "backups/plain.isebak", "not a backup at all");
+        bk.exec(bh, "/restore plain");
+        assert(!bk.pass_buf);
+        bk.plugin_depth = 1;
+        bk.exec(bh, "/restore first"), bk.exec(bh, "/backup other");  // a plugin can't
+        bk.plugin_depth = 0;
+        assert(!bk.pass_buf && rd(dir + "isekur.conf") == "[general]\nnick = bob\n");
+        bk.exec(bh, "/restore first");
+        assert(bk.pass_buf == bh && bk.pass_title == "Restore backup");
+        bool says_wipe = false;
+        for (auto& l : bk.pass_info) says_wipe |= l.find("WIPES") != std::string::npos;
+        assert(says_wipe);  // the dialog says it replaces everything
+        bk.exec(bh, "wrong horse");  // nothing changes
+        assert(rd(dir + "isekur.conf") == "[general]\nnick = bob\n" && access((dir + "secret.key").c_str(), F_OK) != 0 && !bk.unsaved.empty());
+        bk.exec(bh, "/restore first.isebak"), bk.exec(bh, "correct horse");
+        assert(rd(dir + "isekur.conf") == conf && rd(dir + "secret.key") == std::string(32, '\x07') && rd(dir + "plugins/t.lua") == "-- t v1\n" && rd(dir + "plugins/t.data") == "k\tv\n");
+        assert(access((dir + "plugins/extra.lua").c_str(), F_OK) != 0 && access((dir + "themes/extra.theme").c_str(), F_OK) != 0);  // not in the backup: gone
+        assert(access((dir + "plugins/.catalog.json").c_str(), F_OK) == 0 && rd(dir + "notes.txt") == "not part of it" && access((dir + "themes/mine.theme").c_str(), F_OK) == 0);
+        assert(bk.unsaved.empty() && ini_get(bk.cfg, "general", "nick") == "alice");  // the config is loaded
+        std::string snap;  // what was there before is in before-restore-*.isebak, with the same passphrase
+        if (DIR* dd = opendir((dir + "backups").c_str())) {
+            while (dirent* e = readdir(dd))
+                if (std::string(e->d_name).rfind("before-restore-", 0) == 0) snap = dir + "backups/" + e->d_name;
+            closedir(dd);
+        }
+        assert(!snap.empty() && backup_unpack(rd(snap), "correct horse", out, err));
+        bool had_bob = false, had_extra = false;
+        for (auto& f : out) had_bob |= f.path == "isekur.conf" && f.data == "[general]\nnick = bob\n", had_extra |= f.path == "plugins/extra.lua";
+        assert(had_bob && had_extra);
+        // a backup holding a file that isn't one of ours is refused before anything is written
+        wr(dir + "backups/evil.isebak", backup_pack({{"isekur.conf", "[general]\nnick = evil\n"}, {"../escape", "x"}}, "correct horse"));
+        bk.exec(bh, "/restore evil"), bk.exec(bh, "correct horse");
+        assert(rd(dir + "isekur.conf") == conf && access((std::string(d) + "/escape").c_str(), F_OK) != 0);
+        std::filesystem::remove_all(d);
     }
 
     puts("all tests passed");
