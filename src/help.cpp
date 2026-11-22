@@ -384,7 +384,7 @@ static const std::vector<CmdInfo> CMDS = {
      "and their data, your themes and the BNC's certificate into one file, locked with a passphrase you type twice "
      "(8 characters or more; nobody can recover it for you). It is saved as <name>.isebak in the backups folder next to the config "
      "(~/.config/isekur/backups/), named isekur-date-time when you give none; an existing backup is never overwritten, and the "
-     "message says where it went. Logs, history and webchat sessions aren't in it, and neither are /set changes you haven't "
+     "message says where it went. Its boxes and messages are in the CMD tab (it takes you there), whatever tab you typed it in. Logs, history and webchat sessions aren't in it, and neither are /set changes you haven't "
      "saved: /save first. To move to another computer, install iSekur there, start it once, copy the file into "
      "~/.config/isekur/backups/ (make the folder if it isn't there) and type /restore name; a file anywhere else works with "
      "its whole path. Ask for the lock password first when one is set.",
@@ -397,7 +397,7 @@ static const std::vector<CmdInfo> CMDS = {
      "history and the plugin catalog's cache are left alone. A wrong passphrase or a damaged file changes nothing. "
      "Then it reloads the config and the plugins; restart iSekur to apply everything (connections that are open keep their old "
      "settings until then), and /checkconf lists folders or certificates the backup names that aren't on this computer. "
-     "With a name it reads that backup from ~/.config/isekur/backups/ (the folder next to your config); with a path, any "
+     "Like /backup it talks in the CMD tab, wherever you typed it. With a name it reads that backup from ~/.config/isekur/backups/ (the folder next to your config); with a path, any "
      "file; with nothing, it lists the backups there and asks which one. With a lock password set, that password first.",
      {"/restore", "/restore before-upgrade", "/restore ~/Downloads/isekur-20261122-1953.isebak"}},
     {"reload", "Settings", "", "Re-read the config file",

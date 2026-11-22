@@ -4645,6 +4645,23 @@ print("loaded")
         bk.cfg_path = dir + "isekur.conf";
         Buffer* bh = bk.open(nullptr, BT::STATUS, "isekur");
         std::string path = dir + "backups/first.isebak";
+        {  // typed in another tab: the boxes and the lines are in CMD, and you are taken there; the other tab says nothing
+            Buffer* other = bk.open(nullptr, BT::QUERY, "*elsewhere");
+            bk.select(other);
+            size_t n_other = other->lines.size(), n_home = bh->lines.size();
+            bk.exec(other, "/backup elsewhere!");  // an error: in CMD
+            assert(bk.active == bh && other->lines.size() == n_other && bh->lines.size() > n_home);
+            bk.select(other), n_home = bh->lines.size();
+            bk.exec(other, "/backup elsewhere");  // its passphrase box is CMD's
+            assert(bk.pass_buf == bh && bk.active == bh && other->lines.size() == n_other);
+            bk.exec(bh, "");  // cancelled
+            bk.select(other);
+            bk.exec(other, "/restore"), bk.exec(bh, "");  // the list and the question: CMD's too
+            bk.select(other);
+            bk.exec(other, "/restore nope");
+            assert(!bk.pass_buf && bk.active == bh && other->lines.size() == n_other && bh->lines.back().kind == LK::ERROR);
+            bk.select(bh);
+        }
         bk.exec(bh, "/backup first!");  // a name takes letters, digits and . _ -
         assert(!bk.pass_buf && access(path.c_str(), F_OK) != 0);
         bk.exec(bh, "/backup first");

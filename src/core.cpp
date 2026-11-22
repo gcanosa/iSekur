@@ -2053,10 +2053,13 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (plugin_depth && (cmd == "exec" || cmd == "sh" || cmd == "shell" || cmd == "attach")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: no programs
     if (plugin_depth && (cmd == "backup" || cmd == "restore")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: a plugin never reads or replaces the config
-    if (cmd == "backup") { backup_cmd(b, args); return; }
-    if (cmd == "restore") {  // replaces everything, the lock password and web.* included: with a lock password, that password first
-        if (!trim(args).empty() && lock_gate(*this, b, in, "the whole configuration", false)) return;  // the bare /restore only lists and asks which one
-        restore_cmd(b, args);
+    if (cmd == "backup" || cmd == "restore") {  // about iSekur itself, not a network or a channel: its boxes and every line it says are in the CMD tab, wherever it was typed (and you are taken there: select moves the webchat too)
+        Buffer* home = bufs.front().get();
+        select(home);
+        if (cmd == "backup") { backup_cmd(home, args); return; }
+        // replaces everything, the lock password and web.* included: with a lock password, that password first (the bare /restore only lists and asks which one)
+        if (!trim(args).empty() && lock_gate(*this, home, in, "the whole configuration", false)) return;
+        restore_cmd(home, args);
         return;
     }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
