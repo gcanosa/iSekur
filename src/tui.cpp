@@ -77,13 +77,32 @@ extern "C" void isekur_links_begin(void);
 extern "C" void isekur_links_urls(const char* const* urls, int n);
 extern "C" void isekur_link(int x, int y, int id);
 extern "C" int isekur_present(void);
+extern "C" void isekur_cell_reverse(int x, int y);
 static std::vector<std::string> frame_urls;
 
 // unlocking: the session opens from the middle out. g_reveal 0..1, or -1: none
 static double g_reveal = -1;
 static Style g_cover, g_edge;
 
+// The text cursor, drawn by us: a reverse-video cell in every terminal and theme (the terminal's own
+// can be invisible, over SSH or on the input line's color). /set cursor: 0 off, 1 block, 2 blink.
+// put_cursor says where, present() draws it last, over whatever the frame put there.
+static int g_cur_style = 1, g_cur_x = -1, g_cur_y = -1, g_shown_x = -1, g_shown_y = -1;
+static long long g_cur_moved = 0;  // when it last moved: a blinking cursor starts "on"
+static bool g_cur_on = true;
+static constexpr int BLINK_MS = 530;
+static bool cur_phase() { return g_cur_style != 2 || (now_ms() - g_cur_moved) / BLINK_MS % 2 == 0; }
+static void put_cursor(int x, int y) {
+    g_cur_x = x, g_cur_y = y;
+    tb_hide_cursor();
+}
+
 static void present() {
+    if (g_cur_style && g_cur_x >= 0) {
+        if (g_cur_x != g_shown_x || g_cur_y != g_shown_y) g_cur_moved = now_ms();
+        g_shown_x = g_cur_x, g_shown_y = g_cur_y;
+        if ((g_cur_on = cur_phase())) isekur_cell_reverse(g_cur_x, g_cur_y);
+    } else g_shown_x = -1;
     if (g_reveal >= 0) {
         int W = tb_width(), H = tb_height();
         for (int y = 0; y < H; y++)
@@ -834,7 +853,11 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
 
 int Tui::chat_height() const { return std::max(1, tb_height() - 2 - top_row()); }
 
+int Tui::blink_wait() const { return g_cur_style == 2 && g_shown_x >= 0 ? BLINK_MS - (int)((now_ms() - g_cur_moved) % BLINK_MS) + 1 : -1; }
+bool Tui::blink_flipped() const { return g_cur_style == 2 && g_shown_x >= 0 && cur_phase() != g_cur_on; }
+
 void Tui::draw() {
+    g_cur_x = -1;  // none wanted until a field says so
     xbtn = XBtn{};
     if (c.cfg_changed) c.cfg_changed = false, apply_cfg();
     if (c.settings_win) c.settings_win = false, sw = SetWin{}, sw.open = true, sw.to_servers = c.settings_servers, c.settings_servers = false, c.set_denied.clear();
@@ -1407,7 +1430,7 @@ void Tui::draw() {
         }
         col += w;
     }
-    tb_set_cursor(px + curw - off, y);
+    put_cursor(px + curw - off, y);
     present();
 }
 
@@ -1462,7 +1485,7 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
         col += w;
     }
     text(x0 + 2, fy + 2, x0 + 2 + inner, hint, ns, false);
-    if (fy >= 0) tb_set_cursor(fx + curw - off, fy);
+    if (fy >= 0) put_cursor(fx + curw - off, fy);
     else tb_hide_cursor();
 }
 
@@ -1598,7 +1621,7 @@ void Tui::draw_settings(int W, int H) {
         int bx = x1 - 2 - (int)from_utf8(bk).size();
         if (bx > sx + (sw.searching || !sw.q.empty() ? (int)sw.q.size() + 4 : 42)) text(bx, y0 + 1, x1 - 1, bk, dim, false);
     }
-    if (sw.searching) tb_set_cursor(sx + (int)sw.q.size(), y0 + 1);
+    if (sw.searching) put_cursor(sx + (int)sw.q.size(), y0 + 1);
     else if (!sw.editing) tb_hide_cursor();
 
     // categories
@@ -1662,7 +1685,7 @@ void Tui::draw_settings(int W, int H) {
                 }
                 int avail = vmax - ex - 1, off = std::max(0, (int)sw.ecur - avail);
                 text(ex, yy, vmax, to_utf8(shown.substr((size_t)off)), fs, false);
-                tb_set_cursor(ex + (int)sw.ecur - off, yy);
+                put_cursor(ex + (int)sw.ecur - off, yy);
                 continue;
             }
             text(ex, yy, vmax, last ? (pl.empty() ? "add a command (or p: a preset for X, Q, an eggdrop, IdleRPG)" : "add a command") : perform_show(pl[(size_t)j]),
@@ -1684,7 +1707,7 @@ void Tui::draw_settings(int W, int H) {
             std::u32string shown = L.r->secret ? std::u32string(sw.ed.size(), U'\u2022') : sw.ed;
             int avail = vmax - vx - 1, off = std::max(0, (int)sw.ecur - avail);
             text(vx, yy, vmax, to_utf8(shown.substr((size_t)off)), fs, false);
-            tb_set_cursor(vx + (int)sw.ecur - off, yy);
+            put_cursor(vx + (int)sw.ecur - off, yy);
             continue;
         }
         std::string eff = L.r->val.empty() ? L.r->def : L.r->val;
@@ -1962,7 +1985,7 @@ void Tui::draw_themes(int W, int H) {
     int fx = text(tw.x0 + 2, y0 + 1, x1 - 2, "filter: ", hs, false);
     fill(y0 + 1, fx, x1 - 2, fs);
     int ex = text(fx, y0 + 1, x1 - 2, to_utf8(tw.q), fs, false);
-    tb_set_cursor(ex, y0 + 1);
+    put_cursor(ex, y0 + 1);
     if (!n) text(tw.x0 + 2, tw.list_y, x1 - 2, "no theme matches", dim, false);
     for (int i = 0; i < tw.rows && tw.top + i < n; i++) {
         const std::string& name = l[(size_t)(tw.top + i)];
@@ -2172,7 +2195,7 @@ void Tui::draw_find(int W, int H) {
     int fx = text(fw.x0 + 2, y0 + 1, x1 - 2, "find: ", hs, false);
     fill(y0 + 1, fx, x1 - 2, fs);
     int ex = text(fx, y0 + 1, x1 - 2, to_utf8(fw.q), fs, false);
-    tb_set_cursor(ex, y0 + 1);
+    put_cursor(ex, y0 + 1);
     if (!n) text(fw.x0 + 2, fw.list_y, x1 - 2, "no tab matches", dim, false);
     for (int i = 0; i < fw.rows && fw.top + i < n; i++) {
         Buffer* b = l[(size_t)(fw.top + i)];
@@ -2353,7 +2376,7 @@ void Tui::draw_plugins(int W, int H) {
             if (on && pw.editing) {
                 fill(y, cb2, xm, fs);
                 int ex = text(cb2, y, xm, to_utf8(pw.ed), fs, false);
-                tb_set_cursor(std::min(ex, x1 - 3), y);
+                put_cursor(std::min(ex, x1 - 3), y);
                 continue;
             }
             std::string v = s.flag ? std::string(truthy_str(eff) ? "● on" : "○ off") : eff.empty() ? "(empty)" : !s.choices.empty() && on ? "◂ " + eff + " ▸" : eff;
@@ -2675,7 +2698,7 @@ void Tui::draw_pwin(int W, int H) {
         fill(fy, pu.x0 + 2, x1 - 2, fs);  // an input field, even while it isn't typing
         if (pu.filtering) {
             int ex = text(pu.x0 + 3, fy, xm - 1, f, fs, false);
-            tb_set_cursor(std::min(ex, x1 - 4), fy);
+            put_cursor(std::min(ex, x1 - 4), fy);
         } else {
             Style ph = fs;
             ph.fg = readable(dim.fg, fs.bg), ph.attr = 0;
@@ -2915,7 +2938,7 @@ void Tui::draw_bans(int W, int H) {
     text(bw.x0 + 2, sy + 1, x1 - 2,
          can ? "↑↓ · u unban · a add · r reload · s sort · Tab list · / filter · Esc close" : "↑↓ · r reload · s sort · Tab list · / filter · Esc close",
          dim, false);
-    if (bw.filtering) tb_set_cursor(ex, bw.filter_y);
+    if (bw.filtering) put_cursor(ex, bw.filter_y);
     else tb_hide_cursor();
     if (!bw.ask.empty())
         draw_dialog(W, H, std::string(bl.mode == 'b' ? "Unban" : "Remove"), wrap_words((bl.mode == 'b' ? "Unban " : "Remove ") + bw.ask + " on " + b->name + "?", 44), "", false, U"", 0, "y: yes · n or Esc: no", 0, 0, 'u');
@@ -3172,6 +3195,8 @@ void Tui::apply_cfg() {
     std::string th = ini_get(c.cfg, "general", "timestamp_hover", "off");
     ts_hover = th == "term" || th == "both" || th == "on";  // on: what it was before web/term/both
     set_mouse();
+    std::string cs = ini_get(c.cfg, "general", "cursor", "block");
+    g_cur_style = cs == "off" ? 0 : cs == "blink" ? 2 : 1;
     std::string mode = ini_get(c.cfg, "general", "colors", "auto");
     const char* ct = getenv("COLORTERM");
     truecolor = mode == "truecolor" ||
@@ -4233,7 +4258,7 @@ void Tui::draw_logs(int W, int H) {
     std::string qs = to_utf8(lw.q);
     if (qs.empty() && lw.focus != 2) text(fx + 1, y0 + 1, fx + fw_, "/ to type: words, \"a phrase\", nick:alice", sty(T, "timestamp", "input"), false);
     else text(fx + 1, y0 + 1, fx + fw_ - 1, qs, fs, false);
-    if (lw.focus == 2) tb_set_cursor(std::min(fx + 1 + (int)lw.q.size(), fx + fw_ - 1), y0 + 1);
+    if (lw.focus == 2) put_cursor(std::min(fx + 1 + (int)lw.q.size(), fx + fw_ - 1), y0 + 1);
     int sx = text(fx + fw_ + 2, y0 + 1, x1 - 2, "e", keyst, false);
     sx = text(sx, y0 + 1, x1 - 2, lw.events ? " events shown  " : " events hidden  ", dim, false);
     sx = text(sx, y0 + 1, x1 - 2, "c", keyst, false);

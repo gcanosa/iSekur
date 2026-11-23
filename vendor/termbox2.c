@@ -145,6 +145,13 @@ static int lk_send(int id) {
     return bytebuf_puts(&global.out, "\x1b\\");
 }
 
+// the software cursor: the cell under it in reverse video (the terminal's own cursor may be
+// invisible: same color as the input line, over SSH, in tmux)
+void isekur_cell_reverse(int x, int y) {
+    struct tb_cell *c;
+    if (cellbuf_get(&global.back, x, y, &c) == TB_OK) c->fg ^= TB_REVERSE;
+}
+
 int isekur_present(void) {
     if_not_init_return();
     int rv, open = 0, x, y, i;

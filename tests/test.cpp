@@ -609,6 +609,7 @@ int main() {
             for (auto& r : core.setting_rows())
                 if (r.sec == "web" && r.key == "tls") assert(r.choices == std::vector<std::string>({"auto", "true"}));
             assert(bad_value("general", "lock_grace", "5").empty() && !bad_value("general", "lock_grace", "61").empty());
+            assert(bad_value("general", "cursor", "block").empty() && bad_value("general", "cursor", "off").empty() && !bad_value("general", "cursor", "bar").empty());
             assert(bad_value("general", "web_font", "terminal").empty() && !bad_value("general", "web_font", "comic").empty());  // the presets
         }
         core.exec(home, "/exit -y"), core.exec(home, "nope");  // /exit too: the lock password, or iSekur stays

@@ -21,6 +21,7 @@ timestamp_align = left      ; left | right (the right edge of the chat, terminal
 timestamp_hover = off       ; web | term | both: the time hides, it fades in under the mouse and out slowly (term: with mouse on)
 scrollback = 2000           ; lines kept in memory per tab (min 100); fewer = less memory
 colors    = auto             ; auto (truecolor if $COLORTERM says so) | truecolor | 256
+cursor    = block            ; the text cursor, drawn by iSekur so it shows over SSH too: block (steady) | blink | off (invisible)
 mouse     = on               ; click tabs/nicks, wheel scrolls, drag copies; F3 toggles
 tab_bar_position = top       ; top | left | right: the terminal's tabs as a tree down that side, like the webchat's
 tab_bar_width =              ; the terminal's side tab list width in columns, 10-60 (empty: the theme's, 20); a drag on its edge sets it too (webchat: web_tree_width)

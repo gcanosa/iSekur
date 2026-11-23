@@ -20,6 +20,8 @@ struct Tui {
     void draw();
     long long ts_anim_until = 0;  // timestamp_hover: a time fading in or out, redraw ~30 times a second until then
 
+    int blink_wait() const;      // ms to the next on/off of a blinking cursor (-1: none is drawn)
+    bool blink_flipped() const;  // it is due: draw again
     bool in_selecting = false;                  // a drag over the input line (main's loop: input_edge while it lasts)
     void input_edge();                          // that drag at an edge: scroll one character that way
 

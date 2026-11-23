@@ -928,6 +928,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/set own_nick_color off") " your nick in the theme's own color, one other nicks can share (on: a color of its own)",
         "  " G_CMD("/set tab_bar_position left") "     the tabs as a tree down the left side (or right; " G_CMD("tab_bar_width") ", or drag its edge)",
         "  " G_CMD("/set nicklist_side left") " the user list at the left of the chat (" G_CMD("nicklist_width") ", or drag its │)",
+        "  " G_CMD("/set cursor blink") " the text cursor: block (steady, the default), blink or off (invisible); iSekur draws it, so it shows over SSH",
     }},
     {"Plugins", {
         "Small Lua scripts add what iSekur doesn't do itself. They run in a sandbox, and the catalog's are checked by sha256.",

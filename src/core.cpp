@@ -431,7 +431,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"nick", "Identity", 'b'}, {"altnick", "Identity", 'b'}, {"user", "Identity", 'b'}, {"realname", "Identity", 'b'},
     {"theme", "Look", 'g'}, {"theme_dir", "Look", 'g'}, {"web_font", "Look", 'g'}, {"web_font_size", "Look", 'g'}, {"web_tree_lines", "Look", 'g'}, {"web_tree_autohide", "Look", 'g'}, {"web_tree_width", "Look", 'g'}, {"web_unread_badge", "Look", 'g'}, {"colors", "Look", 'g'},
     {"timestamp", "Look", 'g'}, {"timestamp_align", "Look", 'g'}, {"timestamp_hover", "Look", 'g'}, {"nick_width", "Look", 'g'}, {"own_nick_color", "Look", 'g'}, {"scrollback", "Look", 'g'}, {"mouse", "Look", 'g'}, {"tab_bar_position", "Look", 'g'}, {"tab_bar_width", "Look", 'g'}, {"nicklist_side", "Look", 'g'}, {"nicklist_width", "Look", 'g'},
-    {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'},
+    {"status_info", "Look", 'g'}, {"cpu_levels", "Look", 'g'}, {"mem_levels", "Look", 'g'}, {"typing_effect", "Look", 'b'}, {"cursor", "Look", 'g'},
     {"banner_mono", "Look", 'g'}, {"banner_anim", "Look", 'g'}, {"show_guide", "Look", 'g'},
     {"hilight_words", "Messages", 'n'}, {"hilight_window", "Messages", 'b'}, {"bell_notifications", "Messages", 'b'},
     {"paste_confirm", "Messages", 'b'}, {"complete_suffix", "Messages", 'g'}, {"send_typing", "Messages", 'b'}, {"quit_message", "Messages", 'b'}, {"part_message", "Messages", 'b'},
@@ -551,7 +551,7 @@ static const std::vector<std::string> WEB_FONTS = {"theme", "mono", "sans", "ser
 // (on/off, a number). Empty: nothing
 std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> CHOICES = {
-        {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
+        {"cursor", {"block", "blink", "off"}}, {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
         {"web_font", WEB_FONTS}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
@@ -720,6 +720,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         std::string v = r.val.empty() ? def : r.val;
         to_lower(v);
         if (sec == "general" && k == "theme") r.choices = themes;
+        else if (sec == "general" && k == "cursor") r.choices = {"block", "blink", "off"};
         else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
         else if (sec == "general" && k == "tab_bar_position") r.choices = {"top", "left", "right"};
         else if (sec == "general" && k == "nicklist_side") r.choices = {"right", "left"};
@@ -2172,7 +2173,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             Theme t;
             if (load_theme(ini_get(cfg, "general", "theme", "default"), t, err)) theme = t, notify(Ev::THEME, nullptr);
         }
-        if (sec == "keys" || (sec == "general" && (key == "timestamp_hover" || key == "mouse"))) cfg_changed = true;  // the terminal applies them (tui apply_cfg)
+        if (sec == "keys" || (sec == "general" && (key == "timestamp_hover" || key == "mouse" || key == "cursor"))) cfg_changed = true;  // the terminal applies them (tui apply_cfg)
         if (sec == "general" && key == "scrollback") max_lines = (size_t)std::max(100, atoi(opt(nullptr, "scrollback", "2000").c_str()));
         if (sec == "general" && (key.rfind("timestamp", 0) == 0 || key == "scrollback" || key == "nick_width" || key == "own_nick_color" || key == "complete_suffix" || key.rfind("web_font", 0) == 0 || key.rfind("web_tree", 0) == 0 || key == "web_unread_badge")) notify(Ev::THEME, nullptr);  // the webchat redraws its lines with them
         if (sec == "general" && (key == "own_nick_color" || key == "theme")) plugins_reshow();  // what nickcolors painted follows the new colors

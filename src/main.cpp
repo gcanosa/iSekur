@@ -385,6 +385,7 @@ int main(int argc, char** argv) {
         bool reels = c.tty && c.pwin.open && c.pwin.reels == 1;  // a plugin window's cassette turns in the terminal: ~8 frames a second
         if (reels) wait = std::min(wait, 120);
         if (c.tty && tui.in_selecting) wait = std::min(wait, 40);  // a drag over the input line held at an edge scrolls it
+        if (int bw = c.tty ? tui.blink_wait() : -1; bw >= 0) wait = std::min(wait, bw);  // a blinking cursor: wake for its next flip
         if (about) {  // ~30 frames a second while the light sweeps or a line types, else asleep until the next sweep
             long long ph = (now_ms() - c.about_t0) % 3500;
             wait = std::min(wait, ph < 1200 || !c.about_typed.empty() ? 33 : (int)(3500 - ph));
@@ -395,6 +396,7 @@ int main(int argc, char** argv) {
         if (wait_fds(fds, wait) < 0 && errno != EINTR) break;
         probe.skip();
         if (typing || reels) c.dirty = true;
+        if (c.tty && tui.blink_flipped()) c.dirty = true;
         if (c.tty && tui.in_selecting) tui.input_edge();
         if (c.flash_until && now_ms() >= c.flash_until) c.flash.clear(), c.flash_until = 0, c.dirty = true;
         guard("shell tabs", [&] { c.terms_poll(fds, term0); });  // first: nothing has closed a tab yet, so the order still holds
