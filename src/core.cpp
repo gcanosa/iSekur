@@ -544,12 +544,15 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
     return "unknown key " + key + " in [" + sec + "], ignored" + (best.empty() ? "" : " (did you mean " + best + "?)");
 }
 
+// web_font's values; the stacks they stand for are in web/index.html (applyTheme)
+static const std::vector<std::string> WEB_FONTS = {"theme", "mono", "sans", "serif", "classic", "terminal", "humanist"};
+
 // what's wrong with key = v in [sec]: a value from a list, a theme, or the kind of value the template's default is
 // (on/off, a number). Empty: nothing
 std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
     static const std::map<std::string, std::vector<std::string>> CHOICES = {
         {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
-        {"web_font", {"theme", "mono", "sans", "serif"}}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}}};
+        {"web_font", WEB_FONTS}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
     if (sec == "web" && key == "tls") return v == "auto" || v == "true" ? "" : key + " = " + v + ": takes auto (HTTPS unless bound to localhost) or true (HTTPS on localhost too)";
@@ -721,7 +724,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         else if (sec == "general" && k == "tab_bar_position") r.choices = {"top", "left", "right"};
         else if (sec == "general" && k == "nicklist_side") r.choices = {"right", "left"};
         else if (sec == "general" && k == "timestamp_hover") r.choices = {"off", "web", "term", "both"};
-        else if (sec == "general" && k == "web_font") r.choices = {"theme", "mono", "sans", "serif"};  // theme: its font, else mono
+        else if (sec == "general" && k == "web_font") r.choices = WEB_FONTS;  // theme: its font, else mono
         else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
         else if (srv && k == "ip_version") r.choices = {"auto", "4", "6"};
         else if (sec == "web" && k == "tls") r.choices = {"auto", "true"};  // false never did anything: plain HTTP is only on localhost, which is auto

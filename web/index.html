@@ -1730,7 +1730,11 @@ function applyTheme() {
     $(p).classList.toggle("tshover", ["web", "both", "on"].includes(theme.tsh));  // /set timestamp_hover web | both (on: before term was)
   }
   // /set web_font wins; else the theme's (mirc: Fixedsys where it's installed); else ui-monospace...
-  const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif"}, uf = (theme.font || "").trim().replace(/^theme$/, "");
+  // each preset: the same look per OS (Win, Mac/iOS, Linux/BSD via fontconfig's metric-compatible families), the generic one last for Android and anything else
+  const fonts = {mono: "", sans: "system-ui, sans-serif", serif: "Georgia, serif",
+    classic: '"Courier New", Courier, "Liberation Mono", "Nimbus Mono PS", monospace',
+    terminal: '"Lucida Console", Monaco, "Andale Mono", "DejaVu Sans Mono", monospace',
+    humanist: 'Verdana, "DejaVu Sans", "Noto Sans", sans-serif'}, uf = (theme.font || "").trim().replace(/^theme$/, "");
   set("--mono", !uf ? (theme.lay || {}).font : uf in fonts ? fonts[uf] : uf);
   if (!uf) fontCheck((theme.lay || {}).font);  // a /set web_font is the user's own pick: no hint for that
   const win = (theme.lay || {}).window || "";  // mac | win95: the window buttons
