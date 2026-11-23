@@ -3410,6 +3410,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         }
         std::string cmd = k == TB_KEY_ENTER ? menu.items[(size_t)menu.sel].second : "";  // other keys close it
         std::string it = menu.items[(size_t)menu.sel].first;
+        int mb = menu.buf;
         menu.items.clear();
         if (!cmd.empty() && (cmd[0] == '\x01' || cmd[0] == '\x02')) {  // a link's menu: open it, or copy it
             if (cmd[0] == '\x01') open_link(cmd.substr(1));
@@ -3417,17 +3418,20 @@ void Tui::key(int mod, int k, uint32_t ch) {
             return;
         }
         if (!cmd.empty() && cmd[0] == '?') {  // asks first, titled like the item ("Delete server...": "Delete server")
-            confirm = cmd.substr(1), confirm_title = it;
+            confirm = cmd.substr(1), confirm_title = it, confirm_buf = mb;
             while (!confirm_title.empty() && confirm_title.back() == '.') confirm_title.pop_back();
         }
         else if (!cmd.empty() && (cmd.back() == ' ' || cmd.back() == ':')) input = from_utf8(cmd), cur = input.size();  // ends in a space: you finish it
-        else if (!cmd.empty()) c.exec(c.active, cmd);
+        else if (!cmd.empty()) { if (Buffer* t = tab_by_id(mb)) c.exec(t, cmd); }
         return;
     }
     if (!confirm.empty()) {  // a menu's question: y runs it, anything else drops it
         std::string q;
         q.swap(confirm);
-        if (ch == 'y' || ch == 'Y') c.exec(c.active, q.substr(q.find('\n') + 1));
+        int cb = confirm_buf;
+        confirm_buf = 0;
+        if (ch == 'y' || ch == 'Y')
+            if (Buffer* t = tab_by_id(cb)) c.exec(t, q.substr(q.find('\n') + 1));
         return;
     }
     if (!paste.empty()) {  // "Send N lines?" - y sends, anything else puts it back to edit
@@ -3726,7 +3730,7 @@ void Tui::close_box() {
     case 'P': pw.ask.clear(); break;
     case 'A': pw.about.clear(); break;
     case 'a': input.clear(), cur = 0, c.exec(c.active, ""); break;  // a question: cancelled
-    case 'c': confirm.clear(); break;
+    case 'c': confirm.clear(), confirm_buf = 0; break;
     case 'p': input = from_utf8(paste), cur = input.size(), paste.clear(); break;  // back to edit it
     }
     xbtn = XBtn{};
@@ -3843,12 +3847,12 @@ void Tui::mouse(int mod, int k, int x, int y) {
         c.dirty = true;
         return;
     }
-    if (!menu.items.empty() && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RIGHT)) {  // pick, or close it
+    if (!menu.items.empty() && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RIGHT || k == TB_KEY_MOUSE_MIDDLE || (k >= TB_KEY_MOUSE_WHEEL_RIGHT && k <= TB_KEY_MOUSE_WHEEL_UP))) {  // pick, or close it (the middle button and the wheel only close)
         int i = y - menu.y - 1;
         int mw = 0;
         for (auto& it : menu.items) mw = std::max(mw, (int)it.first.size() + 2);
         mw = std::max(mw, (int)menu.nick.size() + 2);
-        bool in = x >= menu.x && x < menu.x + mw && i >= 0 && i < (int)menu.items.size() && !menu.items[(size_t)i].first.empty();
+        bool in = (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RIGHT) && x >= menu.x && x < menu.x + mw && i >= 0 && i < (int)menu.items.size() && !menu.items[(size_t)i].first.empty();
         if (in) menu.sel = i, key(0, TB_KEY_ENTER, 0);
         else menu.items.clear();
         c.dirty = true;
@@ -3873,7 +3877,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
             if ((side_w ? x < side_x || x >= side_x + side_w || y < top_row() || y >= top_row() + chat_height() : y < top_row() - tab_h || y >= top_row()) || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
             Buffer* tb = c.bufs[(size_t)h.tab].get();
             if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY || tb->type == BT::SHELL)  // its commands run there
-                c.select(tb), menu = Menu{x, y, 0, tb->type == BT::STATUS ? tb->srv->cfg.name : tb->name, c.tab_menu(tb)}, c.dirty = true;
+                menu = Menu{x, y, 0, tb->type == BT::STATUS ? tb->srv->cfg.name : tb->name, c.tab_menu(tb), tb->id}, c.dirty = true;  // you stay on your tab: its commands run on this one
         }
         return;
     }
@@ -3999,6 +4003,13 @@ std::pair<Buffer*, int> Tui::drop_at(int x, int y) {
         return {b, at};
     }
     return {nullptr, 0};
+}
+
+Buffer* Tui::tab_by_id(int id) const {
+    if (!id) return c.active;
+    for (auto& b : c.bufs)
+        if (b->id == id) return b.get();
+    return nullptr;
 }
 
 void Tui::open_menu(const std::string& nick, int x, int y) {

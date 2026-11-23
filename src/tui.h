@@ -106,7 +106,9 @@ private:
     bool nl_left = false;          // nicklist_side = left
     int sel_lo = 0, sel_hi = 0;    // the chat text's columns a drag selects and copies in
     // right click on a nick or a channel tab: a menu of commands ("" label = separator); Up/Down/Enter or a click
-    struct Menu { int x = 0, y = 0, sel = 0; std::string nick; std::vector<std::pair<std::string, std::string>> items; };
+    struct Menu { int x = 0, y = 0, sel = 0; std::string nick; std::vector<std::pair<std::string, std::string>> items; int buf = 0; };  // buf: the tab a tab menu was opened on, where its commands run (0: the active one)
+    int confirm_buf = 0;                        // the same for the question a menu item asked
+    Buffer* tab_by_id(int id) const;            // a menu's tab: 0 is the active one; null when it closed meanwhile
     Menu menu;  // items.empty() = closed
     void open_menu(const std::string& nick, int x, int y);
     const Buffer* nl_buf = nullptr;
