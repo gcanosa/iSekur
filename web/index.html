@@ -473,7 +473,7 @@ kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: bor
   padding: 8px 14px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: center; min-height: 38px; }
 #topic .t { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
 #topic .tm { opacity: 0; transition: opacity .15s; font-size: .85em; white-space: nowrap; }  /* the channel modes, only while hovering the topic */
-#topic:hover .tm { opacity: .55; }
+@media (hover: hover) { #topic:hover .tm { opacity: .55; } }  /* only with a real hover: on iOS a tap on a button of the bar was taken as the hover (the fade is a change), no click, and the next tap elsewhere undid it: ☰, 👥 and the tabs needed two */
 #topic .t.full { white-space: pre-wrap; overflow-wrap: anywhere; max-height: calc(var(--vvh, 100dvh) * .4); overflow-y: auto; }
 #topic button { background: none; color: var(--fg); border: 1px solid var(--line); border-radius: 6px; padding: 2px 8px; cursor: pointer; display: inline-flex; align-items: center; }  /* line icons in the theme's text color, like the menus' */
 /* logout: an icon, its name on hover (right away, not the browser's late tooltip), under it and inside the page */
@@ -2225,7 +2225,7 @@ function zoomSet(z) { z = Math.round(z * 10) / 10; document.documentElement.styl
 for (const b of document.querySelectorAll("#zoom .zm")) b.onclick = () => zoomSet(Math.min(2, Math.max(.7, (+document.documentElement.style.getPropertyValue("--z") || 1) + b.dataset.z / 10)));
 try { const z = +localStorage.getItem("fz"); if (z >= .7 && z <= 2) zoomSet(z); } catch (e) {}
 $("#logout").onclick = async () => { await fetch("/logout", {method: "POST", credentials: "same-origin"}); if (ws) { ws.onclose = null; ws.close(); } boot(); };
-$("#menu").onclick = () => $("#side").classList.toggle("open");
+$("#menu").onclick = () => { $("#nicks").classList.remove("open"); $("#side").classList.toggle("open"); };  // the two overlays cover each other on a phone: one at a time
 const sidebtn = document.createElement("button"); sidebtn.id = "sidebtn";
 const sidetop = document.createElement("div"); sidetop.id = "sidetop";
 $("#side").addEventListener("dragover", dragOver), $("#side").addEventListener("drop", dragDrop);
@@ -3365,7 +3365,10 @@ dset.addEventListener("close", () => {
   setLive.clear(); $("#setmsg").textContent = "";
 });
 $("#nickbtn").onclick = () => {
-  if (narrow.matches) return $("#nicks").classList.toggle("open");
+  if (narrow.matches) {
+    if ($("#nicks").style.display === "none") return;  // a tab without a user list (server, query): renderNicks hid it; else the "open" would wait there and pop up on the next channel
+    return $("#side").classList.remove("open"), $("#nicks").classList.toggle("open");
+  }
   const off = $("#nicks").classList.toggle("off");
   $("#nicks2").classList.toggle("off", off);
   try { localStorage.setItem("nicks", off ? "0" : "1"); } catch (e) {}
@@ -3750,7 +3753,7 @@ function action(a) {
   else if (a === "other_pane") { if (split !== null) select(split); }
   else if (a === "find_tab") {  // the filter on top of the tab list (it opens the list if folded or on a phone)
     if ($("#app").classList.contains("noside") && !$("#app").classList.contains("ah")) sidebtn.click();
-    $("#side").classList.add("open");
+    $("#nicks").classList.remove("open"); $("#side").classList.add("open");
     tabq.focus(); tabq.select();
   }
   else if (a === "keys") openKeys();
