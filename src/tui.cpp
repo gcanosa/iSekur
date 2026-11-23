@@ -87,7 +87,7 @@ static Style g_cover, g_edge;
 // The text cursor, drawn by us: a reverse-video cell in every terminal and theme (the terminal's own
 // can be invisible, over SSH or on the input line's color). /set cursor: 0 off, 1 block, 2 blink.
 // put_cursor says where, present() draws it last, over whatever the frame put there.
-static int g_cur_style = 1, g_cur_x = -1, g_cur_y = -1, g_shown_x = -1, g_shown_y = -1;
+static int g_cur_style = 2, g_cur_x = -1, g_cur_y = -1, g_shown_x = -1, g_shown_y = -1;
 static long long g_cur_moved = 0;  // when it last moved: a blinking cursor starts "on"
 static bool g_cur_on = true;
 static constexpr int BLINK_MS = 530;
@@ -3195,8 +3195,8 @@ void Tui::apply_cfg() {
     std::string th = ini_get(c.cfg, "general", "timestamp_hover", "off");
     ts_hover = th == "term" || th == "both" || th == "on";  // on: what it was before web/term/both
     set_mouse();
-    std::string cs = ini_get(c.cfg, "general", "cursor", "block");
-    g_cur_style = cs == "off" ? 0 : cs == "blink" ? 2 : 1;
+    std::string cs = ini_get(c.cfg, "general", "cursor", "blink");
+    g_cur_style = cs == "off" ? 0 : cs == "block" ? 1 : 2;
     std::string mode = ini_get(c.cfg, "general", "colors", "auto");
     const char* ct = getenv("COLORTERM");
     truecolor = mode == "truecolor" ||
@@ -3431,7 +3431,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
             if (k == TB_KEY_ARROW_DOWN) sugg_sel = std::min(sugg_sel + 1, n - 1);
             else if (k == TB_KEY_ARROW_UP) sugg_sel = sugg_sel < 0 ? n - 1 : sugg_sel - 1;  // above the first: none
             else if (sugg_sel < n) {
-                std::u32string w = from_utf8(sg[(size_t)sugg_sel].word + " ");
+                std::u32string w = from_utf8(sg[(size_t)sugg_sel].word + (sg[(size_t)sugg_sel].last ? "" : " "));
                 input.replace((size_t)from, cur - (size_t)from, w);
                 cur = (size_t)from + w.size(), sugg_sel = -1, completing = false;
             }
@@ -4005,6 +4005,17 @@ int Tui::suggest(std::vector<Sugg>& out) const {
                 if (x->srv == b->srv && x.get() != b) scan(x.get());
         if (!out.empty()) return (int)from_utf8(s.substr(0, ws)).size();  // Tab and the list count in characters
     }
+    if (cmd == "set" && arg.find(' ') != std::string::npos && arg.find(' ') == arg.rfind(' ')) {  // "/set cursor b": the values it takes, else what it is
+        std::string key = arg.substr(0, arg.find(' ')), sec = "general";
+        if (size_t dot = key.rfind('.'); dot != std::string::npos) sec = key.substr(0, dot), key = key.substr(dot + 1);
+        if (!secret_key(key)) {
+            std::string pfx = irc_lower(word), cur_v = ini_get(c.cfg, sec, key);
+            for (auto& o : c.setting_choices(sec, key))
+                if (irc_lower(o).rfind(pfx, 0) == 0) out.push_back({o, "  ", o == cur_v ? "(current)" : "", true});
+            if (!out.empty()) return (int)from_utf8(s.substr(0, ws)).size();
+            if (std::string h = c.setting_hint(sec, key); !h.empty() && pfx.empty()) { out.push_back({key, "  ", h}); return -2; }
+        }
+    }
     if (arg.find(' ') == std::string::npos) {
         if (cmd == "set") {  // config keys containing what's typed
             for (auto& st : c.settings())
@@ -4037,7 +4048,7 @@ void Tui::complete() {
         int from = suggest(sg);
         if (from >= 0) {  // a command, config key or nick
             st = (size_t)from;
-            for (auto& g : sg) comp.push_back(g.word + " ");
+            for (auto& g : sg) comp.push_back(g.word + (g.last ? "" : " "));
         } else {
             std::string pfx = irc_lower(to_utf8(input.substr(st, cur - st)));
             if (pfx.empty()) return;

@@ -482,6 +482,8 @@ struct Core {
     // the networks that override it ("libera: off")
     struct SetRow { std::string sec, key, val, def; bool unsaved, secret; std::vector<std::string> choices; std::string grp, cat, head; bool shared; std::string over, unit; };
     std::vector<SetRow> setting_rows() const;
+    std::vector<std::string> setting_choices(const std::string& sec, const std::string& key) const;  // what the key takes, when it is one of a few words (on/off, a list, the themes); else empty
+    std::string setting_hint(const std::string& sec, const std::string& key) const;  // the template's comment on it: what it is and what it takes
     std::string set_refused;  // the webchat's /set values refused since its settings dialog last asked (its Apply)
     std::string set_denied;   // the terminal's settings window: a guarded /set the lock password didn't let through, until it shows it
     bool settings_win = false;  // /set alone in the terminal: the TUI opens its settings window

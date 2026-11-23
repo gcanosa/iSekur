@@ -281,7 +281,7 @@ private:
     void complete();
     // live list under the input line: config keys after "/set ", commands while
     // typing the first word or after "/help ", the usage of a typed command
-    struct Sugg { std::string word, sep, val; };
+    struct Sugg { std::string word, sep, val; bool last = false; };  // last: nothing follows it (a /set value), so no space after it
     int suggest(std::vector<Sugg>& out) const;  // where Tab replaces from; -1 none, -2 shown only
     int sugg_sel = -1;  // Up/Down highlight in that list, -1 = none; Enter or Tab puts it in the input line
     void submit();

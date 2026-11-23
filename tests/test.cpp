@@ -609,6 +609,12 @@ int main() {
             for (auto& r : core.setting_rows())
                 if (r.sec == "web" && r.key == "tls") assert(r.choices == std::vector<std::string>({"auto", "true"}));
             assert(bad_value("general", "lock_grace", "5").empty() && !bad_value("general", "lock_grace", "61").empty());
+            core.exec(home, "/set cursor block "), assert(core.cfg["general"]["cursor"] == "block"), core.exec(home, "/set cursor blink");  // a trailing space (a completed value had one) isn't part of it
+            assert(core.setting_choices("general", "cursor") == std::vector<std::string>({"blink", "block", "off"}));  // /set cursor, Tab and the windows
+            core.cfg["general"]["mouse"] = "on", core.cfg["general"]["scrollback"] = "2000";  // this Core hasn't loaded the template's defaults
+            assert(core.setting_choices("general", "mouse") == std::vector<std::string>({"on", "off"}) && core.setting_choices("general", "scrollback").empty());
+            assert(core.setting_choices("general", "colors").size() == 3 && core.setting_choices("server.x", "ip_version").size() == 3);
+            assert(core.setting_hint("general", "cursor").find("block") != std::string::npos && core.setting_hint("server.x", "nick") == core.setting_hint("general", "nick"));
             assert(bad_value("general", "cursor", "block").empty() && bad_value("general", "cursor", "off").empty() && !bad_value("general", "cursor", "bar").empty());
             assert(bad_value("general", "web_font", "terminal").empty() && !bad_value("general", "web_font", "comic").empty());  // the presets
         }

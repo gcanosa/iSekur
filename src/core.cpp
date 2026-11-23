@@ -547,12 +547,62 @@ static std::string unknown_key(const std::string& sec, const std::string& key) {
 // web_font's values; the stacks they stand for are in web/index.html (applyTheme)
 static const std::vector<std::string> WEB_FONTS = {"theme", "mono", "sans", "serif", "classic", "terminal", "humanist"};
 
+// the [general] / network keys that take one of a few words: what /set checks, and what the settings windows,
+// /set <key> and Tab offer (one list, so they can't disagree)
+static const std::map<std::string, std::vector<std::string>> CHOICES = {
+    {"cursor", {"blink", "block", "off"}}, {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
+    {"web_font", WEB_FONTS}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}},
+    {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}}};
+
+// what key in [sec] takes when that is a few words: v is its value (or default), lowercased. Empty: a number or free text
+static std::vector<std::string> choices_of(const std::string& sec, const std::string& k, const std::string& v) {
+    bool gen = sec == "general" || sec.rfind("server.", 0) == 0;
+    if (sec == "general" && k == "theme") return theme_names();
+    if (gen)
+        if (auto c = CHOICES.find(k); c != CHOICES.end()) return c->second;
+    if (sec == "general" && k == "web_font_size") return {"12", "13", "14", "15", "16", "18", "20", "22"};
+    if (sec == "web" && k == "tls") return {"auto", "true"};  // false never did anything: plain HTTP is only on localhost, which is auto
+    if (v == "on" || v == "off") return {"on", "off"};
+    if (v == "true" || v == "false") return {"true", "false"};
+    if (v == "yes" || v == "no") return {"yes", "no"};
+    return {};
+}
+
+std::vector<std::string> Core::setting_choices(const std::string& sec, const std::string& key) const {
+    std::string v = ini_get(cfg, sec, key);
+    if (v.empty()) v = ini_get(defaults, sec, key);
+    if (v.empty() && sec.rfind("server.", 0) == 0) v = ini_get(defaults, "general", key);
+    to_lower(v);
+    return choices_of(sec, key, v);
+}
+
+// the comment after a key in the template ("key = value   ; what it is"), commented-out keys too; a network's key is
+// found in the example network's section
+std::string Core::setting_hint(const std::string& sec, const std::string& key) const {
+    static const std::map<std::string, std::string> HINTS = [] {
+        std::map<std::string, std::string> m;
+        std::istringstream in(conf_template);
+        std::string line, cur;
+        while (std::getline(in, line)) {
+            if (!line.empty() && line[0] == '[') { cur = line.substr(1, line.find(']') - 1); if (cur.rfind("server.", 0) == 0) cur = "server."; continue; }
+            size_t a = line.find_first_not_of("#; "), e = line.find('='), c = line.find(" ;", e == std::string::npos ? 0 : e);
+            if (a == std::string::npos || e == std::string::npos || e < a || c == std::string::npos) continue;
+            std::string k = line.substr(a, e - a), h = line.substr(c + 2);
+            while (!k.empty() && k.back() == ' ') k.pop_back();
+            if (k.empty() || k.find_first_not_of("abcdefghijklmnopqrstuvwxyz0123456789_") != std::string::npos) continue;
+            size_t b = h.find_first_not_of(' ');
+            if (b != std::string::npos && !m.count(cur + "." + k)) m[cur + "." + k] = h.substr(b);
+        }
+        return m;
+    }();
+    auto it = HINTS.find((sec.rfind("server.", 0) == 0 ? "server." : sec) + "." + key);
+    if (it == HINTS.end() && sec.rfind("server.", 0) == 0) it = HINTS.find("general." + key);  // a [general] key a network overrides
+    return it == HINTS.end() ? "" : it->second;
+}
+
 // what's wrong with key = v in [sec]: a value from a list, a theme, or the kind of value the template's default is
 // (on/off, a number). Empty: nothing
 std::string bad_value(const std::string& sec, const std::string& key, const std::string& v) {
-    static const std::map<std::string, std::vector<std::string>> CHOICES = {
-        {"cursor", {"block", "blink", "off"}}, {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
-        {"web_font", WEB_FONTS}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}}, {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}}};
     static const Ini tmpl = ini_parse(conf_template);
     bool srv = sec.rfind("server.", 0) == 0;
     if (sec == "web" && key == "tls") return v == "auto" || v == "true" ? "" : key + " = " + v + ": takes auto (HTTPS unless bound to localhost) or true (HTTPS on localhost too)";
@@ -711,7 +761,6 @@ void Core::login_ask(Buffer* b, const std::string& net, const std::string& metho
 
 std::vector<Core::SetRow> Core::setting_rows() const {
     std::vector<SetRow> out;
-    auto themes = theme_names();
     auto add = [&](const std::string& sec, const std::string& k, const std::string& def, const std::string& grp) -> SetRow& {
         SetRow r{sec, k, ini_get(cfg, sec, k), def, unsaved.count(sec) && unsaved.at(sec).count(k), secret_key(k), {}, grp, {}, {}, false, {}, key_unit(k)};
         bool srv = sec.rfind("server.", 0) == 0;
@@ -719,19 +768,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         r.head = sec == "general" ? grp : srv ? "⇢ " + sec.substr(7) + " · " + grp : "[" + sec + "]";
         std::string v = r.val.empty() ? def : r.val;
         to_lower(v);
-        if (sec == "general" && k == "theme") r.choices = themes;
-        else if (sec == "general" && k == "cursor") r.choices = {"block", "blink", "off"};
-        else if (sec == "general" && k == "timestamp_align") r.choices = {"left", "right"};
-        else if (sec == "general" && k == "tab_bar_position") r.choices = {"top", "left", "right"};
-        else if (sec == "general" && k == "nicklist_side") r.choices = {"right", "left"};
-        else if (sec == "general" && k == "timestamp_hover") r.choices = {"off", "web", "term", "both"};
-        else if (sec == "general" && k == "web_font") r.choices = WEB_FONTS;  // theme: its font, else mono
-        else if (sec == "general" && k == "web_font_size") r.choices = {"12", "13", "14", "15", "16", "18", "20", "22"};
-        else if (srv && k == "ip_version") r.choices = {"auto", "4", "6"};
-        else if (sec == "web" && k == "tls") r.choices = {"auto", "true"};  // false never did anything: plain HTTP is only on localhost, which is auto
-        else if (v == "on" || v == "off") r.choices = {"on", "off"};
-        else if (v == "true" || v == "false") r.choices = {"true", "false"};
-        else if (v == "yes" || v == "no") r.choices = {"yes", "no"};
+        r.choices = choices_of(sec, k, v);
         out.push_back(r);
         return out.back();
     };
@@ -2103,6 +2140,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string key = dot == std::string::npos ? argv[0] : argv[0].substr(dot + 1);
         std::string val = rest(1);
         if (val == "\"\"") val.clear();  // /set key "": empty, i.e. the default again
+        if (!val.empty() && val.back() == ' ' && !setting_choices(sec, key).empty()) val.erase(val.find_last_not_of(' ') + 1);  // "block ": a word from a list has no spaces to keep
         if (key.empty() || sec.empty()) { print(b, LK::ERROR, "Usage: /set [section.]key value"); return; }
         if (key == "name" && sec.rfind("server.", 0) == 0) {  // not a key: the settings window's name row
             if (argv.size() == 1) print(b, LK::INFO, argv[0] + " = " + sec.substr(7));
@@ -2117,6 +2155,13 @@ void Core::exec(Buffer* b, const std::string& input) {
             if (std::string t = sec == "general" ? theme_def(theme, key) : ""; !t.empty()) def = t + ", the theme's";
             else if (def.empty()) def = code_def(cfg_path, sec, key);
             print(b, LK::INFO, argv[0] + " = " + (secret(key) && !ini_get(cfg, sec, key).empty() ? "********" : (key == "perform" || sec == "aliases") && !ini_get(cfg, sec, key).empty() ? perform_show(ini_get(cfg, sec, key)) : ini_get(cfg, sec, key, def.empty() ? "(not set: default)" : def + "  (default)")));
+            if (!secret(key)) {  // and what it can be set to
+                auto ch = setting_choices(sec, key);
+                std::string l, h = setting_hint(sec, key);
+                for (auto& o : ch) l += (l.empty() ? "" : " | ") + o;
+                if (!l.empty() && key != "theme") print(b, LK::INFO, "  takes: " + l);  // the themes: /theme lists them
+                if (!h.empty()) print(b, LK::INFO, "  " + h);
+            }
             return;
         }
         // the sandbox: a plugin can't switch /exec on, open the webchat or the BNC, move dcc_dir or the /shell login either

@@ -366,7 +366,8 @@ static const std::vector<CmdInfo> CMDS = {
      "take it: a wrong one (tab_bar_position middle, scrollback lots, tab_bar_width 200) is refused and says what the key takes. "
      "Only keys iSekur reads are taken, in the section that reads them ([plugin.*] takes any); "
      "one already in the config can still be shown or cleared. "
-     "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them. "
+     "The section defaults to [general]. While typing the key, matching keys are listed and Tab completes them; "
+     "after the key, what it takes is listed (Tab completes it), and /set key alone says what it is and what it takes. "
      "/set key \"\" empties it, which means its default again. 0 turns off a key that counts: no nick column "
      "(nick_width), never (lock_idle, exec_timeout), no limit (paste_confirm), none (log_history, "
      "history_fetch); a port of 0 is the usual one.",
@@ -928,7 +929,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/set own_nick_color off") " your nick in the theme's own color, one other nicks can share (on: a color of its own)",
         "  " G_CMD("/set tab_bar_position left") "     the tabs as a tree down the left side (or right; " G_CMD("tab_bar_width") ", or drag its edge)",
         "  " G_CMD("/set nicklist_side left") " the user list at the left of the chat (" G_CMD("nicklist_width") ", or drag its │)",
-        "  " G_CMD("/set cursor blink") " the text cursor: block (steady, the default), blink or off (invisible); iSekur draws it, so it shows over SSH",
+        "  " G_CMD("/set cursor block") " the text cursor: blink (the default), block (steady) or off (invisible); iSekur draws it, so it shows over SSH",
     }},
     {"Plugins", {
         "Small Lua scripts add what iSekur doesn't do itself. They run in a sandbox, and the catalog's are checked by sha256.",
