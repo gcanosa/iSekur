@@ -47,8 +47,8 @@ button, input { font: inherit; color: inherit; }
 #side .srv { color: var(--muted); font-size: calc(11px * var(--z, 1)); text-transform: uppercase; letter-spacing: 1px; padding: 10px 14px 4px; }
 #side .tab { display: flex; gap: 8px; padding: 4px 14px; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; border-left: 3px solid transparent; }
 #side .tab .n { color: var(--muted); min-width: 1.6em; text-align: right; }
-#side .tab:not(.active):hover { background: #ffffff08; }
-.light #side .tab:not(.active):hover, .light #setnav button:hover, .light .l:hover { background: #0000000a; }
+@media (hover: hover) { #side .tab:not(.active):hover { background: #ffffff08; } .light #side .tab:not(.active):hover { background: #0000000a; } }  /* a finger has no hover: it only left a tab lit that a tap hadn't opened */
+.light #setnav button:hover, .light .l:hover { background: #0000000a; }
 .light dialog::backdrop { background: #0005; }
 #side .srv[data-id] { cursor: pointer; user-select: none; }
 #side .srv[data-id]:hover { color: var(--fg); }
@@ -1287,7 +1287,9 @@ function label(b) { return b.type === "status" ? b.srv : b.name; }
 // drag to reorder (/move): a channel or query among its network's tabs, a network (its name or server tab, with all
 // its tabs) among the networks. The list sorts live under the pointer; letting go keeps it, Esc puts it back.
 let dragId = null, dragEls = [];
+const mouseMq = matchMedia("(hover: hover)");
 function dragTab(el, b, id) {
+  if (!mouseMq.matches) return;  // a finger: tap opens, a long press is the menu (a draggable tab made iOS lift it at the same moment); /move or the terminal reorders
   if (tabq.value.trim() || !((b.type === "status" && !b.home) || b.type === "channel" || b.type === "query")) return;  // filtered: not the whole list
   el.draggable = true;
   el.ondragstart = e => {
@@ -4107,6 +4109,31 @@ for (const ev of ["pointerup", "pointercancel"]) document.addEventListener(ev, (
 document.addEventListener("click", e => { if (Date.now() < lpUntil) e.preventDefault(), e.stopImmediatePropagation(); }, true);
 document.addEventListener("contextmenu", e => { clearTimeout(lpT); if (e.isTrusted && lpOpen) e.preventDefault(), e.stopImmediatePropagation(); }, true);  // the browser's own after ours: one menu
 document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu(); });
+// iOS takes a tap as "just the hover" and sends no click when anything visible on the page changes in the moment after it (a line
+// arriving, the status line or a list redrawn, the page still loading): the tab highlights and doesn't open, ☰ needs more taps, and a
+// slower press works. Pointer events aren't held back like that, so a tap on the navigation controls that got no click within 400ms
+// (WebKit decides within 350ms) is made one; a real click that comes late for the same spot is dropped, so nothing toggles twice
+const TAPS = "#menu, #nickbtn, #side .tab, #foot button, #nicks .u";
+let tapT = 0, tapD = null, tapS = null;
+document.addEventListener("pointerdown", e => {
+  clearTimeout(tapT);
+  tapD = e.pointerType === "touch" && e.isPrimary && e.target.closest(TAPS) ? {t: e.target, x: e.clientX, y: e.clientY, at: Date.now()} : null;
+}, true);
+document.addEventListener("pointerup", e => {
+  const d = tapD; tapD = null;
+  if (!d || lpOpen || Date.now() - d.at > 450 || Math.hypot(e.clientX - d.x, e.clientY - d.y) > 10) return;  // not a tap: a scroll, or a long press with its menu
+  tapT = setTimeout(() => {
+    tapS = {x: d.x, y: d.y, until: Date.now() + 700};
+    d.t.dispatchEvent(new MouseEvent("click", {bubbles: true, cancelable: true, view: window, clientX: d.x, clientY: d.y}));
+  }, 400);
+}, true);
+document.addEventListener("pointercancel", () => { clearTimeout(tapT); tapD = null; }, true);  // a scroll took the touch
+document.addEventListener("click", e => {
+  if (!e.isTrusted) return;
+  if (tapS && Date.now() < tapS.until && Math.hypot(e.clientX - tapS.x, e.clientY - tapS.y) < 6) e.preventDefault(), e.stopImmediatePropagation();  // the real one, late: already done
+  else clearTimeout(tapT);  // it came
+  tapS = null;
+}, true);
 onerror = null;  // started: later errors stay in the console
 boot();
 </script>
