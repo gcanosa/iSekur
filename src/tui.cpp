@@ -2072,6 +2072,10 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
         for (auto& [a, d] : acts)
             if (!by[a].empty()) out.push_back({"", by[a], d});
     }
+    out.push_back({"Mouse", "", ""});  // not keymap actions: fixed
+    out.push_back({"", "Double-click C-Click M-Click", "open a link (copied over SSH)"});
+    out.push_back({"", "Right-click", "a link: Open, Copy URL; a tab, a nick: menu"});
+    out.push_back({"", "Drag", "copy the text"});
     out.push_back({"Typing", "", ""});
     for (auto& r : std::vector<KeyRow>{
              {"", "Enter", "send the line"}, {"", "Tab", "complete nick or command"}, {"", "Up Down", "earlier lines you typed"},
