@@ -899,6 +899,8 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("The mouse"),
         "  click tabs and the " "\x03" "08" "[Act: 3]" RESET " numbers, wheel scrolls, " BOLD "drag to copy" RESET ", right click a",
         "  tab for its menu (autojoin, reconnect, fold). Tab colors: " "\x03" "10" "news" RESET ", " "\x03" "09" "messages" RESET ", " "\x03" "04" "your nick" RESET ".",
+        "  Links: " BOLD "double click" RESET " one (or Ctrl+click, Alt+click) to open it in your browser, " BOLD "right click" RESET " for Open and Copy URL.",
+        "  The one under the pointer is underlined. Over SSH, or with no display, Open copies the link instead.",
         "",
         G_NOTE "On a Mac, Alt is " BOLD "Option" RESET ". If Option+A types " BOLD "å" RESET ", make Option Alt: Ghostty " BOLD "macos-option-as-alt = left" RESET ",",
         "  iTerm2 Left Option " BOLD "Esc+" RESET ", Terminal.app " BOLD "Use Option as Meta key" RESET ". The same Alt keys work in the webchat.",
