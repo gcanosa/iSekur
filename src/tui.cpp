@@ -5,7 +5,9 @@
 #include <cstdlib>
 #include <cstring>
 #include <cwchar>
+#include <fcntl.h>
 #include <random>
+#include <sys/wait.h>
 #include <unordered_map>
 #include "core.h"
 #include "termbox2.h"
@@ -53,7 +55,9 @@ static std::pair<RGB, RGB> tinted(RGB fg, RGB bg) {
     return g_tint_memo[k] = {tint_fg(fg, bg, *g_tint), tint_color(bg, *g_tint)};
 }
 
+extern "C" void isekur_link(int x, int y, int id);
 static void cell(int x, int y, uint32_t cp, const Style& s) {
+    isekur_link(x, y, 0);  // whatever is drawn here is not the link that was (a window over the chat); draw_row sets its own after
     auto [sf, sb] = tinted(s.fg, s.bg);
     uintattr_t fg = tbc(sf), bg = tbc(sb);
     if (s.attr & A_BOLD) fg |= TB_BOLD;
@@ -76,6 +80,9 @@ using Row = std::vector<Cell>;
 extern "C" void isekur_links_begin(void);
 extern "C" void isekur_links_urls(const char* const* urls, int n);
 extern "C" void isekur_link(int x, int y, int id);
+extern "C" int isekur_link_at(int x, int y);
+extern "C" void isekur_link_underline(int id);
+static int g_hover_x = -1, g_hover_y = -1, g_hover_id = 0;  // the pointer (mode 1003) and the link under it, underlined when the frame is shown
 extern "C" int isekur_present(void);
 extern "C" void isekur_cell_reverse(int x, int y);
 static std::vector<std::string> frame_urls;
@@ -117,13 +124,18 @@ static void present() {
     std::vector<const char*> u;
     for (auto& s : frame_urls) u.push_back(s.c_str());
     isekur_links_urls(u.data(), (int)u.size());
+    g_hover_id = g_hover_x >= 0 ? isekur_link_at(g_hover_x, g_hover_y) : 0;
+    isekur_link_underline(g_hover_id);
     isekur_present();
 }
 
 // http(s)://... in a row of cells, like the webchat: up to a space or < > " ', without the
 // trailing punctuation of the sentence. Printable ASCII only, since it goes into an escape
 // sequence (anything else ends the link).
-static void linkify(Row& r) {
+static RGB readable(RGB c, RGB bg);
+static void linkify(Row& r, const Theme& T) {
+    bool styled = false;
+    Style ls;  // the theme's link look (link_style), worked out when the row has a link
     auto at = [&](size_t i, const char* s) {
         for (size_t k = 0; s[k]; k++)
             if (i + k >= r.size() || r[i + k].cp != (uint32_t)s[k]) return false;
@@ -139,12 +151,16 @@ static void linkify(Row& r) {
         for (size_t k = i; k < j; k++) url += (char)r[k].cp;
         if (url.size() <= 8 || url.size() > 2000 || frame_urls.size() >= 65535) { i = j; continue; }
         frame_urls.push_back(url);
-        for (size_t k = i; k < j; k++) r[k].link = (int)frame_urls.size();
+        if (!styled) ls = link_style(T), styled = true;
+        for (size_t k = i; k < j; k++) {
+            r[k].link = (int)frame_urls.size();
+            if (ls.fg >= 0) r[k].st.fg = readable(ls.fg, r[k].st.bg);  // on the line's own background (the topic bar's is another)
+            r[k].st.attr |= ls.attr;
+        }
         i = j;
     }
 }
 
-static RGB readable(RGB c, RGB bg);
 // the chat's theme while its lines are built (wrap): a nick color of it, or yours, is shown as the theme made it, in the
 // nick column and in a text a plugin painted (nickcolors) alike
 static const Theme* tint_theme = nullptr;
@@ -578,7 +594,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     if (lock_text) cells(body_cells, "\xf0\x9f\x94\x92 ", body, false);
     size_t fx0 = body_cells.size();
     cells(body_cells, txt, body);
-    linkify(body_cells);
+    linkify(body_cells, T);
     if (l.fx_at && !full) {  // e2e_effect: noise over the text's one-column glyphs; spaces and widths stay, so the wrap holds still
         long long now = now_ms();
         size_t n = body_cells.size() - fx0;
@@ -944,7 +960,7 @@ void Tui::draw() {
         if (topic_buf != b) topic_buf = b, topic_off = 0, topic_open = false;
         Row r;
         cells(r, topic, ts);
-        linkify(r);
+        linkify(r, T);
         int tw = W - 2, maxh = std::max(1, (H - 4) / 2);
         if (topic_open && width(r) > tw) {  // unfolded: wrapped over as many rows as it needs
             std::vector<Row> rows(1);
@@ -3244,8 +3260,9 @@ void Tui::shutdown() { tb_shutdown(); }
 
 void Tui::set_mouse() {
     tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
-    // xterm and Ghostty keep 1000/1002/1003 as one mode: 1003l alone turns all mouse reports off, so 1002 comes back after it
-    if (mouse_on) tb_sendf("%s", ts_hover ? "\x1b[?1003h" : "\x1b[?1003l\x1b[?1002h");
+    // every move (1003): the link under the pointer is underlined, and timestamp_hover shows the time of the line under it
+    if (mouse_on) tb_sendf("\x1b[?1003h");
+    if (!mouse_on) g_hover_x = g_hover_y = -1;
     if (!mouse_on || !ts_hover) hover_x = hover_y = -1, hover_line = fade_line = nullptr;
 }
 
@@ -3390,6 +3407,11 @@ void Tui::key(int mod, int k, uint32_t ch) {
         std::string cmd = k == TB_KEY_ENTER ? menu.items[(size_t)menu.sel].second : "";  // other keys close it
         std::string it = menu.items[(size_t)menu.sel].first;
         menu.items.clear();
+        if (!cmd.empty() && (cmd[0] == '\x01' || cmd[0] == '\x02')) {  // a link's menu: open it, or copy it
+            if (cmd[0] == '\x01') open_link(cmd.substr(1));
+            else copy_text(cmd.substr(1));
+            return;
+        }
         if (!cmd.empty() && cmd[0] == '?') {  // asks first, titled like the item ("Delete server...": "Delete server")
             confirm = cmd.substr(1), confirm_title = it;
             while (!confirm_title.empty() && confirm_title.back() == '.') confirm_title.pop_back();
@@ -3621,6 +3643,48 @@ void Tui::copy_text(const std::string& out) {
     c.flash = "Copied " + std::to_string(n) + (n == 1 ? " character" : " characters"), c.flash_until = now_ms() + 1000;
 }
 
+// A link (http(s)://, from linkify) in this machine's browser. Over SSH, with no display or no opener
+// it is copied instead: the browser would open on the wrong machine (the terminal's own Cmd/Ctrl+click works there).
+void Tui::open_link(const std::string& url) {
+#if defined(__APPLE__)
+    const char* opener = "open";
+    bool gui = true;
+#elif defined(__CYGWIN__)
+    const char* opener = "cygstart";
+    bool gui = true;
+#else
+    const char* opener = "xdg-open";
+    bool gui = getenv("DISPLAY") || getenv("WAYLAND_DISPLAY");
+#endif
+    bool found = false;
+    std::string path = getenv("PATH") ? getenv("PATH") : "";
+    for (size_t a = 0; a <= path.size() && !found;) {
+        size_t b = path.find(':', a);
+        if (b == std::string::npos) b = path.size();
+        found = access((path.substr(a, b - a) + "/" + opener).c_str(), X_OK) == 0;
+        a = b + 1;
+    }
+    if (getenv("SSH_CONNECTION") || getenv("SSH_TTY") || !gui || !found) {
+        copy_text(url);
+        c.flash = "Link copied (this machine can't open it): paste it in a browser", c.flash_until = now_ms() + 3000;
+        return;
+    }
+    pid_t p = fork();  // twice: nothing of the browser is left to reap, and its output stays off our screen
+    if (p == 0) {
+        if (fork() == 0) {
+            int nul = ::open("/dev/null", O_RDWR);
+            dup2(nul, 0), dup2(nul, 1), dup2(nul, 2);
+            for (int fd = 3; fd < 1024; fd++) close(fd);
+            setsid();
+            execlp(opener, opener, url.c_str(), (char*)nullptr);  // url starts with http:// or https://: never an option
+            _exit(127);
+        }
+        _exit(0);
+    }
+    if (p > 0) waitpid(p, nullptr, 0);
+    c.flash = "Opening " + url, c.flash_until = now_ms() + 2000;
+}
+
 // the word drawn under x,y in the chat, without the punctuation around it
 std::string Tui::word_at(int x, int y) const {
     tb_cell* cb = tb_cell_buffer();
@@ -3670,7 +3734,11 @@ void Tui::mouse(int mod, int k, int x, int y) {
         if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind == 'L' && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) peek_at = 0, lock_in.clear();
         return;
     }
-    if (k == TB_KEY_MOUSE_RELEASE && (mod & TB_MOD_MOTION)) { hover_x = x, hover_y = y; return; }  // 1003: a move, no button held
+    if (k == TB_KEY_MOUSE_RELEASE && (mod & TB_MOD_MOTION)) {  // 1003: a move, no button held
+        hover_x = x, hover_y = y, g_hover_x = x, g_hover_y = y;
+        if (isekur_link_at(x, y) != g_hover_id) c.dirty = true;  // onto a link or off one: its underline
+        return;
+    }
     if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) { close_box(); return; }
     if (sw.open) { if (!(mod & TB_MOD_MOTION) && !c.asking(c.active)) settings_mouse(k, x, y); return; }
     if (tw.open) { if (!(mod & TB_MOD_MOTION)) theme_mouse(k, x, y); return; }
@@ -3783,6 +3851,12 @@ void Tui::mouse(int mod, int k, int x, int y) {
         return;
     }
     if (k == TB_KEY_MOUSE_RIGHT) {
+        if (int id = isekur_link_at(x, y); id > 0 && id <= (int)frame_urls.size() && (over_chat || over_topic)) {  // a link: Open, Copy URL
+            const std::string& u = frame_urls[(size_t)id - 1];
+            menu = Menu{x, y, 0, u.size() > 38 ? u.substr(0, 35) + "..." : u, {{"Open", "\x01" + u}, {"Copy URL", "\x02" + u}}};  // the command: \x01 open, \x02 copy, then the URL
+            c.dirty = true;
+            return;
+        }
         for (auto& h : hits) {
             if (h.y != y || x < h.x0 || x >= h.x1) continue;
             if (!h.nick.empty()) {  // on the selection: a menu for all of it; else just this one
@@ -3888,6 +3962,10 @@ void Tui::mouse(int mod, int k, int x, int y) {
         long long now = now_ms();
         bool dbl = now - chat_click_ms < 400 && chat_click_y == y;
         chat_click_ms = dbl ? 0 : now, chat_click_y = y;
+        if (int id = isekur_link_at(x, y); id > 0 && id <= (int)frame_urls.size() && (dbl || (mod & (TB_MOD_CTRL | TB_MOD_ALT)))) {
+            open_link(frame_urls[(size_t)id - 1]);  // a link: double click, or Ctrl/Alt+click
+            return;
+        }
         if (dbl && b->srv) {
             if (!b->srv->is_chan(w) && b->name == "*channels")
                 for (int xx = 0; xx < x && !b->srv->is_chan(w); xx++) w = word_at(xx, y);  // the row's first #word: its name

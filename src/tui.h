@@ -76,6 +76,7 @@ private:
     bool in_sel(int x, int y) const;
     void copy_sel();
     void copy_text(const std::string& s);       // OSC 52 and "Copied N characters"
+    void open_link(const std::string& url);     // the browser of this machine (copied over SSH)
     std::u32string shown_input() const;         // the input line as drawn (a password typed: *s)
     void copy_input(size_t a, size_t b);        // input[a, b) to the clipboard
     size_t input_at(int x) const;               // the input character under column x

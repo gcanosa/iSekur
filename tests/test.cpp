@@ -2436,6 +2436,18 @@ int main() {
             assert(dr * dr + dg * dg + db * db >= 30 * 30);
         }
     }
+    {  // link_style: a colored link differs from the chat's text (underlined only under the pointer); the gray themes underline always; a theme's own `link` wins
+        Theme th;
+        std::string terr;
+        for (const char* n : {"default", "dracula", "solarized-light", "github-dark", "contrast-light"}) {
+            assert(load_theme(n, th, terr));
+            Style l = link_style(th), d = th.get("default");
+            assert(!(l.attr & A_UNDER) && l.fg >= 0 && (d.fg < 0 || color_distance(l.fg, d.fg) >= 10));
+        }
+        for (const char* n : {"mono", "mono-light"}) assert(load_theme(n, th, terr) && (link_style(th).attr & A_UNDER));
+        th.el["link"] = Style{0x123456, -1, A_BOLD};
+        assert(link_style(th).fg == 0x123456 && !(link_style(th).attr & A_UNDER));
+    }
     {  // mono: mIRC color codes in text keep the base colors, bold still works
         Theme th;
         std::string terr;

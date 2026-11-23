@@ -39,6 +39,9 @@ static int sgr_mouse(struct tb_event *ev, size_t *n, size_t end) {
     ev->type = TB_EVENT_MOUSE, ev->ch = 0, ev->mod = 0;
     ev->x = v[1] ? (int)v[1] - 1 : 0, ev->y = v[2] ? (int)v[2] - 1 : 0;
     if (b & 32) ev->mod |= TB_MOD_MOTION;
+    if (b & 4) ev->mod |= TB_MOD_SHIFT;  // the keys held with it: 4 Shift, 8 Alt, 16 Ctrl
+    if (b & 8) ev->mod |= TB_MOD_ALT;
+    if (b & 16) ev->mod |= TB_MOD_CTRL;
     if (b & 64) {
         static const uint16_t wheel[] = {TB_KEY_MOUSE_WHEEL_UP, TB_KEY_MOUSE_WHEEL_DOWN,
                                          TB_KEY_MOUSE_WHEEL_LEFT, TB_KEY_MOUSE_WHEEL_RIGHT};
@@ -137,6 +140,19 @@ void isekur_links_urls(const char *const *urls, int n) {  // what the ids stand 
 
 void isekur_link(int x, int y, int id) {
     if (lk_back && x >= 0 && y >= 0 && x < lk_w && y < lk_h) lk_back[y * lk_w + x] = (unsigned short)id;
+}
+
+int isekur_link_at(int x, int y) {  // the link id drawn at a cell by the last frame, 0 none
+    return lk_back && x >= 0 && y >= 0 && x < lk_w && y < lk_h ? lk_back[y * lk_w + x] : 0;
+}
+
+void isekur_link_underline(int id) {  // underline every cell of link id (the one under the pointer), in this frame's back buffer
+    if (!lk_back || id <= 0) return;
+    for (int y = 0; y < lk_h; y++)
+        for (int x = 0; x < lk_w; x++) {
+            struct tb_cell *c;
+            if (lk_back[y * lk_w + x] == id && cellbuf_get(&global.back, x, y, &c) == TB_OK) c->fg |= TB_UNDERLINE;
+        }
 }
 
 static int lk_send(int id) {

@@ -85,6 +85,7 @@ extern std::string theme_dir;  // [general] theme_dir: searched first for <name>
 bool load_theme(const std::string& name, Theme& out, std::string& err);
 Style note_style(const Theme& t);  // the INFO badge on iSekur's own notices: [colors] note, else made from hilight
 Style plugin_style(const Theme& t);  // a plugin's badge: [colors] plugin, else made from tab_active
+Style link_style(const Theme& t);   // a link in the chat and topic at rest: [colors] link, else an accent apart from the text that reads on the background (underlined too when there is none: mono)
 Style fold_style(const Theme& t);   // eventshidemgr's row: [colors] fold, else an accent apart from the chat and event lines that reads on the background
 std::vector<std::string> theme_names();  // installed themes, sorted
 std::string theme_name(const std::string& v);  // "dracula.theme" -> "dracula": theme = takes either

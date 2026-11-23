@@ -54,6 +54,7 @@ error          = #ff5370 default bold
 # menu         = #b0b4d0 default    menus and dialogs; unset: the nicklist's (terminal), the tab bar's (webchat)
 # menu_border  = #4a4f70    their border; unset: separator's
 # menu_sel     = #1c1d2b #c792ea bold    their selected row; unset: tab_active's
+# link         = #7aa2f7 default    links in the chat and the topic (the one under the pointer is underlined; add underline here for always); unset: an accent apart from the text
 
 [nicks]
 palette = #ff6b6b #ffa94d #ffd43b #a9e34b #69db7c #38d9a9 #3bc9db #4dabf7 #748ffc #9775fa #da77f2 #f783ac

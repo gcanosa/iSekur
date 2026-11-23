@@ -534,10 +534,8 @@ double color_distance(RGB a, RGB b) { return delta_e(to_lab(a), to_lab(b)); }
 // that is clearly apart from the chat's text and the event lines (so it can't pass for either) and reads on the chat's
 // background (4.5:1, moved toward black or white until it does), in bold. A theme with only grays (mono) has no such
 // color: the first accent, in bold
-Style fold_style(const Theme& t) {
-    if (t.el.count("fold")) return t.get("fold");
-    Style d = t.get("default"), ev = t.get(t.el.count("event") ? "event" : "info"), a = t.get("tab_active"), m = t.get(t.el.count("marker") ? "marker" : "separator"), h = t.get("hilight");
-    auto accent = [&](const Style& x) { return x.bg >= 0 && x.bg != d.bg ? x.bg : x.fg; };
+static RGB apart_accent(const Theme& t, std::initializer_list<RGB> cands) {
+    Style d = t.get("default"), ev = t.get(t.el.count("event") ? "event" : "info");
     auto reads = [&](RGB c) {
         if (c < 0 || d.bg < 0 || ratio(c, d.bg) >= 4.5) return c;
         RGB to = ratio(0x000000, d.bg) > ratio(0xffffff, d.bg) ? 0x000000 : 0xffffff, out = c;
@@ -548,13 +546,33 @@ Style fold_style(const Theme& t) {
         return out;
     };
     RGB pick = -1;
-    for (RGB c : {accent(a), m.fg, accent(h)}) {
+    for (RGB c : cands) {
         if (c < 0) continue;
         RGB r = reads(c);
         if (pick < 0) pick = r;
         if ((d.fg < 0 || color_distance(r, d.fg) >= 25) && (ev.fg < 0 || color_distance(r, ev.fg) >= 25)) { pick = r; break; }
     }
-    d.fg = pick, d.attr = 0;  // the weight is the chat's: the color sets the row apart
+    return pick;
+}
+static RGB accent_of(const Style& x, const Style& d) { return x.bg >= 0 && x.bg != d.bg ? x.bg : x.fg; }
+
+Style fold_style(const Theme& t) {
+    if (t.el.count("fold")) return t.get("fold");
+    Style d = t.get("default"), a = t.get("tab_active"), m = t.get(t.el.count("marker") ? "marker" : "separator"), h = t.get("hilight");
+    d.fg = apart_accent(t, {accent_of(a, d), m.fg, accent_of(h, d)}), d.attr = 0;  // the weight is the chat's: the color sets the row apart
+    return d;
+}
+
+// a link in the chat and the topic at rest (the one under the pointer is underlined besides): the theme's own `link`, else
+// the first of the data tab's color (a blue in most themes), the server tab's and the tab_active accent that is apart from
+// the chat's text and reads on the background (as fold_style finds its color). A theme with no such color (the grays: mono)
+// has nothing to show a link by, so its links are underlined at rest. Only fg and attr are used: the line's background stays
+Style link_style(const Theme& t) {
+    if (t.el.count("link")) return t.get("link");
+    Style d = t.get("default"), a = t.get("tab_active");
+    RGB c = apart_accent(t, {t.get("tab_data").fg, t.get("tab_server").fg, accent_of(a, d)});
+    d.attr = c < 0 || (d.fg >= 0 && color_distance(c, d.fg) < 10) ? A_UNDER : 0;
+    d.fg = c;
     return d;
 }
 
