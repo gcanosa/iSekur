@@ -1507,16 +1507,14 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
 
-    // whois: a framed block in the tab you asked from
-    static const std::set<std::string> whois_lines = {"301", "307", "310", "312", "313", "317", "319", "320",
-                                                      "330", "335", "338", "378", "379", "671", "276"};
-    // "me nick user host * :real name"; some servers (SekurIRCd) leave out the "*"
-    // ponytail: a framed row wrapped at ~60 bytes (at a space, else hard, UTF-8 safe) so a long host keeps the │ frame
+    // whois: a framed block in the tab you asked from; labels gray, the values that matter bold
+    auto lab = [](const char* l) { return std::string("\x03" "14") + l + "\x0f"; };
+    // ponytail: a framed row wrapped at ~60 columns (at a space, else hard, UTF-8 safe) so a long host keeps the │ frame
     auto boxed = [&](std::string t) {
         const size_t W = 60;
         for (bool first = true; ; first = false) {
             std::string pre = first ? "│ " : "│   ";
-            if (t.size() <= W) { print(reply_buf(), LK::INFO, pre + t); return; }
+            if (mirc_strip(t).size() <= W) { print(reply_buf(), LK::INFO, pre + t); return; }
             size_t cut = t.rfind(' ', W);
             if (cut == std::string::npos || cut < W / 3) {
                 cut = W;
@@ -1527,40 +1525,53 @@ void Core::handle(Server* s, const Msg& m) {
             t = t.substr(cut + (t[cut] == ' '));
         }
     };
+    // "me nick user host * :real name"; some servers (SekurIRCd) leave out the "*"
     if (cmd == "311" && m.params.size() > 4) {
         s->whois = s->lower(m.p(1));
         print(reply_buf(), LK::INFO, "┌─ whois \x02" + m.p(1) + "\x02 ─────────");
-        boxed(m.p(1) + " (" + m.p(2) + "@" + m.p(3) + "): " + m.params.back());
+        boxed("\x02" + m.p(1) + "\x02 (" + m.p(2) + "@" + m.p(3) + "): " + m.params.back());
         return;
     }
-    if (!s->whois.empty() && m.params.size() > 2 && s->lower(m.p(1)) == s->whois) {
+    // Unreal's 275 has no nick parameter: "me :Nick is connected via SSL (secure link)"
+    bool nonick = cmd == "275" && m.params.size() == 2 && m.p(1).find(' ') != std::string::npos &&
+                  s->lower(m.p(1).substr(0, m.p(1).find(' '))) == s->whois;
+    if (!s->whois.empty() && ((m.params.size() > 2 && s->lower(m.p(1)) == s->whois) || nonick)) {
         if (cmd == "318") {
             s->whois.clear();
             print(reply_buf(), LK::INFO, "└─────────");
             return;
         }
-        if (whois_lines.count(cmd)) {
+        // every reply about this nick belongs in the frame, whichever numeric the ircd picked (275 SSL, 308, 310, 616...); errors don't
+        if (cmd.size() == 3 && isdigit((unsigned char)cmd[0]) && cmd[0] != '4' && cmd[0] != '5') {
             std::string txt;
             if (cmd == "317") {  // nick idle signon :seconds idle, signon time
                 long idle = atol(m.p(2).c_str());
-                txt = "idle ";
-                if (idle >= 86400) txt += std::to_string(idle / 86400) + "d";
-                if (idle >= 3600) txt += std::to_string(idle / 3600 % 24) + "h";
-                if (idle >= 60) txt += std::to_string(idle / 60 % 60) + "m";
-                txt += std::to_string(idle % 60) + "s";
-                if (m.params.size() > 4) txt += ", signed on " + fmt_time(atol(m.p(3).c_str()), "%Y-%m-%d %H:%M");
-            } else if (cmd == "312") txt = "server " + m.p(2) + (m.params.size() > 3 ? " (" + m.p(3) + ")" : "");
+                std::string t;
+                if (idle >= 86400) t += std::to_string(idle / 86400) + "d";
+                if (idle >= 3600) t += std::to_string(idle / 3600 % 24) + "h";
+                if (idle >= 60) t += std::to_string(idle / 60 % 60) + "m";
+                t += std::to_string(idle % 60) + "s";
+                txt = lab("idle") + " \x02" + t + "\x02";
+                if (m.params.size() > 4) txt += ", " + lab("signed on") + " " + fmt_time(atol(m.p(3).c_str()), "%Y-%m-%d %H:%M");
+            } else if (cmd == "312") txt = lab("server") + " \x02" + m.p(2) + "\x02" + (m.params.size() > 3 ? " (" + m.p(3) + ")" : "");
             else if (cmd == "319") {  // ponytail: wrap at ~60 cols so the │ frame survives a long list
-                std::string ln = "channels";
+                std::string ln = lab("channels");
+                size_t vis = 8;  // the label's visible width
                 for (auto& c : split(m.p(2), ' ')) {
-                    if (ln.size() > 9 && ln.size() + 1 + c.size() > 60) print(reply_buf(), LK::INFO, "│ " + ln), ln = "        ";
-                    ln += " " + c;
+                    if (vis > 9 && vis + 1 + c.size() > 60) print(reply_buf(), LK::INFO, "│ " + ln), ln = "        ", vis = 8;
+                    ln += " " + c, vis += 1 + c.size();
                 }
                 txt = ln;
             }
-            else if (cmd == "301") txt = m.p(2) == "*" && s->caps.count("draft/pre-away") ? "away" : "away: " + m.p(2);  // pre-away: * = not present, no reason
-            else if (cmd == "330" && m.params.size() > 3) txt = "logged in as " + m.p(2);
-            else for (size_t i = 2; i < m.params.size(); i++) txt += (i > 2 ? " " : "") + m.params[i];
+            else if (cmd == "301") txt = "\x02" "away\x02" + (m.p(2) == "*" && s->caps.count("draft/pre-away") ? "" : ": " + m.p(2));  // pre-away: * = not present, no reason
+            else if (cmd == "330" && m.params.size() > 3) txt = lab("logged in as") + " \x02" + m.p(2) + "\x02";
+            else if (nonick) txt = "\x02" + m.p(1).substr(m.p(1).find(' ') + 1) + "\x02";
+            else {
+                for (size_t i = 2; i < m.params.size(); i++) txt += (i > 2 ? " " : "") + m.params[i];
+                // what you'd look for in a whois: oper, bot, a secure connection, the real address
+                if (cmd == "313" || cmd == "335" || cmd == "275" || cmd == "671") txt = "\x02" + txt + "\x02";
+                else if (cmd == "338" && m.params.size() > 3) txt = "\x02" + m.p(2) + "\x02" + txt.substr(m.p(2).size());
+            }
             boxed(txt);
             return;
         }

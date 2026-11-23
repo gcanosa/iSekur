@@ -2083,6 +2083,18 @@ int main() {
     feed(":srv 311 me Erick erick c.example :Erick R");
     feed(":srv 318 me Erick :End of /WHOIS list.");
     assert(mirc_strip(chb->lines[wb + 1].text) == "│ Erick (erick@c.example): Erick R" && mirc_strip(chb->lines.back().text) == "└─────────");
+    wb = chb->lines.size();  // 275 (SSL) and the rest are framed too, with or without a nick parameter; the key values are bold
+    feed(":srv 311 me Eth ~e h.example * :Eth");
+    feed(":srv 275 me Eth :is using a secure connection");
+    feed(":srv 275 me :Eth is connected via SSL (secure link)");
+    feed(":srv 308 me Eth :is a Services Administrator");
+    feed(":srv 312 me Eth kinetic.example :London");
+    feed(":srv 318 me Eth :End of /WHOIS list.");
+    assert(chb->lines.size() - wb == 7);
+    assert(mirc_strip(chb->lines[wb + 2].text) == "│ is using a secure connection" && chb->lines[wb + 2].text.find("\x02is using") != std::string::npos);
+    assert(mirc_strip(chb->lines[wb + 3].text) == "│ is connected via SSL (secure link)");
+    assert(mirc_strip(chb->lines[wb + 4].text) == "│ is a Services Administrator");
+    assert(mirc_strip(chb->lines[wb + 5].text) == "│ server kinetic.example (London)" && chb->lines[wb + 5].text.find("\x02kinetic.example\x02") != std::string::npos);
     wb = chb->lines.size();  // a realname of raw bytes, not UTF-8 (anyone can set one): framed, no endless loop
     feed(":srv 311 me Raw r h * :" + std::string(200, '\xa1'));
     feed(":srv 318 me Raw :End of /WHOIS list.");
