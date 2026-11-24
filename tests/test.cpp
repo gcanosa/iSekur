@@ -3794,6 +3794,17 @@ isekur.command("fo", "", function() print(isekur.fold(), isekur.api >= 14) iseku
             sy.exec(ph, "/plugin set fo@y/#y nicks off");
             fc = sy.fold_cfg(yb);
             assert(fc.on && fc.names && !fc.nicks && fc.quiet);
+            {  // /quiet tells the truth: with quiet = fold the plugin's rows stay in a quiet tab, with hide everything is hidden
+                sy.exec(yb, "/quiet");
+                assert(yb->quiet && yb->lines.back().text.find("except what fo folds") != std::string::npos);
+                sy.exec(ph, "/plugin set fo@y quiet hide");
+                sy.exec(yb, "/quiet off");
+                sy.exec(yb, "/quiet");
+                assert(yb->quiet && yb->lines.back().text.find("are hidden here") != std::string::npos && yb->lines.back().text.find("except") == std::string::npos);
+                sy.exec(yb, "/quiet off");
+                assert(!yb->quiet);
+                sy.exec(ph, "/plugin set fo@y quiet fold");
+            }
             {  // the kinds that fold: joins, leaves and nicks by default, the others only when asked, each its own setting
                 sy.exec(ph, "/plugin set fo@y/#y nicks on");
                 fc = sy.fold_cfg(yb);

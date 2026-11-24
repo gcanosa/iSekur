@@ -2609,7 +2609,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         b->quiet = on, b->smart = args == "smart";
         b->quiet_typing = false;  // your choice now: /typing off leaves it
         notify(Ev::BUFFER, b);
-        print(b, LK::INFO, b->quiet   ? "Quiet mode on: joins, parts, quits, nick changes and mode changes are hidden here"
+        auto fc = fold_cfg(b);  // a folding plugin (eventshidemgr) may keep its summary rows in a quiet tab: say so, the lines aren't all hidden then
+        print(b, LK::INFO, b->quiet   ? "Quiet mode on: joins, parts, quits, nick changes and mode changes are hidden here" + (fc.on && fc.quiet ? ", except what " + fold_by + " folds into its summary rows (click one to see its lines)" : std::string())
                            : b->smart ? "Quiet mode smart: joins, parts, quits, nick changes and mode changes show only for people who spoke in the last 5 minutes"
                                       : "Quiet mode off: showing joins, parts, quits, nick changes and mode changes");
         return;

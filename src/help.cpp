@@ -182,7 +182,9 @@ static const std::vector<CmdInfo> CMDS = {
      "them; smart hides them unless the person spoke in the last 5 minutes, so lurkers' comings and goings vanish "
      "but a quit from the conversation you're in stays; off shows all. Without an argument it toggles between "
      "off and all. Hidden lines are still logged and come back with /quiet off. Your own joins and parts, your own "
-     "mode changes, kicks and topic changes always show.",
+     "mode changes, kicks and topic changes always show. With the eventshidemgr plugin (/plugin) its quiet setting "
+     "says what a quiet tab does with its folded rows: hide (the default) hides them with the lines, fold keeps "
+     "the rows and hides only the lines of kinds it doesn't fold. The plugin works the same with /quiet off.",
      {"/quiet", "/quiet smart", "/quiet off"}},
     {"mute", "Chat", "[on|off]", "Mute hilights and alerts from this tab",
      "Toggles for the current tab and saves it in the network's mute setting right away. Your nick and hilight_words stop highlighting, "

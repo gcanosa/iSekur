@@ -606,9 +606,10 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 /* eventshidemgr (isekur.fold): a run of them is one row, "⇄ 3 joined, 2 left ▸" in the theme's accent, a click opens it. .fc: a line in a folded run; .nf: not folded (nick
    a kind that isn't asked for), so /quiet still hides it even when it keeps the summary rows (.evq) */
 .quiet.evq .l.noise.nf, .l.fc, .l.fsum.off { display: none !important; }
-.l.fsum { cursor: pointer; }
+.l.fsum { cursor: pointer; touch-action: manipulation; }  /* touch-action: two quick taps (open, fold) toggle it twice, not zoom the page on iOS */
 .l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); }  /* iSekur sends the row's color as the theme element "fold" (fold_style), so --fold-fg comes from applyTheme's loop */
-.l.fsum:hover .tx, .l.fsum:focus-visible .tx { text-decoration: underline; }
+@media (hover: hover) { .l.fsum:hover .tx { text-decoration: underline; } }  /* a touch screen has no hover: iOS reads the first tap as one */
+.l.fsum:focus-visible .tx { text-decoration: underline; }  /* its own rule: a browser without :focus-visible would drop the whole list */
 /* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
    before the last few dimmed (zenDim marks those with .zf); Esc on an empty line leaves it */
 #app.zen { grid-template-columns: 1fr !important; grid-template-rows: 1fr auto !important; grid-template-areas: "msgs" "input" !important; }
@@ -1224,9 +1225,12 @@ function addLine(parent, b, l) { const d = lineEl(b, l); parent.append(d); foldA
 function foldAdd(d, b, l) {
   const ef = b.ef | 0, fk = foldKind(l), noise = fk >= 0 && fk <= 4;
   if (!(ef & 1) || fk < 0) return;
-  if (!(ef & (16 << fk))) { if (noise) d.classList.add("nf"); return; }  // a kind that doesn't fold: a plain line, which /quiet still hides if it is noise
-  if (noise && b.q === 1 && !(ef & 8)) return;  // /quiet hides them all
-  const p = d.previousElementSibling;
+  // hq_: /quiet (or /quiet smart, for someone idle) hides this line, so it neither ends nor joins a run, as the terminal skips it
+  const hid = noise && (b.q === 1 || (b.q === 2 && l.i));
+  if (!(ef & (16 << fk))) { if (noise) d.classList.add("nf"), d.hq_ = hid; return; }  // a kind that doesn't fold: a plain line, which /quiet still hides if it is noise
+  if (noise && b.q === 1 && !(ef & 8)) { d.hq_ = true; return; }  // /quiet hides them all
+  let p = d.previousElementSibling;
+  while (p && p.hq_) p = p.previousElementSibling;
   let r = p && p.run_;
   if (!r) {
     r = {lines: [], cnt: FOLD_W.map(() => 0), who: FOLD_W.map(() => []), open: false, ef, min: b.q === 1 ? 1 : 2, ts0: "", ts1: ""};
@@ -1237,7 +1241,8 @@ function foldAdd(d, b, l) {
       const m = s.parentElement, at = m && m.scrollHeight - m.scrollTop - m.clientHeight < 40;
       r.open = !r.open; foldPaint(r); if (at) m.scrollTop = m.scrollHeight;  // at the bottom, the opened lines show
     };
-    s.onclick = flip; s.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); flip(); } };
+    // stopPropagation: the page sends every typed key to the input line, which would take the focus off the row at the first Space
+    s.onclick = flip; s.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); e.stopPropagation(); flip(); } };
     d.before(s);
   }
   d.run_ = r; r.lines.push(d);
@@ -4117,7 +4122,7 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") closeMenu();
 // arriving, the status line or a list redrawn, the page still loading): the tab highlights and doesn't open, ☰ needs more taps, and a
 // slower press works. Pointer events aren't held back like that, so a tap on the navigation controls that got no click within 400ms
 // (WebKit decides within 350ms) is made one; a real click that comes late for the same spot is dropped, so nothing toggles twice
-const TAPS = "#menu, #nickbtn, #side .tab, #foot button, #nicks .u";
+const TAPS = "#menu, #nickbtn, #side .tab, #foot button, #nicks .u, .l.fsum";  // .l.fsum: eventshidemgr's row, which is where lines are arriving
 let tapT = 0, tapD = null, tapS = null;
 document.addEventListener("pointerdown", e => {
   clearTimeout(tapT);
