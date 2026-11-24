@@ -295,6 +295,42 @@ static int l_window(lua_State* L) {
     return 0;
 }
 
+// isekur.choose{id, title, text = {lines}, items = {rows}, sel}: asks the user to pick one of up to 8 rows, in a box in the terminal and the webchat (a
+// question after another waits its turn). The answer comes back as the `choice` event: `id` as you gave it, `index` the row (1-based), 0 when it was
+// cancelled (Esc, the close button). true, or nil and why
+static int l_choose(lua_State* L) {
+    Plugin* p = self(L);
+    luaL_checktype(L, 1, LUA_TTABLE);
+    Core::Choice q;
+    q.by = p->name;
+    lua_getfield(L, 1, "id");
+    q.id = lua_isstring(L, -1) ? one_line(lua_tostring(L, -1)).substr(0, 80) : "";
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "title");
+    q.title = lua_isstring(L, -1) ? one_line(lua_tostring(L, -1)).substr(0, 40) : p->name;
+    lua_pop(L, 1);
+    q.text = str_list(L, 1, "text", 6, 300), q.items = str_list(L, 1, "items", 8, 80);
+    if (q.items.empty()) return lua_pushnil(L), lua_pushstring(L, "no items"), 2;
+    if (p->c->choices.size() >= 20) return lua_pushnil(L), lua_pushstring(L, "too many questions waiting"), 2;
+    lua_getfield(L, 1, "sel");
+    q.sel = lua_isnumber(L, -1) ? (int)std::clamp<lua_Number>(lua_tonumber(L, -1), 1, (lua_Number)q.items.size()) : 1;
+    lua_pop(L, 1);
+    p->c->choices.push_back(q);
+    p->c->dirty = true;
+    p->c->notify(Ev::CHOICE, nullptr);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+// isekur.copy(text): into the clipboard of the terminal (OSC 52: most terminals ask or allow it) and of the webchat (the browser may only let it
+// when you tapped something a moment ago: then it shows the text with a Copy button)
+static int l_copy(lua_State* L) {
+    std::string t = str_arg(L, 1);
+    if (t.size() > 4096) return lua_pushboolean(L, 0), 1;
+    self(L)->c->copy_text_out(t);
+    lua_pushboolean(L, 1);
+    return 1;
+}
+
 // a click, Enter or Esc in the plugin's window: its `window` event (action "pick" with the row, "button" with the button and the row
 // the cursor is on, "close"); only to the plugin that owns it
 void Core::pwin_act(const std::string& a, int i, int bt) {
@@ -403,7 +439,7 @@ Core::FoldCfg Core::fold_cfg(const Buffer* b) const {
 
 // what the isekur table gets from this file (host.cpp's load registers it)
 const luaL_Reg plug::api_ui[] = {
-    {"window", l_window}, {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view},
+    {"window", l_window}, {"choose", l_choose}, {"copy", l_copy}, {"screen", l_screen}, {"put", l_put}, {"inactive", l_inactive}, {"view", l_view},
     {"lock", l_lock}, {"tint", l_tint}, {"panel", l_panel}, {"sort_tabs", l_sort_tabs}, {"theme", l_theme}, {"nick_color", l_nick_color},
     {"nicklist_colors", l_nicklist_colors}, {"fold", l_fold},
     {nullptr, nullptr}};

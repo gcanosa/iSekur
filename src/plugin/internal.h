@@ -100,7 +100,7 @@ void fold_by(Core& c, const std::string& by);
 // api_core.cpp
 inline constexpr time_t STORE_EVERY = 5;  // seconds: a busy channel's seen updates are one write, not one per line
 bool store_flush(Plugin* p);              // the whole store through a temporary file; false: it couldn't be written (tried again later)
-void http_poll();                         // isekur.http's finished fetches, on every tick
+void http_poll(Core& c);                  // isekur.http's and isekur.upload's finished jobs, on every tick
 
 // each file's part of the isekur table
 extern const luaL_Reg api_core[], api_ui[], api_media[];

@@ -711,6 +711,41 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #line { flex: 1; min-width: 0; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; color: var(--input-fg, var(--fg)); }
 @media (pointer: coarse) { input, select, textarea { font-size: max(16px, 1em) !important; } }
 #line:focus { outline: none; border-color: var(--accent); }
+/* 📎: only where there's no drag and drop (a phone, a tablet) and a plugin takes files in this tab */
+#clip { display: none; flex: none; background: transparent; border: 1px solid var(--line); border-radius: 8px; padding: 0 10px; color: var(--muted); font-size: calc(16px * var(--z, 1)); cursor: pointer; }
+@media (pointer: coarse) { #clip.on { display: block; } }
+/* a file (or text) is being dragged over the page: a frame that breathes, and what letting go does */
+#dropzone { position: fixed; inset: 0; z-index: 60; pointer-events: none; display: grid; place-items: center; opacity: 0; transition: opacity .12s;
+  background: color-mix(in srgb, var(--bg) 72%, transparent); backdrop-filter: blur(3px); }
+#dropzone.on { opacity: 1; }
+#dropzone .dz-frame { position: absolute; inset: 12px; border: 2px dashed var(--accent); border-radius: 16px; animation: dzpulse 1.4s ease-in-out infinite; }
+#dropzone .dz-card { --muted: var(--dlg-dim, #8a8ea8); position: relative; display: grid; justify-items: center; gap: 4px; padding: 18px 28px; max-width: min(440px, calc(100vw - 48px)); text-align: center;
+  background: var(--dlg-bg, var(--menu-bg, var(--panel))); color: var(--fg); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 40px #0008; }
+#dropzone .dz-ic { font-size: calc(34px * var(--z, 1)); line-height: 1; color: var(--dlg-title, var(--accent)); animation: dzbob 1.1s ease-in-out infinite; }
+#dropzone .dz-t { font-weight: 700; font-size: calc(15px * var(--z, 1)); color: var(--dlg-title, var(--accent)); }
+#dropzone .dz-s { font-size: calc(12px * var(--z, 1)); color: var(--muted); overflow-wrap: anywhere; }
+#dropzone.no .dz-frame { border-color: var(--error-fg, #ff5f5f); animation: none; }
+#dropzone.no .dz-ic, #dropzone.no .dz-t { color: var(--error-fg, #ff5f5f); animation: none; }
+@keyframes dzpulse { 50% { inset: 18px; border-color: var(--accent2, var(--accent)); } }
+@keyframes dzbob { 50% { transform: translateY(-6px); } }
+@media (prefers-reduced-motion: reduce) { #dropzone, #dropzone .dz-frame, #dropzone .dz-ic { animation: none; transition: none; } }
+.win-95 #dropzone .dz-frame { border-radius: 0; border-color: #fff; }
+.win-95 #dropzone .dz-card { border-radius: 0; background: #c0c0c0; color: #000; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; }
+.win-95 #dropzone .dz-t, .win-95 #dropzone .dz-s, .win-95 #dropzone .dz-ic { color: #000; font-family: Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
+/* a plugin's question (isekur.choose): the rows as buttons, the number first */
+#dchoice { width: min(420px, calc(100vw - 32px)); }
+#dchoice [hidden] { display: none !important; }
+#dchoice .dask-t { font-size: calc(13px * var(--z, 1)); white-space: pre-line; overflow-wrap: anywhere; }
+#dchoice .dask-t .err { color: var(--dlg-err, var(--err)); font-weight: 700; }
+#dchoice .cl { display: grid; gap: 6px; }
+#dchoice .ci { display: flex; gap: 10px; align-items: baseline; width: 100%; text-align: left; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer; font: inherit; font-size: calc(13px * var(--z, 1)); }
+#dchoice .ci .n { color: var(--muted); min-width: 1ch; }
+#dchoice .ci:focus-visible { outline: none; border-color: var(--accent); }
+@media (hover: hover) { #dchoice .ci:hover { border-color: var(--accent); } }
+.win-95 #dchoice .ci { background: #c0c0c0; color: #000; border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf; font: 400 calc(12px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 8px; }
+.win-95 #dchoice .ci .n { color: #000; }
+.win-95 #dchoice .dask-t .err { color: #a00000; }  /* the theme's pink or red is for a dark chat: on the silver box it can't be read */
+.win-95 #dchoice .ci:focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
 /* a NickServ password being typed: the line's text goes invisible and this copy, with *s, sits over it */
 #line.secret { color: transparent; caret-color: var(--input-fg, var(--fg)); }
 #mask { position: absolute; pointer-events: none; overflow: hidden; white-space: pre; border: 1px solid transparent; padding: 8px 10px; color: var(--input-fg, var(--fg)); display: none; }
@@ -875,7 +910,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <aside id="nicks2"></aside>
   <aside id="nicks"></aside>
   <div id="status"><span id="stl"></span><span id="sti"></span><span id="dccbar" title="Files and transfers"></span></div>
-  <form id="input"><div id="sugg"></div><span id="prompt"></span><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"><div id="mask" aria-hidden="true"></div></form>
+  <form id="input"><div id="sugg"></div><span id="prompt"></span><button id="clip" type="button" aria-label="Send a file" title="Send a file">&#128206;&#xfe0e;</button><input id="pick" type="file" multiple hidden><input id="line" autocomplete="off" spellcheck="true" aria-label="Message"><div id="mask" aria-hidden="true"></div></form>
 </div>
 <canvas id="ss" aria-hidden="true"></canvas>
 <div id="lock" role="dialog" aria-modal="true" aria-label="iSekur is locked"><form class="card" id="lockf">
@@ -1009,6 +1044,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 </form></dialog>
 <button id="radtap" type="button" hidden>&#9654; Tap to hear the radio</button>
 <div id="toasts" aria-live="polite"></div>
+<div id="dropzone" aria-hidden="true"><div class="dz-frame"></div><div class="dz-card"><div class="dz-ic">&#x2B06;&#xfe0e;</div><div class="dz-t"></div><div class="dz-s"></div></div></div>
 <dialog id="dfiles"><form method="dialog">
   <h2>Files</h2>
   <h3>Transfers</h3>
@@ -1030,6 +1066,12 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <div id="dask-t" class="dask-t"></div>
   <label id="dask-l"><span></span><input id="dask-i" autocomplete="off" spellcheck="false"></label>
   <div class="btns"><button value="cancel" formnovalidate>Cancel</button><button class="go" value="ok" id="dask-ok">OK</button></div>
+</form></dialog>
+<dialog id="dchoice" data-type><form method="dialog">
+  <h2 id="dchoice-h">iSekur</h2>
+  <div id="dchoice-t" class="dask-t"></div>
+  <div id="dchoice-l" class="cl" role="listbox"></div>
+  <div class="btns"><button value="cancel" formnovalidate>Cancel</button></div>
 </form></dialog>
 <dialog id="dabout"><form method="dialog">
   <div id="abox"><a id="aupd" hidden target="_blank" rel="noopener" href="https://github.com/gcanosa/iSekur/releases/latest"><span aria-hidden="true">⬆</span><span></span></a><div id="abanner"></div><div id="atext"></div></div>
@@ -1469,6 +1511,7 @@ function typingText(n) {
 let flash = "";  // a word on the status bar for a moment (Alt+C: "Copied 42 characters")
 function renderStatus() {
   const b = bufs.get(active), st = $("#stl"), si = $("#sti"); st.textContent = si.textContent = "";
+  $("#clip").classList.toggle("on", !!(b && b.drop && !b.ask));  // a plugin takes files in this tab (shown on touch screens only)
   if (!b) return;
   const seg = (txt, cls) => st.append("[", el("b", cls, txt), "] ");
   seg(new Date().toTimeString().slice(0, 5));
@@ -1960,6 +2003,10 @@ function onMsg(ev) {
     onRadio(m);
   } else if (m.t === "pwin") {
     onPwin(m);
+  } else if (m.t === "choice") {
+    onChoice(m);
+  } else if (m.t === "copy") {
+    onCopy(m);
   } else if (m.t === "bell") {
     beep(m.soft);
   } else if (m.t === "menu") {
@@ -2383,6 +2430,118 @@ function syncAsk() {
     if (dset.open) send({t: "settings", buf: id});  // a guarded /set (web.*, lock...) waited for this: the window says whether it went through
   });
   dask.dataset.srv = "1";
+}
+
+// ---- files: drop, paste and the picker (a plugin takes them: dropzone) -------------------------------------------------
+// The page sends the bytes to iSekur (POST /upload), which hands them to the plugin: the answer is {"ok":true} or {"error":"why"}.
+// Dragging over the page shows what letting go does, before it happens
+let flashT = 0;
+function flashMsg(s, ms) { flash = s; renderStatus(); clearTimeout(flashT); flashT = setTimeout(() => { flash = ""; renderStatus(); }, ms); }
+const fmtSize = n => n < 1024 ? n + " B" : n < 1048576 ? (n / 1024).toFixed(0) + " KB" : n < 1073741824 ? (n / 1048576).toFixed(1) + " MB" : (n / 1073741824).toFixed(2) + " GB";
+function upFile(f, b) {  // one file to iSekur; the progress in the status bar
+  return new Promise(res => {
+    const name = f.name || "pasted", x = new XMLHttpRequest();
+    x.open("POST", "/upload?buf=" + b.id + "&name=" + encodeURIComponent(name));
+    x.upload.onprogress = e => { if (e.lengthComputable && e.total > 262144) flashMsg("Sending " + name + " to iSekur: " + Math.round(100 * e.loaded / e.total) + "%", 2000); };
+    x.onload = () => {
+      let r = {}; try { r = JSON.parse(x.responseText); } catch (e) {}
+      if (x.status !== 200) note(name + ": " + (r.error || "HTTP " + x.status), true);
+      res();
+    };
+    x.onerror = () => { note(name + ": the file didn't reach iSekur (the connection broke)", true); res(); };
+    x.send(f);
+  });
+}
+async function uploadFiles(files) {
+  const b = bufs.get(active);
+  if (!b || locked) return;
+  if (!b.drop) return note("No plugin takes files here: /plugin install dropzone", true);
+  for (const f of files) {
+    if (!f.size) { note((f.name || "file") + ": the file is empty", true); continue; }
+    await upFile(f, b);
+  }
+}
+const dz = $("#dropzone");
+let dzDepth = 0;
+const dzTypes = e => e.dataTransfer ? [...e.dataTransfer.types] : [];
+// what is being dragged: "files" (a file, from the desktop or the phone's share), "text" (a selection), or "" (a tab, a link: not ours)
+const dzWhat = e => { const t = dzTypes(e); return t.includes("text/x-tab") ? "" : t.includes("Files") ? "files" : t.includes("text/plain") && !t.includes("text/uri-list") ? "text" : ""; };
+function dzShow(e) {
+  const what = dzWhat(e), b = bufs.get(active), no = what === "files" && !(b && b.drop);
+  const its = e.dataTransfer && e.dataTransfer.items ? [...e.dataTransfer.items].filter(i => i.kind === "file") : [];
+  const kind = t => /^image\//.test(t) ? "image" : /^video\//.test(t) ? "video" : /^audio\//.test(t) ? "audio" : /^text\//.test(t) ? "text file" : "file";
+  const k = its.length ? kind(its[0].type) : "file", many = its.length > 1 && its.some(i => kind(i.type) !== k) ? "file" : k;
+  const where = b ? label(b) : "";
+  dz.querySelector(".dz-t").textContent = what === "text" ? "Drop to paste the text" : no ? "No plugin takes files here" : "Drop to upload";
+  dz.querySelector(".dz-s").textContent = what === "text" ? "It stays in the line until you press Enter" : no ? "/plugin install dropzone" :
+    (its.length > 1 ? its.length + " " + many + "s" : its.length ? "1 " + many : "") + (where ? (its.length ? " \u00b7 " : "") + "then you choose where it goes (" + where + ")" : "");
+  dz.classList.toggle("no", no);
+  dz.classList.add("on");
+}
+const dzHide = () => { dzDepth = 0; dz.classList.remove("on"); };
+document.addEventListener("dragenter", e => { if (locked || !dzWhat(e)) return; e.preventDefault(); dzDepth++; dzShow(e); });
+document.addEventListener("dragover", e => { if (locked || !dzWhat(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = "copy"; });
+document.addEventListener("dragleave", e => { if (!dzDepth) return; if (--dzDepth <= 0 || (e.clientX <= 0 && e.clientY <= 0)) dzHide(); });
+document.addEventListener("dragend", dzHide);
+document.addEventListener("drop", e => {
+  const what = dzWhat(e);
+  if (!what || locked) return dzHide();
+  e.preventDefault(); dzHide();
+  if (what === "files" && e.dataTransfer.files.length) uploadFiles([...e.dataTransfer.files]);
+  else if (what === "text") {
+    const t = e.dataTransfer.getData("text/plain").replace(/[\r\n]+$/, "");
+    if (t && !asking()) { line.focus(); insert(enc(t)); }  // as a paste: the lines stay in the line (pasteguard takes them on Enter)
+  }
+});
+$("#clip").onclick = () => $("#pick").click();
+$("#pick").onchange = e => { const fs = [...e.target.files]; e.target.value = ""; uploadFiles(fs); };
+
+// isekur.choose: a plugin's question, the rows as buttons; its answer (the row, 0: cancelled) goes back to iSekur, which closes it on every screen
+const dch = $("#dchoice");
+let chKey = "", chByServer = false;
+function onChoice(m) {
+  if (!m.open) { chKey = ""; if (dch.open) chByServer = true, dch.close("gone"); return; }
+  const key = JSON.stringify([m.title, m.text, m.items]);
+  if (dch.open && key === chKey) return;
+  chKey = key;
+  $("#dchoice-h").textContent = m.title;
+  const tx = $("#dchoice-t");
+  tx.replaceChildren(...m.text.map(l => el("div", l[0] === "!" ? "err" : "", l[0] === "!" ? l.slice(1) : l)));  // "!" first: a warning row, as in the terminal
+  tx.hidden = !m.text.some(Boolean);
+  const btns = m.items.map((t, i) => {
+    const b = el("button", "ci"); b.type = "button"; b.dataset.i = i + 1;
+    b.append(el("span", "n", String(i + 1)), el("span", "", t));
+    b.onclick = () => { chKey = ""; send({t: "choice", buf: active, i: i + 1}); chByServer = true; dch.close("ok"); };
+    return b;
+  });
+  $("#dchoice-l").replaceChildren(...btns);
+  dch.returnValue = ""; chByServer = false;
+  if (!dch.open) dch.showModal();
+  (btns[Math.max(0, Math.min(btns.length - 1, m.sel - 1))] || btns[0]).focus();
+}
+dch.onclose = () => { if (!chByServer && bufs.has(active)) { chKey = ""; send({t: "choice", buf: active, i: 0}); } chByServer = false; };
+dch.addEventListener("keydown", e => {
+  const bs = [...dch.querySelectorAll(".ci")], at = bs.indexOf(document.activeElement);
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); bs[(Math.max(at, 0) + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length].focus(); }
+  else if (/^[1-9]$/.test(e.key) && bs[+e.key - 1] && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); bs[+e.key - 1].click(); }
+});
+
+// isekur.copy: into the clipboard. A browser may only allow it right after a tap: then a toast with the text, a tap on it copies
+async function copyText(t) {
+  if (navigator.clipboard && window.isSecureContext) { try { await navigator.clipboard.writeText(t); return true; } catch (e) {} }
+  const ta = el("textarea"), had = document.activeElement;
+  ta.value = t; ta.style.cssText = "position:fixed;top:0;opacity:0"; document.body.append(ta); ta.select();
+  let ok = false; try { ok = document.execCommand("copy"); } catch (e) {}
+  ta.remove(); if (had && had.focus) had.focus();
+  return ok;
+}
+async function onCopy(m) {
+  if (await copyText(m.text)) return flashMsg("Copied " + (/^https?:\/\//.test(m.text) ? "the link" : [...m.text].length + " characters"), 2500);
+  const t = el("div", "toast");
+  t.append(el("b", "", "Tap to copy"), el("span", "", m.text));
+  t.onclick = async () => { if (await copyText(m.text)) { t.remove(); flashMsg("Copied", 2000); } };
+  $("#toasts").append(t);
+  setTimeout(() => t.remove(), 30000);
 }
 
 // + : the servers. The list is the config's [server.*] (from the settings rows) with each one's state from its tab;
@@ -3616,6 +3775,8 @@ line.addEventListener("keyup", e => { if (/^(Arrow(Left|Right)|Home|End)$/.test(
 line.addEventListener("click", renderSugg);
 // a paste with newlines (or formatting) stays in the line as ↵ until Enter; paste_confirm asks then
 line.addEventListener("paste", e => {
+  const fs = e.clipboardData && e.clipboardData.files;  // a screenshot, or a file copied in the Finder: to the plugin that takes files
+  if (fs && fs.length && !asking()) { e.preventDefault(); uploadFiles([...fs]); return; }
   const t = e.clipboardData && e.clipboardData.getData("text");
   if (!t || asking() || !/[\x00-\x1f]/.test(t)) return;
   e.preventDefault(); insert(enc(t.replace(/[\r\n]+$/, "")));
@@ -3696,6 +3857,7 @@ $("#input").onsubmit = async e => {
   line.value = ""; suggSel = -1; renderSugg(); typedText = false;  // iSekur ends +typing when it sends
   $("#msgs").scrollTop = $("#msgs").scrollHeight;
   if (/^\/about\s*$/i.test(v)) { openAbout(); return; }
+  if (/^\/upload\s*$/i.test(v)) { if (b.drop) $("#pick").click(); else note("No plugin takes files here: /plugin install dropzone", true); return; }  // the browser's file picker (a path would be on the iSekur machine)
   if (/^\/keys\s*$/i.test(v)) { openKeys(); return; }
   const bn = /^\/(?:ban|bans(?:\s+([beIq]))?)\s*$/.exec(v.trim());
   if (bn && b.type === "channel" && b.joined) { openBans(bn[1] || "b"); return; }  // like the terminal: the list in a window

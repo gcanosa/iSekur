@@ -82,7 +82,7 @@ CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers
 LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS) $(ICONV_LIBS)
 
 # the plugin engine (src/plugin/): see internal.h for what each file holds
-PLUG := host api_core api_ui api_media catalog radio
+PLUG := host api_core api_ui api_media catalog radio drop
 SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/bnc.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp src/logs.cpp src/fifo.cpp src/backup.cpp $(PLUG:%=src/plugin/%.cpp)
 VTERM := $(wildcard vendor/libvterm/src/*.c)
 LUA  := $(wildcard vendor/lua/*.c)

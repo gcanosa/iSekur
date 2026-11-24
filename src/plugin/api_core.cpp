@@ -278,7 +278,8 @@ static int l_http(lua_State* L) {
     lua_pushboolean(L, 1);
     return 1;
 }
-void plug::http_poll() {
+static void upload_poll(Core& c);
+void plug::http_poll(Core& c) {
     auto jobs = http_jobs;
     for (auto& j : jobs) {
         if (!j->done.load(std::memory_order_acquire)) continue;
@@ -296,6 +297,87 @@ void plug::http_poll() {
         lua_pushstring(L, t.c_str()), lua_setfield(L, -2, "type");
         lua_pushlstring(L, j->body.data(), j->body.size()), lua_setfield(L, -2, "body");
         lua_pushstring(L, j->url.c_str()), lua_setfield(L, -2, "url");
+        if (!j->err.empty()) lua_pushstring(L, j->err.c_str()), lua_setfield(L, -2, "error");
+        call(p.get(), 1, 0);
+    }
+    upload_poll(c);
+}
+
+// isekur.upload(id, {url, field, type, fields = {k = v}, headers = {k = v}}, fn): sends the file of a `drop` event (a multipart POST, https only, streamed from the
+// disk, the private-address guard on) on a thread; fn({status, body, error}) on a tick once it's done. A 2xx forgets the file, anything else leaves it
+// for another try (it is forgotten after 30 minutes). isekur.upload(id, false) forgets it now. true, or nil and why
+// ponytail: 2 at once per plugin, no progress (the file's size is on the event: say "sending" and wait)
+struct UpJob {
+    std::weak_ptr<Plugin> p;
+    int fn = LUA_NOREF, status = 0;
+    std::string id, body, err;
+    Upload up;
+    std::atomic<bool> done{false};
+};
+static std::vector<std::shared_ptr<UpJob>> up_jobs;
+static std::vector<std::pair<std::string, std::string>> kv_table(lua_State* L, int t, const char* key) {  // t[key]: strings and numbers, by name
+    std::map<std::string, std::string> m;
+    lua_getfield(L, t, key);
+    if (lua_istable(L, -1)) {
+        lua_pushnil(L);
+        while (lua_next(L, -2)) {
+            if (lua_type(L, -2) == LUA_TSTRING && (lua_type(L, -1) == LUA_TSTRING || lua_type(L, -1) == LUA_TNUMBER)) m[lua_tostring(L, -2)] = lua_tostring(L, -1);
+            lua_pop(L, 1);
+        }
+    }
+    lua_pop(L, 1);
+    return {m.begin(), m.end()};
+}
+static int l_upload(lua_State* L) {
+    Plugin* p = self(L);
+    Core& c = *p->c;
+    std::string id = str_arg(L, 1);
+    if (lua_isboolean(L, 2) && !lua_toboolean(L, 2)) return c.drop_forget(id), lua_pushboolean(L, 1), 1;
+    luaL_checktype(L, 2, LUA_TTABLE);
+    luaL_checktype(L, 3, LUA_TFUNCTION);
+    auto no = [&](const char* why) { return lua_pushnil(L), lua_pushstring(L, why), 2; };
+    Core::Drop* d = c.drop_find(id);
+    if (!d) return no("that file is gone");
+    int mine = 0;
+    for (auto& j : up_jobs) mine += j->p.lock().get() == p, mine += 100 * (j->id == id);
+    if (mine >= 100) return no("that file is being sent");
+    if (mine >= 2) return no("busy: 2 uploads already running");
+    auto j = std::make_shared<UpJob>();
+    lua_getfield(L, 2, "url");
+    j->up.url = lua_isstring(L, -1) ? lua_tostring(L, -1) : "";
+    lua_pop(L, 1);
+    if (j->up.url.size() < 9 || strncasecmp(j->up.url.c_str(), "https://", 8) || !https_fetch_err(j->up.url).empty()) return no("the URL must be https://...");
+    for (const char* k : {"field", "type"}) {
+        lua_getfield(L, 2, k);
+        if (lua_isstring(L, -1) && *lua_tostring(L, -1)) (k[0] == 'f' ? j->up.field : j->up.ctype) = lua_tostring(L, -1);
+        lua_pop(L, 1);
+    }
+    if (j->up.ctype == "application/octet-stream") j->up.ctype = d->mime;
+    j->up.fields = kv_table(L, 2, "fields"), j->up.headers = kv_table(L, 2, "headers");
+    j->up.path = d->path, j->up.filename = d->name, j->id = id, j->p = p->me;
+    lua_pushvalue(L, 3), j->fn = luaL_ref(L, LUA_REGISTRYINDEX);
+    up_jobs.push_back(j);
+    std::thread([j] {
+        if (!https_upload(j->up, j->status, j->body, j->err)) j->status = 0;
+        j->done.store(true, std::memory_order_release);
+    }).detach();
+    lua_pushboolean(L, 1);
+    return 1;
+}
+static void upload_poll(Core& c) {
+    auto jobs = up_jobs;
+    for (auto& j : jobs) {
+        if (!j->done.load(std::memory_order_acquire)) continue;
+        up_jobs.erase(std::find(up_jobs.begin(), up_jobs.end(), j));
+        if (j->status / 100 == 2) c.drop_forget(j->id);
+        auto p = j->p.lock();
+        if (!p || p->dead) continue;
+        lua_State* L = p->L;
+        lua_rawgeti(L, LUA_REGISTRYINDEX, j->fn);
+        luaL_unref(L, LUA_REGISTRYINDEX, j->fn);
+        lua_createtable(L, 0, 3);
+        lua_pushinteger(L, j->status), lua_setfield(L, -2, "status");
+        lua_pushlstring(L, j->body.data(), j->body.size()), lua_setfield(L, -2, "body");
         if (!j->err.empty()) lua_pushstring(L, j->err.c_str()), lua_setfield(L, -2, "error");
         call(p.get(), 1, 0);
     }
@@ -350,5 +432,5 @@ const luaL_Reg plug::api_core[] = {
     {"store_set", l_store_set}, {"store_keys", l_store_keys}, {"active", l_active}, {"date", l_date},
     {"is_chan", l_is_chan}, {"servers", l_servers}, {"channels", l_channels}, {"away", l_away},
     {"attached", l_attached}, {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time},
-    {"me", l_me}, {"nick", l_nick}, {"rank", l_rank}, {"http", l_http}, {"embed", l_embed}, {"proxy", l_proxy},
+    {"me", l_me}, {"nick", l_nick}, {"rank", l_rank}, {"http", l_http}, {"upload", l_upload}, {"embed", l_embed}, {"proxy", l_proxy},
     {nullptr, nullptr}};

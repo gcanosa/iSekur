@@ -2093,6 +2093,8 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
     if (plugin_depth && (cmd == "exec" || cmd == "sh" || cmd == "shell" || cmd == "attach")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: no programs
+    if (plugin_depth && cmd == "upload") { plug_print(b, LK::ERROR, "/upload can't be run by a plugin"); return; }  // the sandbox: a plugin never names a file of yours
+    if (cmd == "upload") { upload_cmd(b, args); return; }
     if (plugin_depth && (cmd == "backup" || cmd == "restore")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: a plugin never reads or replaces the config
     if (cmd == "backup" || cmd == "restore") {  // about iSekur itself, not a network or a channel: its boxes and every line it says are in the CMD tab, wherever it was typed (and you are taken there: select moves the webchat too)
         Buffer* home = bufs.front().get();

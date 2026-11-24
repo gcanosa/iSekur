@@ -7,6 +7,7 @@
 #include <string>
 #include <vector>
 #include <poll.h>
+#include <unistd.h>
 #include "core.h"
 
 struct Web {
@@ -45,7 +46,14 @@ private:
         bool radio = false;    // GET /radio/stream: the radio's MP3 goes into conn.out as it comes
         FILE* file = nullptr;  // GET /files/name: streamed into conn.out as it drains
         unsigned long long left = 0;
-        ~Client() { if (file) fclose(file); }
+        FILE* up = nullptr;  // POST /upload: the body goes into a file in uploads/ as it comes
+        unsigned long long up_left = 0;
+        std::string up_path, up_name;
+        int up_buf = 0;
+        ~Client() {
+            if (file) fclose(file);
+            if (up) fclose(up), unlink(up_path.c_str());  // a browser that went away halfway: no half a file left
+        }
     };
     std::vector<int> lfds;  // one listener per address in [web] bind (comma-separated)
     SSL_CTX* ctx = nullptr;
@@ -95,6 +103,9 @@ private:
     std::map<std::string, std::pair<time_t, time_t>> ws_ips;
     void files(Client& cl, const std::string& path, const std::map<std::string, std::string>& h);  // dcc_web
     void feed(Client& cl);
+    void upload_begin(Client& cl, unsigned long long clen, const std::string& target, bool allowed);  // POST /upload?buf=ID&name=NAME: a file for the plugin that takes dropped files
+    void upload_feed(Client& cl);
+    std::string choice_json();  // the plugin question on screen (isekur.choose), open: false when none
 };
 
 // exposed for tests and --hash-password

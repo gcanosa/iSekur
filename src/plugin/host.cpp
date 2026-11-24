@@ -138,6 +138,11 @@ void plug::view_gone(Core& c) {  // a plugin went (disabled, removed, unloaded):
     if (!c.tint.by.empty() && !up(c.tint.by)) c.tint_end();  // glides back, it doesn't jump
     if (c.radio_on() && !up(c.radio.by)) c.radio_stop();
     if (c.pwin.open && !up(c.pwin.by)) c.pwin = Core::PWin{}, c.dirty = true, c.notify(Ev::PWIN, nullptr);
+    bool q = false;  // its questions go with it
+    for (auto it = c.choices.begin(); it != c.choices.end();)
+        if (!up(it->by)) it = c.choices.erase(it), q = true;
+        else ++it;
+    if (q) c.dirty = true, c.notify(Ev::CHOICE, nullptr);
 }
 void plug::reap(Core& c) {
     if (c.plugin_depth) return;
@@ -177,7 +182,7 @@ static void menu_items(lua_State* L, std::vector<std::pair<std::string, std::str
         std::string w = cmd.substr(1, cmd.find(' ') - 1);
         to_lower(w);
         if (!l.empty() && cmd.size() > 1 && cmd[0] == '/' &&
-            w != "plugin" && w != "exec" && w != "sh" && w != "shell" && w != "attach" && w != "backup" && w != "restore")
+            w != "plugin" && w != "exec" && w != "sh" && w != "shell" && w != "attach" && w != "backup" && w != "restore" && w != "upload")
             out.push_back({l, cmd});
     }
 }

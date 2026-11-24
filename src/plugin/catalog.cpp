@@ -244,7 +244,7 @@ static void list_available(Core& c, Buffer* b) {
 }
 
 void Core::plugins_poll() {
-    http_poll();
+    http_poll(*this);
     time_t now = time(nullptr);
     for (auto& p : plugins)
         if (p->store_dirty && now - p->store_at >= STORE_EVERY) store_flush(p.get());

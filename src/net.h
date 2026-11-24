@@ -106,4 +106,14 @@ std::string https_fetch_err(const std::string& url);  // "" when the URL itself 
 // post not empty: a POST of it as text/plain (the redirects after it are GETs)
 bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err,
                  const std::string& post = "");
+// isekur.upload: a multipart/form-data POST of one file (u.field), after u.fields, with u.headers, to an https:// URL. Streamed from
+// the disk, blocking, for a thread; the private-address guard of https_fetch, and https:// only, unless u.guard is false (the tests' own server); redirects not followed.
+// true with the status (any) and up to 64 KB of the answer; false with why in err. u.sent counts the bytes written, for progress
+struct Upload {
+    std::string url, path, field = "file", filename, ctype = "application/octet-stream";
+    std::vector<std::pair<std::string, std::string>> fields, headers;
+    mutable std::atomic<unsigned long long> sent{0};
+    bool guard = true;
+};
+bool https_upload(Upload& u, int& status, std::string& body, std::string& err);
 bool public_addr(const struct sockaddr* sa);

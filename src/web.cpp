@@ -6,6 +6,8 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#include <fcntl.h>
+#include <cerrno>
 #include <openssl/crypto.h>
 #include <openssl/ec.h>
 #include <openssl/err.h>
@@ -390,8 +392,9 @@ void Web::process(const std::vector<pollfd>& v) {
         if (!p.revents) continue;
         bool ok = cl.conn.pump(p.revents, cl.in);
         if (ok && cl.file) feed(cl), cl.since = now;
+        if (ok && cl.up) upload_feed(cl), cl.since = now;
         if (cl.ws && (p.revents & POLLIN)) cl.since = now;
-        if (ok && cl.conn.st == Conn::OPEN && !cl.conn.closing && !cl.file) {
+        if (ok && cl.conn.st == Conn::OPEN && !cl.conn.closing && !cl.file && !cl.up) {
             try {
                 if (cl.ws) ws_frames(cl);
                 else http(cl);
@@ -447,6 +450,9 @@ static void respond(Conn& conn, int code, const std::string& status, const std::
     conn.closing = true;
 }
 
+static std::string pct_decode(const std::string& s);
+static Buffer* by_id(Core& c, int id);
+
 void Web::http(Client& cl) {
     size_t he = cl.in.find("\r\n\r\n");
     if (he == std::string::npos) {
@@ -466,12 +472,14 @@ void Web::http(Client& cl) {
         while (!val.empty() && (val.back() == '\r' || val.back() == ' ')) val.pop_back();
         h[k] = val;
     }
-    size_t clen = (size_t)atol(h["content-length"].c_str());
-    if (rl.size() < 2 || clen > 4096) { respond(cl.conn, 400, "Bad Request", "text/plain", "bad request"); return; }
-    if (cl.in.size() < he + 4 + clen) return;
-    std::string body = cl.in.substr(he + 4, clen);
-    cl.in.erase(0, he + 4 + clen);
+    unsigned long long clen = strtoull(h["content-length"].c_str(), nullptr, 10);
+    if (rl.size() < 2) { respond(cl.conn, 400, "Bad Request", "text/plain", "bad request"); return; }
     std::string method = rl[0], path = rl[1].substr(0, rl[1].find('?'));
+    bool upload = method == "POST" && path == "/upload";  // a file: its body goes to the disk as it comes, never whole into memory
+    if (!upload && clen > 4096) { respond(cl.conn, 400, "Bad Request", "text/plain", "bad request"); return; }
+    if (!upload && cl.in.size() < he + 4 + clen) return;
+    std::string body = upload ? "" : cl.in.substr(he + 4, (size_t)clen);
+    cl.in.erase(0, he + 4 + (upload ? 0 : (size_t)clen));
 
     time_t now = time(nullptr);
     std::string token;
@@ -595,6 +603,8 @@ void Web::http(Client& cl) {
         ws_ips[ip] = {ws_ips.count(ip) ? ws_ips[ip].first : now, now};
         snapshot(cl);
         ws_frames(cl);
+    } else if (upload) {
+        upload_begin(cl, clen, rl[1], authed && same_origin && !c.locked);  // locked: no files either
     } else if (method == "GET" && path == "/radio/stream") {  // the plugin radio's MP3, endless: the page's <audio>
         if (!authed || c.locked || c.radio.st != Core::Radio::PLAYING || c.radio.direct) { respond(cl.conn, authed && !c.locked ? 404 : 403, "Not Found", "text/plain", "no radio"); return; }
         cl.radio = true, cl.since = now;
@@ -695,6 +705,67 @@ void Web::feed(Client& cl) {
     }
 }
 
+// POST /upload?buf=ID&name=NAME with the file as the body (a browser's drop, paste or file picker): into uploads/ as it comes, then the
+// plugin that takes dropped files is told. The answer: {"ok":true}, or {"error":"why"} (a 4xx: the page says it in the tab)
+void Web::upload_begin(Client& cl, unsigned long long clen, const std::string& target, bool allowed) {
+    auto fail = [&](int code, const char* st, const std::string& why) {
+        respond(cl.conn, code, st, "application/json", "{\"error\":" + json_str(why) + "}");
+    };
+    if (!allowed) return fail(403, "Forbidden", "not allowed");
+    auto q = [&](const std::string& k) {  // a query parameter, percent-decoded
+        size_t at = target.find('?');
+        if (at != std::string::npos)
+            for (auto& kv : split(target.substr(at + 1), '&'))
+                if (kv.compare(0, k.size() + 1, k + "=") == 0) return pct_decode(kv.substr(k.size() + 1));
+        return std::string();
+    };
+    Buffer* b = by_id(c, atoi(q("buf").c_str()));
+    if (!b) return fail(400, "Bad Request", "no such tab");
+    if (!clen) return fail(400, "Bad Request", "the file is empty");
+    if (clen > UPLOAD_MAX) return fail(413, "Payload Too Large", "too big: " + std::to_string(UPLOAD_MAX >> 20) + " MB at most");
+    if (!c.plugin_hooks("drop", b->srv, b->type == BT::CHANNEL || b->type == BT::QUERY ? b->name : ""))  // before the megabytes come
+        return fail(422, "Unprocessable Entity", "no plugin takes files: /plugin install dropzone");
+    std::string name = q("name");
+    for (char& ch : name) if ((unsigned char)ch < 0x20 || ch == 0x7f || ch == '/' || ch == '\\') ch = '_';  // a name, not a path
+    name = name.substr(0, 120);
+    if (name.empty() || name[0] == '.') name = "file" + name;
+    mkdir_p(c.upload_dir());
+    std::string path = c.upload_dir() + "/" + random_hex(16);  // never the user's name on the disk
+    int fd = ::open(path.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW, 0600);
+    if (fd < 0 || !(cl.up = fdopen(fd, "wb"))) return fail(500, "Error", std::string("can't write: ") + strerror(errno));
+    cl.up_left = clen, cl.up_path = path, cl.up_name = name, cl.up_buf = b->id;
+    upload_feed(cl);  // what came with the headers
+}
+
+void Web::upload_feed(Client& cl) {
+    size_t n = (size_t)std::min<unsigned long long>(cl.in.size(), cl.up_left);
+    if (n && fwrite(cl.in.data(), 1, n, cl.up) != n) {
+        fclose(cl.up), cl.up = nullptr, unlink(cl.up_path.c_str());
+        respond(cl.conn, 500, "Error", "application/json", "{\"error\":\"the disk is full\"}");
+        return;
+    }
+    cl.in.erase(0, n), cl.up_left -= n;
+    if (cl.up_left) return;
+    bool wrote = fclose(cl.up) == 0;
+    cl.up = nullptr;
+    Buffer* b = by_id(c, cl.up_buf);
+    std::string why = !wrote ? "the disk is full" : !b ? "that tab is gone" : c.file_drop(b, cl.up_path, cl.up_name, true);
+    if (!wrote || !b) unlink(cl.up_path.c_str());
+    if (why.empty()) respond(cl.conn, 200, "OK", "application/json", "{\"ok\":true}");
+    else respond(cl.conn, 422, "Unprocessable Entity", "application/json", "{\"error\":" + json_str(why) + "}");
+}
+
+std::string Web::choice_json() {
+    auto arr = [](const std::vector<std::string>& v) {
+        std::string o = "[";
+        for (auto& x : v) o += (o.size() > 1 ? "," : "") + json_str(x);
+        return o + "]";
+    };
+    if (c.choices.empty()) return "{\"t\":\"choice\",\"open\":false}";
+    const Core::Choice& q = c.choices.front();
+    return "{\"t\":\"choice\",\"open\":true,\"title\":" + json_str(q.title) + ",\"text\":" + arr(q.text) + ",\"items\":" + arr(q.items) + ",\"sel\":" + std::to_string(q.sel) + "}";
+}
+
 std::string Web::dcc_json(std::string* sig) {
     static const char* sts[] = {"offer", "resume", "wait", "run", "done", "failed"};
     std::string j = "{\"t\":\"dcc\",\"web\":" + std::string(c.opt_on(nullptr, "dcc_web", false) ? "true" : "false") + ",\"list\":[";
@@ -789,6 +860,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "fold") c.fold(b);
         else if (m["t"] == "theme") { std::string err; c.use_theme(m["name"], err); }  // the theme picker's live preview
         else if (m["t"] == "view_end" && c.view_on(true)) c.view_end();  // Esc in the zen plugin's focus view
+        else if (m["t"] == "choice") c.choice_act(atoi(m["i"].c_str()));  // a plugin's question: the row picked, 0 cancelled
         else if (m["t"] == "pwin") c.pwin_act(m["a"], atoi(m["i"].c_str()), atoi(m["b"].c_str()));  // a plugin's window: a row picked, a button, closed
         else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
             long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;
@@ -965,6 +1037,7 @@ std::string Web::buf_json(Buffer* b, bool full) {
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
            (b->term && !b->term->host.empty() ? ",\"host\":" + json_str(b->term->host) : "") +
            ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(s && c.plugin_hooks("paste", s, b->name) ? 0 : atoi(c.opt(s, "paste_confirm", "5").c_str())) +
+           (c.plugin_hooks("drop", s, b->type == BT::CHANNEL || b->type == BT::QUERY ? b->name : "") ? ",\"drop\":1" : "") +  // a plugin takes files here: the drop zone, the 📎 button
            (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +
                                                 ",\"hidden\":" + (c.pass_hidden ? "true" : "false") + ",\"info\":" + json_strs(c.pass_info) + "}" : "") +
            ",\"state\":\"" + (s ? STATE[(int)s->state] : "connected") + "\"" +
@@ -1055,6 +1128,7 @@ void Web::snapshot(Client& cl) {
     send(dcc_json());
     send(update_json());
     if (c.pwin.open) send(pwin_json());
+    if (!c.choices.empty()) send(choice_json());
 }
 
 std::string Web::update_json() { return "{\"t\":\"update\",\"ver\":" + json_str(c.update_ver) + "}"; }
@@ -1325,7 +1399,9 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
                 if (cl->ws && !cl->conn.closing) snapshot(*cl);
         return;
     }
-    if (e == Ev::RADIO) { broadcast(radio_json()); return; }  // the state only: a Stop must reach a locked browser too
+    if (e == Ev::RADIO) { broadcast(radio_json()); return; }
+    if (e == Ev::CHOICE) { if (!c.locked || c.choices.empty()) broadcast(choice_json()); return; }  // an answer must close it on a locked browser too
+    if (e == Ev::COPY) { if (!c.locked) broadcast("{\"t\":\"copy\",\"text\":" + json_str(l->text) + "}"); return; }  // the state only: a Stop must reach a locked browser too
     if (c.locked) return;  // nothing of the session while locked
     switch (e) {
     case Ev::LINE: {
@@ -1355,7 +1431,7 @@ void Web::on_event(Ev e, Buffer* b, const Line* l) {
     case Ev::FOCUS: flush_buf(b), broadcast("{\"t\":\"active\",\"buf\":" + std::to_string(b->id) + "}"); break;
     case Ev::BELL: broadcast(l ? "{\"t\":\"bell\",\"soft\":1}" : "{\"t\":\"bell\"}"); break;
     case Ev::SPLIT: if (c.split_buf) flush_buf(c.split_buf); broadcast(split_json()); break;
-    case Ev::LOCK: case Ev::SCREEN: break;  // above
+    case Ev::LOCK: case Ev::SCREEN: case Ev::COPY: case Ev::CHOICE: break;  // above
     case Ev::RADIO: break;  // above
     case Ev::PWIN: broadcast(pwin_json()); break;
     case Ev::UPDATE: broadcast(update_json()); break;

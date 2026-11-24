@@ -31,6 +31,9 @@ your browser or phone shows the same live session.
   resize, `/set` settings window, tab completion with live suggestions, `/split` panes, tabs on top
   or as a side tree.
 - **Lua plugins** run in a sandbox and install from a catalog checked by sha256 (`/plugin install autoaway`).
+- **Drag a file in, get a link.** With the `dropzone` plugin, a file dropped on the webchat (it shows what letting go
+  does first), a pasted screenshot, the paperclip on a phone, a file dropped on the terminal or `/upload file` goes to a
+  file host (litterbox by default, no account) and a box asks whether to send the link to the tab, copy it, or send it elsewhere.
 - **Backup and move.** `/backup` puts your settings, servers, passwords, plugins and themes in one small
   file locked with a passphrase; `/restore` on another computer gives the same iSekur.
 - **And more:** a real shell in a tab (`/shell`, behind a system login), another machine's iSekur in

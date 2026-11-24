@@ -472,6 +472,17 @@ static const std::vector<CmdInfo> CMDS = {
      "what's in dcc_dir, like a seedbox. dcc = off (/set dcc off, every network) drops offers "
      "and turns off /dcc get and send. Passive DCC is not supported yet.",
      {"/dcc", "/dcc get", "/dcc get 3", "/dcc send bob ~/notes.txt", "/dcc close bob"}},
+    {"upload", "Session", "<file>...", "Give files to the plugin that takes them",
+     "Hands files to the plugin that takes dropped files (/plugin install dropzone: it sends them to a file host, "
+     "litterbox unless you pick another, and a box asks whether to send the link to this tab, copy it, or send it to "
+     "another channel; nothing leaves before you answer). It is the same as dropping the file: onto the webchat (the page "
+     "shows what letting go does), pasting a screenshot into it, the paperclip on a phone, or onto this terminal, which types "
+     "the file's path: when the line is only the path of a file, it goes to the plugin by itself. A name with spaces: quote it "
+     "or put a backslash before each space, as a terminal does. In the webchat /upload alone opens the browser's file picker. "
+     "A file the webchat sends waits in uploads/ next to the config until it is sent or half an hour has passed. 1 GB at most. "
+     "The link is public: whoever has it can open the file. A plugin can't run /upload: it only gets the files you give it, "
+     "and never says where they are.",
+     {"/upload ~/Pictures/screenshot.png", "/upload '~/Movies/a clip.mp4' ~/notes.txt"}},
     {"shell", "Session", "", "Open a real terminal in a tab",
      "Asks for this machine's login and password first (the user iSekur runs as, checked by "
      "the system through PAM; pam_service sets the service, default login; three wrong ones "

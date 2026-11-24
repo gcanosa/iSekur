@@ -10,6 +10,7 @@
 #include <fstream>
 #include <regex>
 #include <set>
+#include <thread>
 #include <sstream>
 #include <csignal>
 #include <cstring>
@@ -3295,6 +3296,61 @@ int main() {
         size_t ck = login.find("isekur_sid=");
         assert(login.rfind("HTTP/1.1 200", 0) == 0 && ck != std::string::npos);
         std::string cookie = login.substr(ck, login.find(';', ck) - ck);
+        {  // POST /upload: a file for the plugin that takes dropped files. Not logged in: no; no plugin: told before the bytes come; a plugin: the
+           // file lands in uploads/ (a random name, 0600) and its `drop` event has the name, size and kind, never the path
+            std::string updir = "build/uploads", pdir2 = "build/plugins";
+            auto count_up = [&] { int n = 0; if (DIR* d = opendir(updir.c_str())) { while (dirent* e = readdir(d)) n += e->d_name[0] != '.'; closedir(d); } return n; };
+            auto post = [&](const std::string& q, const std::string& ck, const std::string& data, size_t claim = 0) {
+                auto [fd, r] = talk("POST /upload" + q + " HTTP/1.1\r\nHost: x\r\n" + (ck.empty() ? "" : "Cookie: " + ck + "\r\n") + "Content-Length: " +
+                                        std::to_string(claim ? claim : data.size()) + "\r\n\r\n" + data, 1 << 30);
+                close(fd);
+                return r;
+            };
+            std::string data(60000, 'x');
+            for (size_t i = 0; i < data.size(); i++) data[i] = (char)('a' + i % 23);
+            std::string q = "?buf=" + std::to_string(chb->id) + "&name=my%20pic.png";
+            assert(post(q, "", data).rfind("HTTP/1.1 403", 0) == 0 && count_up() == 0);  // no session
+            std::string r = post(q, cookie, data);
+            assert(r.rfind("HTTP/1.1 422", 0) == 0 && r.find("no plugin takes files") != std::string::npos && count_up() == 0);  // no plugin: refused before any byte is kept
+            mkdir_p(pdir2);
+            { std::ofstream(pdir2 + "/dz.lua") << "isekur.on('drop', function(e) isekur.print(e.srv, e.target, 'dropped ' .. e.name .. '|' .. e.size .. '|' .. e.kind .. '|' .. e.type .. '|' .. tostring(e.srv) .. '|' .. tostring(e.target)) end)\n"; }
+            core.exec(chb, "/plugin enable dz");
+            assert(core.plugin_hooks("drop", ts, "#c"));
+            assert(post("?buf=99999&name=a.png", cookie, data).rfind("HTTP/1.1 400", 0) == 0);  // a tab that isn't there
+            assert(post(q, cookie, "").rfind("HTTP/1.1 400", 0) == 0);  // nothing in it
+            assert(post(q, cookie, "", 2000000000).rfind("HTTP/1.1 413", 0) == 0 && count_up() == 0);  // over 1 GB: said at the headers
+            core.locked = true;
+            assert(post(q, cookie, data).rfind("HTTP/1.1 403", 0) == 0 && count_up() == 0);  // locked: no files either
+            core.locked = false;
+            r = post(q, cookie, data);
+            assert(r.rfind("HTTP/1.1 200", 0) == 0 && r.find("{\"ok\":true}") != std::string::npos);
+            assert(core.drops.size() == 1 && count_up() == 1);
+            const Core::Drop& dd = core.drops[0];
+            assert(dd.name == "my pic.png" && dd.size == 60000 && dd.kind == "image" && dd.mime == "image/png" && dd.own);
+            assert(dd.path.find("pic") == std::string::npos && dd.path.rfind(updir + "/", 0) == 0 && dd.id.size() == 16);  // a random name on the disk
+            struct stat ust;
+            assert(stat(dd.path.c_str(), &ust) == 0 && (ust.st_mode & 0777) == 0600 && ust.st_size == 60000);
+            { std::ifstream in(dd.path, std::ios::binary); std::string got((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>()); assert(got == data); }
+            assert(chb->lines.back().text == "dropped my pic.png|60000|image|image/png|" + ts->cfg.name + "|#c");
+            std::string id1 = dd.id, p1 = dd.path;
+            core.drop_forget(id1);  // sent or discarded: the copy goes
+            assert(core.drops.empty() && access(p1.c_str(), F_OK) != 0 && count_up() == 0);
+            {  // a name is a name, not a path
+                assert(post("?buf=" + std::to_string(chb->id) + "&name=..%2F..%2Fetc%2Fpasswd", cookie, "hi").rfind("HTTP/1.1 200", 0) == 0);
+                assert(core.drops.size() == 1 && core.drops[0].name.find('/') == std::string::npos && core.drops[0].name[0] != '.');
+                core.drop_forget(core.drops[0].id);
+            }
+            {  // a browser that goes away halfway leaves nothing
+                auto [fd, half] = talk("POST /upload" + q + " HTTP/1.1\r\nHost: x\r\nCookie: " + cookie + "\r\nContent-Length: 50000\r\n\r\n" + data.substr(0, 10000), 1);
+                assert(count_up() == 1);  // the half file is there while it comes
+                close(fd);
+                for (int i = 0; i < 20; i++) step();
+                assert(count_up() == 0 && core.drops.empty());
+            }
+            core.exec(chb, "/plugin disable dz");
+            unlink((pdir2 + "/dz.lua").c_str());
+            assert(post(q, cookie, data).rfind("HTTP/1.1 422", 0) == 0);  // the plugin is off again
+        }
         {  // a new X-Forwarded-For each try (an ssh tunnel passes the browser's as is): the 127.0.0.1 peer still locks, after 20
             auto bad = [&](int i) {
                 std::string body = "{\"user\":\"u\",\"pass\":\"no\"}";
@@ -4836,6 +4892,174 @@ print("loaded")
         wr(dir + "backups/evil.isebak", backup_pack({{"isekur.conf", "[general]\nnick = evil\n"}, {"../escape", "x"}}, "correct horse"));
         bk.exec(bh, "/restore evil"), bk.exec(bh, "correct horse");
         assert(rd(dir + "isekur.conf") == conf && access((std::string(d) + "/escape").c_str(), F_OK) != 0);
+        std::filesystem::remove_all(d);
+    }
+
+    {  // API 16: files given to iSekur (/upload, a dropped path), isekur.upload, isekur.choose and isekur.copy
+        char d[] = "/tmp/isekur-drop-XXXXXX";
+        assert(mkdtemp(d));
+        std::string dir = d, pdir = dir + "/plugins", pic = dir + "/a b.png";
+        auto wr = [](const std::string& f, const std::string& body) { std::ofstream(f, std::ios::binary) << body; };
+        wr(pic, "0123456789"), wr(dir + "/two.txt", "hello"), wr(dir + "/empty.txt", "");
+        mkdir(dir.c_str(), 0700), mkdir((dir + "/sub").c_str(), 0700);
+        // what a terminal types for a dropped file: quotes, backslashes, file:// URLs, several; anything else is no path at all
+        assert((dropped_paths("'" + pic + "'") == std::vector<std::string>{pic}));
+        assert((dropped_paths(dir + "/a\\ b.png ") == std::vector<std::string>{pic}));
+        assert((dropped_paths("file://" + dir + "/a%20b.png") == std::vector<std::string>{pic}));
+        assert((dropped_paths("\"" + pic + "\" " + dir + "/two.txt") == std::vector<std::string>{pic, dir + "/two.txt"}));
+        assert(dropped_paths("").empty() && dropped_paths("hello").empty() && dropped_paths(dir + "/nope.png").empty() && dropped_paths(dir + "/sub").empty());
+        assert(dropped_paths(pic + " hello").empty() && dropped_paths("'" + pic).empty() && dropped_paths("relative/a.png").empty());  // one word that isn't a file: a message
+
+        Core dc;
+        dc.cfg_path = dir + "/isekur.conf";
+        Buffer* dh = dc.open(nullptr, BT::STATUS, "isekur");
+        auto last = [&] { return dh->lines.back().text; };
+        assert(dc.file_drop(dh, pic, "", false) == "no plugin takes files: /plugin install dropzone" && dc.drops.empty());
+        mkdir_p(pdir);
+        wr(pdir + "/dz.lua", R"LUA(
+local rec
+isekur.on("drop", function(e)
+  rec = e.id
+  isekur.print(nil, nil, string.format("drop %s %d %s %s %d", e.name, e.size, e.kind, e.type, #e.id))
+  assert(isekur.choose{id = e.id, title = "Upload", text = {"a", "b"}, items = {"one", "two", "three"}, sel = 2})
+end)
+isekur.on("choice", function(e) isekur.print(nil, nil, "choice " .. tostring(e.id == rec) .. " " .. e.index) end)
+isekur.command("dzt", "", function(args)
+  if args == "http" then local ok, why = isekur.upload(rec, {url = "http://x.test/"}, function() end) isekur.print(nil, nil, tostring(ok) .. " " .. why) end
+  if args == "gone" then local ok, why = isekur.upload("nope", {url = "https://x.test/"}, function() end) isekur.print(nil, nil, tostring(ok) .. " " .. why) end
+  if args == "lan" then assert(isekur.upload(rec, {url = "https://127.0.0.1:9/", field = "f"}, function(r) isekur.print(nil, nil, "up " .. r.status .. " " .. tostring(r.error)) end)) end
+  if args == "forget" then isekur.print(nil, nil, "forget " .. tostring(isekur.upload(rec, false))) end
+  if args == "copy" then isekur.print(nil, nil, "copy " .. tostring(isekur.copy("https://litter.test/x.png"))) end
+  if args == "upload" then isekur.exec(nil, nil, "/upload /etc/hosts") end
+  if args == "empty" then isekur.print(nil, nil, tostring(select(2, isekur.choose{items = {}}))) end
+end)
+)LUA");
+        dc.exec(dh, "/plugin enable dz");
+        // /upload gives the file to the plugin: what it is, never where it is
+        dc.exec(dh, "/upload '" + pic + "'");
+        assert(dh->lines[dh->lines.size() - 1].text == "drop a b.png 10 image image/png 16");
+        dc.choices.clear(), dc.drops.clear();
+        wr(dir + "/x\ty.png", "12345");
+        dc.exec(dh, "/upload '" + dir + "/x\ty.png'");
+        assert(dh->lines[dh->lines.size() - 1].text == "drop x_y.png 5 image image/png 16");  // no control character in a name
+        dc.choices.clear(), dc.drops.clear();
+        dc.exec(dh, "/upload '" + pic + "'");
+        assert(dc.drops.size() == 1 && !dc.drops[0].own && dc.choices.size() == 1);
+        const Core::Choice& ch = dc.choices.front();
+        assert(ch.by == "dz" && ch.title == "Upload" && ch.text.size() == 2 && ch.items.size() == 3 && ch.sel == 2 && ch.id == dc.drops[0].id);
+        std::string id = dc.drops[0].id;
+        dc.choice_act(3);  // the third row: the plugin hears it, once; nothing is left on screen
+        assert(last() == "choice true 3" && dc.choices.empty());
+        dc.choice_act(1);  // nothing asked: nothing happens
+        assert(last() == "choice true 3");
+        dc.exec(dh, "/upload " + dir + "/two.txt");
+        assert(last() == "drop two.txt 5 text text/plain 16" && dc.drops.size() == 2 && dc.choices.size() == 1);
+        dc.choice_act(99), assert(last() == "choice true 0");  // a row that isn't there: cancelled
+        dc.exec(dh, "/upload " + dir + "/two.txt");
+        dc.choice_act(0), assert(last() == "choice true 0");
+        dc.exec(dh, "/upload " + dir + "/empty.txt");
+        assert(last() == "/upload: the file is empty" && dc.drops.size() == 3);
+        dc.exec(dh, "/upload " + dir + "/nope.png");
+        assert(last().find("/upload: not a file") == 0);
+        dc.exec(dh, "/upload");
+        assert(last().find("/upload <file>") == 0);
+        // two questions at once: one after the other
+        dc.drops.clear(), dc.exec(dh, "/upload '" + pic + "'"), dc.exec(dh, "/upload " + dir + "/two.txt");
+        assert(dc.choices.size() == 2 && dc.choices.front().id == dc.drops[0].id);
+        dc.choice_act(1), assert(dc.choices.size() == 1 && dc.choices.front().id == dc.drops[1].id);
+        dc.choice_act(2), assert(dc.choices.empty());
+        // isekur.upload: https only, a file that exists, never the LAN, a failure keeps the file for another try
+        id = dc.drops[1].id;
+        dc.exec(dh, "/dzt http"), assert(last() == "nil the URL must be https://...");
+        dc.exec(dh, "/dzt gone"), assert(last() == "nil that file is gone");
+        dc.exec(dh, "/dzt lan");
+        for (int i = 0; i < 500 && last().rfind("up ", 0) != 0; i++) usleep(10000), dc.plugins_poll();
+        assert(last() == "up 0 127.0.0.1 is on a private network: not fetched" && dc.drop_find(id));
+        dc.exec(dh, "/dzt forget"), assert(last() == "forget true" && !dc.drop_find(id));
+        dc.exec(dh, "/dzt empty"), assert(last() == "no items");
+        // a webchat's copy is deleted when forgotten or when nobody sent it; a path the user named never is
+        wr(dir + "/own.bin", "xyz");
+        assert(dc.file_drop(dh, dir + "/own.bin", "x.bin", true).empty() && dc.drops.back().name == "x.bin" && dc.drops.back().kind == "other");
+        dc.choices.clear();
+        std::string oid = dc.drops.back().id;
+        dc.drop_forget(oid), assert(access((dir + "/own.bin").c_str(), F_OK) != 0 && access(pic.c_str(), F_OK) == 0);
+        wr(dir + "/own.bin", "xyz");
+        assert(dc.file_drop(dh, dir + "/own.bin", "x.bin", true).empty());
+        dc.choices.clear();
+        dc.drops_gc(time(nullptr) + 100);  // not yet
+        assert(access((dir + "/own.bin").c_str(), F_OK) == 0);
+        dc.drops_gc(time(nullptr) + 2000);  // forgotten after 30 minutes
+        assert(access((dir + "/own.bin").c_str(), F_OK) != 0 && access(pic.c_str(), F_OK) == 0);
+        wr(dir + "/empty2.bin", "");
+        assert(dc.file_drop(dh, dir + "/empty2.bin", "", true) == "the file is empty" && access((dir + "/empty2.bin").c_str(), F_OK) != 0);  // refused: its copy goes too
+        // a plugin can't name a file of yours
+        size_t n0 = dc.drops.size();
+        dc.exec(dh, "/dzt upload");
+        assert(last() == "/upload can't be run by a plugin" && dc.drops.size() == n0);
+        // isekur.copy: the terminal's clipboard on its next frame, the webchat's through its message
+        std::string copied;
+        dc.listener = [&](Ev e, Buffer*, const Line* l) { if (e == Ev::COPY) copied = l->text; };
+        dc.tty = true;
+        dc.exec(dh, "/dzt copy");
+        assert(last() == "copy true" && copied == "https://litter.test/x.png" && dc.copy_out == copied);
+        dc.listener = nullptr;
+        // a plugin that goes takes its questions with it
+        dc.exec(dh, "/upload '" + pic + "'");
+        assert(dc.choices.size() == 1);
+        dc.exec(dh, "/plugin disable dz");
+        assert(dc.choices.empty());
+
+        {  // the multipart POST: fields, then the file, streamed; the plugin's headers, one line each; a name can't break out of its header
+            int ls = socket(AF_INET, SOCK_STREAM, 0), one = 1;
+            setsockopt(ls, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
+            sockaddr_in a{};
+            a.sin_family = AF_INET, a.sin_addr.s_addr = htonl(0x7f000001);
+            assert(bind(ls, (sockaddr*)&a, sizeof a) == 0 && listen(ls, 1) == 0);
+            socklen_t al = sizeof a;
+            getsockname(ls, (sockaddr*)&a, &al);
+            std::string file(200000, 'x'), req;
+            for (size_t i = 0; i < file.size(); i++) file[i] = (char)(i * 7 + i / 251);
+            wr(dir + "/big.bin", file);
+            std::thread srv([&] {
+                int fd = accept(ls, nullptr, nullptr);
+                size_t he;
+                char buf[65536];
+                while ((he = req.find("\r\n\r\n")) == std::string::npos) { ssize_t n = recv(fd, buf, sizeof buf, 0); if (n <= 0) break; req.append(buf, (size_t)n); }
+                size_t cl = (size_t)atol(req.c_str() + req.find("Content-Length: ") + 16);
+                while (req.size() < he + 4 + cl) { ssize_t n = recv(fd, buf, sizeof buf, 0); if (n <= 0) break; req.append(buf, (size_t)n); }
+                const char* ans = "HTTP/1.0 200 OK\r\nContent-Type: text/plain\r\n\r\nhttps://litter.test/abc.png";
+                send(fd, ans, strlen(ans), 0);
+                close(fd);
+            });
+            Upload up;
+            up.url = "http://127.0.0.1:" + std::to_string(ntohs(a.sin_port)) + "/api.php", up.path = dir + "/big.bin", up.guard = false;
+            up.field = "fileToUpload", up.filename = "a\"b\r\nc.png", up.ctype = "image/png";
+            up.fields = {{"reqtype", "fileupload"}, {"time", "72h"}};
+            up.headers = {{"Authorization", "Client-ID abc"}, {"X-Evil", "x\r\nInjected: yes"}, {"Bad\nName", "v"}, {"Content-Length", "1"}, {"host", "evil.test"}, {"Transfer-Encoding", "chunked"}};
+            int status = 0;
+            std::string body, err;
+            assert(https_upload(up, status, body, err) && status == 200 && body == "https://litter.test/abc.png" && err.empty());
+            srv.join(), close(ls);
+            size_t he = req.find("\r\n\r\n");
+            std::string head = req.substr(0, he), rest = req.substr(he + 4);
+            assert(head.rfind("POST /api.php HTTP/1.0\r\n", 0) == 0 && head.find("\r\nAuthorization: Client-ID abc") != std::string::npos);
+            assert(head.find("Injected") == std::string::npos && head.find("X-Evil") == std::string::npos && head.find("Bad") == std::string::npos);
+            assert(head.find("evil.test") == std::string::npos && head.find("chunked") == std::string::npos && head.find("Content-Length: 1\r\n") == std::string::npos);  // nothing that frames the request
+            size_t bp = head.find("boundary=");
+            std::string bnd = head.substr(bp + 9, head.find("\r\n", bp) - bp - 9);
+            assert(head.find("Content-Type: multipart/form-data; boundary=----iSekur") != std::string::npos && head.find("Content-Length: " + std::to_string(rest.size())) != std::string::npos);
+            std::string want = "--" + bnd + "\r\nContent-Disposition: form-data; name=\"reqtype\"\r\n\r\nfileupload\r\n"
+                               "--" + bnd + "\r\nContent-Disposition: form-data; name=\"time\"\r\n\r\n72h\r\n"
+                               "--" + bnd + "\r\nContent-Disposition: form-data; name=\"fileToUpload\"; filename=\"a_b__c.png\"\r\nContent-Type: image/png\r\n\r\n" +
+                               file + "\r\n--" + bnd + "--\r\n";
+            assert(rest == want && up.sent == req.size());  // every byte of the request went through the counter
+            // the guard: https only, and never a private address
+            Upload bad;
+            bad.url = "http://example.org/", bad.path = pic;
+            assert(!https_upload(bad, status, body, err) && err == "uploads go over https:// only");
+            bad.url = "https://127.0.0.1/";
+            assert(!https_upload(bad, status, body, err) && err == "127.0.0.1 is on a private network: not fetched");
+        }
         std::filesystem::remove_all(d);
     }
 

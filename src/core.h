@@ -352,8 +352,11 @@ struct CatalogRow { std::string name, version, local, desc; bool installed, upda
 std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" line near the top, "" if none
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
-#define PLUGIN_API 15 // isekur.api: the catalog hides plugins that need a newer one
+inline constexpr unsigned long long UPLOAD_MAX = 1ULL << 30;  // a file given to iSekur (webchat upload, /upload): 1 GB
+#define PLUGIN_API 16 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
+// what a terminal types when files are dropped on it ("a b" 'a b' a\ b file:///a%20b), as paths; empty unless every word is a regular file
+std::vector<std::string> dropped_paths(const std::string& text);
 // a plugin event's fields besides srv and target: strings, booleans and whole numbers
 using PArgs = std::vector<std::pair<const char*, std::variant<std::string, bool, int>>>;
 // twitch.cpp; with make notwitch twitch_host() is always false, so none of it runs
@@ -464,7 +467,7 @@ struct UpdateCheck {
     std::string ver;
     std::atomic<bool> done{false};
 };
-enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS, RADIO, PWIN, TINT };  // TINT: the shown tint changed (b is null); CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null; l non-null: the soft one); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab); RADIO: the radio started, changed state or stopped (b is null); PWIN: a plugin's window opened, changed or closed (b is null)
+enum class Ev { LINE, BUFFER, CLOSE, THEME, CLEAR, FOCUS, NOTE, BELL, SPLIT, LOCK, UPDATE, EMBED, SCREEN, SPEAK, BANS, RADIO, PWIN, TINT, COPY, CHOICE };  // TINT: the shown tint changed (b is null); CLEAR: b->lines was emptied (the webchat reloads them); FOCUS: the webchat shows b too; NOTE: a popup in the webchat (l: nick = title, text); BELL: ring() (b is null; l non-null: the soft one); SPLIT: the terminal's /split changed (b is null); LOCK: locked or lock_msg changed (b is null); EMBED: l got a plugin's embed; SCREEN: a screensaver came or went (b is null); SPEAK: a plugin's text for the webchat to say aloud (b is null, l->text); BANS: the ban list window's list changed (b is its channel's tab); RADIO: the radio started, changed state or stopped (b is null); PWIN: a plugin's window opened, changed or closed (b is null); COPY: a plugin's text for the webchat's clipboard (b is null, l->text); CHOICE: a plugin's question came, was answered or went (b is null)
 
 struct Core {
     Ini cfg, unsaved;  // unsaved: /set changes not yet written by /save
@@ -637,6 +640,24 @@ struct Core {
         bool open = false;
         bool same(const PWin& o) const { return by == o.by && title == o.title && display == o.display && items == o.items && buttons == o.buttons && icons == o.icons && sel == o.sel && mark == o.mark && star == o.star && reels == o.reels && slider == o.slider && slider_max == o.slider_max && slider_step == o.slider_step && slider_icon == o.slider_icon && sky == o.sky && open == o.open; }
     } pwin;
+    // files the user gave iSekur (API 16, src/plugin/drop.cpp): dragged or pasted into the webchat, /upload <file>, a path dropped on the terminal.
+    // A plugin's `drop` event gets an id and isekur.upload(id, ...) sends the file: it never sees where it is. A webchat's land in
+    // <config dir>/uploads/ (own: deleted when sent or forgotten), a path the user named is left where it is
+    struct Drop { std::string id, path, name, kind, mime; unsigned long long size = 0; bool own = false; time_t at = 0; };
+    std::vector<Drop> drops;
+    std::string file_drop(Buffer* b, const std::string& path, const std::string& name, bool own);  // "" when a plugin has it, else why not
+    Drop* drop_find(const std::string& id);
+    void drop_forget(const std::string& id);  // sent or discarded: out of the list, a webchat's copy deleted
+    void drops_gc(time_t now);
+    std::string upload_dir() const;
+    void upload_cmd(Buffer* b, const std::string& args);  // /upload <file>
+    // a plugin's question (API 16, isekur.choose): items to pick from in a box, in the terminal and the webchat; one at a time, the rest wait.
+    // The answer is its `choice` event (index: 1-based, 0: cancelled)
+    struct Choice { std::string by, id, title; std::vector<std::string> text, items; int sel = 1; };
+    std::deque<Choice> choices;
+    void choice_act(int index);
+    std::string copy_out;  // isekur.copy: put in the terminal's clipboard (OSC 52) on its next frame
+    void copy_text_out(const std::string& text);
     void pwin_act(const std::string& action, int index, int button = 0);  // a click or a key in it: "pick", "button" (button: 1-based; index: its list row), "slider" (index: its value), "close"
     std::string emit_only;  // plugin_emit: only this plugin gets the event (a window's)
     void lock_saver();  // locked, Esc on the bare password box: the screensaver plugin starts one under it (as Alt+S does)

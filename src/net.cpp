@@ -9,6 +9,7 @@
 #include <arpa/inet.h>
 #include <strings.h>
 #include <poll.h>
+#include <sys/stat.h>
 #include <sys/time.h>
 #include <thread>
 #include <unistd.h>
@@ -289,8 +290,9 @@ std::string https_fetch_err(const std::string& url) {
 }
 
 // one GET: false with err on a failure; true with the status line's code, headers and up to cap bytes of body
+// up: a multipart/form-data POST of a file instead (https_upload): streamed from the disk, so a video never sits in memory
 static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err,
-                       const std::string& post = "", bool guard = true) {
+                       const std::string& post = "", bool guard = true, Upload* up = nullptr) {
     static SSL_CTX* ctx = new_client_ctx();
     std::string host, port, path;
     bool tls = true;
@@ -326,13 +328,60 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
         else X509_VERIFY_PARAM_set1_ip_asc(SSL_get0_param(ssl), host.c_str());
         SSL_set_verify(ssl, SSL_VERIFY_PEER, nullptr);
     }
-    std::string got, req = (post.empty() ? "GET " : "POST ") + path + " HTTP/1.0\r\nHost: " + host + (port == (tls ? "443" : "80") ? "" : ":" + port) +
-                             "\r\nUser-Agent: Mozilla/5.0 (compatible; iSekur link preview)\r\nAccept: text/html,*/*;q=0.8\r\n" +
-                             (post.empty() ? "" : "Content-Type: text/plain; charset=utf-8\r\nContent-Length: " + std::to_string(post.size()) + "\r\n") +
-                             "\r\n" + post;
-    bool ok = ssl ? SSL_connect(ssl) == 1 && SSL_write(ssl, req.data(), (int)req.size()) == (int)req.size()
-                  : ::send(fd, req.data(), req.size(), 0) == (ssize_t)req.size();
-    if (!ok) err = ssl ? "TLS with " + host + ": " + ssl_errstr() : "can't send to " + host;
+    // the file part of an upload: what comes before the file's bytes, after them, and the file's size
+    std::string pre, tail, bnd;
+    unsigned long long fsize = 0;
+    struct Closer { FILE* f = nullptr; ~Closer() { if (f) fclose(f); } } uf;
+    if (up) {
+        uf.f = fopen(up->path.c_str(), "rb");
+        struct stat st;
+        if (!uf.f || fstat(fileno(uf.f), &st) || !S_ISREG(st.st_mode)) { err = "can't read the file"; if (ssl) SSL_free(ssl); ::close(fd); return false; }
+        fsize = (unsigned long long)st.st_size;
+        unsigned char r[12];
+        RAND_bytes(r, sizeof r);
+        char hx[3];
+        bnd = "----iSekur";
+        for (unsigned char ch : r) snprintf(hx, sizeof hx, "%02x", ch), bnd += hx;
+        auto clean = [](std::string v) { for (char& ch : v) if ((unsigned char)ch < 0x20 || ch == '"' || ch == '\\' || ch == 0x7f) ch = '_'; return v; };  // a name in a header: no quote, no line break
+        for (auto& [k, v] : up->fields) pre += "--" + bnd + "\r\nContent-Disposition: form-data; name=\"" + clean(k) + "\"\r\n\r\n" + v + "\r\n";
+        pre += "--" + bnd + "\r\nContent-Disposition: form-data; name=\"" + clean(up->field) + "\"; filename=\"" + clean(up->filename) +
+               "\"\r\nContent-Type: " + clean(up->ctype) + "\r\n\r\n";
+        tail = "\r\n--" + bnd + "--\r\n";
+    }
+    std::string got, req = (up || !post.empty() ? "POST " : "GET ") + path + " HTTP/1.0\r\nHost: " + host + (port == (tls ? "443" : "80") ? "" : ":" + port) +
+                             "\r\nUser-Agent: " + (up ? "iSekur" : "Mozilla/5.0 (compatible; iSekur link preview)") + "\r\nAccept: " + (up ? "*/*" : "text/html,*/*;q=0.8") + "\r\n" +
+                             (up ? "Content-Type: multipart/form-data; boundary=" + bnd + "\r\nContent-Length: " + std::to_string(pre.size() + fsize + tail.size()) + "\r\n"
+                              : post.empty() ? "" : "Content-Type: text/plain; charset=utf-8\r\nContent-Length: " + std::to_string(post.size()) + "\r\n");
+    if (up)
+        for (auto& [k, v] : up->headers) {  // the plugin's (Authorization...): one line each, and not the ones that frame the request
+            std::string lk = k;
+            for (char& ch : lk) ch = (char)tolower((unsigned char)ch);
+            if (k.find_first_of("\r\n:") == std::string::npos && v.find_first_of("\r\n") == std::string::npos && !k.empty() &&
+                lk != "host" && lk != "content-length" && lk != "content-type" && lk != "transfer-encoding" && lk != "connection")
+                req += k + ": " + v + "\r\n";
+        }
+    req += "\r\n" + (up ? pre : post);
+    auto put = [&](const char* d, size_t n) {
+        while (n) {
+            int w = ssl ? SSL_write(ssl, d, (int)std::min<size_t>(n, 1 << 20)) : (int)::send(fd, d, n, 0);
+            if (w <= 0) return false;
+            d += w, n -= (size_t)w;
+            if (up) up->sent += (unsigned long long)w;
+        }
+        return true;
+    };
+    bool ok = (!ssl || SSL_connect(ssl) == 1) && put(req.data(), req.size());
+    if (ok && up) {
+        char fb[65536];
+        unsigned long long left = fsize;
+        while (ok && left) {
+            size_t n = fread(fb, 1, (size_t)std::min<unsigned long long>(sizeof fb, left), uf.f);
+            if (!n) { err = "the file changed while it was sent"; if (ssl) SSL_free(ssl); ::close(fd); return false; }
+            ok = put(fb, n), left -= n;
+        }
+        ok = ok && put(tail.data(), tail.size());
+    }
+    if (!ok && err.empty()) err = ssl ? "TLS with " + host + ": " + ssl_errstr() : "can't send to " + host;
     char buf[16384];
     int n;
     size_t hdr = std::string::npos;
@@ -392,6 +441,13 @@ bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, 
     }
     err = "too many redirects";
     return false;
+}
+
+bool https_upload(Upload& u, int& status, std::string& body, std::string& err) {
+    if (u.guard && (u.url.size() < 9 || strncasecmp(u.url.c_str(), "https://", 8))) { err = "uploads go over https:// only"; return false; }  // a file never goes out in plain text (guard off: the tests' own server)
+    std::string hdrs;
+    if (!fetch_once(u.url, 65536, status, hdrs, body, err, "", u.guard, &u)) return false;
+    return true;
 }
 
 // iSekur's own fetches (the release check, the plugin catalog): fixed GitHub hosts, so no private-address guard (a split-horizon

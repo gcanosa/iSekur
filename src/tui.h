@@ -212,6 +212,12 @@ private:
     // a plugin's window (isekur.window, the radio's): Core::pwin is what it shows, this is where the cursor is
     struct PWinUi { bool live = false, filtering = false; int fy = -1, sy = -1, bar0 = 0, barn = 0, cur = 0, top = 0, rows = 0, x0 = 0, w = 0, list_y = 0, btn_y = 0, last_sel = -1; long long click_ms = 0; std::vector<std::pair<int, int>> bx; std::u32string q; };  // cur: the row's number in the plugin's list; top: the first row shown, counted among those q lets through
     PWinUi pu;
+    // a plugin's question (isekur.choose, API 16): the box over everything. The cursor is ours (Core::choices.front().sel is where it starts)
+    struct ChoiceUi { std::string key; int sel = 1, y0 = 0, x0 = 0, w = 0; long long at = 0; };  // y0: the screen row of the first item; at: when it came up
+    ChoiceUi cu;
+    void draw_choice(int W, int H);
+    void choice_key(int mod, int k, uint32_t ch);
+    void choice_mouse(int mod, int k, int x, int y);
     void draw_pwin(int W, int H);
     std::vector<int> pwin_vis() const;  // the rows (1-based) the filter lets through
     void pwin_key(int k, uint32_t ch);
