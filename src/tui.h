@@ -95,6 +95,7 @@ private:
     int fold_tab = -1;
     struct FoldHit { int y, x0, x1, bid; long long key; };
     std::vector<FoldHit> fhits;
+    bool fold_hov = false;  // the pointer is on one of those rows (it is drawn in reverse); a move onto one or off one redraws
     // clickable regions from the last draw(): tabs, activity numbers, nicks
     struct Hit { int y, x0, x1; int tab; std::string nick; };
     int tab_drag = -1;  // the id of the tab pressed on: released on another of its server's tabs, it moves there

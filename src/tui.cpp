@@ -861,6 +861,13 @@ void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
                 auto mix = [&](int sh) { return (int)(((bg >> sh) & 255) * 0.55 + ((fg >> sh) & 255) * 0.45) << sh; };
                 cl.st.fg = mix(16) | mix(8) | mix(0);
             }
+        if (fk[idx] >= 0 && mouse_on && g_hover_y == y + h - 1 - k && g_hover_x >= x && g_hover_x < x + w) {  // the pointer is on an eventshidemgr row: its text in reverse, a pressable look (an underline is a link's)
+            int cx = x;
+            for (auto& cl : rows[idx]) {
+                if (cx >= meta[idx].bx && cx < meta[idx].bend) cl.st.attr |= A_REV;
+                cx += cl.w;
+            }
+        }
         draw_row(x, y + h - 1 - k, x + w, rows[idx]);
         meta[idx].y = y + h - 1 - k, crows.push_back(meta[idx]);
         if (fk[idx] >= 0) fhits.push_back({y + h - 1 - k, x, x + w, b->id, fk[idx]});
@@ -3266,7 +3273,7 @@ void Tui::set_mouse() {
     tb_set_input_mode(TB_INPUT_ALT | (mouse_on ? TB_INPUT_MOUSE : 0));
     // every move (1003): the link under the pointer is underlined, and timestamp_hover shows the time of the line under it
     if (mouse_on) tb_sendf("\x1b[?1003h");
-    if (!mouse_on) g_hover_x = g_hover_y = -1;
+    if (!mouse_on) g_hover_x = g_hover_y = -1, fold_hov = false;
     if (!mouse_on || !ts_hover) hover_x = hover_y = -1, hover_line = fade_line = nullptr;
 }
 
@@ -3745,6 +3752,9 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (k == TB_KEY_MOUSE_RELEASE && (mod & TB_MOD_MOTION)) {  // 1003: a move, no button held
         hover_x = x, hover_y = y, g_hover_x = x, g_hover_y = y;
         if (isekur_link_at(x, y) != g_hover_id) c.dirty = true;  // onto a link or off one: its underline
+        bool onf = false;
+        for (auto& fh : fhits) onf = onf || (fh.y == y && x >= fh.x0 && x < fh.x1);
+        if (onf != fold_hov) fold_hov = onf, c.dirty = true;  // onto an eventshidemgr row or off one: its highlight
         return;
     }
     if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && xbtn.kind && y == xbtn.y && x >= xbtn.x0 && x <= xbtn.x1) { close_box(); return; }

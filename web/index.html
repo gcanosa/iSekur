@@ -606,10 +606,11 @@ video.md { width: min(320px, 100%); max-height: 260px; } video.lg { width: min(4
 /* eventshidemgr (isekur.fold): a run of them is one row, "⇄ 3 joined, 2 left ▸" in the theme's accent, a click opens it. .fc: a line in a folded run; .nf: not folded (nick
    a kind that isn't asked for), so /quiet still hides it even when it keeps the summary rows (.evq) */
 .quiet.evq .l.noise.nf, .l.fc, .l.fsum.off { display: none !important; }
-.l.fsum { cursor: pointer; touch-action: manipulation; }  /* touch-action: two quick taps (open, fold) toggle it twice, not zoom the page on iOS */
-.l.fsum .tx { color: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); }  /* iSekur sends the row's color as the theme element "fold" (fold_style), so --fold-fg comes from applyTheme's loop */
-@media (hover: hover) { .l.fsum:hover .tx { text-decoration: underline; } }  /* a touch screen has no hover: iOS reads the first tap as one */
-.l.fsum:focus-visible .tx { text-decoration: underline; }  /* its own rule: a browser without :focus-visible would drop the whole list */
+.l.fsum { cursor: pointer; touch-action: manipulation; --fc: var(--fold-fg, var(--event-fg, var(--info-fg, var(--info)))); }  /* touch-action: two quick taps (open, fold) toggle it twice, not zoom the page on iOS. --fold-fg: iSekur sends the row's color as the theme element "fold" (fold_style), so it comes from applyTheme's loop */
+.l.fsum .tx { color: var(--fc); justify-self: start; padding: 0 .5ch; margin: 0 -.5ch; border-radius: 3px; }  /* the padding is always there (and taken back by the margin) so the text doesn't move when it lights up */
+/* under the pointer, or focused: its text on the accent, like the terminal's reverse video. Not an underline: that is a link's */
+@media (hover: hover) { .l.fsum:hover .tx { background: var(--fc); color: var(--bg); } }  /* a touch screen has no hover: iOS reads the first tap as one */
+.l.fsum:focus-visible .tx { background: var(--fc); color: var(--bg); }  /* its own rule: a browser without :focus-visible would drop the whole list */
 /* the zen plugin's focus view (isekur.view): the messages alone in a centered column, the input under them, the lines
    before the last few dimmed (zenDim marks those with .zf); Esc on an empty line leaves it */
 #app.zen { grid-template-columns: 1fr !important; grid-template-rows: 1fr auto !important; grid-template-areas: "msgs" "input" !important; }
