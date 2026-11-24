@@ -763,7 +763,7 @@ std::string Web::choice_json() {
     };
     if (c.choices.empty()) return "{\"t\":\"choice\",\"open\":false}";
     const Core::Choice& q = c.choices.front();
-    return "{\"t\":\"choice\",\"open\":true,\"title\":" + json_str(q.title) + ",\"text\":" + arr(q.text) + ",\"items\":" + arr(q.items) + ",\"sel\":" + std::to_string(q.sel) + "}";
+    return "{\"t\":\"choice\",\"open\":true,\"title\":" + json_str(q.title) + ",\"text\":" + arr(q.text) + ",\"items\":" + arr(q.items) + ",\"sel\":" + std::to_string(q.sel) + ",\"input\":" + json_str(q.input) + ",\"value\":" + json_str(q.value) + "}";
 }
 
 std::string Web::dcc_json(std::string* sig) {
@@ -860,7 +860,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "fold") c.fold(b);
         else if (m["t"] == "theme") { std::string err; c.use_theme(m["name"], err); }  // the theme picker's live preview
         else if (m["t"] == "view_end" && c.view_on(true)) c.view_end();  // Esc in the zen plugin's focus view
-        else if (m["t"] == "choice") c.choice_act(atoi(m["i"].c_str()));  // a plugin's question: the row picked, 0 cancelled
+        else if (m["t"] == "choice") c.choice_act(atoi(m["i"].c_str()), m["text"]);  // a plugin's question: the row picked, 0 cancelled
         else if (m["t"] == "pwin") c.pwin_act(m["a"], atoi(m["i"].c_str()), atoi(m["b"].c_str()));  // a plugin's window: a row picked, a button, closed
         else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
             long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;

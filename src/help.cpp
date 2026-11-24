@@ -475,7 +475,8 @@ static const std::vector<CmdInfo> CMDS = {
     {"upload", "Session", "<file>...", "Give files to the plugin that takes them",
      "Hands files to the plugin that takes dropped files (/plugin install dropzone: it sends them to a file host, "
      "litterbox unless you pick another, and a box asks whether to send the link to this tab, copy it, or send it to "
-     "another channel; nothing leaves before you answer). It is the same as dropping the file: onto the webchat (the page "
+     "another channel, names the host that gets the file (a third party: iSekur has nothing to do with it, the plugin only "
+     "automates the sharing) and has a field for a message that goes before the link; nothing leaves before you answer). It is the same as dropping the file: onto the webchat (the page "
      "shows what letting go does), pasting a screenshot into it, the paperclip on a phone, or onto this terminal, which types "
      "the file's path: when the line is only the path of a file, it goes to the plugin by itself. A name with spaces: quote it "
      "or put a backslash before each space, as a terminal does. In the webchat /upload alone opens the browser's file picker. "

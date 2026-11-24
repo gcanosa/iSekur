@@ -652,10 +652,11 @@ struct Core {
     std::string upload_dir() const;
     void upload_cmd(Buffer* b, const std::string& args);  // /upload <file>
     // a plugin's question (API 16, isekur.choose): items to pick from in a box, in the terminal and the webchat; one at a time, the rest wait.
-    // The answer is its `choice` event (index: 1-based, 0: cancelled)
-    struct Choice { std::string by, id, title; std::vector<std::string> text, items; int sel = 1; };
+    // The answer is its `choice` event (index: 1-based, 0: cancelled; text: the field's)
+    // input: the label of a one-line text field under the items ("" none), value: what it starts with; its text comes back with the answer
+    struct Choice { std::string by, id, title; std::vector<std::string> text, items; int sel = 1; std::string input, value; };
     std::deque<Choice> choices;
-    void choice_act(int index);
+    void choice_act(int index, const std::string& text = "");
     std::string copy_out;  // isekur.copy: put in the terminal's clipboard (OSC 52) on its next frame
     void copy_text_out(const std::string& text);
     void pwin_act(const std::string& action, int index, int button = 0);  // a click or a key in it: "pick", "button" (button: 1-based; index: its list row), "slider" (index: its value), "close"

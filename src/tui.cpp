@@ -1529,17 +1529,20 @@ void Tui::draw_dialog(int W, int H, const std::string& title, const std::vector<
 void Tui::draw_choice(int W, int H) {
     const Core::Choice& q = c.choices.front();
     std::string key = q.by + "\n" + q.id + "\n" + q.title + "\n" + std::to_string(q.items.size());
-    if (key != cu.key) cu.key = key, cu.sel = q.sel, cu.at = now_ms();  // a new question: the cursor starts where the plugin says
+    if (key != cu.key) cu.key = key, cu.sel = q.sel, cu.at = now_ms(), cu.text = from_utf8(q.value), cu.cur = cu.text.size();  // a new question: the cursor starts where the plugin says
     int n = (int)q.items.size();
+    bool field = !q.input.empty();  // with a text field the digits are text: the rows are not numbered
     std::vector<std::string> info;
     for (auto& l : q.text)
         for (auto& w : wrap_words(l, 44)) info.push_back(w);
     if (!info.empty()) info.push_back("");
     size_t first = info.size();
-    for (int i = 0; i < n; i++) info.push_back(std::string(i + 1 == cu.sel ? "\u25b6 " : "  ") + std::to_string(i + 1) + "  " + q.items[(size_t)i]);
-    draw_dialog(W, H, q.title, info, "", false, U"", 0, "\u2191\u2193 or 1-" + std::to_string(n) + " \u00b7 Enter: OK \u00b7 Esc: cancel", 0, 0, 'q');
+    for (int i = 0; i < n; i++) info.push_back(std::string(i + 1 == cu.sel ? "\u25b6 " : "  ") + (field ? "" : std::to_string(i + 1) + "  ") + q.items[(size_t)i]);
+    if (field) info.push_back("");  // the rows, a gap, the field
+    draw_dialog(W, H, q.title, info, q.input, false, cu.text, cu.cur,
+                field ? "\u2191\u2193: choose \u00b7 Enter: OK \u00b7 Esc: cancel" : "\u2191\u2193 or 1-" + std::to_string(n) + " \u00b7 Enter: OK \u00b7 Esc: cancel", 0, 0, 'q');
     const Theme& T = c.look(false);
-    int bw = std::min(W - 2, 48), bh = 4 + (int)info.size();
+    int bw = std::min(W - 2, 48), bh = (field ? 5 : 4) + (int)info.size();
     cu.x0 = (W - bw) / 2, cu.w = bw, cu.y0 = std::max(0, (H - bh) / 2 - 1) + 1 + (int)first;
     Style ss = sty(T, "menu_sel", "tab_active");
     int y = cu.y0 + cu.sel - 1;
@@ -1548,23 +1551,35 @@ void Tui::draw_choice(int W, int H) {
 }
 
 void Tui::choice_key(int mod, int k, uint32_t ch) {
-    int n = (int)c.choices.front().items.size();
+    const Core::Choice& q = c.choices.front();
+    int n = (int)q.items.size();
+    bool field = !q.input.empty(), early = now_ms() - cu.at < 400;  // early: typed ahead of the box (a message being typed, a paste): not an answer
     if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) return;
-    if ((k == TB_KEY_ESC && !ch) || k == TB_KEY_CTRL_C) c.choice_act(0);
-    else if (now_ms() - cu.at < 400 && (k == TB_KEY_ENTER || (ch >= '1' && ch <= '9'))) return;  // typed ahead of the box (a message being typed, a paste): not an answer
-    else if (k == TB_KEY_ARROW_UP) cu.sel = (cu.sel - 2 + n) % n + 1;
-    else if (k == TB_KEY_ARROW_DOWN || k == TB_KEY_TAB) cu.sel = cu.sel % n + 1;
-    else if (k == TB_KEY_ENTER) c.choice_act(cu.sel);
-    else if (ch >= '1' && ch <= '9' && (int)(ch - '1') < n) c.choice_act((int)(ch - '0'));
+    if ((k == TB_KEY_ESC && !ch) || k == TB_KEY_CTRL_C) { c.choice_act(0); return; }
     c.dirty = true;
+    if (early && (k == TB_KEY_ENTER || ch || k == TB_KEY_SPACE)) return;
+    if (k == TB_KEY_ARROW_UP) cu.sel = (cu.sel - 2 + n) % n + 1;
+    else if (k == TB_KEY_ARROW_DOWN || k == TB_KEY_TAB) cu.sel = cu.sel % n + 1;
+    else if (k == TB_KEY_ENTER) c.choice_act(cu.sel, to_utf8(cu.text));
+    else if (!field) {
+        if (ch >= '1' && ch <= '9' && (int)(ch - '1') < n) c.choice_act((int)(ch - '0'));
+    } else if (k == TB_KEY_ARROW_LEFT) cu.cur -= cu.cur > 0;
+    else if (k == TB_KEY_ARROW_RIGHT) cu.cur += cu.cur < cu.text.size();
+    else if (k == TB_KEY_HOME || k == TB_KEY_CTRL_A) cu.cur = 0;
+    else if (k == TB_KEY_END || k == TB_KEY_CTRL_E) cu.cur = cu.text.size();
+    else if ((k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2) && cu.cur > 0) cu.text.erase(--cu.cur, 1);
+    else if (k == TB_KEY_DELETE && cu.cur < cu.text.size()) cu.text.erase(cu.cur, 1);
+    else if (k == TB_KEY_CTRL_U) cu.text.clear(), cu.cur = 0;
+    else if ((ch >= 32 || k == TB_KEY_SPACE) && cu.text.size() < 300) cu.text.insert(cu.cur++, 1, ch ? (char32_t)ch : U' ');
 }
 
 void Tui::choice_mouse(int mod, int k, int x, int y) {
-    int n = (int)c.choices.front().items.size();
+    const Core::Choice& q = c.choices.front();
+    int n = (int)q.items.size();
     if (mod & TB_MOD_MOTION) return;
     if (k == TB_KEY_MOUSE_WHEEL_UP) cu.sel = (cu.sel - 2 + n) % n + 1;
     else if (k == TB_KEY_MOUSE_WHEEL_DOWN) cu.sel = cu.sel % n + 1;
-    else if (k == TB_KEY_MOUSE_LEFT && x > cu.x0 && x < cu.x0 + cu.w - 1 && y >= cu.y0 && y < cu.y0 + n) c.choice_act(y - cu.y0 + 1);
+    else if (k == TB_KEY_MOUSE_LEFT && x > cu.x0 && x < cu.x0 + cu.w - 1 && y >= cu.y0 && y < cu.y0 + n) c.choice_act(y - cu.y0 + 1, to_utf8(cu.text));
     c.dirty = true;
 }
 
@@ -3381,15 +3396,23 @@ void Tui::on_readable() {
         }
         if ((ev.type == TB_EVENT_KEY || ev.type == TB_EVENT_MOUSE) && c.wake()) { c.dirty = true; continue; }  // it only ends the screensaver
         keyed |= ev.type == TB_EVENT_KEY;
-        if (enter) input.insert(cur++, 1, U'\n'), enter = false;
+        if (enter) {  // an Enter with more coming is a paste's line break: a newline in the line, a space in a question's field
+            if (!c.choices.empty()) cu.text.insert(std::min(cu.cur, cu.text.size()), 1, U' '), cu.cur++;
+            else input.insert(cur++, 1, U'\n');
+            enter = false;
+        }
         if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || c.pwin.open || lw.open || bw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
-        if (nl && paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0) { enter = true; continue; }  // a highlighted suggestion: key() takes it
+        if (nl && (!c.choices.empty() || (paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0))) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
         else if (ev.type == TB_EVENT_MOUSE) mouse(ev.mod, ev.key, ev.x, ev.y);
         c.dirty = true;
     }
-    if (enter) submit(), c.dirty = true;
+    if (enter) {
+        if (!c.choices.empty()) choice_key(0, TB_KEY_ENTER, 0);  // the last Enter of a read is a key: it answers the question
+        else submit();
+        c.dirty = true;
+    }
     // a file dropped on the terminal is its path typed in one go (a few characters at a time can't be a hand): when the whole line is the path
     // of a file and a plugin takes files, it goes to it without a second Enter
     if (nkeys >= 6 && !enter && !input.empty() && c.active && c.active->type != BT::SHELL && !c.locked && c.choices.empty() && confirm.empty() && paste.empty() &&

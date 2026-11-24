@@ -736,8 +736,10 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #dchoice { width: min(420px, calc(100vw - 32px)); }
 #dchoice [hidden] { display: none !important; }
 #dchoice .dask-t { font-size: calc(13px * var(--z, 1)); white-space: pre-line; overflow-wrap: anywhere; }
+#dchoice .dask-t > div + div { margin-top: 5px; }  /* the lines are paragraphs: the file, where it goes, the notice */
 #dchoice .dask-t .err { color: var(--dlg-err, var(--err)); font-weight: 700; }
 #dchoice .cl { display: grid; gap: 6px; }
+#dchoice label[hidden] { display: none; }
 #dchoice .ci { display: flex; gap: 10px; align-items: baseline; width: 100%; text-align: left; background: var(--bg); color: var(--fg); border: 1px solid var(--line); border-radius: 8px; padding: 9px 12px; cursor: pointer; font: inherit; font-size: calc(13px * var(--z, 1)); }
 #dchoice .ci .n { color: var(--muted); min-width: 1ch; }
 #dchoice .ci:focus-visible { outline: none; border-color: var(--accent); }
@@ -1070,6 +1072,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 <dialog id="dchoice" data-type><form method="dialog">
   <h2 id="dchoice-h">iSekur</h2>
   <div id="dchoice-t" class="dask-t"></div>
+  <label id="dchoice-f" hidden><span></span><input id="dchoice-i" autocomplete="off" spellcheck="true" maxlength="300"></label>
   <div id="dchoice-l" class="cl" role="listbox"></div>
   <div class="btns"><button value="cancel" formnovalidate>Cancel</button></div>
 </form></dialog>
@@ -2498,12 +2501,17 @@ $("#pick").onchange = e => { const fs = [...e.target.files]; e.target.value = ""
 
 // isekur.choose: a plugin's question, the rows as buttons; its answer (the row, 0: cancelled) goes back to iSekur, which closes it on every screen
 const dch = $("#dchoice");
-let chKey = "", chByServer = false;
+let chKey = "", chByServer = false, chSel = 1;
 function onChoice(m) {
   if (!m.open) { chKey = ""; if (dch.open) chByServer = true, dch.close("gone"); return; }
-  const key = JSON.stringify([m.title, m.text, m.items]);
+  const key = JSON.stringify([m.title, m.text, m.items, m.input]);
   if (dch.open && key === chKey) return;
   chKey = key;
+  const fi = $("#dchoice-i");
+  $("#dchoice-f").hidden = !m.input;
+  $("#dchoice-f span").textContent = m.input || "";
+  fi.value = m.value || "";
+  chSel = Math.max(1, Math.min(m.items.length, m.sel));
   $("#dchoice-h").textContent = m.title;
   const tx = $("#dchoice-t");
   tx.replaceChildren(...m.text.map(l => el("div", l[0] === "!" ? "err" : "", l[0] === "!" ? l.slice(1) : l)));  // "!" first: a warning row, as in the terminal
@@ -2511,19 +2519,26 @@ function onChoice(m) {
   const btns = m.items.map((t, i) => {
     const b = el("button", "ci"); b.type = "button"; b.dataset.i = i + 1;
     b.append(el("span", "n", String(i + 1)), el("span", "", t));
-    b.onclick = () => { chKey = ""; send({t: "choice", buf: active, i: i + 1}); chByServer = true; dch.close("ok"); };
+    b.onclick = () => { chKey = ""; send({t: "choice", buf: active, i: i + 1, text: m.input ? fi.value : ""}); chByServer = true; dch.close("ok"); };
     return b;
   });
   $("#dchoice-l").replaceChildren(...btns);
   dch.returnValue = ""; chByServer = false;
   if (!dch.open) dch.showModal();
-  (btns[Math.max(0, Math.min(btns.length - 1, m.sel - 1))] || btns[0]).focus();
+  if (m.input) fi.focus(), fi.select();  // typing starts the message; Enter answers with the row the plugin put the cursor on
+  else (btns[chSel - 1] || btns[0]).focus();
 }
 dch.onclose = () => { if (!chByServer && bufs.has(active)) { chKey = ""; send({t: "choice", buf: active, i: 0}); } chByServer = false; };
 dch.addEventListener("keydown", e => {
-  const bs = [...dch.querySelectorAll(".ci")], at = bs.indexOf(document.activeElement);
-  if (e.key === "ArrowDown" || e.key === "ArrowUp") { e.preventDefault(); bs[(Math.max(at, 0) + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length].focus(); }
-  else if (/^[1-9]$/.test(e.key) && bs[+e.key - 1] && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); bs[+e.key - 1].click(); }
+  const bs = [...dch.querySelectorAll(".ci")], at = bs.indexOf(document.activeElement), typing = document.activeElement === $("#dchoice-i");
+  if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+    e.preventDefault();
+    if (typing) (bs[e.key === "ArrowDown" ? chSel - 1 : bs.length - 1] || bs[0]).focus();  // from the field into the rows
+    else if (e.key === "ArrowUp" && at === 0 && !$("#dchoice-f").hidden) $("#dchoice-i").focus();
+    else bs[(Math.max(at, 0) + (e.key === "ArrowDown" ? 1 : -1) + bs.length) % bs.length].focus();
+  }
+  else if (typing && e.key === "Enter") { e.preventDefault(); (bs[chSel - 1] || bs[0]).click(); }  // Enter in the field answers with the default row
+  else if (!typing && /^[1-9]$/.test(e.key) && bs[+e.key - 1] && !e.ctrlKey && !e.metaKey && !e.altKey) { e.preventDefault(); bs[+e.key - 1].click(); }
 });
 
 // isekur.copy: into the clipboard. A browser may only allow it right after a tap: then a toast with the text, a tap on it copies

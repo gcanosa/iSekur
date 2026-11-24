@@ -295,9 +295,9 @@ static int l_window(lua_State* L) {
     return 0;
 }
 
-// isekur.choose{id, title, text = {lines}, items = {rows}, sel}: asks the user to pick one of up to 8 rows, in a box in the terminal and the webchat (a
+// isekur.choose{id, title, text = {lines}, items = {rows}, sel, input, value}: asks the user to pick one of up to 8 rows, in a box in the terminal and the webchat (with `input`, the label of a one-line text field under the rows, whose text comes back in the event; a
 // question after another waits its turn). The answer comes back as the `choice` event: `id` as you gave it, `index` the row (1-based), 0 when it was
-// cancelled (Esc, the close button). true, or nil and why
+// cancelled (Esc, the close button), `text` what was typed. true, or nil and why
 static int l_choose(lua_State* L) {
     Plugin* p = self(L);
     luaL_checktype(L, 1, LUA_TTABLE);
@@ -310,6 +310,12 @@ static int l_choose(lua_State* L) {
     q.title = lua_isstring(L, -1) ? one_line(lua_tostring(L, -1)).substr(0, 40) : p->name;
     lua_pop(L, 1);
     q.text = str_list(L, 1, "text", 6, 300), q.items = str_list(L, 1, "items", 8, 80);
+    lua_getfield(L, 1, "input");  // a text field under the items, its label; `value`: what it starts with
+    q.input = lua_isstring(L, -1) ? one_line(lua_tostring(L, -1)).substr(0, 40) : "";
+    lua_pop(L, 1);
+    lua_getfield(L, 1, "value");
+    q.value = lua_isstring(L, -1) ? one_line(lua_tostring(L, -1)).substr(0, 300) : "";
+    lua_pop(L, 1);
     if (q.items.empty()) return lua_pushnil(L), lua_pushstring(L, "no items"), 2;
     if (p->c->choices.size() >= 20) return lua_pushnil(L), lua_pushstring(L, "too many questions waiting"), 2;
     lua_getfield(L, 1, "sel");

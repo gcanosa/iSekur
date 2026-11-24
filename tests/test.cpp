@@ -3389,6 +3389,15 @@ int main() {
             }
             return got;
         };
+        {  // a plugin's question reaches the browser with its field, and the browser's answer (row and text) takes it off the list for everyone
+            core.choices.push_back(Core::Choice{"none", "q1", "Send a file", {"pic.png"}, {"one", "two"}, 2, "Message (optional)", "hi"});
+            core.notify(Ev::CHOICE, nullptr);
+            std::string got = more("");
+            assert(got.find("\"t\":\"choice\",\"open\":true,\"title\":\"Send a file\"") != std::string::npos);
+            assert(got.find("\"items\":[\"one\",\"two\"],\"sel\":2,\"input\":\"Message (optional)\",\"value\":\"hi\"") != std::string::npos);
+            got = more(client_frame("{\"t\":\"choice\",\"buf\":" + std::to_string(chb->id) + ",\"i\":2,\"text\":\"hello\"}"));
+            assert(core.choices.empty() && got.find("{\"t\":\"choice\",\"open\":false}") != std::string::npos);
+        }
         core.notify(Ev::BUFFER, chb);  // the first update after a browser comes in has it once more,
         assert(buf_msg(more("")).find("\"nicks\":[") != std::string::npos);
         core.notify(Ev::BUFFER, chb);  // after that, say an unread count changed: the list stays out
@@ -4921,9 +4930,11 @@ local rec
 isekur.on("drop", function(e)
   rec = e.id
   isekur.print(nil, nil, string.format("drop %s %d %s %s %d", e.name, e.size, e.kind, e.type, #e.id))
-  assert(isekur.choose{id = e.id, title = "Upload", text = {"a", "b"}, items = {"one", "two", "three"}, sel = 2})
+  local q = {id = e.id, title = "Upload", text = {"a", "b"}, items = {"one", "two", "three"}, sel = 2}
+  if e.name ~= "two.txt" then q.input, q.value = "Message", "hello" end  -- a text field, starting with "hello" (not for two.txt: none)
+  assert(isekur.choose(q))
 end)
-isekur.on("choice", function(e) isekur.print(nil, nil, "choice " .. tostring(e.id == rec) .. " " .. e.index) end)
+isekur.on("choice", function(e) isekur.print(nil, nil, "choice " .. tostring(e.id == rec) .. " " .. e.index .. " [" .. e.text .. "]") end)
 isekur.command("dzt", "", function(args)
   if args == "http" then local ok, why = isekur.upload(rec, {url = "http://x.test/"}, function() end) isekur.print(nil, nil, tostring(ok) .. " " .. why) end
   if args == "gone" then local ok, why = isekur.upload("nope", {url = "https://x.test/"}, function() end) isekur.print(nil, nil, tostring(ok) .. " " .. why) end
@@ -4947,18 +4958,32 @@ end)
         assert(dc.drops.size() == 1 && !dc.drops[0].own && dc.choices.size() == 1);
         const Core::Choice& ch = dc.choices.front();
         assert(ch.by == "dz" && ch.title == "Upload" && ch.text.size() == 2 && ch.items.size() == 3 && ch.sel == 2 && ch.id == dc.drops[0].id);
+        assert(ch.input == "Message" && ch.value == "hello");  // a text field under the rows
         std::string id = dc.drops[0].id;
-        dc.choice_act(3);  // the third row: the plugin hears it, once; nothing is left on screen
-        assert(last() == "choice true 3" && dc.choices.empty());
-        dc.choice_act(1);  // nothing asked: nothing happens
-        assert(last() == "choice true 3");
+        dc.choice_act(3, "  typed\t text\n ");  // the third row: the plugin hears it, once, with the field's text as one trimmed line; nothing is left on screen
+        assert(last() == "choice true 3 [typed  text]" && dc.choices.empty());
+        dc.choice_act(1, "later");  // nothing asked: nothing happens
+        assert(last() == "choice true 3 [typed  text]");
+        dc.exec(dh, "/upload '" + pic + "'");  // cancelled: no text, whatever was typed
+        dc.choice_act(0, "typed and then Esc");
+        assert(last() == "choice true 0 []");
+        dc.exec(dh, "/upload '" + pic + "'");  // 300 bytes at most, and never half of a character
+        dc.choice_act(1, std::string(400, 'a'));
+        assert(last() == "choice true 1 [" + std::string(300, 'a') + "]");
+        dc.exec(dh, "/upload '" + pic + "'");
+        dc.choice_act(1, std::string(299, 'a') + "\xc3\xa9");  // 301 bytes: the cut would fall inside the e acute
+        assert(last() == "choice true 1 [" + std::string(299, 'a') + "]");
         dc.exec(dh, "/upload " + dir + "/two.txt");
-        assert(last() == "drop two.txt 5 text text/plain 16" && dc.drops.size() == 2 && dc.choices.size() == 1);
-        dc.choice_act(99), assert(last() == "choice true 0");  // a row that isn't there: cancelled
+        assert(last() == "drop two.txt 5 text text/plain 16" && dc.drops.size() == 5 && dc.choices.size() == 1);
+        assert(dc.choices.front().input.empty());
+        dc.choice_act(2, "a box with no field gets no text");
+        assert(last() == "choice true 2 []");
         dc.exec(dh, "/upload " + dir + "/two.txt");
-        dc.choice_act(0), assert(last() == "choice true 0");
+        dc.choice_act(99), assert(last() == "choice true 0 []");  // a row that isn't there: cancelled
+        dc.exec(dh, "/upload " + dir + "/two.txt");
+        dc.choice_act(0), assert(last() == "choice true 0 []");
         dc.exec(dh, "/upload " + dir + "/empty.txt");
-        assert(last() == "/upload: the file is empty" && dc.drops.size() == 3);
+        assert(last() == "/upload: the file is empty" && dc.drops.size() == 7);
         dc.exec(dh, "/upload " + dir + "/nope.png");
         assert(last().find("/upload: not a file") == 0);
         dc.exec(dh, "/upload");

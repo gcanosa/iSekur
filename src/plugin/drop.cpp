@@ -137,15 +137,24 @@ void Core::upload_cmd(Buffer* b, const std::string& args) {
 }
 
 // isekur.choose's queue: the front one is on screen (terminal and webchat); an answer from either closes it on both and shows the next
-void Core::choice_act(int index) {
+void Core::choice_act(int index, const std::string& text) {
     if (choices.empty()) return;
     Choice q = choices.front();
     choices.pop_front();
     dirty = true;
     notify(Ev::CHOICE, nullptr);
     if (index < 0 || index > (int)q.items.size()) index = 0;
+    std::string t;  // the field's text: one line, no control characters, trimmed, 300 bytes at most (never cut inside a character); nothing when cancelled
+    if (!q.input.empty() && index)
+        for (char ch : text) t += (unsigned char)ch < 0x20 || ch == 0x7f ? ' ' : ch;
+    t = trim(t);
+    if (t.size() > 300) {
+        t.resize(300);
+        while (!t.empty() && ((unsigned char)t.back() & 0xc0) == 0x80) t.pop_back();
+        if (!t.empty() && (unsigned char)t.back() >= 0xc0) t.pop_back();
+    }
     emit_only = q.by;
-    plugin_emit("choice", nullptr, "", {{"id", q.id}, {"index", index}});
+    plugin_emit("choice", nullptr, "", {{"id", q.id}, {"index", index}, {"text", t}});
     emit_only.clear();
 }
 
