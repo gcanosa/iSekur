@@ -861,6 +861,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "theme") { std::string err; c.use_theme(m["name"], err); }  // the theme picker's live preview
         else if (m["t"] == "view_end" && c.view_on(true)) c.view_end();  // Esc in the zen plugin's focus view
         else if (m["t"] == "choice") c.choice_act(atoi(m["i"].c_str()), m["text"]);  // a plugin's question: the row picked, 0 cancelled
+        else if (m["t"] == "radfail") c.radio_client_fail(m["url"], m["why"]);  // the browser couldn't play the direct stream it was given
         else if (m["t"] == "pwin") c.pwin_act(m["a"], atoi(m["i"].c_str()), atoi(m["b"].c_str()), m["text"]);  // a plugin's window: a row picked, a button, a tab, a search, closed
         else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
             long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;

@@ -627,6 +627,7 @@ struct Core {
     void radio_poll(const std::vector<pollfd>& fds, size_t from);
     void radio_drop();
     void radio_fail(const std::string& why);
+    bool radio_client_fail(const std::string& url, const std::string& why);  // a webchat's browser couldn't play the direct stream url: true when that is what plays (it stops, with why)
     // a plugin's window (API 12, isekur.window): a title, a lcd-like display, a list, buttons; in the terminal and the webchat.
     // sel and mark are 1-based (0: none); mark is the row that plays
     struct PWin {

@@ -4057,11 +4057,23 @@ const rad = new Audio(); let radWant = false, radUrl = "";  // radUrl: a stream 
 let radBlocked = false;  // the browser wouldn't start the sound without a tap: the pill asks for one, or Play in the window (a modal window makes the page inert, so the pill is for when it's closed)
 const radTapShow = () => { $("#radtap").hidden = !radBlocked || $("#dpw").open; };
 const radTap = on => { radBlocked = on; radTapShow(); if (pwin && pwin.open && $("#dpw").open) renderPwin(); };
+// a direct stream runs in this browser, so only it knows when it doesn't play: an error, a play() that is refused for another reason than needing a
+// tap, or no sound within 15 seconds is told to iSekur (the plugin then tries it through iSekur's machine, or the next station)
+let radTimer = 0;
+const radFail = why => { clearTimeout(radTimer); if (radUrl && radWant) send({t: "radfail", buf: active, url: radUrl, why}); };
 function radStart() {
+  clearTimeout(radTimer);
   rad.src = radUrl || "/radio/stream?" + Date.now();  // a new connection each time: the stream is live, never cached
-  rad.play().then(() => radTap(false), () => radTap(true));
+  if (radUrl) radTimer = setTimeout(() => radFail("no sound came from the stream in the browser"), 15000);
+  rad.play().then(() => radTap(false), e => { if (radUrl && e && e.name !== "NotAllowedError") radFail("the browser can't play this stream"); else { clearTimeout(radTimer); radTap(true); } });  // a refused tap isn't a failure: the pill asks for one
 }
-function radStop() { rad.pause(); rad.removeAttribute("src"); rad.load(); radTap(false); }
+function radStop() { clearTimeout(radTimer); rad.pause(); rad.removeAttribute("src"); rad.load(); radTap(false); }
+rad.addEventListener("playing", () => clearTimeout(radTimer));
+rad.addEventListener("error", () => {
+  if (!radUrl || !radWant || !rad.getAttribute("src")) return;
+  const c = rad.error && rad.error.code;
+  radFail(c === 2 ? "the browser lost the stream's connection" : c === 3 ? "the stream is broken for the browser" : c === 4 ? "the browser can't play this kind of stream" : "the browser couldn't play the stream");
+});
 let radSeen = "";  // state and name of the last message: only a change of station or a restart reconnects, a mute doesn't
 function onRadio(m) {
   radWant = m.state === "playing";

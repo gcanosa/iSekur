@@ -200,6 +200,17 @@ void Core::radio_fail(const std::string& why) {
     radio.err = why;
 }
 
+// a direct stream runs in the browsers, so only they know it didn't play (an error, a codec or a format the browser lacks such as HLS, a
+// network that blocks it, no sound): the first to say so stops the radio like a relayed one that died. A report about another stream (an older
+// station's, a late one) is ignored
+bool Core::radio_client_fail(const std::string& url, const std::string& why) {
+    if (!radio.direct || radio.st == Radio::OFF || url != radio.url) return false;
+    std::string w = why.substr(0, 160);
+    for (char& ch : w) if ((unsigned char)ch < 32 || ch == 127) ch = ' ';
+    radio_fail(w.empty() ? "the browser couldn't play it" : w);
+    return true;
+}
+
 void Core::radio_fds(std::vector<pollfd>& fds) {
     radio_pf.clear();
     for (int f : {radio.res_fd, radio.ff_fd, radio.ff_err})

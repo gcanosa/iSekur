@@ -4175,6 +4175,7 @@ isekur.command("r", "", function()
   print(select(2, isekur.radio("file:///x")), isekur.radio().state, isekur.radio_mute(true), isekur.window())
 end)
 isekur.command("v", "", function() print(isekur.radio_volume(), isekur.radio_volume(200), isekur.radio_volume(-5), isekur.radio().volume) end)
+isekur.command("dstart", "", function() print(isekur.radio("https://radio.example.com/live", {name = "D", direct = true})) end)
 isekur.on("window", function(e) print("win", e.action, e.index, e.button, e.value) end)
 )LUA");
         wr("ro", "isekur.on(\"window\", function(e) print(\"ro got it\") end)\n");
@@ -4196,6 +4197,19 @@ isekur.on("window", function(e) print("win", e.action, e.index, e.button, e.valu
         rc.radio.volume = 100;
         rc.exec(rh, "/v");
         assert(last() == "100 150 0 0");  // nothing plays: the volume is set for the next one
+        {  // a direct stream runs in the browsers: only they can say it didn't play, and only about the stream that plays
+            rc.exec(rh, "/dstart");
+            assert(last() == "true" && rc.radio.direct && rc.radio.st == Core::Radio::PLAYING && rc.radio.url == "https://radio.example.com/live");
+            assert(!rc.radio_client_fail("https://radio.example.com/another", "late") && rc.radio.st == Core::Radio::PLAYING);  // another station's report: ignored
+            assert(rc.radio_client_fail("https://radio.example.com/live", "the browser can't play\tthis kind of stream"));
+            assert(rc.radio.st == Core::Radio::OFF && rc.radio.err == "the browser can't play this kind of stream" && !rc.radio.direct);
+            assert(!rc.radio_client_fail("https://radio.example.com/live", "again"));  // nothing plays now
+            rc.exec(rh, "/dstart");
+            assert(rc.radio_client_fail("https://radio.example.com/live", "") && rc.radio.err == "the browser couldn't play it");
+            rc.exec(rh, "/dstart");
+            rc.radio_stop();
+            assert(!rc.radio_client_fail("https://radio.example.com/live", "after a stop"));
+        }
         rc.exec(rh, "/w");
         const Core::PWin& w = rc.pwin;
         assert(w.open && w.by == "rw" && w.title == "T" && w.display.size() == 2 && w.items.size() == 3 && w.sel == 2 && w.mark == 1 && w.star == 3 && w.slider == 40 && w.slider_max == 150 && w.slider_step == 10 && w.slider_icon == "v" &&
