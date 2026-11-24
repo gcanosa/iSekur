@@ -604,7 +604,7 @@ static const std::vector<CmdInfo> CMDS = {
     // ---- IRC operator (sent to the server; the reason/message needs no ':')
     {"oper", "IRC operator", "user [password]", "Log in as an IRC operator",
      "Without the password you are asked for it, hidden and kept out of the input history. "
-     "While you are +o or +s, server notices (\"*** ...\") and WALLOPS go to a *snotices tab, "
+     "While you are +o or +s, notices from the server (whatever their wording) and WALLOPS go to a *snotices tab, "
      "and the nick menu gets Kill and G-line.",
      {"/oper gera", "/oper gera s3cret"}},
     {"kill", "IRC operator", "nick reason", "Disconnect a user from the network",

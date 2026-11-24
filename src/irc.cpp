@@ -1358,8 +1358,11 @@ void Core::handle(Server* s, const Msg& m) {
         bool replay = bt != m.tags.end() && s->hist_batches.count(bt->second);
         bool server_msg = m.prefix.find('!') == std::string::npos && !m.prefix.empty();
         LK kind = notice ? LK::NOTICE : LK::MSG;
-        // "*** Notice -- ..." while you are +o/+s: the *snotices tab, not your server tab
-        bool snote = notice && server_msg && s->state == SS::CONNECTED && text.rfind("*** ", 0) == 0 &&
+        // a NOTICE from a server while you are +o/+s: the *snotices tab, not your server tab. The source says it, not
+        // the text ("*** Notice -- ..." is only some ircds' wording; Unreal's has none): like WeeChat, no address and
+        // a dot, which a nick can't have
+        bool snote = notice && server_msg && m.prefix.find('@') == std::string::npos &&
+                     m.prefix.find('.') != std::string::npos && s->state == SS::CONNECTED &&
                      s->umodes.find_first_of("os") != std::string::npos;
         bool locked = false;  // /e2e: decrypted
         if (!notice && e2e_line(text) && s->is_chan(tgt)) {

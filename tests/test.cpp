@@ -943,6 +943,21 @@ int main() {
         assert(mb->modes == "nt");
         core.close(mb);
         ts->umodes.clear();
+        {  // server notices: to *snotices while +o/+s whatever the text says (Unreal's have no "***"); never from a nick
+            size_t n = ts->status->lines.size();
+            feed(":irc.t NOTICE me :connect.LOCAL_CLIENT_CONNECT Client connecting: x (u@h)");
+            assert(ts->status->lines.size() == n + 1 && !core.find(ts, "*snotices"));  // not an oper: the server tab
+            ts->umodes = "os";
+            feed(":irc.t NOTICE me :connect.LOCAL_CLIENT_CONNECT Client connecting: x (u@h)");
+            feed(":irc.t NOTICE me :*** Notice -- Client connecting: y (u@h)");
+            Buffer* sn = core.find(ts, "*snotices");
+            assert(sn && sn->lines.size() == 2 && sn->lines[0].text.rfind("connect.LOCAL", 0) == 0 && ts->status->lines.size() == n + 1);
+            feed(":nobody NOTICE me :*** Notice -- not from a server");  // no dot: a nick, not a server
+            assert(sn->lines.size() == 2 && ts->status->lines.size() == n + 2);
+            feed(":bob!u@h NOTICE me :hi");  // an address: a user
+            assert(sn->lines.size() == 2);
+            core.close(sn), ts->umodes.clear();
+        }
         core.exec(ts->status, "/nick");  // alone: says which
         assert(ts->status->lines.back().text == "Your nickname is me");
         Buffer* was = core.active;
