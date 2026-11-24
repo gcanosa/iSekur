@@ -138,13 +138,13 @@ std::string Core::radio_start(const std::string& by, const std::string& url, con
         notify(Ev::RADIO, nullptr);
         return "";
     }
-    if (which_prog("ffmpeg").empty()) return "ffmpeg isn't installed: it decodes the stream";
-    if (is_yt(h) && which_prog("yt-dlp").empty()) return "yt-dlp isn't installed: it finds the audio of a YouTube channel";
+    if (which_prog("ffmpeg").empty()) return "ffmpeg isn't installed on the machine iSekur runs on: it relays the streams a browser can't play by itself (http and YouTube ones)";
+    if (is_yt(h) && which_prog("yt-dlp").empty()) return "yt-dlp isn't installed on the machine iSekur runs on: it finds the audio of a YouTube channel";
     std::string player;
     if (host)
         for (const char* n : {"mpv", "ffplay", "vlc"})
             if (player.empty() && !which_prog(n).empty()) player = n;
-    if (host && player.empty()) return "no player for this machine's speakers: install mpv (or ffplay or vlc)";
+    if (host && player.empty()) return "no player for the speakers of the machine iSekur runs on: install mpv (or ffplay or vlc)";
     radio_stop();
     radio.by = by, radio.name = name, radio.url = url, radio.host = host, radio.player = player, radio.direct = false;
     radio.want = true, radio.fails = 0, radio.retry = 0, radio.err.clear();
