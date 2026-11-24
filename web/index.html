@@ -885,6 +885,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #dpw .btns { flex-wrap: nowrap; gap: 6px; }  /* every button on one row */
 #dpw .btns button { flex: 1 1 0; min-width: 0; padding: 7px 6px; white-space: nowrap; }
 @media (max-width: 440px) { #dpw .btns .lb { display: none; } #dpw .btns button { font-size: calc(17px * var(--z, 1)); } }  /* a phone: the icons alone */
+#dpw form { grid-template-columns: minmax(0, 1fr); }  /* a column that can shrink: a row of buttons wider than the window (six, with a bigger font) pushed the whole window past its box */
+#dpw .btns.meas button { flex: none; } #dpw .btns.tight .lb { display: none; } #dpw .btns.tight button { font-size: calc(17px * var(--z, 1)); }  /* pwFit: the labels don't fit on one row, so the icons alone */
 .win-95 #dpw .btns button { min-width: 0; }
 #radtap { position: fixed; z-index: 20; left: 50%; transform: translateX(-50%); bottom: calc(64px + env(safe-area-inset-bottom)); padding: 8px 16px; border-radius: 999px; cursor: pointer;
   border: 1px solid var(--line); background: var(--dlg-bg, var(--panel)); color: var(--fg); font: inherit; box-shadow: 0 6px 24px -8px var(--accent); }
@@ -2296,7 +2298,7 @@ $("#lf").onsubmit = async e => {
   $("#loginerr").textContent = r.status === 429 ? "Too many attempts. Try again in " + j.wait + "s." : "Wrong user or password.";
 };
 // A−/A+: --z scales every font size (chat, dialogs, menus); layout and positions stay put. 0.7-2, kept per browser
-function zoomSet(z) { z = Math.round(z * 10) / 10; document.documentElement.style.setProperty("--z", z); try { z !== 1 ? localStorage.setItem("fz", z) : localStorage.removeItem("fz"); } catch (e) {} }
+function zoomSet(z) { z = Math.round(z * 10) / 10; document.documentElement.style.setProperty("--z", z); if (typeof pwFit === "function") pwFit(); try { z !== 1 ? localStorage.setItem("fz", z) : localStorage.removeItem("fz"); } catch (e) {} }
 for (const b of document.querySelectorAll("#zoom .zm")) b.onclick = () => zoomSet(Math.min(2, Math.max(.7, (+document.documentElement.style.getPropertyValue("--z") || 1) + b.dataset.z / 10)));
 try { const z = +localStorage.getItem("fz"); if (z >= .7 && z <= 2) zoomSet(z); } catch (e) {}
 $("#logout").onclick = async () => { await fetch("/logout", {method: "POST", credentials: "same-origin"}); if (ws) { ws.onclose = null; ws.close(); } boot(); };
@@ -4120,8 +4122,18 @@ function renderPwin() {
     if (!pwDrag) rg.value = w.slider;  // not while it's being dragged: the echo of an older value would pull the thumb back
     $("#dpw-volout").textContent = rg.value + "%";
   }
+  pwFit();
   pwMark();
 }
+function pwFit() {  // all the buttons with their labels on one row, or the icons alone: measured with every button at its natural width
+  const b = document.getElementById("dpw-btns");
+  if (!b || !b.closest("dialog").open || !b.children.length) return;  // (dpw itself may not exist yet when a saved zoom is applied at load)
+  b.classList.remove("tight"); b.classList.add("meas");
+  let need = (b.children.length - 1) * (parseFloat(getComputedStyle(b).columnGap) || 0);  // (not scrollWidth: the row is right-aligned, so what doesn't fit spills off the left edge, where it isn't scrollable)
+  for (const x of b.children) need += x.getBoundingClientRect().width;
+  b.classList.remove("meas"); b.classList.toggle("tight", need > b.clientWidth + 1);
+}
+addEventListener("resize", pwFit);
 function pwMark() {
   document.querySelectorAll("#dpw-list .r").forEach(r => r.classList.toggle("on", +r.dataset.i === pwCur));
   document.querySelector("#dpw-list .r.on")?.scrollIntoView({block: "nearest"});
