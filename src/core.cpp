@@ -839,6 +839,27 @@ bool server_name_ok(const std::string& n) {
     return !n.empty() && n.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789._-") == std::string::npos;
 }
 
+// the name /server gives a new network, from the arguments typed: its -name, else the address (no brackets or port, a ws URL's
+// host) with what a [server.x] can't have turned to -
+std::string new_server_name(const std::string& line) {
+    std::string addr;
+    auto w = split(line, ' ');
+    for (size_t i = 0; i < w.size(); i++) {
+        const std::string& a = w[i];
+        if (a == "-name" && i + 1 < w.size()) return w[i + 1];
+        if (a.empty() || a[0] != '-') { if (addr.empty() && !a.empty()) addr = a; }
+        else if (a == "-nick" || a == "-login" || a == "-host" || a == "-cmdspeed" || a == "-cmdmax") i++;  // its value, not the address
+    }
+    if (addr.empty()) return "";
+    if (addr[0] == '[') addr = addr.substr(1, addr.find(']') == std::string::npos ? std::string::npos : addr.find(']') - 1);
+    std::string wh, wpath;
+    int wport;
+    bool wtls;
+    if (ws_url(addr, wh, wport, wpath, wtls)) addr = wh;
+    for (char& ch : addr) if (!server_name_ok(std::string(1, ch))) ch = '-';
+    return addr;
+}
+
 // a network's new name: its [server.x] (in the file at once, comments kept), unsaved changes, place in server_order,
 // tab, logs folder (when the new one isn't there yet: logs are never merged) and its tabs' kept history.
 // Only a local label: no reconnect
@@ -2422,11 +2443,11 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] | del name"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] [-noconnect] | del name"); return; }
         std::string nick, port, login, name;
         std::vector<std::string> pos;  // the address, then the port
         std::vector<std::pair<std::string, std::string>> sets;  // config keys the options write: -host, -cap, -nocap, -cmdspeed, -cmdmax, -noproxy, -4, -6
-        bool tls = false, verify = true, rawlog_on = false, keep = false;
+        bool tls = false, verify = true, rawlog_on = false, keep = false, nocon = false;
         // the options come before or after the address, like irssi's: /server -host vhost irc.sekurnet.org 6697 -tls
         for (size_t i = 0; i < argv.size(); i++) {
             const std::string& a = argv[i];
@@ -2438,6 +2459,7 @@ void Core::exec(Buffer* b, const std::string& input) {
             else if (a == "-4" || a == "-6") sets.push_back({"ip_version", a.substr(1)});
             else if (a == "-rawlog") rawlog_on = true;
             else if (a == "-save") keep = true;
+            else if (a == "-noconnect") nocon = true;  // add it (and -save it) without connecting: /connect name later
             else if (a == "-name" || a == "-nick" || a == "-login" || a == "-host" || a == "-cmdspeed" || a == "-cmdmax") {
                 if (i + 1 >= argv.size()) { print(b, LK::ERROR, a + " takes a value (/help server)"); return; }
                 const std::string& v = argv[++i];
@@ -2485,6 +2507,7 @@ void Core::exec(Buffer* b, const std::string& input) {
                 sv->cfg = server_cfg(name), load_flood(sv.get());
                 if (keep && save_section(*this, sec, b)) print(b, LK::INFO, name + " saved");
                 if (rawlog_on) rawlog(sv->status, "on");
+                if (nocon) { print(b, LK::INFO, name + " updated, not connected: /connect " + name); return; }
                 connect(sv.get());
                 select(sv->status);
                 return;
@@ -2499,17 +2522,20 @@ void Core::exec(Buffer* b, const std::string& input) {
         for (auto& [k, v] : sets) cfg[sec][k] = unsaved[sec][k] = v;
         ServerCfg sc = server_cfg(name);
         Server* ns = add_server(sc);
-        select(ns->status);
+        if (!nocon) select(ns->status);
         if (!keep) {
             temp_servers.insert(name);
             info_note(ns->status, "Not kept: gone at the next start. /autojoin snap saves it with its channels, or /server " + name + " -save");
         } else if (save_section(*this, sec, ns->status)) print(ns->status, LK::INFO, name + " saved");
         if (rawlog_on) rawlog(ns->status, "on");  // before it connects: the handshake is in it
         // -login: its questions first, since the password and the certificate go out with the connection
-        if (login.empty()) connect(ns);
+        if (nocon) {
+            print(b, LK::INFO, name + (keep ? " added and saved" : " added") + ", not connected: /connect " + name);
+            if (!login.empty()) select(ns->status), login_ask(ns->status, name, login, keep, nullptr);  // the questions are asked in its tab
+        } else if (login.empty()) connect(ns);
         else {
             print(ns->status, LK::INFO, "It connects once the login is answered. Cancelled: /connect " + name + " goes ahead without one");
-            login_ask(ns->status, name, login, false, [this, name](bool ok) {
+            login_ask(ns->status, name, login, keep, [this, name](bool ok) {
                 for (auto& sv : servers)
                     if (ok && sv->cfg.name == name) connect(sv.get());
             });

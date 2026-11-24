@@ -1609,7 +1609,19 @@ int main() {
         core.exec(home, "/server 127.0.0.1 1 -name tmp4");
         core.exec(home, "/server del tmp4");
         assert(!core.temp("tmp4") && !in_file("tmp4"));
-        for (auto n : {"tmp1", "tmp2", "tmp3"}) core.exec(home, std::string("/server del ") + n);
+        // -noconnect: added (and kept with -save) without connecting, as the webchat's Save button for a new network does
+        core.exec(home, "/server 127.0.0.1 1 -name tmp5 -save -noconnect");
+        {
+            Server* n5 = nullptr;
+            for (auto& sv : core.servers)
+                if (sv->cfg.name == "tmp5") n5 = sv.get();
+            assert(n5 && n5->conn.fd < 0 && n5->state == SS::DISCONNECTED && !core.temp("tmp5") && listed("tmp5") && in_file("tmp5"));
+            assert(home->lines.back().text.find("not connected") != std::string::npos || n5->status->lines.back().text.find("not connected") != std::string::npos);
+        }
+        core.exec(home, "/server 127.0.0.1 1 -name tmp5 -nocap -noconnect");  // a known one: its options, still not connected
+        for (auto& sv : core.servers)
+            if (sv->cfg.name == "tmp5") assert(sv->conn.fd < 0 && !sv->cfg.cap);
+        for (auto n : {"tmp1", "tmp2", "tmp3", "tmp5"}) core.exec(home, std::string("/server del ") + n);
         remove(core.cfg_path.c_str());
         std::swap(core.cfg_path, path);
     }
@@ -1670,7 +1682,18 @@ int main() {
         Server* g2 = core.servers.back().get();
         core.exec(g2->status, "");
         assert(!core.pass_buf && g2->conn.fd < 0 && core.cfg.count("server.lg2") && ini_get(core.cfg, "server.lg2", "password").empty());
-        for (auto nm : {"lg", "lg2"}) core.exec(home, std::string("/server del ") + nm);
+        // -save keeps the login with it, -noconnect leaves it not connected once answered
+        core.exec(home, "/server irc.invalid 6667 -name lg3 -save -noconnect -login sasl");
+        Server* g3 = core.servers.back().get();
+        core.exec(g3->status, "me");
+        core.exec(g3->status, "pw3");
+        Ini f3;
+        assert(!core.pass_buf && g3->conn.fd < 0 && !core.unsaved.count("server.lg3") && ini_load(core.cfg_path, f3) && f3["server.lg3"]["sasl_user"] == "me");
+        // the name the terminal's New server box works out for /servers
+        assert(new_server_name("irc.sekurnet.org 6697 -tls") == "irc.sekurnet.org" && new_server_name("irc.x.org -name sn") == "sn" &&
+               new_server_name("-host vhost.example.org irc.x.org -tls") == "irc.x.org" && new_server_name("[2001:db8::1]:6697 -tls") == "2001-db8--1" &&
+               new_server_name("wss://irc.x.org/ws") == "irc.x.org" && new_server_name("-tls").empty());
+        for (auto nm : {"lg", "lg2", "lg3"}) core.exec(home, std::string("/server del ") + nm);
         remove(core.cfg_path.c_str());
         std::swap(core.cfg_path, path);
     }

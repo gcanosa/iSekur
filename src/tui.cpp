@@ -1966,15 +1966,16 @@ void Tui::settings_key(int mod, int k, uint32_t ch) {
     }
     if (ch == 'n') {
         sw.open = false;
-        // the host line, then how to log in: the login is asked before it connects (a password goes out with the connection)
+        // the host line, then how to log in: the login is asked before it connects (a password goes out with the connection).
+        // It is kept in the config (-save), as the webchat's Servers window does; "save only" adds it without connecting
+        // and comes back to /servers on it
         c.ask_pass(c.active, "server", [this](const std::string& v) {
-            if (v.empty()) return;
-            std::string nm = v.substr(0, v.find(' '));  // the host, or its -name
-            auto w = split(v, ' ');
-            if (auto i = std::find(w.begin(), w.end(), "-name"); i != w.end() && i + 1 != w.end()) nm = *(i + 1);
-            menu = Menu{std::max(0, tb_width() / 2 - 14), std::max(0, tb_height() / 2 - 4), 0, "Log in to " + nm + "?",
-                        login_items("/server " + v + " -login", "No login: connect", "/server " + v)};
-        }, false, "New server", {"host [port] [-tls] [-noverify] [-name name]", "[-nick nick] [-host vhost]", "e.g. irc.sekurnet.org 6697 -tls"});  // the box is 44 wide: a longer line is cut
+            std::string nm = new_server_name(v), add = "/server " + v + " -save";
+            if (nm.empty()) return;
+            auto items = login_items(add + " -login", "No login: save and connect", add);
+            items.push_back({"No login: save only", add + " -noconnect\n/servers " + nm});
+            menu = Menu{std::max(0, tb_width() / 2 - 14), std::max(0, tb_height() / 2 - 4), 0, "Add " + nm + "?", items};
+        }, false, "New server", {"host [port] [-tls] [-noverify] [-name name]", "[-nick nick] [-host vhost] [-noconnect]", "e.g. irc.sekurnet.org 6697 -tls"});  // the box is 44 wide: a longer line is cut
         return;
     }
     if (ch == 'l' && !srv.empty()) { settings_login(srv); return; }
@@ -3519,7 +3520,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
             while (!confirm_title.empty() && confirm_title.back() == '.') confirm_title.pop_back();
         }
         else if (!cmd.empty() && (cmd.back() == ' ' || cmd.back() == ':')) input = from_utf8(cmd), cur = input.size();  // ends in a space: you finish it
-        else if (!cmd.empty()) { if (Buffer* t = tab_by_id(mb)) c.exec(t, cmd); }
+        else if (!cmd.empty()) { if (Buffer* t = tab_by_id(mb)) for (auto& l : split(cmd, '\n')) c.exec(t, l); }  // one command a line
         return;
     }
     if (!confirm.empty()) {  // a menu's question: y runs it, anything else drops it

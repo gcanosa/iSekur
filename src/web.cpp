@@ -883,8 +883,9 @@ void Web::ws_frames(Client& cl) {
                 for (size_t i = 0; i < r.choices.size(); i++) o += (i ? "," : "") + json_str(r.choices[i]);
                 o += "]," + json_str(r.cat) + "," + json_str(r.head) + "," + (r.shared ? "1" : "0") + "," + json_str(r.over) + "," + json_str(r.unit) + "]";
             }
-            cl.conn.out += ws_frame(o + "],\"err\":" + json_str(c.set_refused + (c.set_refused.empty() ? "" : " (unchanged)")) + "}");
-            c.set_refused.clear();
+            bool poll = m.count("poll");  // the window asking again to follow changes made elsewhere: it doesn't take the refusal a /set left for the next answer
+            cl.conn.out += ws_frame(o + "],\"poll\":" + (poll ? "1" : "0") + ",\"err\":" + json_str(poll ? "" : c.set_refused + (c.set_refused.empty() ? "" : " (unchanged)")) + "}");
+            if (!poll) c.set_refused.clear();
         } else if (m["t"] == "plugref") {  // the plugin window's Available tab: fetch the catalog
             c.plugin_refresh(b);
         } else if (m["t"] == "plugins") {  // the plugin window: installed, the catalog, the scopes, and the console's newest line (the last action's answer)

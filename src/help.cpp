@@ -12,7 +12,7 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] [-noconnect] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. The options can come before the address too, as in irssi: /server -host vhost.example.org irc.sekurnet.org 6697 -tls. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick), -host the local hostname or IP to connect from "
@@ -25,7 +25,7 @@ static const std::vector<CmdInfo> CMDS = {
      "(server.<name>.ip_version = 4, 6 or auto; the last of -4 and -6 wins, and /set server.<name>.ip_version auto goes back to either; over a proxy it is the connection to the proxy, "
      "and ssh gets it as -4 or -6). "
      "-rawlog opens the /rawlog tab before it connects, so the handshake is in it (not kept). -login sasl, cert, nickserv or password asks for that login "
-     "before it connects (see /login). An IPv6 address works bare or "
+     "before it connects (see /login). -noconnect only adds it (with -save it is kept): /connect name connects it later, and the webchat's Servers window uses it for its Save button. An IPv6 address works bare or "
      "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). A ws:// or wss:// URL as the host "
      "is IRC over WebSocket (IRCv3), for a network that only listens that way or sits behind an HTTPS proxy: the scheme "
      "says TLS, the URL the port (443 or 80 without one) and the path, -noverify still applies. Without -save the "
@@ -41,7 +41,7 @@ static const std::vector<CmdInfo> CMDS = {
      "its [server.<name>] in the config (saved at once, comments kept), its tab, its logs folder and kept history follow, "
      "no reconnect needed (the name is only yours). Without the names it asks, for the tab you're in; the settings window's "
      "name row and r do the same.",
-     {"/server irc.sekurnet.org 6697 -tls -name sekurnet -save", "/server irc.sekurnet.org 6697 -tls", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify", "/server irc.sekurnet.org 6697 -tls -host vhost.example.org", "/server irc.sekurnet.org 6697 -tls -6", "/server irc.sekurnet.org 6697 -tls -cmdspeed 1000 -cmdmax 8 -rawlog",
+     {"/server irc.sekurnet.org 6697 -tls -name sekurnet -save", "/server irc.sekurnet.org 6697 -tls -name sekurnet -save -noconnect", "/server irc.sekurnet.org 6697 -tls", "/server wss://irc.sekurnet.org/ws", "/server rename sekurnet sn", "/server irc.sekurnet.org", "/server 10.0.0.5 6697 -tls -noverify", "/server irc.sekurnet.org 6697 -tls -host vhost.example.org", "/server irc.sekurnet.org 6697 -tls -6", "/server irc.sekurnet.org 6697 -tls -cmdspeed 1000 -cmdmax 8 -rawlog",
       "/server irc.chat.twitch.tv 6697 -tls -name twitch -nick mylogin"}},
     {"twitch", "Connection", "[token]", "Open the Twitch chat tab",
      "Opens the tab of your Twitch server (any [server.<name>] on twitch.tv; made as [server.twitch] if "
@@ -57,8 +57,8 @@ static const std::vector<CmdInfo> CMDS = {
      {"/connect", "/connect sekurnet"}},
     {"servers", "Connection", "[name]", "Manage your servers",
      "The terminal: the settings window at the first server (or the one you name; Edit network in a server tab's menu does that), where c connects the selected one, l sets how it logs in (SASL, NickServ, a certificate, a server password: /login), r renames it, x deletes "
-     "it (it asks first), n adds one (and asks how it logs in before it connects) and p adds a login preset (X, Q, eggdrop, IdleRPG); its keys edit it, On connect has the user modes and /perform's commands. The webchat: the Servers window (the server-rack button), "
-     "with a Login section: the method, then its account and password, or the certificate. Elsewhere it "
+     "it (it asks first), n adds one (kept in the config; it asks how it logs in, then connects, or \"No login: save only\" adds it without connecting) and p adds a login preset (X, Q, eggdrop, IdleRPG); its keys edit it, On connect has the user modes and /perform's commands. The webchat: the Servers window (the server-rack button), "
+     "with a Login section: the method, then its account and password, or the certificate; for a new network Save adds it to the config and Connect adds it and connects, and \"Connect at startup\" is each network's autoconnect. Elsewhere it "
      "lists them. A network still on a legacy charset: /set server.sekurnet.encoding iso-8859-9 (any iconv name), used from its next connect.",
      {"/servers", "/servers sekurnet"}},
     {"login", "Connection", "sasl|cert|nickserv|password|none", "How this network logs you in",
@@ -809,7 +809,7 @@ static const std::vector<GuidePage> GUIDE = {
         "  " G_CMD("/set server.sekurnet.sasl_pass ") G_VAL("secret") "   then " G_CMD("/save") " and " G_CMD("/connect"),
         "",
         "  " G_CMD("/disconnect") " leaves a server (tabs stay), " G_CMD("/connect") " comes back, " G_CMD("/quit") " leaves this tab's server, " G_CMD("/exit") " closes iSekur.",
-        "  " G_CMD("/servers") " manages them: " G_KEY("c") " connects, " G_KEY("l") " sets the login, " G_KEY("x") " deletes, " G_KEY("n") " adds one.",
+        "  " G_CMD("/servers") " manages them: " G_KEY("c") " connects, " G_KEY("l") " sets the login, " G_KEY("x") " deletes, " G_KEY("n") " adds one (kept in the config: it connects, or " G_KEY("save only") " adds it without connecting).",
         "  Right-click a server tab: " BOLD "Connect at startup" RESET " or not, " BOLD "Delete server" RESET ".",
         G_NOTE BOLD "irc.SekurNet.org" RESET " is iSekur's own network: any other works the same way.",
     }},

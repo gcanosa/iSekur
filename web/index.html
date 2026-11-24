@@ -968,7 +968,6 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <label id="srvperf">Commands, one per line, run before autojoin ($nick: your nick)</label>
   <label class="ck"><input type="checkbox" name="jwait" checked> With +x and a login: join once the host is hidden (10s at most)</label>
   </details>
-  <label class="ck" id="srvsavebox"><input type="checkbox" name="save" checked> Save it to the config (/save)</label>
   <div class="hint" id="srvhint"></div>
   </div>
   </div>
@@ -2018,8 +2017,11 @@ function onMsg(ev) {
     renderAbout(m);
   } else if (m.t === "settings") {
     setCache = m.list;
-    if (dset.open) { renderSettings(m.list); if (m.err) $("#setmsg").textContent = m.err; }
-    if (dsrv.open) { srvs = srvRows(m.list); if (srvWant) { const w = srvWant; srvWant = null; srvPick(w); } if (srvSel && !srvs.some(x => x.name === srvSel)) srvSel = null; renderSrv(); }
+    if (dset.open) {
+      if (!m.poll) { renderSettings(m.list); if (m.err) $("#setmsg").textContent = m.err; }
+      else if (JSON.stringify(m.list) !== setSig && setIdle()) { const box = $("#setlist"), at = box.scrollTop; renderSettings(m.list); box.scrollTop = at; }  // changed elsewhere
+    }
+    if (dsrv.open) { srvs = srvRows(m.list); if (srvWant) { const w = srvWant; srvWant = null; srvPick(w); srvNote = srvWantNote; srvWantNote = ""; } else srvSync(); if (srvSel && !srvs.some(x => x.name === srvSel)) srvSel = null; renderSrv(); }
     renderSugg();
   } else if (m.t === "logs" || m.t === "logread" || m.t === "logfind") {
     logMsg(m);
@@ -2560,10 +2562,10 @@ async function onCopy(m) {
 }
 
 // + : the servers. The list is the config's [server.*] (from the settings rows) with each one's state from its tab;
-// picking one fills the form: Save writes the changes (/set + /save), Connect also connects, Delete removes it
+// picking one fills the form: Save writes the changes (/set + /save), Connect also connects, Delete removes it; a new one: Save adds it, Connect adds it and connects
 // (/server del). New, or no server yet: the form adds one, as /server
 const dsrv = $("#dsrv"), fs = dsrv.querySelector("form").elements;
-let srvs = [], srvSel = null, srvNote = "", srvWant = null, srvNick = "";  // srvSel: the [server.x] name being edited, null: a new one; srvNote: "Saved."; srvWant: Edit network, picked once the list comes
+let srvs = [], srvSel = null, srvNote = "", srvWant = null, srvWantNote = "", srvNick = "", srvBase = {}, srvCfg = {};  // srvSel: the [server.x] name being edited, null: a new one; srvNote: "Saved."; srvWant: Edit network, picked once the list comes
 const isOn = v => /^(true|on|yes|1)$/i.test(v || "");
 function srvRows(list) {  // [section, key, value, default, ...] rows -> one object per server: what's in effect
   const by = new Map();
@@ -2621,10 +2623,9 @@ function renderSrv() {
     L.append(b);
   }
   const o = srvs.find(x => x.name === srvSel), t = o && srvTab(o.name);
-  $("#srvdel").hidden = $("#srvsave").hidden = !o;
-  $("#srvsavebox").hidden = !!o;
+  $("#srvdel").hidden = !o;
   $("#srvgo").textContent = !o ? "Connect" : t && t.state !== "disconnected" ? "Save & reconnect" : "Save & connect";
-  $("#srvhint").textContent = (srvNote ? srvNote + " " : "") + (!o ? "A new server: Connect adds it and connects." :
+  $("#srvhint").textContent = (srvNote ? srvNote + " " : "") + (!o ? "A new network: Save adds it to the config, Connect saves it and connects." :
     (t ? t.state[0].toUpperCase() + t.state.slice(1) : "Not connected") + ". Host, port, TLS and vhost changes take effect on the next connect.");
   srvLogin();
 }
@@ -2636,19 +2637,36 @@ function srvPick(name) {
   const f = dsrv.querySelector("form"); f.reset();
   const o = srvs.find(x => x.name === name);
   if (o) {
-    fs.host.value = o.host || ""; fs.port.value = o.port || ""; fs.name.value = o.name; fs.nick.value = o.nick || ""; fs.usevhost.checked = !!o.vhost; fs.vhost.value = o.vhost || "";
-    fs.autojoin.value = (o.autojoin || "").split(",").map(x => x.trim()).filter(Boolean).join(", ");
-    fs.tls.checked = isOn(o.tls); fs.verify.checked = isOn(o.tls_verify ?? "true"); fs.auto.checked = isOn(o.autoconnect ?? "true");
-    fs.umodes.value = o.umodes || ""; fs.jwait.checked = isOn(o.join_wait ?? "on");
-    fs.login.value = loginOf(o);
-    for (const k of ["sasl_user", "sasl_mech", "cert", "key"]) fs[k].value = o[k] || "";
+    fs.name.value = o.name;
+    for (const [k, v] of Object.entries(srvVals(o))) srvPut(k, v);
   }
   srvVhost();
   $("#srvlogin").open = !!loginOf(o);  // closed unless this network logs in
   $("#srvadv").open = !!(o && (o.umodes || o.perform || !isOn(o.join_wait ?? "on")));  // basic setup: closed unless this network uses it
   srvPB.reset(o ? o.perform : "");
   fs.verify.disabled = !fs.tls.checked;
+  srvBase = srvSnap(), srvCfg = o ? srvVals(o) : {};
   renderSrv();
+}
+// The form is a copy of the config, so it can fall behind a /set made elsewhere (the terminal, another browser). srvBase is the form
+// as it was filled and srvCfg what the config had then: Save sends only what you changed since (the difference from srvBase), and
+// each fresh list (srvSync) fills in what the config changed in the fields you haven't touched
+const srvVals = o => ({host: o.host || "", port: o.port || "", nick: o.nick || "", usevhost: !!o.vhost, vhost: o.vhost || "",
+  autojoin: (o.autojoin || "").split(",").map(x => x.trim()).filter(Boolean).join(", "), tls: isOn(o.tls), verify: isOn(o.tls_verify ?? "true"),
+  auto: isOn(o.autoconnect ?? "true"), umodes: o.umodes || "", jwait: isOn(o.join_wait ?? "on"), login: loginOf(o), perform: o.perform || "",
+  ...Object.fromEntries(["sasl_user", "sasl_mech", "cert", "key"].map(k => [k, o[k] || ""]))});
+const srvSnap = () => Object.fromEntries(Object.keys(srvVals({})).map(k => [k, k === "perform" ? srvPB.get() : fs[k].type === "checkbox" ? fs[k].checked : fs[k].value]));
+const srvPut = (k, v) => { if (k === "perform") srvPB.reset(v); else if (fs[k].type === "checkbox") fs[k].checked = v; else fs[k].value = v; };
+function srvSync() {
+  const o = srvs.find(x => x.name === srvSel); if (!o) return;
+  const now = srvVals(o), cur = srvSnap();
+  let moved = false;
+  for (const k of Object.keys(now))
+    if (now[k] !== srvCfg[k] && cur[k] === srvBase[k]) srvPut(k, now[k]), moved = true;  // the config changed it and you haven't
+  const f = srvSnap();
+  for (const k of Object.keys(now)) if (now[k] !== srvCfg[k] && cur[k] === srvBase[k]) srvBase[k] = f[k];
+  srvCfg = now;
+  if (moved) srvVhost(), fs.verify.disabled = !fs.tls.checked;
 }
 // the /set lines for what changed on the picked server; true when there were any
 function srvApply() {
@@ -2663,27 +2681,62 @@ function srvApply() {
     autojoin: fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(","),
     tls: fs.tls.checked ? "true" : "false", tls_verify: fs.verify.checked ? "true" : "false", autoconnect: fs.auto.checked ? "true" : "false",
     umodes: fs.umodes.value.trim(), perform: srvPB.get(), join_wait: fs.jwait.checked ? "on" : "off"};
+  // only what you changed since the form was filled: a field a /set elsewhere changed meanwhile isn't put back
+  const cur = srvSnap(), mine = k => cur[k] !== srvBase[k], form = {tls_verify: "verify", autoconnect: "auto", join_wait: "jwait"};
   for (const [k, v] of Object.entries(want)) {
-    const was = k === "join_wait" ? (isOn(o[k] ?? "on") ? "on" : "off") : k === "perform" ? performLines(o[k]).join(" && ") : k === "umodes" ? o[k] || "" :
-      ["tls", "tls_verify", "autoconnect"].includes(k) ? (isOn(o[k] ?? (k === "tls" ? "false" : "true")) ? "true" : "false") : (o[k] || "").split(",").map(x => x.trim()).filter(Boolean).join(",");
-    if (v === was) continue;
+    if (!(k === "vhost" ? mine("usevhost") || mine("vhost") : mine(form[k] || k))) continue;
     send({t: "input", buf: active, text: "/set server." + o.name + "." + k + " " + (v === "" ? '""' : v)}), n++;
   }
+  srvBase = srvSnap();  // written: that's the form's new starting point
   for (const [k, v] of loginSets(o)) send({t: "input", buf: active, text: "/set server." + o.name + "." + k + " " + (v === "" ? '""' : v)}), n++;
   for (const k of LOGIN_SECRET) fs[k].value = "";  // sent: they're saved now (a second Save mustn't send them again)
   if (n) send({t: "input", buf: active, text: "/save"});
   return n > 0;
 }
 const srvRefresh = () => send({t: "settings", buf: active});
-$("#addsrv").onclick = () => { $("#side").classList.remove("open"); srvSel = null; srvPick(null); srvRefresh(); dsrv.showModal(); };
+let srvPoll = 0;
+$("#addsrv").onclick = () => {
+  $("#side").classList.remove("open"); srvSel = null; srvPick(null); srvRefresh(); dsrv.showModal();
+  clearInterval(srvPoll); srvPoll = setInterval(() => dsrv.open ? srvRefresh() : clearInterval(srvPoll), 2500);  // a /set from another screen shows up here
+};
 $("#srvnew").onclick = () => { srvPick(null); fs.host.focus(); };
-$("#srvsave").onclick = () => { if (!fs.host.reportValidity() || !fs.name.reportValidity()) return; srvNote = srvApply() ? "Saved." : "Nothing changed."; renderSrv(); setTimeout(srvRefresh, 300); };
+$("#srvsave").onclick = () => {
+  if (!fs.host.reportValidity() || !fs.name.reportValidity()) return;
+  if (!srvSel) {  // a new one: added and kept, not connected (Connect does that); then it is the picked one
+    const n = srvNewName();
+    if (srvs.some(x => x.name === n)) { srvNote = "There's a network called " + n + " already: pick it in the list."; renderSrv(); return; }
+    srvAdd(false, n); srvWant = n; srvWantNote = "Saved; Connect connects it."; setTimeout(srvRefresh, 300); return;
+  }
+  srvNote = srvApply() ? "Saved." : "Nothing changed."; renderSrv(); setTimeout(srvRefresh, 300);
+};
 $("#srvdel").onclick = async () => {
   if (!srvSel || await askBox({title: "Delete server", text: "Delete " + srvSel + "? It disconnects, its tabs close and its [server." + srvSel + "] leaves the config.", ok: "Delete"}) === null) return;
   send({t: "input", buf: active, text: "/server del " + srvSel});
   srvPick(null); setTimeout(srvRefresh, 300);
 };
 fs.tls.onchange = () => { if (fs.port.value === "6667" || fs.port.value === "6697") fs.port.value = fs.tls.checked ? "6697" : "6667"; fs.verify.disabled = !fs.tls.checked; };
+// the name /server would give a new one (a ws:// URL: its host, odd characters: -), said out loud so the [server.x] keys land on it
+const srvNewName = () => fs.name.value.trim() || (fs.host.value.trim().match(/^wss?:\/\/([^\/:]+)/i)?.[1] || fs.host.value.trim().replace(/^\[|\]$/g, "")).replace(/[^A-Za-z0-9._-]/g, "-");
+// a new network from the form: /server adds it and keeps it in the config (-save; -noconnect: not connected), then its other keys
+function srvAdd(connect, name) {
+  const host = fs.host.value.trim(), nick = fs.nick.value.trim(), sec = "server." + name;
+  // the login first: a password and a certificate go out with the connection /server starts
+  for (const [k, v] of loginSets(null)) send({t: "input", buf: active, text: "/set " + sec + "." + k + " " + v});
+  let cmd = "/server " + host + " " + (fs.port.value || (fs.tls.checked ? 6697 : 6667));
+  if (fs.tls.checked) cmd += " -tls" + (fs.verify.checked ? "" : " -noverify");
+  cmd += " -name " + name;
+  if (nick) cmd += " -nick " + nick;
+  if (fs.usevhost.checked && fs.vhost.value.trim()) cmd += " -host " + fs.vhost.value.trim();
+  cmd += " -save" + (connect ? "" : " -noconnect");
+  send({t: "input", buf: active, text: cmd});
+  const aj = fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(",");
+  if (aj) send({t: "input", buf: active, text: "/set " + sec + ".autojoin " + aj});
+  if (!fs.auto.checked) send({t: "input", buf: active, text: "/set " + sec + ".autoconnect false"});
+  if (fs.umodes.value.trim()) send({t: "input", buf: active, text: "/set " + sec + ".umodes " + fs.umodes.value.trim()});
+  if (srvPB.get()) send({t: "input", buf: active, text: "/set " + sec + ".perform " + srvPB.get()});
+  if (!fs.jwait.checked) send({t: "input", buf: active, text: "/set " + sec + ".join_wait off"});
+  send({t: "input", buf: active, text: "/save"});
+}
 dsrv.onclose = () => {
   if (dsrv.returnValue !== "ok") return;
   if (srvSel) {  // a configured one: its changes, then connect (or reconnect: host and port count from the next connect)
@@ -2693,26 +2746,7 @@ dsrv.onclose = () => {
     else send({t: "input", buf: active, text: "/connect " + srvSel});
     return;
   }
-  const host = fs.host.value.trim(), nick = fs.nick.value.trim();
-  // the name /server would give it (a ws:// URL: its host, odd characters: -), said out loud so the [server.x] keys below land on it
-  const name = fs.name.value.trim() || (host.match(/^wss?:\/\/([^\/:]+)/i)?.[1] || host.replace(/^\[|\]$/g, "")).replace(/[^A-Za-z0-9._-]/g, "-");
-  const sec = "server." + name;
-  // the login first: a password and a certificate go out with the connection /server starts
-  for (const [k, v] of loginSets(null)) send({t: "input", buf: active, text: "/set " + sec + "." + k + " " + v});
-  let cmd = "/server " + host + " " + (fs.port.value || (fs.tls.checked ? 6697 : 6667));
-  if (fs.tls.checked) cmd += " -tls" + (fs.verify.checked ? "" : " -noverify");
-  cmd += " -name " + name;
-  if (nick) cmd += " -nick " + nick;
-  if (fs.usevhost.checked && fs.vhost.value.trim()) cmd += " -host " + fs.vhost.value.trim();
-  if (fs.save.checked) cmd += " -save";  // else /server keeps it for this run only and the /save below leaves it out
-  send({t: "input", buf: active, text: cmd});
-  const aj = fs.autojoin.value.split(",").map(x => x.trim()).filter(Boolean).join(",");
-  if (aj) send({t: "input", buf: active, text: "/set " + sec + ".autojoin " + aj});
-  if (!fs.auto.checked) send({t: "input", buf: active, text: "/set " + sec + ".autoconnect false"});
-  if (fs.umodes.value.trim()) send({t: "input", buf: active, text: "/set " + sec + ".umodes " + fs.umodes.value.trim()});
-  if (srvPB.get()) send({t: "input", buf: active, text: "/set " + sec + ".perform " + srvPB.get()});
-  if (!fs.jwait.checked) send({t: "input", buf: active, text: "/set " + sec + ".join_wait off"});
-  if (fs.save.checked) send({t: "input", buf: active, text: "/save"});
+  srvAdd(true, srvNewName());
 };
 // ⇅ : /dcc transfers (also in the status line) and, with dcc_web on, dcc_dir's files to download
 let dcc = {list: [], web: false};
@@ -3446,10 +3480,17 @@ const setLive = new Map();
 // (below) has sent its /set reverts: once iSekur asks a passphrase, the next line typed is the answer
 for (const [id, cmd] of [["setbak", "/backup"], ["setres", "/restore"]])
   $("#" + id).onclick = () => { dset.addEventListener("close", () => send({t: "input", buf: active, text: cmd}), {once: true}); dset.close("cancel"); };
-$("#setbtn").onclick = () => { $("#side").classList.remove("open"); $("#setlist").textContent = "Loading..."; send({t: "settings", buf: active}); dset.showModal(); };
+$("#setbtn").onclick = () => {
+  $("#side").classList.remove("open"); $("#setlist").textContent = "Loading..."; send({t: "settings", buf: active}); dset.showModal();
+  clearInterval(setPoll); setPoll = setInterval(() => dset.open ? setIdle() && send({t: "settings", buf: active, poll: 1}) : clearInterval(setPoll), 2500);
+};
+// a /set made elsewhere (the terminal, another browser) shows up while the window is open, but only while nothing here is being
+// edited or previewed (a rebuild would lose it): the search line may have the focus, a field may not
+let setPoll = 0, setSig = "";
+const setIdle = () => { const a = document.activeElement; return !setLive.size && setRows.every(r => r.get() === r.orig) && !(dset.contains(a) && a !== $("#setq") && /^(INPUT|SELECT|TEXTAREA)$/.test(a.tagName)); };
 let setCat = "";  // "" = All
 function renderSettings(list) {
-  const box = $("#setlist"); box.textContent = ""; setRows = [];
+  const box = $("#setlist"); box.textContent = ""; setRows = []; setSig = JSON.stringify(list);
   for (const [sec, k, v, def, uns, secret, choices, cat, head, shared, over, unit] of list) {
     const full = (sec === "general" ? "" : sec + ".") + k;
     const kl = document.createElement("div"); kl.className = "k" + (+uns ? " uns" : ""); kl.textContent = k; kl.title = full;

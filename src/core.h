@@ -936,6 +936,7 @@ int keep_days(const std::string& v);                            // log_keep: "30
 const char* key_unit(const std::string& key);                    // what a number key counts ("lines", "seconds"), "" if none
 std::vector<std::pair<std::string, std::string>> conf_keys();   // iSekur.conf.example's [section] keys, commented or not
 bool server_name_ok(const std::string& n);  // letters, digits, . _ -
+std::string new_server_name(const std::string& line);  // the name /server <line> gives a new network ("" with no address)
 std::vector<std::string> conf_check(const std::string& path);  // the config's problems, "line N: ..." (none: fine); only reads
 bool cfg_secret_opens(const std::string& path, const std::string& enc);  // an "enc:" value secret.key next to path decrypts
 bool is_on(const std::string& v);  // on, true, yes, 1
