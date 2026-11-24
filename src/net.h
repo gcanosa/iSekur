@@ -108,12 +108,13 @@ bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, 
                  const std::string& post = "");
 // isekur.upload: a multipart/form-data POST of one file (u.field), after u.fields, with u.headers, to an https:// URL. Streamed from
 // the disk, blocking, for a thread; the private-address guard of https_fetch, and https:// only, unless u.guard is false (the tests' own server); redirects not followed.
-// true with the status (any) and up to 64 KB of the answer; false with why in err. u.sent counts the bytes written, for progress
+// true with the status (any) and up to 64 KB of the answer; false with why in err (no answer within u.wait seconds, the connection closed without one). A host that answers before it has the whole file (413, 412...) is heard: the rest isn't sent. u.sent counts the bytes written, for progress
 struct Upload {
     std::string url, path, field = "file", filename, ctype = "application/octet-stream";
     std::vector<std::pair<std::string, std::string>> fields, headers;
     mutable std::atomic<unsigned long long> sent{0};
     bool guard = true;
+    int wait = 120;  // seconds to wait for the host's answer once the file is sent
 };
 bool https_upload(Upload& u, int& status, std::string& body, std::string& err);
 bool public_addr(const struct sockaddr* sa);

@@ -290,6 +290,7 @@ std::string https_fetch_err(const std::string& url) {
 }
 
 // one GET: false with err on a failure; true with the status line's code, headers and up to cap bytes of body
+static std::string header(const std::string& hdrs, const char* name);
 // up: a multipart/form-data POST of a file instead (https_upload): streamed from the disk, so a video never sits in memory
 static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err,
                        const std::string& post = "", bool guard = true, Upload* up = nullptr) {
@@ -370,30 +371,59 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
         }
         return true;
     };
+    // the host may answer before it has the whole file (a 413 at the headers, "Invalid uploader"): then the rest isn't sent, the answer is read.
+    // Readable isn't enough with TLS 1.3, which sends its session tickets first: only application data, or the host closing, is an answer
+    auto answered = [&]() {
+        pollfd pf{fd, POLLIN, 0};
+        if (!ssl) return poll(&pf, 1, 0) > 0;
+        if (poll(&pf, 1, 0) <= 0 && SSL_pending(ssl) <= 0) return false;
+        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+        char c;
+        int r = SSL_peek(ssl, &c, 1), e = r > 0 ? SSL_ERROR_NONE : SSL_get_error(ssl, r);
+        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+        return r > 0 || (e != SSL_ERROR_WANT_READ && e != SSL_ERROR_WANT_WRITE);
+    };
     bool ok = (!ssl || SSL_connect(ssl) == 1) && put(req.data(), req.size());
     if (ok && up) {
         char fb[65536];
         unsigned long long left = fsize;
-        while (ok && left) {
+        bool early = false;
+        while (ok && left && !early) {
+            if (answered()) { early = true; break; }
             size_t n = fread(fb, 1, (size_t)std::min<unsigned long long>(sizeof fb, left), uf.f);
             if (!n) { err = "the file changed while it was sent"; if (ssl) SSL_free(ssl); ::close(fd); return false; }
             ok = put(fb, n), left -= n;
         }
-        ok = ok && put(tail.data(), tail.size());
+        if (ok && !early) ok = put(tail.data(), tail.size());
+        timeval wait{(time_t)up->wait, 0};  // the host may take a while to look at a big file: more than the 15 s a page gets
+        setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &wait, sizeof wait);
     }
     if (!ok && err.empty()) err = ssl ? "TLS with " + host + ": " + ssl_errstr() : "can't send to " + host;
     char buf[16384];
-    int n;
-    size_t hdr = std::string::npos;
+    int n = 0;
+    size_t hdr = std::string::npos, cl = 0;  // cl: the answer's Content-Length, when it says (uploads)
     while (ok && (n = ssl ? SSL_read(ssl, buf, sizeof buf) : (int)::recv(fd, buf, sizeof buf, 0)) > 0) {
         got.append(buf, (size_t)n);
-        if (hdr == std::string::npos) hdr = got.find("\r\n\r\n");
-        if (hdr == std::string::npos ? got.size() > 65536 : got.size() - hdr - 4 >= cap) break;  // enough: the rest isn't read
+        if (hdr == std::string::npos && (hdr = got.find("\r\n\r\n")) != std::string::npos && up) {
+            // an answer is short: the headers are in, so a host that keeps the connection open (it is still taking the rest of an
+            // early-rejected file, or waits for us to close) gets a few seconds more, not the whole wait; a Content-Length ends it at once
+            timeval idle{3, 0};
+            setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &idle, sizeof idle);
+            cl = (size_t)atol(header(got.substr(0, hdr + 2), "content-length:").c_str());
+        }
+        if (hdr == std::string::npos ? got.size() > 65536 : got.size() - hdr - 4 >= std::min(cap, cl ? cl : cap)) break;  // enough: the rest isn't read
     }
+    bool timed_out = n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK);
     if (ssl) SSL_free(ssl);
     ::close(fd);
     if (!ok) return false;
-    if (hdr == std::string::npos || got.compare(0, 5, "HTTP/")) { err = "no answer from " + host; return false; }
+    if (hdr == std::string::npos || got.compare(0, 5, "HTTP/")) {
+        err = !up ? "no answer from " + host
+            : !got.empty() ? host + " answered with something that isn't HTTP"
+            : timed_out ? host + " didn't answer within " + std::to_string(up->wait) + " seconds"
+                        : host + " closed the connection without answering";  // what it did with the file: nothing more is known
+        return false;
+    }
     status = atoi(got.c_str() + got.find(' ') + 1);
     hdrs = got.substr(0, hdr + 2);
     body = got.substr(hdr + 4, cap);
