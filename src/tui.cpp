@@ -4050,18 +4050,21 @@ void Tui::submit() {
     hpos = hist.size();
     c.active->scroll = 0;
     if (line == "/exit" || line.rfind("/exit ", 0) == 0) { ask_exit(line.substr(5)); return; }
+    if (line == "/restart" || line.rfind("/restart ", 0) == 0) { ask_exit(line.substr(8), true); return; }
     c.exec(c.active, line);
 }
 
-// /exit and Alt+Q: the yes/no box while a network is connected, else straight out
-void Tui::ask_exit(std::string msg) {
+// /exit, /restart and Alt+Q: the yes/no box while a network is connected, else straight out
+void Tui::ask_exit(std::string msg, bool restart) {
     while (!msg.empty() && msg[0] == ' ') msg.erase(0, 1);
     bool on = false;
     for (auto& sv : c.servers) on |= sv->state != SS::DISCONNECTED;
-    if (msg == "-y" || msg.rfind("-y ", 0) == 0) { c.exec(c.active, "/exit " + msg); return; }
-    if (!on) { c.exec(c.active, "/exit -y " + msg); return; }
-    confirm = "Exit iSekur? You leave every network and the webchat closes. Alt+D detaches instead: iSekur stays connected.\n/exit -y " + msg;
-    confirm_title = "Exit";
+    std::string cmd = restart ? "/restart " : "/exit ";
+    if (msg == "-y" || msg.rfind("-y ", 0) == 0) { c.exec(c.active, cmd + msg); return; }
+    if (!on) { c.exec(c.active, cmd + "-y " + msg); return; }
+    confirm = (restart ? "Restart iSekur? You leave every network, it starts again and the webchat is back in a moment; settings not saved with /save are lost. Alt+D detaches instead: iSekur stays connected.\n"
+                       : "Exit iSekur? You leave every network and the webchat closes. Alt+D detaches instead: iSekur stays connected.\n") + cmd + "-y " + msg;
+    confirm_title = restart ? "Restart" : "Exit";
 }
 
 int Tui::suggest(std::vector<Sugg>& out) const {

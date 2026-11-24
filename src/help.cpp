@@ -100,6 +100,14 @@ static const std::vector<CmdInfo> CMDS = {
      "unlocked terminal or an open webchat can't close iSekur. Alt+Q (Option+Q on a Mac) does the same. To keep "
      "iSekur running in the background instead, use /detach or Alt+D (Option+D on a Mac).",
      {"/exit", "/exit see you tomorrow", "/exit -y"}},
+    {"restart", "Connection", "[-y] [message]", "Quit every server and start iSekur again",
+     "Like /exit, then iSekur runs again from the same place with the same options (so an upgrade, brew or make install, "
+     "takes effect): every network is left with a QUIT and joined again when it is back, the webchat and the BNC "
+     "start again, and a terminal attached with --attach or Alt+D is taken to the new one by itself. Each tab "
+     "starts empty (the logs keep what was said) and settings not saved with /save are lost. It asks first like /exit "
+     "(-y doesn't, the lock password does), and does nothing if the program it was started from is gone. "
+     "The webchat page reconnects by itself; reload it after an upgrade to get the new page.",
+     {"/restart", "/restart brb, new version", "/restart -y"}},
     {"nick", "Connection", "newnick", "Change your nickname",
      "Changes your nick on the server of the current tab; /nick alone shows it. When disconnected, it is used on the next connect. "
      "iSekur remembers it per network ([server.x] last_nick, written to the config at once), so "

@@ -519,6 +519,8 @@ struct Core {
     const time_t started = time(nullptr);  // uptime in the nick list
     void set_attached(bool a);
     std::string quit_msg;  // from /quit text; else quit_message
+    bool restart = false;  // /restart: the quit it makes ends with main() running `self` again
+    std::string self;      // the path iSekur was started from (main sets it): what /restart runs
     std::string bye(const Server* s, const std::string& key) const;  // quit_message / part_message
     std::string complete_suffix() const;  // after a nick completed at the start of a line (": " less the space); "" for off
     std::function<void(Ev, Buffer*, const Line*)> listener;  // web frontend

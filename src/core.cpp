@@ -2362,7 +2362,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         exec(b, "/disconnect " + args);
         return;
     }
-    if (cmd == "exit") {  // the frontends ask first while connected (/exit -y skips that); here it just goes
+    if (cmd == "exit" || cmd == "restart") {  // the frontends ask first while connected (-y skips that); here it just goes
         // with a lock password, that password too: an unlocked terminal or a webchat left open can't close iSekur
         // (Alt+D still detaches freely: everything stays connected)
         static bool exit_ok = false;
@@ -2375,6 +2375,11 @@ void Core::exec(Buffer* b, const std::string& input) {
             return;
         }
         if (args == "-y" || args.rfind("-y ", 0) == 0) args = args.size() > 3 ? args.substr(3) : "";
+        if (cmd == "restart" && access(self.c_str(), X_OK) != 0) {  // before anything quits: a restart that can't start again is an /exit
+            print(b, LK::ERROR, "Can't restart: " + (self.empty() ? "iSekur doesn't know where it was started from" : self + " is gone or not runnable") + ". /exit closes iSekur");
+            return;
+        }
+        restart = cmd == "restart";
         quit_msg = args;
         for (auto& sv : servers)
             if (sv->state != SS::DISCONNECTED)
@@ -2663,7 +2668,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         std::string a = argv.empty() ? "status" : argv[0];
         web_req_buf = b;
         if (a == "start") web_req = WebReq::START;
-        else if ((a == "stop" || a == "restart") && daemon) print(b, LK::ERROR, "The webchat is the only way into this iSekur; not stopping it (restart iSekur instead)");
+        else if ((a == "stop" || a == "restart") && daemon) print(b, LK::ERROR, "The webchat is the only way into this iSekur; not stopping it (/restart restarts iSekur)");
         else if (a == "stop") web_req = WebReq::STOP;
         else if (a == "restart") web_req = WebReq::RESTART;
         else if (a == "status") print(b, LK::INFO, web_url.empty() ? "Webchat is stopped (/web start)" : "Webchat on " + web_url);

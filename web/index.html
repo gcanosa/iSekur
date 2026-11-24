@@ -2217,9 +2217,13 @@ function connect() {
   ws.onclose = () => { ws = null; ssOn(false); setTimeout(boot, 3000); };  // no frames without it: not a frozen one; the reconnect starts it again if it's still on
 }
 
+let srvBuild = "";  // the server's build at the first look: another one later (iSekur restarted after an upgrade) means this page is old
 async function boot() {
   const r = await fetch("/session", {credentials: "same-origin"}).catch(() => null);
   if (!r) { setTimeout(boot, 3000); return; }
+  const bld = r.headers.get("X-Build") || "";
+  if (srvBuild && bld && bld !== srvBuild) { location.reload(); return; }
+  srvBuild = srvBuild || bld;
   if (r.ok) { $("#login").style.display = "none"; $("#app").style.display = "grid"; connect(); }
   else { $("#app").style.display = "none"; $("#login").style.display = "flex"; $("#lu").focus(); }
 }
@@ -3703,6 +3707,8 @@ $("#input").onsubmit = async e => {
   if (/^\/servers\s*$/i.test(v)) { $("#addsrv").click(); return; }  // the Servers window
   const ex = /^\/exit(?:\s+(.*))?$/i.exec(v.trim());
   if (ex) { askExit(ex[1] || ""); return; }  // asks first while connected
+  const rs = /^\/restart(?:\s+(.*))?$/i.exec(v.trim());
+  if (rs) { askExit(rs[1] || "", true); return; }
   const sp = /^\/(split|unsplit|merge)(?:\s+(.*))?$/i.exec(v.trim());
   if (sp) { splitCmd(sp[1].toLowerCase(), (sp[2] || "").trim()); return; }  // this browser's panes
   send({t: "input", buf: active, text: v});
@@ -3722,14 +3728,16 @@ function keyspec(e) {
   if (/^(Up|Down|Left|Right)$/.test(k)) return s + (e.ctrlKey ? "C-" : "") + (e.shiftKey ? "S-" : "") + k;
   return s + (e.ctrlKey && /^[a-z]$/.test(k) ? "C-" : "") + k;
 }
-// /exit and Alt+Q: asks while a network is connected (like the terminal), /exit -y doesn't
-function askExit(msg) {
+// /exit, /restart and Alt+Q: asks while a network is connected (like the terminal), -y doesn't
+function askExit(msg, restart) {
   msg = msg.trim();
-  if (/^-y(\s|$)/.test(msg)) return send({t: "input", buf: active, text: "/exit " + msg});
+  const cmd = restart ? "/restart " : "/exit ";
+  if (/^-y(\s|$)/.test(msg)) return send({t: "input", buf: active, text: cmd + msg});
   const on = [...bufs.values()].some(b => b.type === "status" && b.state !== "disconnected");
-  if (!on) return send({t: "input", buf: active, text: "/exit -y " + msg});
-  askBox({title: "Exit", text: "Exit iSekur? It leaves every network and this webchat closes; nothing keeps running.", ok: "Exit"})
-    .then(v => { if (v !== null) send({t: "input", buf: active, text: "/exit -y " + msg}); });
+  if (!on) return send({t: "input", buf: active, text: cmd + "-y " + msg});
+  askBox(restart ? {title: "Restart", text: "Restart iSekur? It leaves every network and starts again; this page reconnects in a moment (reload it after an upgrade). Settings not saved with /save are lost.", ok: "Restart"}
+                 : {title: "Exit", text: "Exit iSekur? It leaves every network and this webchat closes; nothing keeps running.", ok: "Exit"})
+    .then(v => { if (v !== null) send({t: "input", buf: active, text: cmd + "-y " + msg}); });
 }
 function action(a) {
   const n = order.indexOf(active), sz = order.length, at = i => order[((i % sz) + sz) % sz];

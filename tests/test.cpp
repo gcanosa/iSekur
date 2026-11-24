@@ -624,6 +624,13 @@ int main() {
         assert(core.pass_buf == home && !core.quit);
         core.exec(home, "");  // Esc / empty: cancelled
         assert(!core.quit && !core.pass_buf);
+        core.self = "";  // /restart: the lock password too, and it quits nothing it can't start again
+        core.exec(home, "/restart -y"), core.exec(home, "pw");
+        assert(home->lines.back().text.rfind("Can't restart: ", 0) == 0 && !core.quit && !core.restart);
+        core.self = "/bin/sh";
+        core.exec(home, "/restart -y see you"), core.exec(home, "pw");
+        assert(core.quit && core.restart && core.quit_msg == "see you");
+        core.quit = core.restart = false, core.quit_msg.clear();
         {  // Face ID devices: kept in web.passkeys, lock_biometric guarded, /lock devices del takes the password
             std::string was = core.cfg_path;
             core.cfg_path = "build/test-bio.conf";
@@ -3270,6 +3277,7 @@ int main() {
                 assert(h.find("200 OK") != std::string::npos && body.size() > 100);
             }
             assert(n_links == 4 && page.find("<link rel=\"apple-touch-icon\" sizes=\"180x180\"") != std::string::npos);
+            assert(fetch("/session").first.find("X-Build: " + version_string() + "\r\n") != std::string::npos);  // the page reloads itself when a restart brings another one
             auto [ih, ico] = fetch("/favicon.ico");  // 16, 32 and 48 px, PNG inside
             assert(ih.find("image/x-icon") != std::string::npos && ico.size() > 22 && ico.compare(0, 6, std::string("\0\0\1\0\3\0", 6)) == 0);
             for (int i = 0; i < 3; i++) {

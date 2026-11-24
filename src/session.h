@@ -15,7 +15,7 @@ struct Session {
     // after poll(): a terminal handed over by `isekur --attach`, with its TERM
     // and locale applied, or -1. `busy`: already drawing on one, so refuse it.
     int process(const std::vector<pollfd>& fds, bool busy);
-    void release(char why);  // 'D' detached / 'Q' quit / 'F' unusable terminal: tell the attach process, close its terminal
+    void release(char why);  // 'D' detached / 'Q' quit / 'R' restarting / 'F' unusable terminal: tell the attach process, close its terminal
     int tty = -1;            // the attached terminal
     bool lost = false;       // the attach process went away (closed terminal, dropped SSH)
     // who the attached terminal is, for the home tab: "203.0.113.7 (ssh) on /dev/ttys004" or

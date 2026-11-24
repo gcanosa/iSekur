@@ -214,10 +214,23 @@ struct Probe {
     }
 };
 
+// Where this iSekur was started from, absolute (the way it was typed, not resolved: a brew upgrade or a make install
+// leaves the symlink or the path pointing at the new build), for /restart to run it again.
+static std::string find_self(const char* a0) {
+    std::string p = a0;
+    char cwd[4096];
+    if (p.find('/') == std::string::npos) {  // started through PATH: the search the shell made
+        const char* path = getenv("PATH");
+        for (auto& d : split(path ? path : "", ':'))
+            if (access((d + "/" + p).c_str(), X_OK) == 0) { p = d + "/" + p; break; }
+    }
+    return p[0] != '/' && getcwd(cwd, sizeof cwd) ? std::string(cwd) + "/" + p : p;
+}
+
 int main(int argc, char** argv) {
     setlocale(LC_ALL, "");
     signal(SIGPIPE, SIG_IGN);
-    bool daemon = false, attach = false, list = false, bnc_mode = false, check = false;
+    bool daemon = false, attach = false, list = false, bnc_mode = false, check = false, resume = false;  // resume: /restart's, already in the background
     int web_flag = -1;  // --web / --no-web; -1 = [web] autostart decides
     Core c;
     for (int i = 1; i < argc; i++) {
@@ -229,6 +242,7 @@ int main(int argc, char** argv) {
         else if (a == "--bnc") bnc_mode = daemon = true;
         else if (a == "--web") web_flag = 1;
         else if (a == "--no-web") web_flag = 0;
+        else if (a == "--resume") resume = true;  // not in --help: only /restart passes it
         else if (a == "--hash-password") return hash_pw_cmd();
         else if (a == "--check") check = true;
         else if (a == "-v" || a == "--version") {
@@ -284,19 +298,26 @@ int main(int argc, char** argv) {
     // terminal is driven here and there is no detaching.
     std::string log = cfg_side(c.cfg_path, "log");  // isekur.conf: isekur.log
     bool local = !daemon && ls == 0;
-    if (!local) {
+    if (!local && !resume) {
         int d = daemonize(log, !daemon);
         if (d < 0) { perror("fork"); return 1; }
         if (d == 0) return attach_main(sock, how);
-        signal(SIGHUP, SIG_IGN);
     }
+    if (!local) signal(SIGHUP, SIG_IGN);
     crash_dumps(cfg_side(c.cfg_path, "crash"));
     signal(SIGTERM, [](int) { g_term = 1; });
     signal(SIGINT, [](int) { g_term = 1; });
 
     c.daemon = !local && !ses.listening();  // the webchat is the only way back in
+    c.self = find_self(argv[0]);
     c.load_config();
     Buffer* home = c.bufs.front().get();
+    if (resume) {  // /restart ran us: say which build we are, and which one it was
+        const char* was = getenv("ISEKUR_WAS");
+        std::string now = version_string();
+        c.info_note(home, was && *was && was != now ? "Restarted: " + std::string(was) + " \u2192 " + now : "Restarted: " + now);
+    }
+    unsetenv("ISEKUR_WAS");  // /shell tabs and /exec would inherit it
     if (ls == 0) c.print(home, LK::ERROR, "Detaching is not available: " + err);
     if (attach && !daemon)
         c.print(home, LK::INFO, "\x03" "01,08" "\x02" " NEW SESSION " "\x0f" " Nothing was running to attach to: this is a fresh start, not a recovered session");
@@ -562,7 +583,23 @@ int main(int argc, char** argv) {
     c.save_history();
     c.fifo_close();
     if (c.tty) tui.shutdown();
-    ses.release('Q');
-    ses.close();
+    ses.close();  // the socket first: an attach client told 'R' waits for the new iSekur's, not this one's
+    ses.release(c.restart ? 'R' : 'Q');
+    if (c.restart) {  // /restart: the same command line, minus --attach (a fresh start isn't one) and an older --resume, plus --resume
+        std::vector<std::string> args{argv[0]};
+        for (int i = 1; i < argc; i++)
+            if (std::string a = argv[i]; a != "-a" && a != "--attach" && a != "--resume") args.push_back(a);
+        args.push_back("--resume");
+        std::vector<char*> av;
+        for (auto& a : args) av.push_back(&a[0]);
+        av.push_back(nullptr);
+        setenv("ISEKUR_WAS", version_string().c_str(), 1);
+        long mx = sysconf(_SC_OPEN_MAX);
+        for (int fd = 3; fd < (mx < 0 || mx > 65536 ? 65536 : mx); fd++) fcntl(fd, F_SETFD, FD_CLOEXEC);  // the webchat's and BNC's ports, DCC, shells: the new one binds its own (close-on-exec, not close(): on macOS closing what
+        // the system frameworks hold kills the process)
+        execv(c.self.c_str(), av.data());
+        fprintf(stderr, "restart: can't run %s: %s\n", c.self.c_str(), strerror(errno));
+        return 1;
+    }
     return 0;
 }

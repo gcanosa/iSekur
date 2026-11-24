@@ -529,8 +529,11 @@ void Web::http(Client& cl) {
                 "  }));\n"
                 "};\n");
     } else if (method == "GET" && path == "/session") {
-        if (authed) respond(cl.conn, 200, "OK", "application/json", "{\"user\":" + json_str(user) + "}");
-        else respond(cl.conn, 401, "Unauthorized", "application/json", "{}");
+        // X-Build: the page asks again whenever it reconnects, and reloads itself when this isn't the build it started with
+        // (ponytail: the git describe, so two dev builds with the same "-dirty" id look alike)
+        std::string build = "X-Build: " + version_string() + "\r\n";
+        if (authed) respond(cl.conn, 200, "OK", "application/json", "{\"user\":" + json_str(user) + "}", build);
+        else respond(cl.conn, 401, "Unauthorized", "application/json", "{}", build);
     } else if (method == "POST" && path == "/login") {
         if (!same_origin) { respond(cl.conn, 403, "Forbidden", "text/plain", "bad origin"); return; }
         // through a proxy or an ssh tunnel (a 127.0.0.1 peer) the address is X-Forwarded-For, which an ssh tunnel takes

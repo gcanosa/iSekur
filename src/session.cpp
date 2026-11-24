@@ -247,6 +247,19 @@ int attach_main(const std::string& path, const std::string& how) {
         }
         if (ch == 'D') { printf("Detached; iSekur keeps running. Back with: %s\n", how.c_str()); return 0; }
         if (ch == 'Q') { puts("iSekur quit."); return 0; }
+        if (ch == 'R') {  // /restart: the new iSekur listens again within a moment; take this terminal to it
+            restore();
+            ::close(s);
+            fputs("iSekur is restarting...\n", stderr);
+            for (int i = 0; i < 150; i++, usleep(100000)) {  // up to 15 s
+                int t = socket(AF_UNIX, SOCK_STREAM, 0);
+                bool up = t >= 0 && connect(t, (sockaddr*)&a, sizeof a) == 0;
+                if (t >= 0) ::close(t);
+                if (up) return attach_main(path, how);
+            }
+            fprintf(stderr, "iSekur didn't come back (see its log, isekur.log next to the config). Start it again with: %s\n", how.c_str());
+            return 1;
+        }
         if (ch == 'F') {
             restore();
             fprintf(stderr, "iSekur couldn't use this terminal; it is still running (its first window says why)\n");
