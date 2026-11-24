@@ -252,9 +252,13 @@ static std::vector<std::string> str_list(lua_State* L, int t, const char* key, s
     lua_pop(L, 1);
     return v;
 }
-// isekur.window{title, display = {lines}, items = {rows}, sel, mark, star, buttons = {labels}, icons = {a symbol for each button}, reels, slider = {value, max, step, icon}}: opens or updates your window, in the
+// isekur.window{title, display = {lines}, items = {rows}, subs = {a second line for each row}, sel, mark, star, buttons = {labels}, icons = {a symbol for each button}, reels, slider = {value, max, step, icon},
+// tabs = {labels}, tab, search = "placeholder", query, list = "id"}: opens or updates your window, in the
 // terminal and the webchat. sel is the row the cursor starts on (it moves when this number changes), mark the row that is playing and
-// star one drawn with a ★ (1-based, 0: none). reels: a cassette in the display, its reels turning when true, still when false (nothing if left out). A click, Enter or Esc comes back as the `window` event. isekur.window(false) closes it, isekur.window() says if it's open
+// star one drawn with a ★ (1-based, 0: none). reels: a cassette in the display, its reels turning when true, still when false (nothing if left out). A click, Enter or Esc comes back as the `window` event. isekur.window(false) closes it, isekur.window() says if it's open.
+// API 17: tabs (up to 6) are a strip under the display, tab the active one: a click, Tab or its number comes back as the event's action "tab" (index), and Backspace as "back". subs are shown under the rows (a dim second line).
+// search is the placeholder of a text field that replaces the list's own filter: its Enter comes back as action "search" with `text`; query is what it holds (pass what you were given, or "" to clear it).
+// list names what the rows are (a tab, a folder, a page of results): when it changes the cursor goes to `sel` (the first row when 0) and the list scrolls to the top
 static int l_window(lua_State* L) {
     Plugin* p = self(L);
     Core& c = *p->c;
@@ -276,6 +280,24 @@ static int l_window(lua_State* L) {
         return r;
     };
     w.sel = row("sel"), w.mark = row("mark"), w.star = row("star");
+    w.tabs = str_list(L, 1, "tabs", 6, 16), w.subs = str_list(L, 1, "subs", 300, 120);
+    w.subs.resize(w.subs.empty() ? 0 : w.items.size());  // one for each row, none when there are none
+    lua_getfield(L, 1, "tab");
+    w.tab = w.tabs.empty() || !lua_isnumber(L, -1) ? 0 : (int)std::clamp<lua_Number>(lua_tonumber(L, -1), 0, (lua_Number)w.tabs.size());
+    lua_pop(L, 1);
+    const std::tuple<const char*, std::string*, size_t> texts[] = {{"search", &w.search, 60}, {"query", &w.query, 120}, {"list", &w.list, 60}};
+    for (auto& [k, dst, len] : texts) {
+        lua_getfield(L, 1, k);
+        std::string v = lua_isstring(L, -1) ? one_line(lua_tostring(L, -1)) : "";
+        for (char& ch : v) if ((unsigned char)ch < 32 || ch == 127) ch = ' ';
+        if (v.size() > len) {  // cut, and not inside a character
+            v.resize(len);
+            while (!v.empty() && ((unsigned char)v.back() & 0xc0) == 0x80) v.pop_back();
+            if (!v.empty() && (unsigned char)v.back() >= 0xc0) v.pop_back();
+        }
+        *dst = v;
+        lua_pop(L, 1);
+    }
     lua_getfield(L, 1, "reels");
     w.reels = lua_isboolean(L, -1) ? lua_toboolean(L, -1) : -1;
     lua_pop(L, 1);
@@ -339,11 +361,31 @@ static int l_copy(lua_State* L) {
 
 // a click, Enter or Esc in the plugin's window: its `window` event (action "pick" with the row, "button" with the button and the row
 // the cursor is on, "close"); only to the plugin that owns it
-void Core::pwin_act(const std::string& a, int i, int bt) {
+void Core::pwin_act(const std::string& a, int i, int bt, const std::string& text) {
     if (!pwin.open) return;
     std::string by = pwin.by;
-    PArgs args{{"action", a == "close" ? std::string("close") : a == "pick" ? std::string("pick") : a == "slider" ? std::string("slider") : std::string("button")}};
+    PArgs args{{"action", a == "close" || a == "pick" || a == "slider" || a == "tab" || a == "search" || a == "back" ? a : std::string("button")}};
     if (a == "close") pwin = PWin{}, dirty = true, notify(Ev::PWIN, nullptr);
+    else if (a == "tab") {  // a tab picked: both screens follow at once, the plugin fills it
+        if (i < 1 || i > (int)pwin.tabs.size()) return;
+        pwin.tab = i, dirty = true;
+        notify(Ev::PWIN, nullptr);
+        args.push_back({"index", i});
+    } else if (a == "search") {  // the field's Enter: its text is what both screens show until the plugin says otherwise
+        if (pwin.search.empty()) return;
+        std::string t = text.substr(0, 120);
+        for (char& ch : t) if ((unsigned char)ch < 32 || ch == 127) ch = ' ';
+        if (text.size() > 120) {  // cut, and not inside a character
+            while (!t.empty() && ((unsigned char)t.back() & 0xc0) == 0x80) t.pop_back();
+            if (!t.empty() && (unsigned char)t.back() >= 0xc0) t.pop_back();
+        }
+        t.erase(0, t.find_first_not_of(' ')), t.erase(t.find_last_not_of(' ') + 1);  // what was typed, trimmed
+        pwin.query = t, dirty = true;
+        notify(Ev::PWIN, nullptr);
+        args.push_back({"text", t});
+    } else if (a == "back") {  // Backspace: only a window with tabs asks for it, the others have no use for it
+        if (pwin.tabs.empty()) return;
+    }
     else if (a == "slider") {  // its new value; the other side (terminal or webchat) follows
         if (pwin.slider < 0) return;
         i = std::clamp(i, 0, pwin.slider_max);

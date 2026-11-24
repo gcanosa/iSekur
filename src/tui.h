@@ -210,7 +210,7 @@ private:
     };
     PlugWin pw;
     // a plugin's window (isekur.window, the radio's): Core::pwin is what it shows, this is where the cursor is
-    struct PWinUi { bool live = false, filtering = false; int fy = -1, sy = -1, bar0 = 0, barn = 0, cur = 0, top = 0, rows = 0, x0 = 0, w = 0, list_y = 0, btn_y = 0, last_sel = -1; long long click_ms = 0; std::vector<std::pair<int, int>> bx; std::u32string q; };  // cur: the row's number in the plugin's list; top: the first row shown, counted among those q lets through
+    struct PWinUi { bool live = false, filtering = false; int fy = -1, ty = -1, sy = -1, bar0 = 0, barn = 0, cur = 0, top = 0, rows = 0, rowh = 1, x0 = 0, w = 0, list_y = 0, btn_y = 0, last_sel = -1, last_tab = -1; long long click_ms = 0; std::vector<std::pair<int, int>> bx, tx; std::u32string q; std::string last_query, last_list; };  // cur: the row's number in the plugin's list; top: the first row shown, counted among those q lets through; rowh: screen rows for one (2 with subs); tx: the tabs' columns; last_*: what the plugin said last, so only a change moves ours
     PWinUi pu;
     // a plugin's question (isekur.choose, API 16): the box over everything. The cursor is ours (Core::choices.front().sel is where it starts)
     struct ChoiceUi { std::string key; int sel = 1, y0 = 0, x0 = 0, w = 0; long long at = 0; std::u32string text; size_t cur = 0; };  // y0: the screen row of the first item; at: when it came up; text, cur: the field's

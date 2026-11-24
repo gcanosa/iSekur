@@ -293,7 +293,8 @@ std::string https_fetch_err(const std::string& url) {
 static std::string header(const std::string& hdrs, const char* name);
 // up: a multipart/form-data POST of a file instead (https_upload): streamed from the disk, so a video never sits in memory
 static bool fetch_once(const std::string& url, size_t cap, int& status, std::string& hdrs, std::string& body, std::string& err,
-                       const std::string& post = "", bool guard = true, Upload* up = nullptr) {
+                       const std::string& post = "", bool guard = true, Upload* up = nullptr,
+                       const std::vector<std::pair<std::string, std::string>>* extra = nullptr) {
     static SSL_CTX* ctx = new_client_ctx();
     std::string host, port, path;
     bool tls = true;
@@ -349,12 +350,18 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
                "\"\r\nContent-Type: " + clean(up->ctype) + "\r\n\r\n";
         tail = "\r\n--" + bnd + "--\r\n";
     }
+    const auto* xh = up ? &up->headers : extra;  // the plugin's headers (an upload's, or isekur.http's)
+    auto hdr_is = [&](const char* name) {  // does the plugin give this one? then ours isn't sent
+        if (xh) for (auto& kv : *xh) if (!strcasecmp(kv.first.c_str(), name)) return true;
+        return false;
+    };
     std::string got, req = (up || !post.empty() ? "POST " : "GET ") + path + " HTTP/1.0\r\nHost: " + host + (port == (tls ? "443" : "80") ? "" : ":" + port) +
-                             "\r\nUser-Agent: " + (up ? "iSekur" : "Mozilla/5.0 (compatible; iSekur link preview)") + "\r\nAccept: " + (up ? "*/*" : "text/html,*/*;q=0.8") + "\r\n" +
+                             (hdr_is("user-agent") ? "" : std::string("\r\nUser-Agent: ") + (up ? "iSekur" : "Mozilla/5.0 (compatible; iSekur link preview)")) +
+                             (hdr_is("accept") ? "" : std::string("\r\nAccept: ") + (up ? "*/*" : "text/html,*/*;q=0.8")) + "\r\n" +
                              (up ? "Content-Type: multipart/form-data; boundary=" + bnd + "\r\nContent-Length: " + std::to_string(pre.size() + fsize + tail.size()) + "\r\n"
                               : post.empty() ? "" : "Content-Type: text/plain; charset=utf-8\r\nContent-Length: " + std::to_string(post.size()) + "\r\n");
-    if (up)
-        for (auto& [k, v] : up->headers) {  // the plugin's (Authorization...): one line each, and not the ones that frame the request
+    if (xh)
+        for (auto& [k, v] : *xh) {  // the plugin's (Authorization...): one line each, and not the ones that frame the request
             std::string lk = k;
             for (char& ch : lk) ch = (char)tolower((unsigned char)ch);
             if (k.find_first_of("\r\n:") == std::string::npos && v.find_first_of("\r\n") == std::string::npos && !k.empty() &&
@@ -444,10 +451,11 @@ static std::string header(const std::string& hdrs, const char* name) {  // name 
     return "";
 }
 
-bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err, const std::string& post) {
+bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err, const std::string& post,
+                 const std::vector<std::pair<std::string, std::string>>* headers) {
     for (int hop = 0; hop < 5; hop++) {
         std::string hdrs;
-        if (!fetch_once(url, cap, status, hdrs, body, err, hop ? "" : post)) return false;  // a redirect after a POST: a GET (303)
+        if (!fetch_once(url, cap, status, hdrs, body, err, hop ? "" : post, true, nullptr, headers)) return false;  // a redirect after a POST: a GET (303)
         std::string loc = header(hdrs, "location:");
         if (status / 100 != 3 || loc.empty()) {
             ctype = header(hdrs, "content-type:");

@@ -353,7 +353,7 @@ std::string plugin_version(const std::string& lua);  // its "-- version: 1.2" li
 std::string plugin_header(const std::string& lua, const std::string& key);  // "-- key: value" near the top, "" if none
 std::string plugin_sec(const std::string& name, const std::string& scope);  // [plugin.name], [plugin.name@scope]  // auto_away & co. still in [general] or a [server.X]: auto-away is a plugin now
 inline constexpr unsigned long long UPLOAD_MAX = 1ULL << 30;  // a file given to iSekur (webchat upload, /upload): 1 GB
-#define PLUGIN_API 16 // isekur.api: the catalog hides plugins that need a newer one
+#define PLUGIN_API 17 // isekur.api: the catalog hides plugins that need a newer one
 bool plugin_name_ok(const std::string& n);  // letters, digits, _ -
 // what a terminal types when files are dropped on it ("a b" 'a b' a\ b file:///a%20b), as paths; empty unless every word is a regular file
 std::vector<std::string> dropped_paths(const std::string& text);
@@ -637,8 +637,14 @@ struct Core {
         double sky = -1;  // a sun and a moon in the display (twilight): -1 none, 0 day .. 1 night, in steps of 1/20
         int slider = -1, slider_max = 100, slider_step = 5;  // a slider (the radio's volume): its value, -1 none; the icon before it
         std::string slider_icon;
+        // API 17: a strip of tabs under the display (tab: the active one, 1-based), a second line under each row (subs, parallel to items), and a text
+        // field whose Enter goes to the plugin (search: its placeholder, "" none; query: what it holds, the plugin's to set: the terminal and the webchat show it)
+        std::vector<std::string> tabs, subs;
+        int tab = 0;
+        std::string search, query;
+        std::string list;  // names what the rows are (a tab, a folder): when it changes the cursor goes to `sel` and the list scrolls to the top
         bool open = false;
-        bool same(const PWin& o) const { return by == o.by && title == o.title && display == o.display && items == o.items && buttons == o.buttons && icons == o.icons && sel == o.sel && mark == o.mark && star == o.star && reels == o.reels && slider == o.slider && slider_max == o.slider_max && slider_step == o.slider_step && slider_icon == o.slider_icon && sky == o.sky && open == o.open; }
+        bool same(const PWin& o) const { return by == o.by && title == o.title && display == o.display && items == o.items && buttons == o.buttons && icons == o.icons && sel == o.sel && mark == o.mark && star == o.star && reels == o.reels && slider == o.slider && slider_max == o.slider_max && slider_step == o.slider_step && slider_icon == o.slider_icon && sky == o.sky && tabs == o.tabs && subs == o.subs && tab == o.tab && search == o.search && query == o.query && list == o.list && open == o.open; }
     } pwin;
     // files the user gave iSekur (API 16, src/plugin/drop.cpp): dragged or pasted into the webchat, /upload <file>, a path dropped on the terminal.
     // A plugin's `drop` event gets an id and isekur.upload(id, ...) sends the file: it never sees where it is. A webchat's land in
@@ -659,7 +665,7 @@ struct Core {
     void choice_act(int index, const std::string& text = "");
     std::string copy_out;  // isekur.copy: put in the terminal's clipboard (OSC 52) on its next frame
     void copy_text_out(const std::string& text);
-    void pwin_act(const std::string& action, int index, int button = 0);  // a click or a key in it: "pick", "button" (button: 1-based; index: its list row), "slider" (index: its value), "close"
+    void pwin_act(const std::string& action, int index, int button = 0, const std::string& text = "");  // a click or a key in it: "pick", "button" (button: 1-based; index: its list row), "slider" (index: its value), "tab" (index: the tab), "search" (text), "back" (Backspace), "close"
     std::string emit_only;  // plugin_emit: only this plugin gets the event (a window's)
     void lock_saver();  // locked, Esc on the bare password box: the screensaver plugin starts one under it (as Alt+S does)
     bool wake();  // someone's here; true: it ended a screensaver (the key that woke it goes no further)

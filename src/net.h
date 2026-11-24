@@ -104,8 +104,9 @@ bool https_get(const std::string& host, const std::string& path, size_t cap, std
 // refused: links people post mustn't reach your LAN. false with why in err; true with the status (any), the final url
 std::string https_fetch_err(const std::string& url);  // "" when the URL itself is fine (https, a host)
 // post not empty: a POST of it as text/plain (the redirects after it are GETs)
+// headers: the plugin's (isekur.http's User-Agent and Accept), sent on every hop; one that is given replaces ours
 bool https_fetch(std::string& url, size_t cap, int& status, std::string& ctype, std::string& body, std::string& err,
-                 const std::string& post = "");
+                 const std::string& post = "", const std::vector<std::pair<std::string, std::string>>* headers = nullptr);
 // isekur.upload: a multipart/form-data POST of one file (u.field), after u.fields, with u.headers, to an https:// URL. Streamed from
 // the disk, blocking, for a thread; the private-address guard of https_fetch, and https:// only, unless u.guard is false (the tests' own server); redirects not followed.
 // true with the status (any) and up to 64 KB of the answer; false with why in err (no answer within u.wait seconds, the connection closed without one). A host that answers before it has the whole file (413, 412...) is heard: the rest isn't sent. u.sent counts the bytes written, for progress

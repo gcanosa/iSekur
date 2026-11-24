@@ -2732,7 +2732,7 @@ void Tui::plugin_mouse(int k, int x, int y) {
 // filter (/), the list, the buttons. The cursor is ours (Core::pwin.sel only moves it when the plugin changes it); Enter or a double
 // click picks the row, a button is pressed by its first letter or a click
 std::vector<int> Tui::pwin_vis() const {
-    std::string q = to_utf8(pu.q);
+    std::string q = c.pwin.search.empty() ? to_utf8(pu.q) : "";  // a search field is for the plugin: the rows are what it found, none are hidden here
     for (char& ch : q) ch = (char)tolower((unsigned char)ch);
     std::vector<int> v;
     for (size_t i = 0; i < c.pwin.items.size(); i++) {
@@ -2753,19 +2753,27 @@ void Tui::draw_pwin(int W, int H) {
     hs.attr |= A_BOLD, keyst.attr |= A_BOLD;
     if (!pu.live) pu = PWinUi{}, pu.live = true;
     if (w.sel != pu.last_sel) pu.last_sel = w.sel, pu.cur = w.sel ? w.sel : pu.cur;
+    if (w.list != pu.last_list) pu.last_list = w.list, pu.cur = w.sel ? w.sel : w.items.empty() ? 0 : 1, pu.top = 0, pu.q.clear(), pu.filtering = false;  // other rows: from the top, with no filter on them
+    if (w.tab != pu.last_tab) pu.last_tab = w.tab, pu.q.clear(), pu.filtering = false;  // another tab: its own filter
+    if (w.query != pu.last_query) pu.last_query = w.query, pu.q = from_utf8(w.query);  // the plugin changed what the search field holds
     auto vis = pwin_vis();
     int n = (int)vis.size(), at = (int)(std::find(vis.begin(), vis.end(), pu.cur) - vis.begin());
     if (at >= n) at = 0, pu.cur = n ? vis[0] : 0;  // the cursor's row is filtered out: the first one
-    int fr = w.items.size() >= 6 ? 1 : 0;  // the filter row
+    int fr = w.items.size() >= 6 || !w.search.empty() ? 1 : 0;  // the filter row (a search field is always there)
+    int tr = w.tabs.empty() ? 0 : 1;  // the tab strip
+    int rh = w.subs.empty() ? 1 : 2;  // a row with a second line takes two
     int nd = std::max(w.sky >= 0 ? 3 : 1, std::min((int)w.display.size(), 4));  // a sky is three rows tall
     int sr = w.slider >= 0 ? 1 : 0;  // the slider row (volume)
-    pu.rows = n ? std::max(1, std::min({n, H - nd - 9 - fr - sr, 12})) : 0;
-    pu.w = std::min(W - 2, 64), pu.x0 = (W - pu.w) / 2;
-    int bh = nd + pu.rows + 6 + fr + sr, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pu.x0 + pu.w, xm = x1 - 2;
+    pu.rowh = rh;
+    pu.rows = n ? std::max(1, std::min({n, (H - nd - 9 - fr - sr - tr) / rh, rh == 1 ? 12 : 7})) : 0;
+    pu.w = std::min(W - 2, w.tabs.empty() ? 64 : 72), pu.x0 = (W - pu.w) / 2;  // tabs and six buttons need the room
+    int bh = nd + pu.rows * rh + 6 + fr + sr + tr, y0 = std::max(0, (H - bh) / 2 - 1), x1 = pu.x0 + pu.w, xm = x1 - 2;
     int ly = y0 + 1;  // the display's top border
-    int fy = ly + nd + 2;
+    int ty = ly + nd + 2;  // the tabs
+    int fy = ty + tr;
+    pu.ty = tr ? ty : -1;
     pu.fy = fr ? fy : -1;
-    pu.list_y = fy + fr, pu.sy = sr ? pu.list_y + pu.rows : -1, pu.btn_y = pu.list_y + pu.rows + sr;
+    pu.list_y = fy + fr, pu.sy = sr ? pu.list_y + pu.rows * rh : -1, pu.btn_y = pu.list_y + pu.rows * rh + sr;
     int hint_y = pu.btn_y + 1;
     if (n) {
         if (at < pu.top) pu.top = at;
@@ -2792,7 +2800,18 @@ void Tui::draw_pwin(int W, int H) {
         int rx = lx1 - 9;
         cell(rx, ly + 1, U'[', ls), cell(rx + 1, ly + 1, r, keyst), cell(rx + 2, ly + 1, U'═', ls), cell(rx + 3, ly + 1, U'═', ls), cell(rx + 4, ly + 1, U'═', ls), cell(rx + 5, ly + 1, r, keyst), cell(rx + 6, ly + 1, U']', ls);
     }
-    if (fr) {  // the filter
+    pu.tx.clear();
+    if (tr) {  // the tabs: the active one in the cursor's colors, the others plain; Tab or its number picks one
+        int x = pu.x0 + 2;
+        for (size_t ti = 0; ti < w.tabs.size(); ti++) {
+            bool on = (int)ti + 1 == w.tab;
+            int xs = x;
+            x = text(x, ty, xm, " " + std::to_string(ti + 1) + " " + w.tabs[ti] + " ", on ? sel : hs, false);
+            pu.tx.push_back({xs, x - 1});
+            x += 1;
+        }
+    }
+    if (fr) {  // the filter, or the search field
         std::string f = "/ " + to_utf8(pu.q);
         fill(fy, pu.x0 + 2, x1 - 2, fs);  // an input field, even while it isn't typing
         if (pu.filtering) {
@@ -2801,17 +2820,18 @@ void Tui::draw_pwin(int W, int H) {
         } else {
             Style ph = fs;
             ph.fg = readable(dim.fg, fs.bg), ph.attr = 0;
-            text(pu.x0 + 3, fy, xm - 1, pu.q.empty() ? "/ search stations: press / or click here" : f, pu.q.empty() ? ph : fs, false);
+            text(pu.x0 + 3, fy, xm - 1, pu.q.empty() ? "/ " + (w.search.empty() ? std::string("search stations: press / or click here") : w.search + ": press /") : f, pu.q.empty() ? ph : fs, false);
         }
     }
     for (int i = 0; i < pu.rows && pu.top + i < n; i++) {
-        int k = vis[(size_t)(pu.top + i)], y = pu.list_y + i;
+        int k = vis[(size_t)(pu.top + i)], y = pu.list_y + i * rh;
         bool on = k == pu.cur;
         Style st = on ? sel : bs;
-        fill(y, pu.x0 + 1, x1 - 1, st);
+        for (int l = 0; l < rh; l++) fill(y + l, pu.x0 + 1, x1 - 1, st);
         text(pu.x0 + 2, y, xm, k == w.mark ? "▶" : " ", on ? st : ok, false);  // ▶ playing, ★ favorite: two narrow columns before the name
         text(pu.x0 + 3, y, xm, k == w.star ? "★" : " ", on ? st : keyst, false);
         text(pu.x0 + 5, y, xm, w.items[(size_t)k - 1], st, false);
+        if (rh == 2 && (size_t)k <= w.subs.size()) text(pu.x0 + 5, y + 1, xm, w.subs[(size_t)k - 1], on ? st : dim, false);
     }
     if (!n && !w.items.empty()) text(pu.x0 + 5, pu.list_y, xm, "Nothing matches", dim, false);
     if (sr) {  // the slider: an icon, a bar, the value
@@ -2836,8 +2856,9 @@ void Tui::draw_pwin(int W, int H) {
     }
     std::string keys;  // the buttons' first letters
     for (auto& b : w.buttons) keys += (keys.empty() ? "" : " ") + b.substr(0, 1);
-    text(pu.x0 + 2, hint_y, xm, pu.filtering ? "type to filter · Enter keeps it · Esc clears" :
-         std::string("↑↓ Enter picks") + (sr ? " · ←→ volume" : "") + (fr ? " · / filter" : "") + (keys.empty() ? "" : " · " + keys) + " · Esc", dim, false);
+    bool srch = !w.search.empty();
+    text(pu.x0 + 2, hint_y, xm, pu.filtering ? (srch ? "type what to look for · Enter searches · Esc clears" : "type to filter · Enter keeps it · Esc clears") :
+         std::string(tr ? "↑↓ Enter · Tab tabs" : "↑↓ Enter picks") + (sr ? (tr ? " · ←→ vol" : " · ←→ volume") : "") + (fr ? (srch ? " · / search" : " · / filter") : "") + (keys.empty() ? "" : " · " + keys) + " · Esc", dim, false);
 }
 
 void Tui::pwin_key(int k, uint32_t ch) {
@@ -2853,7 +2874,10 @@ void Tui::pwin_key(int k, uint32_t ch) {
     bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2, arrow = k == TB_KEY_ARROW_DOWN || k == TB_KEY_ARROW_UP || k == TB_KEY_PGDN || k == TB_KEY_PGUP;
     if (pu.filtering && !arrow) {
         if (k == TB_KEY_ESC) pu.q.clear(), pu.filtering = false, fix();
-        else if (k == TB_KEY_ENTER) pu.filtering = false;
+        else if (k == TB_KEY_ENTER) {
+            pu.filtering = false;
+            if (!w.search.empty()) c.pwin_act("search", 0, 0, to_utf8(pu.q));  // a search field: the plugin looks it up
+        }
         else if (bs) { if (!pu.q.empty()) pu.q.pop_back(); fix(); }
         else if (ch || k == TB_KEY_SPACE) pu.q += ch ? (char32_t)ch : U' ', fix();
         return;
@@ -2870,7 +2894,10 @@ void Tui::pwin_key(int k, uint32_t ch) {
     else if (w.slider >= 0 && (k == TB_KEY_ARROW_LEFT || k == TB_KEY_ARROW_RIGHT || ch == '+' || ch == '=' || ch == '-'))
         c.pwin_act("slider", w.slider + (k == TB_KEY_ARROW_RIGHT || ch == '+' || ch == '=' ? 1 : -1) * w.slider_step);
     else if (k == TB_KEY_ENTER) { if (pu.cur) c.pwin_act("pick", pu.cur); }
-    else if (ch == '/' && w.items.size() >= 6) pu.filtering = true;
+    else if (k == TB_KEY_TAB && !w.tabs.empty()) c.pwin_act("tab", w.tab % (int)w.tabs.size() + 1);
+    else if (bs && !w.tabs.empty()) c.pwin_act("back", 0);  // one level up, for a plugin that has levels
+    else if (ch >= '1' && ch <= '9' && (int)(ch - '0') <= (int)w.tabs.size()) c.pwin_act("tab", (int)(ch - '0'));
+    else if (ch == '/' && (w.items.size() >= 6 || !w.search.empty())) pu.filtering = true;
     else if (ch) {  // a button's first letter
         for (size_t i = 0; i < w.buttons.size(); i++) {
             std::u32string u = from_utf8(w.buttons[i]);
@@ -2891,6 +2918,9 @@ void Tui::pwin_mouse(int k, int x, int y) {
     }
     if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) { pwin_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0); return; }
     if (k != TB_KEY_MOUSE_LEFT) return;
+    if (y == pu.ty)  // the tabs
+        for (size_t i = 0; i < pu.tx.size(); i++)
+            if (x >= pu.tx[i].first && x <= pu.tx[i].second) { c.pwin_act("tab", (int)i + 1); return; }
     if (y == pu.fy && x > pu.x0 && x < pu.x0 + pu.w - 1) { pu.filtering = true; return; }  // the filter field
     if (y == pu.btn_y) {
         for (size_t i = 0; i < pu.bx.size(); i++)
@@ -2898,7 +2928,7 @@ void Tui::pwin_mouse(int k, int x, int y) {
         return;
     }
     auto vis = pwin_vis();
-    int i = y - pu.list_y;
+    int i = y < pu.list_y ? -1 : (y - pu.list_y) / std::max(1, pu.rowh);
     if (i < 0 || i >= pu.rows || pu.top + i >= (int)vis.size() || x <= pu.x0 || x >= pu.x0 + pu.w - 1) return;
     int row = vis[(size_t)(pu.top + i)];
     long long now = now_ms();

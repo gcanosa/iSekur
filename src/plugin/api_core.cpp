@@ -1,5 +1,7 @@
 // isekur.* for chat, settings, the plugin's own store, the network (http, embed, proxy) and what the client is doing.
 #include "plugin/internal.h"
+#include <cctype>
+#include <cstdlib>
 
 using namespace plug;
 
@@ -246,12 +248,14 @@ static int l_rank(lua_State* L) {  // rank(srv, chan, nick): its prefix ("@", "+
     return 1;
 }
 
-// isekur.http(url, fn): a GET on a thread; fn({status, type, body, url, error}) on a tick once it's done.
-// ponytail: one job list per process (one Core); 4 at once per plugin, the rest refused
+// isekur.http(url, fn [, body [, {headers = {["User-Agent"] = "...", Accept = "..."}}]]): a GET (a POST with a body) on a thread; fn({status, type, body, url, error}) on a tick once it's done.
+// ponytail: one job list per process (one Core); 4 at once per plugin, the rest refused. Only User-Agent and Accept may be given: any other header
+// would follow a redirect to another host; add them (first hop only) when a plugin needs one
 struct HttpJob {
     std::weak_ptr<Plugin> p;
     int fn = LUA_NOREF, status = 0;
     std::string url, ctype, body, err, post;
+    std::vector<std::pair<std::string, std::string>> headers;  // isekur.http's 4th argument: User-Agent, Accept
     std::atomic<bool> done{false};
 };
 static std::vector<std::shared_ptr<HttpJob>> http_jobs;
@@ -269,10 +273,26 @@ static int l_http(lua_State* L) {
     auto j = std::make_shared<HttpJob>();
     j->p = p->me, j->url = url;
     if (!lua_isnoneornil(L, 3)) j->post = str_arg(L, 3);  // isekur.http(url, fn, body): a POST
+    if (lua_istable(L, 4)) {
+        lua_getfield(L, 4, "headers");
+        if (lua_istable(L, -1)) {
+            lua_pushnil(L);
+            while (lua_next(L, -2)) {
+                std::string k = lua_type(L, -2) == LUA_TSTRING ? lua_tostring(L, -2) : "", v = lua_type(L, -1) == LUA_TSTRING ? lua_tostring(L, -1) : "";
+                std::string lk = k;
+                for (char& ch : lk) ch = (char)tolower((unsigned char)ch);
+                if ((lk != "user-agent" && lk != "accept") || v.empty() || v.size() > 200 || v.find_first_of("\r\n") != std::string::npos)
+                    return lua_settop(L, 0), lua_pushboolean(L, 0), lua_pushstring(L, ("header " + k + " isn't allowed: only User-Agent and Accept, one line").c_str()), 2;
+                j->headers.push_back({k, v});
+                lua_pop(L, 1);
+            }
+        }
+        lua_pop(L, 1);
+    }
     lua_pushvalue(L, 2), j->fn = luaL_ref(L, LUA_REGISTRYINDEX);
     http_jobs.push_back(j);
     std::thread([j] {
-        if (!https_fetch(j->url, HTTP_CAP, j->status, j->ctype, j->body, j->err, j->post)) j->status = 0;
+        if (!https_fetch(j->url, HTTP_CAP, j->status, j->ctype, j->body, j->err, j->post, j->headers.empty() ? nullptr : &j->headers)) j->status = 0;
         j->done.store(true, std::memory_order_release);
     }).detach();
     lua_pushboolean(L, 1);
@@ -426,11 +446,143 @@ static int l_embed(lua_State* L) {
 }
 
 // what the isekur table gets from this file (host.cpp's load registers it)
+// isekur.json_decode(text): the Lua value of a JSON text: objects and arrays are tables, a null is an absent key (false inside an array, so the
+// places hold), numbers are integers when they have no fraction. nil and why for text that isn't JSON, nested deeper than 32 or longer than 1 MB
+namespace {
+struct JsonIn {
+    lua_State* L;
+    const char *p, *e;
+    int depth = 0;
+    const char* err = nullptr;
+    bool fail(const char* m) { if (!err) err = m; return false; }
+    void ws() { while (p < e && (*p == ' ' || *p == '\t' || *p == '\n' || *p == '\r')) p++; }
+    bool hex4(unsigned& cp) {
+        if (e - p < 4) return fail("bad \\u escape");
+        cp = 0;
+        for (int i = 0; i < 4; i++, p++) {
+            int d = isdigit((unsigned char)*p) ? *p - '0' : (*p >= 'a' && *p <= 'f') ? *p - 'a' + 10 : (*p >= 'A' && *p <= 'F') ? *p - 'A' + 10 : -1;
+            if (d < 0) return fail("bad \\u escape");
+            cp = cp * 16 + (unsigned)d;
+        }
+        return true;
+    }
+    static void utf8(std::string& o, unsigned cp) {
+        if (cp < 0x80) o += (char)cp;
+        else if (cp < 0x800) o += (char)(0xc0 | cp >> 6), o += (char)(0x80 | (cp & 0x3f));
+        else if (cp < 0x10000) o += (char)(0xe0 | cp >> 12), o += (char)(0x80 | (cp >> 6 & 0x3f)), o += (char)(0x80 | (cp & 0x3f));
+        else o += (char)(0xf0 | cp >> 18), o += (char)(0x80 | (cp >> 12 & 0x3f)), o += (char)(0x80 | (cp >> 6 & 0x3f)), o += (char)(0x80 | (cp & 0x3f));
+    }
+    bool str(std::string& o) {  // after the opening quote
+        for (;;) {
+            if (p >= e) return fail("unterminated string");
+            unsigned char c = (unsigned char)*p++;
+            if (c == '"') return true;
+            if (c < 0x20) return fail("control character in a string");
+            if (c != '\\') { o += (char)c; continue; }
+            if (p >= e) return fail("bad escape");
+            char x = *p++;
+            switch (x) {
+            case '"': case '\\': case '/': o += x; break;
+            case 'b': o += '\b'; break;
+            case 'f': o += '\f'; break;
+            case 'n': o += '\n'; break;
+            case 'r': o += '\r'; break;
+            case 't': o += '\t'; break;
+            case 'u': {
+                unsigned cp, lo;
+                if (!hex4(cp)) return false;
+                if (cp >= 0xd800 && cp < 0xdc00) {  // a surrogate pair, or a lone half (U+FFFD)
+                    const char* save = p;
+                    if (e - p >= 2 && p[0] == '\\' && p[1] == 'u' && (p += 2, hex4(lo)) && lo >= 0xdc00 && lo < 0xe000) cp = 0x10000 + ((cp - 0xd800) << 10) + (lo - 0xdc00);
+                    else cp = 0xfffd, p = save, err = nullptr;
+                } else if (cp >= 0xdc00 && cp < 0xe000) cp = 0xfffd;
+                utf8(o, cp);
+                break;
+            }
+            default: return fail("bad escape");
+            }
+        }
+    }
+    bool lit(const char* w) { size_t n = strlen(w); if ((size_t)(e - p) < n || strncmp(p, w, n)) return fail("not JSON"); p += n; return true; }
+    bool value() {  // pushes the value (nil for null)
+        ws();
+        if (p >= e) return fail("unexpected end");
+        if (!lua_checkstack(L, 8)) return fail("too deep");
+        if (*p == '{' || *p == '[') {
+            bool obj = *p++ == '{';
+            if (++depth > 32) return fail("nested too deep");
+            lua_newtable(L);
+            ws();
+            if (p < e && *p == (obj ? '}' : ']')) { p++, depth--; return true; }
+            for (lua_Integer i = 1;; i++) {
+                if (obj) {
+                    ws();
+                    if (p >= e || *p != '"') return fail("a key was expected");
+                    p++;
+                    std::string k;
+                    if (!str(k)) return false;
+                    ws();
+                    if (p >= e || *p++ != ':') return fail("a : was expected");
+                    if (!value()) return false;
+                    if (lua_isnil(L, -1)) lua_pop(L, 1);
+                    else lua_setfield(L, -2, k.c_str());
+                } else {
+                    if (!value()) return false;
+                    if (lua_isnil(L, -1)) lua_pop(L, 1), lua_pushboolean(L, 0);
+                    lua_rawseti(L, -2, i);
+                }
+                ws();
+                if (p < e && *p == ',') { p++; continue; }
+                if (p < e && *p == (obj ? '}' : ']')) { p++, depth--; return true; }
+                return fail("a , or a closing bracket was expected");
+            }
+        }
+        if (*p == '"') {
+            p++;
+            std::string s;
+            if (!str(s)) return false;
+            lua_pushlstring(L, s.data(), s.size());
+            return true;
+        }
+        if (*p == 't') return lit("true") && (lua_pushboolean(L, 1), true);
+        if (*p == 'f') return lit("false") && (lua_pushboolean(L, 0), true);
+        if (*p == 'n') return lit("null") && (lua_pushnil(L), true);
+        const char* s = p;
+        bool real = false;
+        if (p < e && *p == '-') p++;
+        if (p >= e || !isdigit((unsigned char)*p)) return fail("not JSON");
+        while (p < e && isdigit((unsigned char)*p)) p++;
+        if (p < e && *p == '.') { real = true, p++; if (p >= e || !isdigit((unsigned char)*p)) return fail("bad number"); while (p < e && isdigit((unsigned char)*p)) p++; }
+        if (p < e && (*p == 'e' || *p == 'E')) {
+            real = true, p++;
+            if (p < e && (*p == '+' || *p == '-')) p++;
+            if (p >= e || !isdigit((unsigned char)*p)) return fail("bad number");
+            while (p < e && isdigit((unsigned char)*p)) p++;
+        }
+        std::string num(s, (size_t)(p - s));
+        double d = strtod(num.c_str(), nullptr);
+        if (!real && num.size() < 16) lua_pushinteger(L, (lua_Integer)atoll(num.c_str()));
+        else lua_pushnumber(L, d);
+        return true;
+    }
+};
+}  // namespace
+static int l_json_decode(lua_State* L) {
+    size_t n;
+    const char* s = luaL_checklstring(L, 1, &n);
+    if (n > (1u << 20)) return lua_pushnil(L), lua_pushstring(L, "longer than 1 MB"), 2;
+    int top = lua_gettop(L);
+    JsonIn j{L, s, s + n};
+    if (j.value()) { j.ws(); if (j.p != j.e) j.fail("text after the value"); }
+    if (j.err) return lua_settop(L, top), lua_pushnil(L), lua_pushstring(L, j.err), 2;
+    return 1;
+}
+
 const luaL_Reg plug::api_core[] = {
     {"on", l_on}, {"command", l_command}, {"setting", l_setting}, {"opt", l_opt}, {"set", l_set},
     {"say", l_say}, {"send", l_send}, {"print", l_print}, {"exec", l_exec}, {"store_get", l_store_get},
     {"store_set", l_store_set}, {"store_keys", l_store_keys}, {"active", l_active}, {"date", l_date},
     {"is_chan", l_is_chan}, {"servers", l_servers}, {"channels", l_channels}, {"away", l_away},
     {"attached", l_attached}, {"idle", l_idle}, {"detached_for", l_detached_for}, {"time", l_time},
-    {"me", l_me}, {"nick", l_nick}, {"rank", l_rank}, {"http", l_http}, {"upload", l_upload}, {"embed", l_embed}, {"proxy", l_proxy},
+    {"me", l_me}, {"nick", l_nick}, {"rank", l_rank}, {"http", l_http}, {"json_decode", l_json_decode}, {"upload", l_upload}, {"embed", l_embed}, {"proxy", l_proxy},
     {nullptr, nullptr}};

@@ -309,9 +309,9 @@ dialog .btns .left { margin-right: auto; }
 #blist .tmp { color: var(--accent); margin-left: 8px; }
 /* /plugin: the installed plugins and the catalog's, a tab each; Configure: its options at one scope */
 #dplug { width: min(720px, calc(100vw - 32px)); }
-#plugtabs, #bkinds { display: flex; gap: 4px; }
-#plugtabs button, #bkinds button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; color: var(--muted); font-size: calc(13px * var(--z, 1)); }
-#plugtabs button.on, #bkinds button.on { color: var(--fg); border-color: var(--accent); background: var(--accent-veil, #ffffff0d); }
+#plugtabs, #bkinds, #dpw-tabs { display: flex; gap: 4px; }
+#plugtabs button, #bkinds button, #dpw-tabs button { background: none; border: 1px solid var(--line); border-radius: 6px; padding: 4px 12px; cursor: pointer; color: var(--muted); font-size: calc(13px * var(--z, 1)); }
+#plugtabs button.on, #bkinds button.on, #dpw-tabs button.on { color: var(--fg); border-color: var(--accent); background: var(--accent-veil, #ffffff0d); }
 #pluglist { max-height: min(48vh, 420px); }
 #plugcfg { display: grid; gap: 8px; }
 #plugcfg .panel { display: grid; grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--dlg-bg, var(--bg)); }  /* a plugin's own header (isekur.panel): status lines, a sky, buttons */
@@ -802,12 +802,12 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 :is(dialog, #lock) :is(input:not([type=checkbox]), select, textarea) { background: #fff; color: #000; border-radius: 0; border: 1px solid;
   border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 3px 5px; font: inherit; outline: none; }
 .win-95 :is(dialog, #lock) select:not([multiple]) { appearance: none; padding-right: 22px; background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16'%3E%3Crect width='16' height='16' fill='%23c0c0c0'/%3E%3Cpath d='M0 0h15v1H1v14H0z' fill='%23fff'/%3E%3Cpath d='M15 0h1v16H0v-1h15z' fill='%23000'/%3E%3Cpath d='M14 1h1v14H1v-1h13z' fill='%23808080'/%3E%3Cpath d='M4 6h7l-3.5 4z' fill='%23000'/%3E%3C/svg%3E") no-repeat right 2px center / 16px 16px, #fff; }
-.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, .bio .add, #srvnew, #plugtabs button, #bkinds button, .perf .peek) { background: #c0c0c0; color: #000;
+.win-95 :is(dialog .btns button, dialog .btns button.go, #lock button, .flist .r .b button, .flist .r .b a, .bio .add, #srvnew, #plugtabs button, #bkinds button, #dpw-tabs button, .perf .peek) { background: #c0c0c0; color: #000;
   border-radius: 0; border: 1px solid; border-color: #fff #000 #000 #fff; box-shadow: inset -1px -1px #808080, inset 1px 1px #dfdfdf;
   font: 400 calc(12px * var(--z, 1)) Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; padding: 4px 12px; text-shadow: none; }
 .win-95 :is(dialog .btns button, #lock button) { min-width: 75px; }
 .win-95 :is(dialog .btns button.go, #lock button) { box-shadow: 0 0 0 1px #000, inset -1px -1px #808080, inset 1px 1px #dfdfdf; }  /* the default button */
-.win-95 :is(#plugtabs, #bkinds) button.on { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; background: #dfdfdf; font-weight: bold; }
+.win-95 :is(#plugtabs, #bkinds, #dpw-tabs) button.on { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; background: #dfdfdf; font-weight: bold; }
 .win-95 :is(dialog .btns button, #lock button, .flist .r .b button, .bio .add):active { border-color: #000 #fff #fff #000; box-shadow: inset 1px 1px #808080; padding: 5px 11px 3px 13px; }
 .win-95 :is(dialog .btns button, #lock button, .flist .r .b button, .bio .add):focus-visible { outline: 1px dotted #000; outline-offset: -4px; }
 .win-95 dialog input[type=checkbox], .win-95 #setlist .sw i { appearance: none; box-sizing: border-box; width: 13px; height: 13px; margin: 0; flex: none;
@@ -865,11 +865,17 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 #dpw[data-reels="1"] .cass .reel { animation: reelspin 2.2s linear infinite; }
 @keyframes reelspin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #dpw[data-reels="1"] .cass .reel { animation: none; } }
-#dpw .pwlist { display: grid; gap: 2px; max-height: calc(var(--vvh, 100dvh) * .36); overflow-y: auto; font-size: calc(14px * var(--z, 1)); }
+#dpw .pwlist { display: grid; grid-template-columns: minmax(0, 1fr); gap: 2px; max-height: calc(var(--vvh, 100dvh) * .36); overflow-y: auto; font-size: calc(14px * var(--z, 1)); }
 #dpw .pwlist .r { display: flex; gap: 8px; padding: 6px 8px; border-radius: 6px; cursor: pointer; }
 #dpw .pwlist .r .m { width: 1em; flex: none; color: var(--dlg-title, var(--accent)); } #dpw .pwlist .r { gap: 4px; }  /* two narrow columns before the name: ▶ playing, ★ favorite */
 #dpw .pwlist .r.on { background: var(--dlg-sel-bg, #ffffff14); color: var(--dlg-sel-fg, var(--fg)); } #dpw .pwlist .r.on .m { color: inherit; }
 #dpw .pwlist .none { color: var(--muted); padding: 6px 8px; cursor: default; }
+#dpw-tabs { flex-wrap: nowrap; } #dpw-tabs button { flex: 1 1 auto; min-width: 0; padding: 5px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 440px) { #dpw-tabs button { padding: 5px 2px; font-size: calc(12px * var(--z, 1)); } }
+#dpw .pwlist .r .t { flex: 1; min-width: 0; } #dpw .pwlist .r .nm { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#dpw .pwlist .r .sub { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: calc(12px * var(--z, 1)); color: var(--muted); }
+#dpw .pwlist .r.on .sub { color: inherit; }  /* the highlight's own text color at full strength: dimmed it fell under 4.5:1 in 17 themes */
+.win-95 #dpw .pwlist .r .sub { color: #404040; } .win-95 #dpw .pwlist .r.on .sub { color: #fff; opacity: 1; }
 @media (hover: hover) { #dpw .pwlist .r:not(.on):hover { background: #ffffff0a; } }
 #dpw .vol { display: flex; align-items: center; gap: 10px; }
 #dpw [hidden] { display: none !important; }  /* a window without a slider, a cassette or a sky (twilight's): the page's own display rules beat the UA's [hidden] */
@@ -1038,6 +1044,7 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
       </g>
       <path d="M5 36h66" opacity=".7"/><path d="M14 40h48M24 44h28" opacity=".35"/>
     </svg></div>
+  <div id="dpw-tabs" role="tablist" hidden></div>
   <input id="dpw-q" type="text" inputmode="search" enterkeyhint="search" placeholder="Filter the list" autocomplete="off" spellcheck="false" aria-label="Filter the list">
   <div class="pwlist" id="dpw-list" role="listbox"></div>
   <div class="vol" id="dpw-vol" hidden><span class="ic" id="dpw-volic"></span><input id="dpw-range" type="range" min="0" aria-label="Volume"><output id="dpw-volout" for="dpw-range"></output></div>
@@ -4071,23 +4078,35 @@ if ("mediaSession" in navigator) {
 }
 
 // a plugin's window (isekur.window), the radio's: an LCD, a filter, a list, buttons. A click or key goes to the plugin as its `window` event
-const dpw = $("#dpw"); let pwin = null, pwCur = 0, pwKey = "", pwDrag = false, pwSent = 0, pwTimer = 0;
-const pwVis = () => { const q = $("#dpw-q").value.trim().toLowerCase(); return pwin.items.map((t, i) => i + 1).filter(i => !q || pwin.items[i - 1].toLowerCase().includes(q)); };  // the rows the filter lets through, by their number in the plugin's list
+const dpw = $("#dpw"); let pwin = null, pwCur = 0, pwKey = "", pwDrag = false, pwSent = 0, pwTimer = 0, pwQ = "", pwTab = -1, pwList = "";
+const pwVis = () => { const q = pwin.search ? "" : $("#dpw-q").value.trim().toLowerCase(); return pwin.items.map((t, i) => i + 1).filter(i => !q || pwin.items[i - 1].toLowerCase().includes(q)); };  // a search field is the plugin's: no row is hidden here  // the rows the filter lets through, by their number in the plugin's list
 function renderPwin() {
   const w = pwin;
   $("#dpw-h").textContent = w.title;
   dpw.dataset.reels = w.reels; $("#dpw .cass").toggleAttribute("hidden", w.reels < 0);  // an SVG has no .hidden property
   const sky = $("#dpw .sky"); sky.toggleAttribute("hidden", !(w.sky >= 0)); if (w.sky >= 0) sky.style.setProperty("--sky", w.sky);  // twilight's sun and moon
   $("#dpw-lcd").replaceChildren(...(radBlocked ? [...w.display, "Press Play to hear it here"] : w.display).map((t, i) => { const d = document.createElement("div"); d.textContent = t || "\u00a0"; if (i) d.className = "dim"; return d; }));
-  $("#dpw-q").hidden = w.items.length < 6;
+  const tabs = $("#dpw-tabs"); tabs.hidden = !w.tabs.length;
+  if (w.tabs.length) {  // the tab strip (API 17): one button each, the active one lit
+    const tk = JSON.stringify(w.tabs);
+    if (tabs.dataset.k !== tk) { tabs.dataset.k = tk; tabs.replaceChildren(...w.tabs.map((t, i) => { const b = document.createElement("button"); b.type = "button"; b.setAttribute("role", "tab"); b.textContent = t; b.title = t + " (" + (i + 1) + ")"; b.dataset.i = i + 1; return b; })); }
+    for (const b of tabs.children) b.classList.toggle("on", +b.dataset.i === w.tab), b.setAttribute("aria-selected", +b.dataset.i === w.tab);
+  }
+  const q = $("#dpw-q"), searching = !!w.search;
+  q.hidden = !searching && w.items.length < 6;
+  q.placeholder = q.ariaLabel = w.search || "Filter the list";
+  if (w.query !== pwQ || w.tab !== pwTab || w.list !== pwList) { pwQ = w.query; pwTab = w.tab; q.value = w.query; }  // the plugin changed what the field holds, or other rows: not while someone types
+  if (w.list !== pwList) { pwList = w.list; pwCur = w.sel || (w.items.length ? 1 : 0); $("#dpw-list").scrollTop = 0; }  // other rows: from the top
   const vis = pwVis();
   if (vis.length && !vis.includes(pwCur)) pwCur = vis[0];
-  const key = JSON.stringify([w.items, w.mark, w.star, w.buttons, w.icons, vis]);  // rebuilt only when it changed: a re-render between two clicks would swallow a double click
+  const key = JSON.stringify([w.items, w.subs, w.mark, w.star, w.buttons, w.icons, vis]);  // rebuilt only when it changed: a re-render between two clicks would swallow a double click
   if (key !== pwKey) {
     pwKey = key;
     const rows = vis.map(n => {
       const r = document.createElement("div"); r.className = "r"; r.dataset.i = n; r.setAttribute("role", "option");
-      const m = document.createElement("span"), f = document.createElement("span"), t = document.createElement("span"); m.className = "m"; f.className = "m st"; m.textContent = n === w.mark ? "\u25b6\ufe0e" : ""; f.textContent = n === w.star ? "\u2605" : ""; t.textContent = w.items[n - 1];
+      const m = document.createElement("span"), f = document.createElement("span"), t = document.createElement("span"); m.className = "m"; f.className = "m st"; m.textContent = n === w.mark ? "\u25b6\ufe0e" : ""; f.textContent = n === w.star ? "\u2605" : "";
+      if (w.subs.length) { const nm = document.createElement("span"), sb = document.createElement("span"); t.className = "t"; nm.className = "nm"; sb.className = "sub"; nm.textContent = w.items[n - 1]; sb.textContent = w.subs[n - 1] || "\u00a0"; t.append(nm, sb); }
+      else t.textContent = w.items[n - 1];
       r.append(m, f, t); return r;
     });
     if (!rows.length && w.items.length) { const d = document.createElement("div"); d.className = "none"; d.textContent = "Nothing matches"; rows.push(d); }
@@ -4111,7 +4130,7 @@ function onPwin(m) {
   const was = pwin && pwin.open ? pwin.sel : -1;
   pwin = m;
   if (!m.open) { if (dpw.open) dpw.close(); radTapShow(); return; }
-  if (!dpw.open) { pwCur = m.sel || (m.items.length ? 1 : 0); $("#dpw-q").value = ""; dpw.showModal(); deskFocus($("#dpw-q")); }
+  if (!dpw.open) { pwCur = m.sel || (m.items.length ? 1 : 0); pwQ = m.query; pwTab = m.tab; pwList = m.list; $("#dpw-q").value = m.query; dpw.showModal(); deskFocus($("#dpw-q")); }
   else if (m.sel && m.sel !== was) pwCur = m.sel;
   pwCur = Math.min(pwCur, m.items.length);
   renderPwin();
@@ -4128,6 +4147,7 @@ $("#dpw-range").oninput = () => {
 $("#dpw-range").onpointerdown = () => { pwDrag = true; };
 for (const ev of ["pointerup", "pointercancel"]) addEventListener(ev, () => { if (pwDrag) pwDrag = false, pwSlide(); });
 $("#dpw-range").onchange = pwSlide;
+$("#dpw-tabs").onclick = e => { const b = e.target.closest("button"); if (b) send({t: "pwin", buf: active, a: "tab", i: +b.dataset.i}); };
 $("#dpw-list").onclick = e => { const r = e.target.closest(".r"); if (r) pwCur = +r.dataset.i, pwMark(); };  // only the classes change
 $("#dpw-list").ondblclick = e => { if (e.target.closest(".r")) send({t: "pwin", buf: active, a: "pick", i: pwCur}); };
 $("#dpw-btns").onclick = e => {
@@ -4138,6 +4158,12 @@ $("#dpw-btns").onclick = e => {
 dpw.addEventListener("keydown", e => {
   const d = {ArrowDown: 1, ArrowUp: -1}[e.key];
   if (e.target.type === "range") return;  // the slider keeps its own arrow keys
+  if (pwin && pwin.search && e.target.id === "dpw-q" && e.key === "Enter") { e.preventDefault(); send({t: "pwin", buf: active, a: "search", text: e.target.value}); return; }  // a search field: Enter asks the plugin
+  const typing = e.target.matches("input, textarea") && e.target.type !== "range";
+  if (pwin && pwin.tabs.length && !typing && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    if (e.key === "Backspace") { e.preventDefault(); send({t: "pwin", buf: active, a: "back"}); return; }  // one level up, for a plugin that has levels
+    if (/^[1-9]$/.test(e.key) && +e.key <= pwin.tabs.length) { e.preventDefault(); send({t: "pwin", buf: active, a: "tab", i: +e.key}); return; }
+  }
   if (d && pwin) { e.preventDefault(); const vis = pwVis(), at = vis.indexOf(pwCur); if (vis.length) pwCur = vis[Math.max(0, Math.min(vis.length - 1, (at < 0 ? 0 : at) + d))]; pwMark(); }
   else if (e.key === "Enter" && pwCur && !e.target.closest("button")) { e.preventDefault(); send({t: "pwin", buf: active, a: "pick", i: pwCur}); }
 });

@@ -861,7 +861,7 @@ void Web::ws_frames(Client& cl) {
         else if (m["t"] == "theme") { std::string err; c.use_theme(m["name"], err); }  // the theme picker's live preview
         else if (m["t"] == "view_end" && c.view_on(true)) c.view_end();  // Esc in the zen plugin's focus view
         else if (m["t"] == "choice") c.choice_act(atoi(m["i"].c_str()), m["text"]);  // a plugin's question: the row picked, 0 cancelled
-        else if (m["t"] == "pwin") c.pwin_act(m["a"], atoi(m["i"].c_str()), atoi(m["b"].c_str()));  // a plugin's window: a row picked, a button, closed
+        else if (m["t"] == "pwin") c.pwin_act(m["a"], atoi(m["i"].c_str()), atoi(m["b"].c_str()), m["text"]);  // a plugin's window: a row picked, a button, a tab, a search, closed
         else if (m["t"] == "more") {  // scrolled to the top: the BACKLOG lines before line number "before", for this browser
             long long base = b->added - (long long)b->lines.size(), end = atoll(m["before"].c_str()) - base;
             size_t to = (size_t)std::max(0LL, std::min(end, (long long)b->lines.size()));
@@ -1278,7 +1278,7 @@ std::string Web::pwin_json() {
     };
     const Core::PWin& w = c.pwin;
     return std::string("{\"t\":\"pwin\",\"open\":") + (w.open ? "true" : "false") + ",\"title\":" + json_str(w.title) + ",\"display\":" + arr(w.display) +
-           ",\"items\":" + arr(w.items) + ",\"buttons\":" + arr(w.buttons) + ",\"icons\":" + arr(w.icons) + ",\"sel\":" + std::to_string(w.sel) + ",\"mark\":" + std::to_string(w.mark) + ",\"star\":" + std::to_string(w.star) + ",\"reels\":" + std::to_string(w.reels) + ",\"sky\":" + std::to_string(w.sky) + ",\"slider\":" + std::to_string(w.slider) + ",\"smax\":" + std::to_string(w.slider_max) + ",\"sstep\":" + std::to_string(w.slider_step) + ",\"sicon\":" + json_str(w.slider_icon) + "}";
+           ",\"items\":" + arr(w.items) + ",\"buttons\":" + arr(w.buttons) + ",\"icons\":" + arr(w.icons) + ",\"sel\":" + std::to_string(w.sel) + ",\"mark\":" + std::to_string(w.mark) + ",\"star\":" + std::to_string(w.star) + ",\"reels\":" + std::to_string(w.reels) + ",\"sky\":" + std::to_string(w.sky) + ",\"slider\":" + std::to_string(w.slider) + ",\"smax\":" + std::to_string(w.slider_max) + ",\"sstep\":" + std::to_string(w.slider_step) + ",\"sicon\":" + json_str(w.slider_icon) + ",\"tabs\":" + arr(w.tabs) + ",\"tab\":" + std::to_string(w.tab) + ",\"subs\":" + arr(w.subs) + ",\"search\":" + json_str(w.search) + ",\"query\":" + json_str(w.query) + ",\"list\":" + json_str(w.list) + "}";
 }
 
 void Web::broadcast(const std::string& json) {

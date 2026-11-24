@@ -4215,8 +4215,54 @@ isekur.on("window", function(e) print("win", e.action, e.index, e.button, e.valu
         assert(last() == "win close nil nil nil" && !rc.pwin.open);
         rc.exec(rh, "/w");
         assert(rc.pwin.open);
+        rc.pwin_act("back", 0);
+        assert(last() == "win close nil nil nil");  // a window without tabs has no use for Backspace: nothing was sent
         rc.exec(rh, "/plugin disable rw");
         assert(!rc.pwin.open);  // its plugin went: the window closes
+        {  // API 17: tabs, a second line under each row, a search field, the list's name; isekur.json_decode; isekur.http's headers
+            wr("rv", R"LUA(
+isekur.command("va", "", function()
+  isekur.window{title = "V2", items = {"a", "b", "c"}, subs = {"one", "two"}, tabs = {"One", "Two", "Three"}, tab = 2, search = "Find stations", query = "ja\tzz", list = "L1", buttons = {"Go"}}
+end)
+isekur.command("vb", "", function() isekur.window{title = "V3", items = {"a"}, tabs = {"Only"}, tab = 9, search = ("x"):rep(100), list = "\xc3\xa9"} end)
+isekur.on("window", function(e) print("v", e.action, e.index, e.text) end)
+isekur.command("jsonchk", "", function()
+  local v = isekur.json_decode('{"a":[1,2.5,"x\\u00e9\\ud83d\\ude00",null,true],"b":null,"c":{"d":-3e2,"e":"\\n\\"q\\""},"f":12345678901234}')
+  assert(#v.a == 5 and v.a[1] == 1 and math.type(v.a[1]) == "integer" and v.a[2] == 2.5 and v.a[3] == "x\xc3\xa9\xf0\x9f\x98\x80" and v.a[4] == false and v.a[5] == true)
+  assert(v.b == nil and v.c.d == -300 and v.c.e == '\n"q"' and v.f == 12345678901234)
+  assert(#isekur.json_decode(" [] ") == 0 and isekur.json_decode("{}") ~= nil and isekur.json_decode('"\\ud800"') == "\xef\xbf\xbd" and isekur.json_decode("null") == nil)
+  for _, bad in ipairs{"", "{", '{"a":}', "[1,]", "tru", '"x', "1 2", "[" .. ("["):rep(40), '{"a" 1}', "-", "1.", '"\\q"'} do
+    local r, why = isekur.json_decode(bad)
+    assert(r == nil and type(why) == "string", bad)
+  end
+  local ok, why = isekur.http("https://x.test/", function() end, nil, {headers = {["X-Foo"] = "1"}})
+  assert(ok == false and why == "header X-Foo isn't allowed: only User-Agent and Accept, one line", why)
+  ok, why = isekur.http("https://x.test/", function() end, nil, {headers = {["User-Agent"] = "a\r\nb: c"}})
+  assert(ok == false and why:find("isn't allowed"))
+  print("json ok")
+end)
+)LUA");
+            rc.exec(rh, "/plugin enable rv");
+            rc.exec(rh, "/va");
+            assert(w.open && w.by == "rv" && w.tabs == std::vector<std::string>({"One", "Two", "Three"}) && w.tab == 2 && w.subs == std::vector<std::string>({"one", "two", ""}) &&
+                   w.search == "Find stations" && w.query == "ja zz" && w.list == "L1");
+            rc.pwin_act("tab", 3);
+            assert(last() == "v tab 3 nil" && rc.pwin.tab == 3);
+            rc.pwin_act("tab", 9);  // no such tab
+            assert(last() == "v tab 3 nil" && rc.pwin.tab == 3);
+            rc.pwin_act("search", 0, 0, "  smooth\tjazz ");  // trimmed, no control characters; both screens show it until the plugin says otherwise
+            assert(last() == "v search nil smooth jazz" && rc.pwin.query == "smooth jazz");
+            rc.pwin_act("back", 0);
+            assert(last() == "v back nil nil");
+            rc.pwin_act("search", 0, 0, std::string(119, 'a') + "\xc3\xa9");  // 121 bytes: cut before the e acute, not through it
+            assert(last() == "v search nil " + std::string(119, 'a') && rc.pwin.query == std::string(119, 'a'));
+            rc.exec(rh, "/vb");  // a tab past the last one is the last; the placeholder is cut
+            assert(w.tab == 1 && w.search == std::string(60, 'x') && w.list == "\xc3\xa9" && w.subs.empty() && w.query.empty());
+            rc.exec(rh, "/jsonchk");
+            assert(last() == "json ok");
+            rc.pwin_act("close", 0);
+            rc.exec(rh, "/plugin disable rv");
+        }
         rc.plugins.clear();
         setenv("PATH", oldpath.c_str(), 1);
         assert(system(("rm -rf '" + dir + "'").c_str()) == 0);
@@ -5083,7 +5129,7 @@ end)
             up.url = "http://127.0.0.1:" + std::to_string(ntohs(a.sin_port)) + "/api.php", up.path = dir + "/big.bin", up.guard = false;
             up.field = "fileToUpload", up.filename = "a\"b\r\nc.png", up.ctype = "image/png";
             up.fields = {{"reqtype", "fileupload"}, {"time", "72h"}};
-            up.headers = {{"Authorization", "Client-ID abc"}, {"X-Evil", "x\r\nInjected: yes"}, {"Bad\nName", "v"}, {"Content-Length", "1"}, {"host", "evil.test"}, {"Transfer-Encoding", "chunked"}};
+            up.headers = {{"Authorization", "Client-ID abc"}, {"X-Evil", "x\r\nInjected: yes"}, {"Bad\nName", "v"}, {"Content-Length", "1"}, {"host", "evil.test"}, {"Transfer-Encoding", "chunked"}, {"user-agent", "radio-test/1"}};
             int status = 0;
             std::string body, err;
             assert(https_upload(up, status, body, err) && status == 200 && body == "https://litter.test/abc.png" && err.empty());
@@ -5092,6 +5138,7 @@ end)
             std::string head = req.substr(0, he), rest = req.substr(he + 4);
             assert(head.rfind("POST /api.php HTTP/1.0\r\n", 0) == 0 && head.find("\r\nAuthorization: Client-ID abc") != std::string::npos);
             assert(head.find("Injected") == std::string::npos && head.find("X-Evil") == std::string::npos && head.find("Bad") == std::string::npos);
+            assert(head.find("\r\nuser-agent: radio-test/1") != std::string::npos && head.find("User-Agent:") == std::string::npos);  // the plugin's User-Agent replaces ours, it isn't added to it
             assert(head.find("evil.test") == std::string::npos && head.find("chunked") == std::string::npos && head.find("Content-Length: 1\r\n") == std::string::npos);  // nothing that frames the request
             size_t bp = head.find("boundary=");
             std::string bnd = head.substr(bp + 9, head.find("\r\n", bp) - bp - 9);
