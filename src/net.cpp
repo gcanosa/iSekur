@@ -384,11 +384,34 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
         pollfd pf{fd, POLLIN, 0};
         if (!ssl) return poll(&pf, 1, 0) > 0;
         if (poll(&pf, 1, 0) <= 0 && SSL_pending(ssl) <= 0) return false;
-        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK);
+        int fl = fcntl(fd, F_GETFL);  // as it was (put_up keeps it non-blocking)
+        fcntl(fd, F_SETFL, fl | O_NONBLOCK);
         char c;
         int r = SSL_peek(ssl, &c, 1), e = r > 0 ? SSL_ERROR_NONE : SSL_get_error(ssl, r);
-        fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) & ~O_NONBLOCK);
+        fcntl(fd, F_SETFL, fl);
         return r > 0 || (e != SSL_ERROR_WANT_READ && e != SSL_ERROR_WANT_WRITE);
+    };
+    // a piece of the file. It never waits for room in a full buffer without listening: a host that answered at the headers and reads no more would
+    // hold a blocking send() until it closed the connection, and the reset that comes with the close costs the answer (found on a slow VM, where the
+    // buffers filled before the host's thread ran). So the socket is non-blocking for the piece, and a wait for room also watches for the answer
+    // (early: the rest isn't sent). false: a failure, or nothing moving for the 15 s a stalled host gets
+    auto put_up = [&](const char* d, size_t n, bool& early) {
+        int fl = fcntl(fd, F_GETFL);
+        fcntl(fd, F_SETFL, fl | O_NONBLOCK);
+        bool good = true;
+        int stalled = 0;  // 100 ms rounds with no room and no word
+        while (n && good && !early) {
+            int w = ssl ? SSL_write(ssl, d, (int)std::min<size_t>(n, 1 << 20)) : (int)::send(fd, d, n, 0);
+            if (w > 0) { d += w, n -= (size_t)w, up->sent += (unsigned long long)w, stalled = 0; continue; }
+            int e = ssl ? SSL_get_error(ssl, w) : (w < 0 && (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) ? SSL_ERROR_WANT_WRITE : SSL_ERROR_SYSCALL);
+            if (e != SSL_ERROR_WANT_WRITE && e != SSL_ERROR_WANT_READ) { good = false; break; }
+            pollfd pf{fd, POLLIN | POLLOUT, 0};
+            int pr = poll(&pf, 1, 100);
+            if (pr > 0 && (pf.revents & (POLLIN | POLLHUP | POLLERR)) && answered()) { early = true; break; }
+            if (pr <= 0 && ++stalled > 150) good = false;
+        }
+        fcntl(fd, F_SETFL, fl);
+        return good;
     };
     bool ok = (!ssl || SSL_connect(ssl) == 1) && put(req.data(), req.size());
     if (ok && up) {
@@ -399,7 +422,7 @@ static bool fetch_once(const std::string& url, size_t cap, int& status, std::str
             if (answered()) { early = true; break; }
             size_t n = fread(fb, 1, (size_t)std::min<unsigned long long>(sizeof fb, left), uf.f);
             if (!n) { err = "the file changed while it was sent"; if (ssl) SSL_free(ssl); ::close(fd); return false; }
-            ok = put(fb, n), left -= n;
+            ok = put_up(fb, n, early), left -= n;
         }
         if (ok && !early) ok = put(tail.data(), tail.size());
         timeval wait{(time_t)up->wait, 0};  // the host may take a while to look at a big file: more than the 15 s a page gets

@@ -5163,8 +5163,8 @@ end)
                                file + "\r\n--" + bnd + "--\r\n";
             assert(rest == want && up.sent == req.size());  // every byte of the request went through the counter
             {  // what iSekur says when a host answers before it has the file, closes without a word, or is too slow: what happened
-                struct Host { int ls; std::thread t; unsigned short port; };
-                auto host = [&](int mode) {  // 0: answers at the headers and sits on it, 1: takes the file and closes, 2: takes the file and thinks for 3 s
+                struct Host { int ls; std::thread t; unsigned short port; std::atomic<bool> stop{false}; };
+                auto host = [&](int mode) {  // 0: answers at the headers and sits on it, 1: takes the file and closes, 2: takes the file and thinks for 3 s, 3: reads nothing for 0.4 s, then answers
                     auto h = std::make_unique<Host>();
                     h->ls = socket(AF_INET, SOCK_STREAM, 0);
                     int on = 1;
@@ -5176,16 +5176,25 @@ end)
                     getsockname(h->ls, (sockaddr*)&sa, &sl);
                     h->port = ntohs(sa.sin_port);
                     int lfd = h->ls;
-                    h->t = std::thread([lfd, mode] {
+                    std::atomic<bool>* stop = &h->stop;
+                    h->t = std::thread([lfd, mode, stop] {
                         int fd = accept(lfd, nullptr, nullptr);
+                        if (mode == 3) {  // reads nothing and says nothing for a while: the client fills its buffers and sits in send(); the answer comes then, to a client that must still hear it
+                            usleep(400000);
+                            const char* late = "HTTP/1.0 413 Payload Too Large\r\nContent-Length: 4\r\n\r\nnope";
+                            send(fd, late, strlen(late), 0);
+                            for (int i = 0; i < 2000 && !stop->load(); i++) usleep(10000);
+                            close(fd), close(lfd);
+                            return;
+                        }
                         std::string rq;
                         char b[65536];
                         size_t e;
                         while ((e = rq.find("\r\n\r\n")) == std::string::npos) { ssize_t n = recv(fd, b, sizeof b, 0); if (n <= 0) break; rq.append(b, (size_t)n); }
-                        if (mode == 0) {
+                        if (mode == 0 || mode == 3) {
                             const char* ans = "HTTP/1.0 413 Payload Too Large\r\nContent-Length: 4\r\n\r\nnope";
                             send(fd, ans, strlen(ans), 0);
-                            usleep(700000);  // not reading: a client that goes on sending would fill its buffers and stop
+                            for (int i = 0; i < 2000 && !stop->load(); i++) usleep(10000);  // not reading, and not closing until the client is done (20 s at most): a client that goes on sending fills its buffers and stops
                         } else {
                             size_t cl = (size_t)atol(rq.c_str() + rq.find("Content-Length: ") + 16), got = rq.size() - e - 4;
                             while (got < cl) { ssize_t n = recv(fd, b, sizeof b, 0); if (n <= 0) break; got += (size_t)n; }
@@ -5200,14 +5209,22 @@ end)
                     Upload u;
                     u.url = "http://127.0.0.1:" + std::to_string(h->port) + "/up", u.path = path, u.guard = false, u.wait = wait;
                     bool ok = https_upload(u, code, answer, why);
+                    h->stop = true;
                     h->t.join();
                     return std::make_pair(ok, (unsigned long long)u.sent);
                 };
                 std::string big(20 << 20, 'z'), ans, why;
                 wr(dir + "/20mb.bin", big);
                 int code = 0;
-                auto [ok0, sent0] = go(0, dir + "/20mb.bin", 120, ans, why, code);  // "413 too big" at the headers: heard, and the 20 MB are not sent
-                assert(ok0 && code == 413 && ans == "nope" && sent0 < (4 << 20));
+                // "413 too big" at the headers: heard, and the rest of the 20 MB is not sent. The host reads no more than its first piece, so what got
+                // written is what the two kernel buffers hold (a few hundred KB on some systems, several MB on others that grow them): the bound is
+                // "far from all of it", not a number of one kernel
+                for (int mode : {0, 3}) {  // 3: the buffers are full, the client is in send(), when the host answers
+                    auto [okm, sentm] = go(mode, dir + "/20mb.bin", 120, ans, why, code);
+                    if (!(okm && code == 413 && ans == "nope" && sentm < big.size() * 3 / 4))
+                        fprintf(stderr, "early answer, mode %d: ok=%d code=%d answer=[%s] why=[%s] sent=%llu\n", mode, okm, code, ans.c_str(), why.c_str(), sentm);
+                    assert(okm && code == 413 && ans == "nope" && sentm < big.size() * 3 / 4);
+                }
                 auto [ok1, sent1] = go(1, dir + "/big.bin", 120, ans, why, code);
                 assert(!ok1 && why == "127.0.0.1 closed the connection without answering" && sent1 > 200000);
                 auto [ok2, sent2] = go(2, dir + "/big.bin", 1, ans, why, code);
