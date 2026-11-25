@@ -80,7 +80,6 @@ button, input { font: inherit; color: inherit; }
 #side .tab .ub + .more, #side .tab .ub + .fold, #side .tab .ub + .x { margin-left: 0; }
 /* a network's row: its × takes the badge's place on hover, so the name keeps its room */
 @media (hover: hover) { #side .tab.srv:hover .ub { display: none; } #side .tab.srv:hover .ub + .fold { margin-left: auto; } }
-#side .tab.shell { color: var(--tab_shell-fg, var(--tab_home-fg, inherit)); }
 #side .tab .more { color: var(--muted); }
 #side .tab .x { margin-left: auto; flex-shrink: 0; padding: 0 4px; font-weight: 400; opacity: .4; visibility: hidden; }  /* the tab's own color, faded: fits every theme and the active tab's */
 @media (hover: hover) { #side .tab:hover .x { visibility: visible; } }
@@ -1450,7 +1449,7 @@ function renderSide() {
       for (const x of order) { const o = bufs.get(x); if (o && o !== b && o.srv === b.srv && x !== active) hid++, act = Math.max(act, o.act), ub += x === split ? 0 : unreadMsgs(o); }
     const t = document.createElement("div");
     t.className = "tab" + (id === active ? " active" : id === split ? " split" : "") + (act ? " a" + act : "") +
-      (b.home ? " home" : srvRow ? " server srv" : b.type === "shell" ? " shell" : "") +
+      (b.home ? " home" : srvRow ? " server srv" : "") +
       (b.srv && !b.home && !srvRow ? " child" : "") +
       ((b.type === "channel" && !b.joined) || b.state !== "connected" ? " off" : "");
     t.dataset.id = id, t.dataset.net = b.net;
@@ -1502,7 +1501,6 @@ function renderTopic() {
   else if (b.name === "*channels") t.textContent = "Channel list: type a word to filter by name or topic, Esc clears · /list again refreshes it · /join #channel";
   else if (b.name === "*guide") t.textContent = "First steps guide: ← → or Prev / Next turn the pages · /guide N jumps · q or Esc closes";
   else if (b.type === "query") t.textContent = "Query with " + b.name;
-  else if (b.type === "shell") t.textContent = b.host ? "Remote iSekur: ssh " + b.host + " (in iSekur's terminal only)" : "Shell: it runs in iSekur's terminal only";
   else if (b.home) t.textContent = "iSekur - multi-server IRC with a built-in webchat";
   else t.textContent = b.srv + " - " + b.state;
   t.title = t.textContent;
@@ -3991,7 +3989,7 @@ function action(a) {
     let best = null;
     for (let i = 1; i < sz; i++) { const b = bufs.get(at(n + i)); if (b && b.act > (best ? bufs.get(best).act : 0)) best = at(n + i); }
     if (best !== null) select(best);
-  } else if (a === "next_server" || a === "prev_server") {  // the top level: server tabs and the ones of no network (cmd, shells)
+  } else if (a === "next_server" || a === "prev_server") {  // the top level: server tabs and the ones of no network (cmd)
     const d = a === "next_server" ? 1 : -1;
     for (let i = 1; i < sz; i++) { const b = bufs.get(at(n + d * i)); if (b && (b.type === "status" || !b.net)) { select(at(n + d * i)); break; } }
   } else if (a === "close_tab") send({t: "input", buf: active, text: "/close"});

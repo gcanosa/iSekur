@@ -6,7 +6,6 @@ topic          = #ffffff #1c1c1c bold
 tabbar         = #8a8a8a #121212
 tab_server     = #ffffff #121212 bold
 tab_home       = #ffffff #121212 bold
-tab_shell      = #ffffff #121212 bold
 tab_active     = #000000 #d0d0d0 bold
 tab_data       = #d0d0d0 #121212 underline
 tab_msg        = #ffffff #121212 bold

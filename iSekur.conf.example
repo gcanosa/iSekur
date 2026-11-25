@@ -133,8 +133,6 @@ lock_prompt_timeout = 30
 # needs https and a domain name, not an IP). The password always works too.
 # /lock devices lists them, /lock devices del <name> removes one.
 lock_biometric = off
-# /shell checks the login and password with this PAM service
-#pam_service = login
 
 # Ask before sending a paste (or /exec -o output) longer than this many lines (0 = never ask).
 # Servers with IRCv3 draft/multiline get a paste as one message.

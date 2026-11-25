@@ -194,25 +194,9 @@ inline bool noise(const Line& l) { int k = fold_kind(l); return k >= 0 && k <= 4
 struct LogFile { std::string net, name, day, path; long long size = 0; bool current = false; };
 struct LogQuery { std::vector<std::string> words; std::string nick; bool events = true; };  // events: joins, parts, quits, nicks
 struct LogHit { size_t file, line; Line l; };
-enum class BT { STATUS, CHANNEL, QUERY, SHELL };  // SHELL: /shell, no server
+enum class BT { STATUS, CHANNEL, QUERY };
 struct Server;
 struct Core;
-struct VTerm;
-// /shell: a shell on a pty and its screen (exec.cpp); the TUI draws vt
-struct Term {
-    pid_t pid = -1;
-    int fd = -1;  // the pty master
-    VTerm* vt = nullptr;
-    int rows = 24, cols = 80;
-    bool cursor = true;
-    int mouse = 0;  // the program in it asked for mouse reports (VTERM_PROP_MOUSE): clicks go to it
-    bool up = false;  // /attach: the remote iSekur took the screen; before, ssh is connecting and the input line is iSekur's
-    std::string host, rcfg, port;  // /attach [-p port] host [config]: ssh to another iSekur, "" = /shell
-    time_t t0 = time(nullptr);     // started: "connected 47m" when it ends
-    Core* c = nullptr;
-    struct Buffer* b = nullptr;
-    ~Term();  // hangs up the shell
-};
 // host: user@host, "" = unknown; account: logged in as (account-notify, account-tag, WHOX), "" = no or unknown;
 // realname: WHOX, SETNAME; bot: the 005 BOT mode (WHOX flags, the bot tag)
 struct NickEntry { std::string nick, prefix; bool away = false; std::string host, account, realname; bool bot = false; };
@@ -237,7 +221,6 @@ struct Buffer {
     bool quiet_typing = false;               // quiet only because /typing turned it on: /typing off undoes it
     bool collapsed = false;                  // a server tab hiding its channels in the tab bar (right click)
     bool placed = false;                     // /move (or a drag) put it here: isekur.sort_tabs leaves it where it is
-    std::unique_ptr<Term> term;              // a shell tab's running shell
     FILE* log = nullptr;                     // opened lazily when logging is on
     std::string log_day;                     // YYYY-MM-DD the open log belongs to
     // /topicrotate: topics set in turn every rot_min minutes
@@ -820,14 +803,6 @@ struct Core {
     std::vector<Job> jobs;  // /exec, exec.cpp
     bool from_web = false;  // exec() called for the webchat: /exec needs exec_web
     void exec_cmd(Buffer* b, const std::string& args);
-    void shell_cmd(Buffer* b);                       // /shell: asks the system login first
-    void shell_login(Buffer* sb, const std::string& err);  // the login dialog, again after a wrong one
-    void shell_start(Buffer* sb, const std::string& host = "", const std::string& rcfg = "", const std::string& port = "");  // host: ssh -t [-p port] host isekur [-c rcfg] --attach
-    void attach_cmd(Buffer* b, const std::string& args);  // /attach host [config]: a remote iSekur in a tab
-    bool os_login(const std::string& login, const std::string& pass, std::string& why);
-    void shell_line(Buffer* b, const std::string& l);  // a line typed in a shell tab with no shell
-    void term_resize(Term* t, int rows, int cols);
-    void terms_poll(const std::vector<pollfd>& fds, size_t from);  // their ptys from fds[from] on
     void jobs_poll(const std::vector<pollfd>& fds, size_t from);  // their pipes from fds[from] on
     // [general] fifo: a named pipe whose lines run as if typed (fifo.cpp)
     int fifo_fd = -1;
@@ -903,7 +878,6 @@ bool e2e_line_open(const std::string& key, const std::string& text, std::string&
 bool e2e_on(const Buffer* b);  // a 🔒 tab: an encrypted query, or a channel with a key
 std::string fmt_time(time_t t, const std::string& fmt);
 std::string human_bytes(unsigned long long n);  // 512M, 3.2G
-std::string ssh_dest(const std::string& ssh_g);  // exec.cpp: `ssh -G` output -> "user@hostname:port"
 std::string fmt_dur(long secs);
 std::string ban_kinds(const Server* s);  // chanops.cpp: the list modes this server has of "beIq" (bans, exceptions, invite exceptions, quiets)
 long long parse_span(const std::string& w);  // config.cpp: 90 (minutes), 30m, 2h, 1d12h, 1w -> seconds; 0 when it isn't one

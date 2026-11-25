@@ -191,7 +191,7 @@ std::vector<std::string> about_lines(const Theme& t, double shine, bool web, std
     const char* k = "\x03" "14";  // labels gray, values in the text color
     for (std::string l : {std::string(""),
                           std::string("\x02iSekur " ISEKUR_VERSION "\x02  a colorful terminal IRC client with a built-in webchat"),
-                          std::string(k) + "multi-server · IRCv3 · TLS + SASL · E2E channels and queries · /shell · detach and attach",
+                          std::string(k) + "multi-server · IRCv3 · TLS + SASL · E2E channels and queries · detach and attach",
                           std::string(""),
                           std::string(k) + "Author     \x0f" "Gerardo Canosa",
                           std::string(k) + "Website    \x0f" "https://gcanosa.github.io/isekur-site/",
@@ -442,7 +442,7 @@ static const std::vector<KeyInfo> KEYS = {
     {"log", "Logs", 'b'}, {"log_dir", "Logs", 'b'}, {"log_history", "Logs", 'b'}, {"log_rotate", "Logs", 'b'}, {"log_keep", "Logs", 'b'}, {"keep_history", "Logs", 'b'},
     {"flood_burst", "Network", 'b'}, {"flood_interval_ms", "Network", 'b'}, {"pre_away", "Network", 'b'},
     {"dcc", "Files", 'g'}, {"dcc_dir", "Files", 'b'}, {"dcc_ip", "Files", 'b'}, {"dcc_ports", "Files", 'b'}, {"dcc_web", "Files", 'g'},
-    {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_grace", "Security", 'g'}, {"lock_prompt_timeout", "Security", 'g'}, {"lock_biometric", "Security", 'g'}, {"lock_password_hash", "Security", 'g'}, {"pam_service", "Security", 'g'},
+    {"lock", "Security", 'g'}, {"lock_idle", "Security", 'g'}, {"lock_grace", "Security", 'g'}, {"lock_prompt_timeout", "Security", 'g'}, {"lock_biometric", "Security", 'g'}, {"lock_password_hash", "Security", 'g'},
     {"exec_timeout", "Security", 'g'}, {"exec_web", "Security", 'g'}, {"fifo", "Session", 'g'}, {"fifo_path", "Session", 'g'},
     {"check_updates", "Updates", 'g'},
 };
@@ -1126,7 +1126,7 @@ void Core::close(Buffer* b, const std::string& part_msg) {
     if (pass_buf == b) pass_buf = nullptr, pass_done = nullptr;
     if (s && b->name == "*raw" && b->type == BT::QUERY) s->raw_hook = nullptr;  // /rawlog stops with its tab
     bool drop_server = s && b->type == BT::STATUS;
-    crumb("close", b->type == BT::STATUS ? "status" : b->type == BT::CHANNEL ? "channel" : b->type == BT::QUERY ? "query" : "shell");
+    crumb("close", b->type == BT::STATUS ? "status" : b->type == BT::CHANNEL ? "channel" : "query");
     int i = index_of(b);
     notify(Ev::CLOSE, b);
     if (active == b) active = bufs[(size_t)(i > 0 ? i - 1 : 1 % bufs.size())].get();
@@ -2000,11 +2000,6 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (in.empty()) return;
     last_input = time(nullptr);
-    // a shell tab: everything goes to the shell (/bin/ls too) but iSekur's own commands
-    if (b->type == BT::SHELL && (in[0] != '/' || !find_command(in.substr(1, in.find(' ') - 1)))) {
-        shell_line(b, in);
-        return;
-    }
     if (in[0] != '/' || in.rfind("//", 0) == 0) {
         if (b->srv && b->name == "*channels") { list_filter(b, in); return; }  // typed in the /list table: it filters it
         say(b, in[0] == '/' ? in.substr(1) : in);
@@ -2090,7 +2085,7 @@ void Core::exec(Buffer* b, const std::string& input) {
     if (cmd == "logs") {  // the log browser, at this tab's logs; text: searched there right away (the webchat opens its own)
         if (!tty || from_web) { print(b, LK::INFO, "The log browser is a window: /logs in the terminal or the webchat"); return; }
         logs_win = dirty = true, logs_q = args;
-        logs_at = b->srv && b->type != BT::SHELL ? b->srv->cfg.name + (b->type == BT::STATUS ? "" : "\t" + safe_name(b->name)) : "";
+        logs_at = b->srv ? b->srv->cfg.name + (b->type == BT::STATUS ? "" : "\t" + safe_name(b->name)) : "";
         return;
     }
     if (cmd == "keys") {  // the terminal's window (the webchat opens its own dialog)
@@ -2113,7 +2108,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "e2e" || cmd == "sq") { e2e_cmd(b, args); return; }
-    if (plugin_depth && (cmd == "exec" || cmd == "sh" || cmd == "shell" || cmd == "attach")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: no programs
+    if (plugin_depth && (cmd == "exec" || cmd == "sh")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: no programs
     if (plugin_depth && cmd == "upload") { plug_print(b, LK::ERROR, "/upload can't be run by a plugin"); return; }  // the sandbox: a plugin never names a file of yours
     if (cmd == "upload") { upload_cmd(b, args); return; }
     if (plugin_depth && (cmd == "backup" || cmd == "restore")) { plug_print(b, LK::ERROR, "/" + cmd + " can't be run by a plugin"); return; }  // the sandbox: a plugin never reads or replaces the config
@@ -2128,8 +2123,6 @@ void Core::exec(Buffer* b, const std::string& input) {
     }
     if (cmd == "exec" || cmd == "sh") { exec_cmd(b, args); return; }
     if (cmd == "dcc") { dcc_cmd(b, args); return; }
-    if (cmd == "shell") { shell_cmd(b); return; }
-    if (cmd == "attach") { attach_cmd(b, args); return; }
     if (cmd == "lock") { lock_cmd(b, args); return; }
     if (cmd == "servers") {  // the terminal: the settings window at the first server, or at /servers name (the webchat opens its Servers window)
         if (!argv.empty() && !std::any_of(servers.begin(), servers.end(), [&](auto& sv) { return sv->cfg.name == argv[0]; })) {
@@ -2187,8 +2180,8 @@ void Core::exec(Buffer* b, const std::string& input) {
             }
             return;
         }
-        // the sandbox: a plugin can't switch /exec on, open the webchat or the BNC, move dcc_dir or the /shell login either
-        if (plugin_depth && (lock_guarded(sec, key) || key == "pam_service" || key == "perform" || sec == "aliases")) { plug_print(b, LK::ERROR, "/set " + argv[0] + " can't be run by a plugin"); return; }
+        // the sandbox: a plugin can't switch /exec on, open the webchat or the BNC or move dcc_dir either
+        if (plugin_depth && (lock_guarded(sec, key) || key == "perform" || sec == "aliases")) { plug_print(b, LK::ERROR, "/set " + argv[0] + " can't be run by a plugin"); return; }
         // a value the key can't take is refused here, before it's in the config (the same check /checkconf does)
         if (!val.empty())
             if (std::string m = bad_value(sec, key, val); !m.empty()) {

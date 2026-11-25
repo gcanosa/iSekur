@@ -317,7 +317,7 @@ int main(int argc, char** argv) {
         std::string now = version_string();
         c.info_note(home, was && *was && was != now ? "Restarted: " + std::string(was) + " \u2192 " + now : "Restarted: " + now);
     }
-    unsetenv("ISEKUR_WAS");  // /shell tabs and /exec would inherit it
+    unsetenv("ISEKUR_WAS");  // /exec would inherit it
     if (ls == 0) c.print(home, LK::ERROR, "Detaching is not available: " + err);
     if (attach && !daemon)
         c.print(home, LK::INFO, "\x03" "01,08" "\x02" " NEW SESSION " "\x0f" " Nothing was running to attach to: this is a fresh start, not a recovered session");
@@ -385,9 +385,6 @@ int main(int argc, char** argv) {
         size_t job0 = fds.size();
         for (auto& j : c.jobs)
             if (j.fd >= 0) fds.push_back({j.fd, POLLIN, 0});
-        size_t term0 = fds.size();
-        for (auto& b : c.bufs)
-            if (b->term && b->term->fd >= 0) fds.push_back({b->term->fd, POLLIN, 0});
         size_t dcc0 = fds.size();
         for (auto& d : c.dccs)
             if (d->conn.fd >= 0) fds.push_back({d->conn.fd, d->conn.events(), 0});
@@ -420,8 +417,6 @@ int main(int argc, char** argv) {
         if (c.tty && tui.blink_flipped()) c.dirty = true;
         if (c.tty && tui.in_selecting) tui.input_edge();
         if (c.flash_until && now_ms() >= c.flash_until) c.flash.clear(), c.flash_until = 0, c.dirty = true;
-        guard("shell tabs", [&] { c.terms_poll(fds, term0); });  // first: nothing has closed a tab yet, so the order still holds
-        probe.lap("shell tabs");
         guard("DCC", [&] { c.dccs_poll(fds, dcc0); });
         probe.lap("DCC");
         // servers first: their handlers never delete servers, so `polled` stays valid.

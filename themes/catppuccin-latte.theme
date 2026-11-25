@@ -5,7 +5,6 @@ topic          = #4c4f69 #ccd0da bold
 tabbar         = #8c8fa1 #e6e9ef
 tab_server     = #8839ef #e6e9ef bold
 tab_home       = #179299 #e6e9ef bold
-tab_shell      = #fe640b #e6e9ef bold
 tab_active     = #ffffff #8839ef bold
 tab_data       = #1e66f5 #e6e9ef
 tab_msg        = #4c4f69 #e6e9ef bold

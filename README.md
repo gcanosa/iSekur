@@ -17,7 +17,8 @@ your browser or phone shows the same live session.
 ## Why iSekur
 
 - **No screen, tmux or ZNC needed.** Alt+D detaches and `isekur --attach` brings it back from any
-  terminal or SSH login. A closed window or a dropped connection detaches; it doesn't quit.
+  terminal or SSH login (from another computer, `ssh -t host isekur --attach`). A closed window or a
+  dropped connection detaches; it doesn't quit.
 - **A bouncer built in.** irssi, weechat, HexChat, mIRC or a phone app connect to your iSekur and
   share its networks, channels and recent lines. Clients that support IRCv3 also get chathistory and echoes.
 - **A webchat built in.** It shows the same live session over HTTPS in a browser and installs
@@ -36,8 +37,7 @@ your browser or phone shows the same live session.
   file host (litterbox by default, no account) and a box asks whether to send the link to the tab, copy it, or send it elsewhere.
 - **Backup and move.** `/backup` puts your settings, servers, passwords, plugins and themes in one small
   file locked with a passphrase; `/restore` on another computer gives the same iSekur.
-- **And more:** a real shell in a tab (`/shell`, behind a system login), another machine's iSekur in
-  a tab (`/attach host`), Twitch chat, DCC with resume, a log browser, a master lock password, channel op tools.
+- **And more:** Twitch chat, DCC with resume, a log browser, a master lock password, channel op tools.
 
 | | |
 |---|---|
@@ -55,19 +55,19 @@ Prebuilt packages of the latest release:
 [macOS arm64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-macos-arm64.tar.gz),
 [Linux x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-x86_64.tar.gz),
 [Linux arm64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-linux-arm64.tar.gz) (libssl3),
-[Windows x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-windows-x86_64.zip) (Cygwin build, without `/shell` or detach; WSL runs the Linux one),
+[Windows x86_64](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-windows-x86_64.zip) (Cygwin build, without detach; WSL runs the Linux one),
 [source](https://github.com/gcanosa/iSekur/releases/latest/download/isekur-src.tar.gz).
 
-From source (C++17, GNU make, OpenSSL 1.1+/LibreSSL, PAM; termbox2 and libvterm are vendored):
+From source (C++17, GNU make, OpenSSL 1.1+/LibreSSL; termbox2 and Lua are vendored):
 
     make && sudo make install     # gmake on *BSD
 
-On Debian, Ubuntu and WSL the headers come from `sudo apt install build-essential libssl-dev libpam0g-dev`
-(Fedora: `openssl-devel pam-devel`).
+On Debian, Ubuntu and WSL the headers come from `sudo apt install build-essential libssl-dev`
+(Fedora: `openssl-devel`).
 
 Every push is built and tested on macOS, Linux (glibc and Alpine's musl), FreeBSD, OpenBSD, NetBSD and Cygwin.
 On the BSDs install GNU make first: `pkg install gmake` (FreeBSD), `pkg_add gmake` (NetBSD),
-`pkg_add gmake libiconv` (OpenBSD, which has no PAM, so no `/shell` login there).
+`pkg_add gmake libiconv` (OpenBSD).
 
 Run `isekur`. The first start writes `~/.config/isekur/isekur.conf` and opens a short guide.
 After that, `/server irc.sekurnet.org 6697 -tls -save` (without `-save` it is only for this run) and `/join #iSekur`. All the rest is in the

@@ -237,8 +237,6 @@ int main() {
     assert(fmt_dur(9) == "9s" && fmt_dur(2832) == "47m12s" && fmt_dur(90061) == "1d1h1m");
     assert(attach_who("203.0.113.7 52144 10.0.0.2 22", "/dev/ttys004") == "203.0.113.7 (ssh) on /dev/ttys004");
     assert(attach_who("", "/dev/ttys001") == "local on /dev/ttys001" && attach_who("", "") == "local");
-    assert(ssh_dest("user ethernet\nhostname 203.0.113.7\nport 22\nidentityfile ~/.ssh/id\n") == "ethernet@203.0.113.7:22");
-    assert(ssh_dest("hostname 2001:db8::1\nport 2222\n") == "[2001:db8::1]:2222" && ssh_dest("") == "");
     assert(client_ip("203.0.113.9", "1.2.3.4") == "203.0.113.9");             // not from a local proxy: ignored
     assert(client_ip("127.0.0.1", "6.6.6.6, 198.51.100.23") == "198.51.100.23");  // the proxy's own hop
     assert(client_ip("::1", "2001:db8::5") == "2001:db8::5" && client_ip("127.0.0.1", "") == "127.0.0.1");
@@ -464,30 +462,13 @@ int main() {
     assert(mirc_strip(home->lines[before].text).rfind("/join #channel [key]", 0) == 0);
     core.exec(home, "/help bogus");
     assert(mirc_strip(home->lines.back().text).find("No such command: /bogus") == 0);
-    // /attach: never an ssh option or more than a host, never from the webchat; no tab opened
-    size_t tabs = core.bufs.size();
-    for (const char* bad : {"/attach", "/attach -oProxyCommand=touch /tmp/x", "/attach a b c", "/attach a;b", "/attach a -x",
-                            "/attach a $(id)", "/attach a 'x'", "/attach a x\"y", "/attach -p 22 -x a", "/attach -p 22 a b c"}) {
-        core.exec(home, bad);
-        assert(home->lines.back().text.find("Usage: /attach [-p port] host") == 0 && core.bufs.size() == tabs);
-    }
-    for (const char* bad : {"/attach -p a", "/attach -p 0 a", "/attach -p 70000 a", "/attach -p -oX=y a", "/attach a -p"}) {  // -p: a port, nothing else
-        core.exec(home, bad);
-        assert(home->lines.back().text == "/attach -p takes a port, 1-65535" && core.bufs.size() == tabs);
-    }
-    {  // a shell or remote tab gets a right-click menu: its keys all go to the tab
-        Buffer* sh = core.open(nullptr, BT::SHELL, "vps");
-        auto tm = core.tab_menu(sh);
-        assert(tm.size() == 1 && tm[0].first == "Close" && tm[0].second == "/close");  // a remote one: "Disconnect", asking first
-        core.close(sh);
-    }
     {  // a pasted "/close" with lines after it: the rest has no tab to run in (it used to run in the freed one)
-        Buffer* gone = core.open(nullptr, BT::SHELL, "gone");
+        Buffer* gone = core.open(nullptr, BT::QUERY, "gone");
         size_t n = core.bufs.size();
         core.exec(gone, "/close\n/help /join\n/help bogus");
         assert(core.bufs.size() == n - 1 && core.index_of(gone) < 0);
         Buffer* was = core.active;  // the same through the FIFO: an escaped \n after /close runs in the tab active then
-        Buffer* fgone = core.open(nullptr, BT::SHELL, "fgone");
+        Buffer* fgone = core.open(nullptr, BT::QUERY, "fgone");
         core.active = fgone;
         core.fifo_line("/close\\n/help /join");
         assert(core.index_of(fgone) < 0);
@@ -513,10 +494,6 @@ int main() {
         for (const char* k : {"log_keep", "tab_bar_width", "nick_width", "history_fetch"}) core.cfg["general"].erase(k), core.unsaved["general"].erase(k), core.set_was["general"].erase(k);
         if (core.unsaved["general"].empty()) core.unsaved.erase("general");
     }
-    core.from_web = true;
-    core.exec(home, "/attach vps");
-    core.from_web = false;
-    assert(home->lines.back().text == "/attach works in the terminal only" && core.bufs.size() == tabs);
     {  // with a lock password, exec_web (and lock itself) change only after typing it
         core.cfg["general"]["lock"] = "on", core.cfg["general"]["lock_password_hash"] = hash_password("pw");
         core.cfg["general"]["lock_grace"] = "0";  // every guarded /set asks, as these tests expect; lock_grace has its own below
@@ -4361,12 +4338,12 @@ print("loaded")
         }
         pc.exec(ph, "/ptest self");
         assert(last(ph) == "/plugin can't be run by a plugin" && pc.plugins.size() == 1);
-        for (const char* blocked : {"exec", "sh", "shell", "attach", "alias", "perform"}) {  // no programs: the sandbox has no way around through a command
+        for (const char* blocked : {"exec", "sh", "alias", "perform"}) {  // no programs: the sandbox has no way around through a command
             size_t tabs = pc.bufs.size();
             pc.exec(ph, std::string("/ptest run ") + blocked + " true");
             assert(last(ph) == std::string("/") + blocked + " can't be run by a plugin" && pc.jobs.empty() && pc.bufs.size() == tabs);
         }
-        for (const char* key : {"exec_web", "dcc_dir", "pam_service", "web.password_hash", "aliases.x", "server.sn.perform"}) {  // nor by switching them on
+        for (const char* key : {"exec_web", "dcc_dir", "web.password_hash", "aliases.x", "server.sn.perform"}) {  // nor by switching them on
             std::string was = pc.cfg["general"]["exec_web"];
             pc.exec(ph, std::string("/ptest run set ") + key + " on");
             assert(last(ph) == std::string("/set ") + key + " can't be run by a plugin" && pc.cfg["general"]["exec_web"] == was);

@@ -11,18 +11,9 @@
 #include <unordered_map>
 #include "core.h"
 #include "termbox2.h"
-#include <termios.h>
 #include <unistd.h>
-#include "vterm.h"
 
 static const int TB_MOD_SUPER = 16;  // vendor/termbox2.c: CSI u / modifyOtherKeys, Cmd
-// /attach before the remote iSekur shows up: iSekur's input line, not raw keys echoed by the pty;
-// ssh asking a password (echo off) gets the keys themselves
-static bool connecting(const Term* t) {
-    termios ts;
-    return !t->host.empty() && !t->up && !(tcgetattr(t->fd, &ts) == 0 && !(ts.c_lflag & ECHO));
-}
-
 static bool g_true = true;  // truecolor output, else nearest xterm-256
 
 static int nearest256(RGB c) {
@@ -559,7 +550,7 @@ static std::vector<Row> wrap(const Core& c, const Line& l, const Buffer* b, int 
     }
     if (l.badge_kind == 'f') body = fold_style(T);  // eventshidemgr's row: the theme's accent, apart from the chat
     if (auto em = T.lay("event_marker", ""); !em.empty() && l.kind != LK::MSG && l.kind != LK::NOTICE)  // mirc: "*"
-        marker = l.kind == LK::INFO && !b->srv && b->type != BT::SHELL ? "" : em;  // home tab's banner and welcome: bare
+        marker = l.kind == LK::INFO && !b->srv ? "" : em;  // home tab's banner and welcome: bare
     // the 🔒 (drawn, not in the text: a typed one can't pass for it) in a column of its own, opposite the time: at the
     // right edge, or with timestamp_align = right at the left, in front of the nick column (a long nick gives it 2 cells)
     Row lock;
@@ -747,13 +738,6 @@ static Line fold_line(const std::vector<const Line*>& run, bool open, bool names
 
 void Tui::draw_chat(Buffer* b, int x, int y, int w, int h) {
     const Theme& T = c.look(false);
-    // a shell tab: its terminal screen, unless scrolled back into what went off the top
-    Term* term = b->term.get();
-    if (term && b->scroll == 0) {
-        c.term_resize(term, h, w);
-        draw_term(term, y, h, w, x);
-        return;
-    }
     auto fc = c.fold_cfg(b);  // eventshidemgr: runs of join/part/quit lines as one row, a click opens them
     bool zhide = zen && !c.view.events;  // the focus view hides them unless it shows them
     bool hide = zhide || (b->quiet && !(fc.on && fc.quiet));  // join/part/quit lines: a quiet tab's (its summary rows stay when the plugin keeps them) and the focus view's
@@ -910,9 +894,9 @@ void Tui::draw() {
     c.dirty = false;
     {  // for isekur.crash: what this frame is about to draw
         char st[240];
-        snprintf(st, sizeof st, "%dx%d theme=%s tab=%s lines=%zu scroll=%d unread=%d quiet=%d term=%d split=%d locked=%d saver=%s", W, H, T.name.c_str(),
-                 !b ? "none" : b->type == BT::STATUS ? (b->srv ? "status" : "cmd") : b->type == BT::CHANNEL ? "channel" : b->type == BT::QUERY ? "query" : "shell",
-                 b ? b->lines.size() : 0, b ? b->scroll : 0, b ? b->unread : 0, b && b->quiet, b && b->term, c.split_buf != nullptr, c.locked,
+        snprintf(st, sizeof st, "%dx%d theme=%s tab=%s lines=%zu scroll=%d unread=%d quiet=%d split=%d locked=%d saver=%s", W, H, T.name.c_str(),
+                 !b ? "none" : b->type == BT::STATUS ? (b->srv ? "status" : "cmd") : b->type == BT::CHANNEL ? "channel" : "query",
+                 b ? b->lines.size() : 0, b ? b->scroll : 0, b ? b->unread : 0, b && b->quiet, c.split_buf != nullptr, c.locked,
                  c.screen_by.empty() ? "-" : c.screen_by.c_str());
         crumb_state(st);
     }
@@ -958,8 +942,6 @@ void Tui::draw() {
         else if (b->name == "*about" && !b->srv) topic = "About iSekur";
         else if (b->name == "*guide" && !b->srv) topic = "First steps guide: ← → turn the pages · /guide N jumps · q, Esc or Ctrl+W closes";
         else if (b->type == BT::QUERY) topic = "Query with " + b->name;
-        else if (b->type == BT::SHELL) topic = b->term && !b->term->host.empty() ? "Remote iSekur: ssh " + (b->term->port.empty() ? "" : "-p " + b->term->port + " ") + b->term->host + (b->term->rcfg.empty() ? "" : ", -c " + b->term->rcfg) + " (/detach inside leaves it running)"
-                    : b->term ? std::string("Shell: ") + (getenv("SHELL") ? getenv("SHELL") : "/bin/sh") : "Shell: /shell logs in and starts one";
         else if (b->srv) {
             static const char* st[] = {"disconnected", "connecting", "registering", "connected"};
             topic = b->srv->cfg.host + ":" + std::to_string(b->srv->cfg.port) +
@@ -1017,7 +999,6 @@ void Tui::draw() {
                 : act == 2 ? T.get("tab_msg")
                 : act == 1 ? T.get("tab_data")
                 : t->quiet ? sty(T, "tab_quiet", "tabbar")
-                : t->type == BT::SHELL ? sty(T, "tab_shell", "tab_home")
                 : !t->srv ? sty(T, "tab_home", "tab_server")
                 : t->type == BT::STATUS ? sty(T, "tab_server", "tabbar") : tbs;
         if (t->id == tab_drop) s.attr ^= A_REV;
@@ -1142,7 +1123,6 @@ void Tui::draw() {
     nl_left = ini_get(c.cfg, "general", "nicklist_side") == "left";
     sel_lo = chat_x, sel_hi = chat_end;  // the chat's columns, less a lone pane's nicklist (set by draw_pane)
     int AW = chat_end - chat_x;  // the chat's width: beside the tab list, if it's at a side
-    pane = Box{chat_x, top, AW, ch};  // where the focused tab's chat went (a shell's cursor goes in it)
     auto draw_pane = [&](Buffer* pb, Box bx, bool focus) {
         if (two) {
             Style hs = focus ? T.get("tab_active") : T.get("tabbar");
@@ -1158,10 +1138,9 @@ void Tui::draw() {
             if (focus) nl_x = sx, nl_x0 = l0, nl_x1 = l0 + nw, (nl_left ? sel_lo : sel_hi) = nl_left ? sx + 1 : sx;
         }
         draw_chat(pb, cx, bx.y, cwp, bx.h);
-        if (focus) pane = Box{cx, bx.y, cwp, bx.h};
     };
     hover_in = false;
-    if (!two) draw_pane(b, pane, true);
+    if (!two) draw_pane(b, Box{chat_x, top, AW, ch}, true);
     else {
         Box p1{chat_x, top, AW, ch}, p2 = p1;
         if (c.split_mode == 1 || (c.split_mode == 0 && AW >= 140)) {  // side by side, a separator column between
@@ -1341,7 +1320,7 @@ void Tui::draw() {
     y = H - 1;
     Style is = T.get("input");
     fill(y, 0, W, is);
-    in_px = -1;  // no input line to drag over until it's drawn below (a box, a shell tab, a question: none)
+    in_px = -1;  // no input line to drag over until it's drawn below (a box, a question: none)
     if (!c.choices.empty()) {  // a plugin's question
         draw_choice(W, H);
         present();
@@ -1407,18 +1386,7 @@ void Tui::draw() {
         present();
         return;
     }
-    if (Term* term = b->term.get(); term && !c.asking(b) && !(term->fd >= 0 && connecting(term))) {  // keys go to the shell: the input line only says so
-        text(0, y, W, "[" + buf_label(b) + "] ", T.get("hilight"), false);
-        text((int)buf_label(b).size() + 3, y, W, term->host.empty() ? "keys go to the shell · Alt+←/→ or Alt+1-9: other tabs · wheel: scrollback · exit ends it"
-                                                          : "keys go to the remote iSekur · Alt+←/→ or Alt+1-9: other tabs · Alt+D or Ctrl+W detaches it", sty(T, "timestamp", "input"), false);
-        VTermPos p;
-        vterm_state_get_cursorpos(vterm_obtain_state(term->vt), &p);
-        if (term->cursor && b->scroll == 0 && p.row < pane.h && p.col < pane.w) tb_set_cursor(pane.x + p.col, pane.y + p.row);
-        else tb_hide_cursor();
-        present();
-        return;
-    }
-    if (c.asking(b)) {  // /shell login, /e2e and /oper passwords: a dialog box
+    if (c.asking(b)) {  // /e2e and /oper passwords: a dialog box
         draw_dialog(W, H, c.pass_title.empty() ? "Password" : c.pass_title, c.pass_info, c.pass_label, c.pass_hidden, input, cur, "Enter: OK · Esc: cancel", 0, 0, 'a');
         present();
         return;
@@ -1464,9 +1432,9 @@ void Tui::draw() {
 }
 
 // the password prompt over the middle of the screen:
-//   ┌─ Shell login ──────────────────┐
-//   │  login: ethernet               │
-//   │  password: ********            │
+//   ┌─ Lock password ────────────────┐
+//   │  Type it again                 │
+//   │  again: ********               │
 //   │  Enter: OK · Esc: cancel       │
 //   └────────────────────────────────┘
 // label "": a yes/no box, the info lines and the hint, no field
@@ -2256,7 +2224,7 @@ std::vector<Buffer*> Tui::find_list() const {
     std::vector<Buffer*> out;
     for (auto& bp : c.bufs) {
         Buffer* b = bp.get();
-        static const char* KIND[] = {"server", "channel", "query", "shell"};
+        static const char* KIND[] = {"server", "channel", "query"};
         std::string hay = irc_lower(buf_label(b) + " " + b->name + " " + (b->srv ? b->srv->cfg.name + " " + b->srv->network : "") +
                                     " " + (b->type == BT::STATUS && !b->srv ? "cmd console" : KIND[(int)b->type]));
         bool ok = true;
@@ -3236,77 +3204,7 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
     return s + "?";
 }
 
-// ---- shell tabs (/shell) ----------------------------------------------------
 bool Tui::guide_tab() const { return c.active && !c.active->srv && c.active->name == "*guide"; }
-
-// the active tab has a running shell and nothing (menu, y/n question, login) is asking
-bool Tui::shell_keys() const {
-    Buffer* b = c.active;
-    return b && b->term && b->term->fd >= 0 && !connecting(b->term.get()) && !c.asking(b) && menu.items.empty() && confirm.empty();
-}
-
-// every key to the shell, but Alt/Cmd ones bound to moving between tabs
-void Tui::shell_key(int mod, int k, uint32_t ch) {
-    Buffer* b = c.active;
-    if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) {
-        auto it = keymap.find(keyspec(mod, k, ch));
-        if (it != keymap.end()) {
-            const std::string& a = it->second;
-            if (a == "next_tab" || a == "prev_tab" || a == "next_active" || a == "mark_all_read" || a == "next_server" || a == "prev_server" || a.rfind("tab_", 0) == 0) { action(a); return; }
-        }
-    }
-    if (!b->term->host.empty()) {  // /attach: Ctrl+W closes this link (the iSekur there keeps running), not a tab over there
-        auto it = keymap.find(keyspec(mod, k, ch));
-        if (it != keymap.end() && it->second == "close_tab") { action("close_tab"); return; }
-    }
-    VTerm* vt = b->term->vt;
-    b->scroll = 0;  // typing goes back to the live screen
-    int m = (mod & TB_MOD_ALT ? VTERM_MOD_ALT : 0) | (mod & TB_MOD_CTRL ? VTERM_MOD_CTRL : 0) | (mod & TB_MOD_SHIFT ? VTERM_MOD_SHIFT : 0);
-    if (ch) { vterm_keyboard_unichar(vt, ch, (VTermModifier)m); return; }
-    VTermKey vk = VTERM_KEY_NONE;
-    switch (k) {
-    case TB_KEY_ENTER: vk = VTERM_KEY_ENTER; break;
-    case TB_KEY_TAB: vk = VTERM_KEY_TAB; break;
-    case TB_KEY_BACKSPACE2: vk = VTERM_KEY_BACKSPACE; break;
-    case TB_KEY_ESC: vk = VTERM_KEY_ESCAPE; break;
-    case TB_KEY_ARROW_UP: vk = VTERM_KEY_UP; break;
-    case TB_KEY_ARROW_DOWN: vk = VTERM_KEY_DOWN; break;
-    case TB_KEY_ARROW_LEFT: vk = VTERM_KEY_LEFT; break;
-    case TB_KEY_ARROW_RIGHT: vk = VTERM_KEY_RIGHT; break;
-    case TB_KEY_INSERT: vk = VTERM_KEY_INS; break;
-    case TB_KEY_DELETE: vk = VTERM_KEY_DEL; break;
-    case TB_KEY_HOME: vk = VTERM_KEY_HOME; break;
-    case TB_KEY_END: vk = VTERM_KEY_END; break;
-    case TB_KEY_PGUP: vk = VTERM_KEY_PAGEUP; break;
-    case TB_KEY_PGDN: vk = VTERM_KEY_PAGEDOWN; break;
-    case TB_KEY_SPACE: vterm_keyboard_unichar(vt, ' ', (VTermModifier)m); return;
-    }
-    if (k >= TB_KEY_F12 && k <= TB_KEY_F1) vk = (VTermKey)VTERM_KEY_FUNCTION(TB_KEY_F1 - k + 1);
-    if (k < 0x80) m &= ~VTERM_MOD_CTRL;  // termbox calls Enter, Tab, Esc, Backspace Ctrl+M, I, [, ?
-    if (vk != VTERM_KEY_NONE) vterm_keyboard_key(vt, vk, (VTermModifier)m);
-    else if (k >= 0 && k < 0x20) vterm_keyboard_unichar(vt, (uint32_t)k, (VTermModifier)(m & VTERM_MOD_ALT));  // Ctrl+C, Ctrl+W...: the byte
-}
-
-// the shell's screen, cell by cell; its default colors are the theme's
-void Tui::draw_term(Term* t, int top, int rows, int cols, int x0) {
-    VTermScreen* scr = vterm_obtain_screen(t->vt);
-    Style def = c.look(false).get("default");
-    for (int r = 0; r < rows && r < t->rows; r++)
-        for (int x = 0; x < cols && x < t->cols; x++) {
-            VTermScreenCell cl;
-            if (!vterm_screen_get_cell(scr, VTermPos{r, x}, &cl) || cl.chars[0] == (uint32_t)-1) continue;  // -1: a wide char's right half
-            Style st = def;
-            auto rgb = [&](VTermColor col, RGB& out) {
-                vterm_screen_convert_color_to_rgb(scr, &col);
-                out = col.rgb.red << 16 | col.rgb.green << 8 | col.rgb.blue;
-            };
-            if (!VTERM_COLOR_IS_DEFAULT_FG(&cl.fg)) rgb(cl.fg, st.fg);
-            if (!VTERM_COLOR_IS_DEFAULT_BG(&cl.bg)) rgb(cl.bg, st.bg);
-            st.attr = (cl.attrs.bold ? A_BOLD : 0) | (cl.attrs.italic ? A_ITALIC : 0) | (cl.attrs.underline ? A_UNDER : 0) | (cl.attrs.reverse ? A_REV : 0);
-            uint32_t cp = cl.chars[0];
-            cell(x0 + x, top + r, cp < 0x20 || cp == 0x7f ? ' ' : cp, st);  // never a control byte to the real terminal
-        }
-}
 
 bool Tui::init(std::string& err, int fd) {
     int r = fd < 0 ? tb_init() : tb_init_fd(fd);
@@ -3432,7 +3330,7 @@ void Tui::on_readable() {
             else input.insert(cur++, 1, U'\n');
             enter = false;
         }
-        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || c.pwin.open || lw.open || bw.open || shell_keys()) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
+        if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || c.pwin.open || lw.open || bw.open) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
         if (nl && (!c.choices.empty() || (paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0))) { enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
@@ -3446,7 +3344,7 @@ void Tui::on_readable() {
     }
     // a file dropped on the terminal is its path typed in one go (a few characters at a time can't be a hand): when the whole line is the path
     // of a file and a plugin takes files, it goes to it without a second Enter
-    if (nkeys >= 6 && !enter && !input.empty() && c.active && c.active->type != BT::SHELL && !c.locked && c.choices.empty() && confirm.empty() && paste.empty() &&
+    if (nkeys >= 6 && !enter && !input.empty() && c.active && !c.locked && c.choices.empty() && confirm.empty() && paste.empty() &&
         !(sw.open || tw.open || fw.open || kw.open || pw.open || c.pwin.open || lw.open || bw.open) && !c.asking(c.active) &&
         c.plugin_hooks("drop", c.active->srv, c.active->type == BT::CHANNEL || c.active->type == BT::QUERY ? c.active->name : "")) {
         std::string line = to_utf8(input);
@@ -3479,7 +3377,7 @@ bool Tui::action(const std::string& a) {
             if (at(n + i)->activity > (best ? best->activity : 0)) best = at(n + i);
         if (best) c.select(best);
     } else if (a == "mark_all_read") c.mark_all_read();
-    else if (a == "next_server" || a == "prev_server") {  // the top level: server tabs and the ones of no network (cmd, shells)
+    else if (a == "next_server" || a == "prev_server") {  // the top level: server tabs and the ones of no network (cmd)
         int d = a == "next_server" ? 1 : -1;
         for (int i = 1; i < sz; i++)
             if (at(n + d * i)->type == BT::STATUS || !at(n + d * i)->srv) { c.select(at(n + d * i)); break; }
@@ -3569,7 +3467,6 @@ void Tui::key(int mod, int k, uint32_t ch) {
         else input = from_utf8(p), cur = input.size();
         return;
     }
-    if (shell_keys()) { shell_key(mod, k, ch); return; }
     if (c.asking(c.active)) {  // the password dialog
         if ((k == TB_KEY_ESC || k == TB_KEY_CTRL_C) && !ch && !(mod & TB_MOD_ALT)) {  // Esc (or Ctrl+C) cancels
             input.clear(), cur = 0;
@@ -3644,10 +3541,6 @@ void Tui::key(int mod, int k, uint32_t ch) {
     case TB_KEY_TAB: complete(); break;
     // mIRC formatting: bold, color, reset, reverse, italic, underline
     case TB_KEY_CTRL_C:  // on an empty line it's the "how do I quit?" key: say so, once in a row
-        if (input.empty() && c.active->term && c.active->term->fd >= 0) {  // /attach connecting: ssh gives up
-            if (::write(c.active->term->fd, "\x03", 1) < 0) {}
-            break;
-        }
         if (input.empty()) {
             const std::string hint = "Ctrl+C doesn't quit iSekur (it's the color key while typing): /exit closes iSekur, Ctrl+Z, Alt+D or /detach leave it running";
             if (c.active->lines.empty() || c.active->lines.back().text != hint) {
@@ -3729,7 +3622,7 @@ size_t Tui::input_at(int x) const {
 }
 
 // the selection to the terminal's clipboard: chat lines as their text, "00:08 nick text" (the time first even when
-// drawn at the right, no padding, a wrapped line joined back up); other rows (a shell tab) as their cells
+// drawn at the right, no padding, a wrapped line joined back up); other rows as their cells
 void Tui::copy_sel() {
     tb_cell* cb = tb_cell_buffer();
     int W = tb_width();
@@ -3893,15 +3786,6 @@ void Tui::mouse(int mod, int k, int x, int y) {
         else if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1)) kw.open = false;
         return;
     }
-    // a program in a shell tab that wants the mouse (the remote iSekur's tabs, vim...) gets it, inside its screen
-    if (Term* t = c.active ? c.active->term.get() : nullptr; t && t->mouse && shell_keys() && c.active->scroll == 0 && pane.in(x, y)) {
-        int m = (mod & TB_MOD_ALT ? VTERM_MOD_ALT : 0) | (mod & TB_MOD_CTRL ? VTERM_MOD_CTRL : 0) | (mod & TB_MOD_SHIFT ? VTERM_MOD_SHIFT : 0);
-        vterm_mouse_move(t->vt, y - pane.y, x - pane.x, (VTermModifier)m);
-        int btn = k == TB_KEY_MOUSE_LEFT ? 1 : k == TB_KEY_MOUSE_MIDDLE ? 2 : k == TB_KEY_MOUSE_RIGHT ? 3 : k == TB_KEY_MOUSE_WHEEL_UP ? 4 : k == TB_KEY_MOUSE_WHEEL_DOWN ? 5 : 0;
-        if (k == TB_KEY_MOUSE_RELEASE) vterm_mouse_button(t->vt, 1, false, (VTermModifier)m);  // ponytail: termbox doesn't say which; the left one
-        else if (btn && !(mod & TB_MOD_MOTION)) vterm_mouse_button(t->vt, btn, true, (VTermModifier)m);
-        return;
-    }
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && !zen && y < topic_h, over_chat = y >= top && y < top + ch && x >= chat_x && x < chat_end && (nl_x < 0 || x < std::min(nl_x, nl_x0) || x >= std::max(nl_x + 1, nl_x1));  // not on the nicklist or its │
     if (in_selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {  // a drag over the input line
@@ -4009,7 +3893,7 @@ void Tui::mouse(int mod, int k, int x, int y) {
             }
             if ((side_w ? x < side_x || x >= side_x + side_w || y < top_row() || y >= top_row() + chat_height() : y < top_row() - tab_h || y >= top_row()) || h.tab < 0 || h.tab >= (int)c.bufs.size()) continue;
             Buffer* tb = c.bufs[(size_t)h.tab].get();
-            if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY || tb->type == BT::SHELL)  // its commands run there
+            if ((tb->type == BT::STATUS && tb->srv) || tb->type == BT::CHANNEL || tb->type == BT::QUERY)  // its commands run there
                 menu = Menu{x, y, 0, tb->type == BT::STATUS ? tb->srv->cfg.name : tb->name, c.tab_menu(tb), tb->id}, c.dirty = true;  // you stay on your tab: its commands run on this one
         }
         return;

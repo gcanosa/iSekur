@@ -7,7 +7,6 @@ topic          = #000000 #f0f0f0
 tabbar         = #000000 #ffffff
 tab_server     = #000000 #ffffff bold
 tab_home       = #000000 #ffffff bold
-tab_shell      = #000000 #ffffff bold
 tab_active     = #ffffff #0078d7
 tab_data       = #00007f #ffffff
 tab_msg        = #ff0000 #ffffff

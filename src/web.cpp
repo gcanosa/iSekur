@@ -949,7 +949,7 @@ void Web::ws_frames(Client& cl) {
                 bool on = false;
                 for (auto& s : c.servers) on |= c.opt_on(s.get(), "log", false);
                 // at: the tab it was opened from, as the files name it ("net" or "net\tname")
-                std::string at = b->srv && b->type != BT::SHELL ? b->srv->cfg.name + (b->type == BT::STATUS ? "" : "\t" + safe_name(b->name)) : "";
+                std::string at = b->srv ? b->srv->cfg.name + (b->type == BT::STATUS ? "" : "\t" + safe_name(b->name)) : "";
                 std::string o = "{\"t\":\"logs\",\"on\":" + std::string(on ? "1" : "0") + ",\"at\":" + json_str(at) + ",\"files\":[";
                 for (size_t i = 0; i < files.size(); i++)
                     o += (i ? ",[" : "[") + json_str(files[i].net) + "," + json_str(files[i].name) + "," + json_str(files[i].day) + "," +
@@ -1005,7 +1005,7 @@ static std::string line_json(const Line& l, const std::string& fmt) {
 }
 
 std::string Web::buf_json(Buffer* b, bool full) {
-    static const char* TYPE[] = {"status", "channel", "query", "shell"};
+    static const char* TYPE[] = {"status", "channel", "query"};
     static const char* STATE[] = {"disconnected", "connecting", "registering", "connected"};
     Server* s = b->srv;
     std::string srv = !s ? "cmd" : s->network.empty() ? s->cfg.name : s->network;  // same label as the console tabs
@@ -1035,9 +1035,8 @@ std::string Web::buf_json(Buffer* b, bool full) {
     return "{\"t\":\"buf\",\"id\":" + std::to_string(b->id) + ",\"name\":" + json_str(b->name) +
            ",\"type\":\"" + TYPE[(int)b->type] + "\",\"srv\":" + json_str(srv) + ",\"net\":" + json_str(s ? s->cfg.name : "") +
            ",\"topic\":" + json_str(b->topic) + ",\"modes\":" + json_str(b->modes) +
-           ",\"home\":" + (s || b->type == BT::SHELL ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : b->smart ? "2" : "0") + ",\"mute\":" + (c.muted(b) ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
+           ",\"home\":" + (s ? "0" : "1") + ",\"fold\":" + (b->collapsed ? "1" : "0") + ",\"q\":" + (b->quiet ? "1" : b->smart ? "2" : "0") + ",\"mute\":" + (c.muted(b) ? "1" : "0") + ",\"e2e\":" + (e2e_on(b) ? "1" : "0") +
            ",\"act\":" + std::to_string(b->activity) + ",\"unread\":" + std::to_string(b->unread) + ",\"joined\":" + (b->joined ? "1" : "0") +
-           (b->term && !b->term->host.empty() ? ",\"host\":" + json_str(b->term->host) : "") +
            ",\"me\":" + json_str(s ? s->nick : "") + ",\"pc\":" + std::to_string(s && c.plugin_hooks("paste", s, b->name) ? 0 : atoi(c.opt(s, "paste_confirm", "5").c_str())) +
            (c.plugin_hooks("drop", s, b->type == BT::CHANNEL || b->type == BT::QUERY ? b->name : "") ? ",\"drop\":1" : "") +  // a plugin takes files here: the drop zone, the 📎 button
            (c.pass_buf == b && c.pass_web ? ",\"ask\":{\"title\":" + json_str(c.pass_title) + ",\"label\":" + json_str(c.pass_label) +

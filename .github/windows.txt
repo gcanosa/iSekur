@@ -23,8 +23,7 @@ https://gcanosa.github.io/isekur-site/ have the rest, including the built-in web
 
 What this build doesn't have
 ----------------------------
-Cygwin has no PAM and its unix sockets can't pass a terminal, so:
-  - no /shell
+Cygwin's unix sockets can't pass a terminal, so:
   - no detach and attach (Alt+D, /detach, --daemon, --attach)
 
 For all of iSekur on Windows, use WSL ("wsl --install" in an administrator terminal),

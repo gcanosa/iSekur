@@ -9,7 +9,6 @@
 
 struct Core;
 struct Buffer;
-struct Term;
 struct Tui {
     Core& c;
     explicit Tui(Core& core) : c(core) {}
@@ -119,20 +118,16 @@ private:
     bool completing = false;
 
     void key(int mod, int key, uint32_t ch);
-    bool shell_keys() const;
-    bool guide_tab() const;  // the *guide tab is shown: Left/Right and clicks turn its pages  // a live shell tab: keys go to it
-    void shell_key(int mod, int k, uint32_t ch);
-    void draw_term(Term* t, int top, int rows, int cols, int x0 = 0);
-    void draw_chat(Buffer* b, int x, int y, int w, int h);  // a tab's lines (or its shell) in that box
+    bool guide_tab() const;  // the *guide tab is shown: Left/Right and clicks turn its pages
+    void draw_chat(Buffer* b, int x, int y, int w, int h);  // a tab's lines in that box
     void draw_nicks(Buffer* b, int sx, int x0, int xend, int top, int h, bool focus);  // its │ at sx, the list in [x0, xend)
     struct Box { int x = 0, y = 0, w = 0, h = 0; bool in(int px, int py) const { return w && px >= x && px < x + w && py >= y && py < y + h; } };
-    Box other;
-    Box pane;   // where the focused tab was drawn (a shell tab's clicks go to its program by it)  // /split: where the unfocused pane was drawn (a click there focuses it, the wheel scrolls it)
+    Box other;  // /split: where the unfocused pane was drawn (a click there focuses it, the wheel scrolls it)
     // /split: the first (left/top) pane's share in per mille; a drag on the divider (the │ column, or the lower
     // pane's title row) moves it. div_x / div_y: where the divider was drawn, -1 = none
     int div_x = -1, div_y = -1;
     bool div_drag = false, div_moved = false;
-    // a prompt box over the middle of the screen (/shell login, passwords, the lock screen)
+    // a prompt box over the middle of the screen (passwords, the lock screen)
     void draw_dialog(int W, int H, const std::string& title, const std::vector<std::string>& info, const std::string& label,
                      bool hidden, const std::u32string& in, size_t at, const std::string& hint, int dx = 0, int dy = 0, char kind = 0);
     // the close button (× or the red dot) drawn this frame, and which box it closes: s settings, t theme, f find,

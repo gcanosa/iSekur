@@ -92,7 +92,7 @@ static const std::vector<CmdInfo> CMDS = {
      {"/disconnect", "/disconnect brb, rebooting"}},
     {"quit", "Connection", "[message]", "Quit the server of this tab",
      "Sends QUIT to the server of the tab you're on, like /disconnect: its tabs stay and /connect comes back. "
-     "In a tab with no server (the home tab, a shell) it does nothing. To close iSekur, use /exit.",
+     "In a tab with no server (the home tab) it does nothing. To close iSekur, use /exit.",
      {"/quit", "/quit see you tomorrow"}},
     {"exit", "Connection", "[-y] [message]", "Quit every server and close iSekur",
      "Sends QUIT everywhere (with the message, else quit_message) and exits. While a network is connected it "
@@ -484,26 +484,6 @@ static const std::vector<CmdInfo> CMDS = {
      "The link is public: whoever has it can open the file. A plugin can't run /upload: it only gets the files you give it, "
      "and never says where they are.",
      {"/upload ~/Pictures/screenshot.png", "/upload '~/Movies/a clip.mp4' ~/notes.txt"}},
-    {"shell", "Session", "", "Open a real terminal in a tab",
-     "Asks for this machine's login and password first (the user iSekur runs as, checked by "
-     "the system through PAM; pam_service sets the service, default login; three wrong ones "
-     "lock it for a minute), then runs $SHELL as a login shell on a pty: vim, top, ssh, "
-     "Ctrl+C all work. Every key goes to it except Alt+arrows and Alt+1-9 (other tabs); "
-     "the mouse wheel scrolls back. exit ends it, Ctrl+W then closes the tab. Terminal only: "
-     "never from the webchat.",
-     {"/shell"}},
-    {"attach", "Session", "[-p port] host [config]", "Another machine's iSekur in a tab, over ssh",
-     "Runs ssh -t host there and isekur --attach on it (through a login shell, so its PATH is "
-     "the usual one) in a tab like /shell's: the remote iSekur, live, inside this one. host is a "
-     "name, user@host or a Host from ~/.ssh/config (keys go there); -p port is ssh's own -p, for a port other than 22. ssh asks for its own "
-     "password or uses your keys; no system login is asked first. Every key and click goes to the remote "
-     "except Alt+arrows, Alt+1-9 and Ctrl+W, so Alt+D or /detach typed there detaches it and leaves it "
-     "running (Ctrl+W too, and closes the tab); the tab then says so, and /attach host again reconnects. If nothing runs there, a "
-     "new iSekur starts. Several iSekurs on one machine each run with their own config (isekur -c "
-     "work.conf); config picks one (isekur -c config --attach there) and names the tab host:work; "
-     "ssh host isekur --list shows which run there. "
-     "While ssh connects (10s at most) the input line is iSekur's: Enter sends it to ssh, Ctrl+C gives up. Terminal only: never from the webchat.",
-     {"/attach vps", "/attach me@irc.example.org", "/attach -p 2222 me@irc.example.org", "/attach vps ~/.config/isekur/work.conf"}},
     {"lock", "Session", "[on|off|devices [del name]]", "Lock the session (terminal and webchat) with a password",
      "/lock or Alt+S (Option+S on a Mac) locks now: the terminal and every webchat show only a password box, and the webchat "
      "gets nothing of the session until it's typed (in either one); with the screensaver plugin on, a screensaver "
@@ -566,8 +546,10 @@ static const std::vector<CmdInfo> CMDS = {
     {"detach", "Session", "", "Leave iSekur running in the background",
      "Gives the terminal back; iSekur stays connected, in the channels, logging. isekur --attach "
      "(or just isekur) brings it back, from any terminal or SSH session. Alt+D (Option+D on a Mac) "
-     "and Ctrl+Z do the same. Closing the terminal or losing SSH detaches too, instead of quitting.",
-     {"/detach", "isekur --attach  (from your shell, later)"}},
+     "and Ctrl+Z do the same. Closing the terminal or losing SSH detaches too, instead of quitting. "
+     "From another computer, ssh -t host isekur --attach shows that machine's iSekur in your terminal "
+     "(if ssh doesn't find isekur there: ssh -t host '$SHELL -lc \"isekur --attach\"').",
+     {"/detach", "isekur --attach  (from your shell, later)", "ssh -t vps isekur --attach  (another machine's)"}},
     {"typing", "Session", "[on|off]", "Messages type themselves out",
      "Other people's messages, actions and notices appear letter by letter with a cursor, about "
      "30 a second (a long line still takes at most 2s), in the terminal and the webchat. Alone it "
@@ -984,9 +966,9 @@ static const std::vector<GuidePage> GUIDE = {
         G_HEAD("Stay online when you leave"),
         "  " G_KEY("Ctrl+Z") ", " G_KEY("Alt+D") " or " G_CMD("/detach") " gives the terminal back and " BOLD "keeps iSekur connected" RESET ".",
         "  Later, from any terminal or SSH session: " G_CMD("isekur --attach") " (or just " G_CMD("isekur") ").",
-        "  On another computer: " G_CMD("/attach ") G_VAL("host") " shows that machine's iSekur in a tab (over ssh).",
+        "  From another computer: " G_CMD("ssh -t ") G_VAL("host") G_CMD(" isekur --attach") " shows that machine's iSekur.",
         "  Several at once: one config each, " G_CMD("isekur -c ") G_VAL("work.conf") "; " G_CMD("isekur --list") " shows them,",
-        "  " G_CMD("isekur -c ") G_VAL("work.conf") G_CMD(" --attach") " or " G_CMD("/attach ") G_VAL("host work.conf") " picks one.",
+        "  " G_CMD("isekur -c ") G_VAL("work.conf") G_CMD(" --attach") " picks one.",
         "  Away while detached: you are marked " BOLD "away" RESET " by yourself, and back when you type.",
         "",
         G_HEAD("Your other IRC clients"),

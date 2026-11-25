@@ -407,13 +407,6 @@ std::vector<std::pair<std::string, std::string>> Core::tab_menu(Buffer* b) const
         m.push_back({"Delete server...", "?Delete " + s->cfg.name + ": disconnect, close its tabs and remove it from the config?\n/server del " + s->cfg.name});
         return m;
     }
-    if (b->type == BT::SHELL) {  // /shell or /attach: keys go to the tab, so its menu is the way out
-        bool remote = b->term && !b->term->host.empty();
-        if (remote) m.push_back({"Disconnect", "?Disconnect from " + b->term->host + "? Only this link closes: the iSekur there keeps running "
-                                               "and stays on its networks. /attach brings it back.\n/close"});
-        else m.push_back({"Close", "/close"});
-        return m;
-    }
     if (b->type == BT::QUERY && s && (b->name == "*channels" || b->name == "*snotices" || b->name == "*raw")) {  // iSekur's own tabs: no nick behind them
         if (b->name == "*channels") {
             m.push_back({"Refresh list", "/list"});

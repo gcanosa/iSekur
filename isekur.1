@@ -46,6 +46,10 @@ config, a new one starts (its first window says it's a new session). Starting
 while one is running with the same config attaches too. Several run side by
 side with one config each
 .RB ( "isekur \-c ~/.config/isekur/work.conf" ).
+From another computer,
+.BI "ssh \-t " host " isekur \-\-attach"
+shows that machine's iSekur in your terminal (if ssh doesn't find isekur there:
+.BI "ssh \-t " host " \(aq$SHELL \-lc \(dqisekur \-\-attach\(dq\(aq" \fR).
 .TP
 .BR \-l ", " \-\-list
 List the iSekurs running from the default config's directory (and
@@ -111,7 +115,7 @@ Go to tab 1..10.
 Previous / next tab.
 .TP
 .B Alt+Left/Right
-Previous / next server tab, or a tab of no network (cmd, shells).
+Previous / next server tab, or a tab of no network (cmd).
 .TP
 .B Ctrl+A, Alt+A
 Next tab with activity.
@@ -212,21 +216,6 @@ Channel operators also get
 .BR /lockdown ", " /unlock ", " /kickban " (" /kb "), " /tempban ", " /chanstats
 and
 .BR /topicrotate .
-.B /shell
-opens a terminal in a tab after this machine's login;
-.BI /attach " host " [ config ]
-runs
-.B ssh \-t
-.I host
-.B isekur
-.RB [ \-c
-.IR config ]
-.B \-\-attach
-in one, showing that machine's iSekur inside this one (Alt+D there detaches it).
-Several iSekurs run side by side with one config each
-.RB ( "isekur \-c work.conf" );
-.I config
-picks one.
 .B /plugin
 opens the plugin window (installed and available plugins, their settings per network and channel),
 .B /plugin list

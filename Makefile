@@ -33,7 +33,8 @@ else
   endif
 endif
 
-# OpenSSL can't be left out: say what to install, not a wall of "openssl/ssl.h: No such file" (clean needs no headers)
+# OpenSSL can't be left out: say what to install, not a wall of "openssl/ssl.h: No such file" (clean needs no headers).
+# \043 is "#": make 4.x keeps a backslash in '\#', so cpp got "\#include", saw no include and always said yes
 ifeq ($(filter clean,$(MAKECMDGOALS)),)
   ifneq ($(shell printf '\043include <openssl/ssl.h>\n' | $(CXX) -E -x c++ $(OPENSSL_CFLAGS) - >/dev/null 2>&1 && echo yes),yes)
     $(warning no OpenSSL headers: iSekur can't build without them. Install them and run make again:)
@@ -43,31 +44,22 @@ ifeq ($(filter clean,$(MAKECMDGOALS)),)
   endif
 endif
 
-# Cygwin's newlib hides strptime() unless asked; it has no PAM, so no /shell login there
+# Cygwin's newlib hides strptime() unless asked
 ifneq ($(findstring CYGWIN,$(shell uname -s)),)
-  OPENSSL_CFLAGS += -D_GNU_SOURCE -DISEKUR_NO_PAM
+  OPENSSL_CFLAGS += -D_GNU_SOURCE
 else
   ifneq ($(shell uname -s),Darwin)
-    PAM_LIBS := -lutil  # forkpty
     LDFLAGS  += -rdynamic  # function names in isekur.crash backtraces
     ifneq ($(filter %BSD DragonFly,$(shell uname -s)),)
-      PAM_LIBS += -lexecinfo  # backtrace() isn't in the BSDs' libc
+      SYS_LIBS := -lexecinfo  # backtrace() isn't in the BSDs' libc
     endif
     ifeq ($(shell uname -s),OpenBSD)
       OPENSSL_CFLAGS += -I/usr/local/include  # iconv.h: OpenBSD's libc has no iconv, pkg_add libiconv
       ICONV_LIBS := -L/usr/local/lib -liconv
     endif
   else
-    PAM_LIBS := -framework IOKit -framework CoreFoundation  # /statusbar bat
+    SYS_LIBS := -framework IOKit -framework CoreFoundation  # /statusbar bat
     ICONV_LIBS := -liconv  # legacy charsets (config.cpp); glibc has iconv in libc
-  endif
-  # \043 is "#": make 4.x keeps a backslash in '\#', so cpp got "\#include", saw no include and always said yes
-  ifeq ($(shell printf '\043include <security/pam_appl.h>\n' | $(CXX) -E -x c++ - >/dev/null 2>&1 && echo yes),yes)
-    PAM_LIBS += -lpam
-  else
-    $(warning no PAM headers: building without the /shell login. For it, install them and run make again:)
-    $(warning   Debian/Ubuntu: sudo apt install libpam0g-dev   Fedora/RHEL: sudo dnf install pam-devel   Arch: sudo pacman -S pam)
-    OPENSSL_CFLAGS += -DISEKUR_NO_PAM
   endif
 endif
 
@@ -76,17 +68,16 @@ DATADIR  ?= $(PREFIX)/share/isekur
 MANDIR   ?= $(PREFIX)/share/man
 OPT      ?= -O2
 COMMON   := $(OPT) -g -Wall -Wextra -Wno-unused-parameter -fstack-protector-strong \
-            -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Ivendor/libvterm/include -Isrc -Ibuild $(OPENSSL_CFLAGS)
+            -DTB_OPT_ATTR_W=32 -DISEKUR_DATADIR='"$(DATADIR)"' -Ivendor -Isrc -Ibuild $(OPENSSL_CFLAGS)
 CXXFLAGS += -std=c++17 -pthread $(COMMON)
 CFLAGS   += -std=c99 $(COMMON) -Wno-sign-compare -Wno-missing-field-initializers -Wno-unused-result
-LDLIBS   += $(OPENSSL_LIBS) $(PAM_LIBS) $(ICONV_LIBS)
+LDLIBS   += $(OPENSSL_LIBS) $(SYS_LIBS) $(ICONV_LIBS)
 
 # the plugin engine (src/plugin/): see internal.h for what each file holds
 PLUG := host api_core api_ui api_media catalog radio drop
 SRC  := src/main.cpp src/core.cpp src/irc.cpp src/net.cpp src/config.cpp src/tui.cpp src/web.cpp src/bnc.cpp src/help.cpp src/chanops.cpp src/session.cpp src/e2e.cpp src/exec.cpp src/dcc.cpp src/sysinfo.cpp src/twitch.cpp src/logs.cpp src/fifo.cpp src/backup.cpp $(PLUG:%=src/plugin/%.cpp)
-VTERM := $(wildcard vendor/libvterm/src/*.c)
 LUA  := $(wildcard vendor/lua/*.c)
-OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
+OBJ  := $(SRC:src/%.cpp=build/%.o) build/termbox2.o $(LUA:vendor/lua/%.c=build/lua_%.o)
 
 all: isekur
 
@@ -99,10 +90,6 @@ build/%.o: src/%.cpp | build
 
 build/termbox2.o: vendor/termbox2.c vendor/termbox2.h | build
 	$(CC) $(CFLAGS) -c -o $@ $<
-
-# libvterm 0.3.3 (MIT): the screen of /shell's terminal
-build/vterm_%.o: vendor/libvterm/src/%.c | build
-	$(CC) $(CFLAGS) -Ivendor/libvterm/include -w -c -o $@ $<
 
 # Lua 5.4.7 (MIT): plugins. LUA_USE_POSIX: mkstemp etc. in the parts the sandbox leaves out anyway
 build/lua_%.o: vendor/lua/%.c | build
@@ -157,7 +144,7 @@ TEST_FLAGS := $(shell $(CXX) -fno-var-tracking-assignments -E -x c++ /dev/null >
 test: build/test
 	./build/test
 
-build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/bnc.o build/e2e.o build/exec.o build/fifo.o build/backup.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o $(PLUG:%=build/plugin/%.o) build/logs.o build/termbox2.o $(VTERM:vendor/libvterm/src/%.c=build/vterm_%.o) $(LUA:vendor/lua/%.c=build/lua_%.o)
+build/test: tests/test.cpp build/config.o build/irc.o build/core.o build/help.o build/chanops.o build/session.o build/net.o build/web.o build/bnc.o build/e2e.o build/exec.o build/fifo.o build/backup.o build/dcc.o build/tui.o build/sysinfo.o build/twitch.o $(PLUG:%=build/plugin/%.o) build/logs.o build/termbox2.o $(LUA:vendor/lua/%.c=build/lua_%.o)
 	$(CXX) $(CXXFLAGS) $(TEST_FLAGS) -Ibuild -o $@ $^ $(LDFLAGS) $(LDLIBS)
 
 debug:
