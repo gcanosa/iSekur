@@ -2451,6 +2451,8 @@ int main() {
         Ini disk;
         assert(ini_load(core.cfg_path, disk) && ini_get(disk, "general", "show_guide") == "off");
         assert(g->lines.back().text.find("☑") != std::string::npos);
+        core.select(home), core.notify(Ev::THEME, nullptr);  // redrawn while another tab is shown: not activity
+        assert(!g->lines.empty() && !g->activity && !g->unread);
         core.exec(g, "/guide close");
         assert(!core.find(nullptr, "*guide"));
         unlink(core.cfg_path.c_str());

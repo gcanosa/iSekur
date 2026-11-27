@@ -4107,7 +4107,43 @@ int Tui::suggest(std::vector<Sugg>& out) const {
         for (auto& [k, u, pl] : c.plugin_commands())
             if (k == cmd) usage = u;
     Buffer* b = c.active;
-    if (!word.empty() && !usage.empty() && b && b->srv && nick_arg(usage, (size_t)std::count(arg.begin(), arg.end(), ' '), arg.substr(0, arg.find(' ')))) {
+    size_t wi = (size_t)std::count(arg.begin(), arg.end(), ' ');  // the argument being typed, 0 the first
+    std::string first = arg.substr(0, arg.find(' ')), name = nk ? nk->name : "";
+    // "/part ", "/mode #", "/msg #is": the network's channels, this tab's first. /join: those you're not in; /mode: those
+    // where you can set modes (more than voice); /part and /cycle: any tab. web/index.html chanRows() is the same
+    if (b && b->srv && !usage.empty()) {
+        Server* sv = b->srv;
+        auto u = split(usage.substr(0, usage.find(" | ")), ' ');
+        bool want = word.empty() ? (name == "mode" ? !wi : name != "kick" && wi < u.size() && u[wi].find("#channel") != std::string::npos)
+                                 : sv->is_chan(word) && (usage.find("#channel") != std::string::npos || usage.find("target") != std::string::npos);
+        auto chan = [&](Buffer* x) {
+            if (x->srv != sv || x->type != BT::CHANNEL || sv->lower(x->name).rfind(sv->lower(word), 0) != 0) return;
+            if (name == "join" ? x->joined : !x->joined && name != "part" && name != "cycle") return;
+            if (name == "mode" && !wi) {
+                auto me = x->nicks.find(sv->lower(sv->nick));
+                if (me == x->nicks.end() || me->second.prefix.empty() || me->second.prefix[0] == '+') return;
+            }
+            out.push_back({x->name, "  ", x == b ? "(this tab)" : ""});
+        };
+        if (want) {
+            chan(b);
+            for (auto& x : c.bufs)
+                if (x.get() != b) chan(x.get());
+            if (out.size() == 1 && sv->lower(out[0].word) == sv->lower(word)) out.clear();  // typed out already: Up is history's
+            if (!out.empty()) return (int)from_utf8(s.substr(0, ws)).size();
+        }
+    }
+    // "/mode +o al", "/mode #chan +b al": nicks after modes that take one
+    bool mode_nick = false;
+    if (name == "mode") {
+        auto a = split(arg, ' ');
+        size_t m = !first.empty() && (first[0] == '+' || first[0] == '-') ? 0 : 1;  // where the modes are
+        mode_nick = wi > m && m < a.size() && a[m].find_first_of("qaohvb") != std::string::npos;
+    }
+    // "/kick #chan al", "/mode #chan +o al": that channel's nicks
+    if (wi && b && b->srv && b->srv->is_chan(first))
+        if (Buffer* x = c.find(b->srv, first)) b = x;
+    if (!word.empty() && !usage.empty() && b && b->srv && (mode_nick || nick_arg(usage, wi, first))) {
         std::string pfx = irc_lower(word), me = b->srv->lower(b->srv->nick);
         std::set<std::string> seen;
         auto add = [&](const std::string& n, const std::string& where) {

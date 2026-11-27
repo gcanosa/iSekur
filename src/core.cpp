@@ -1225,6 +1225,7 @@ void Core::add(Buffer* b, Line l) {
     const Line& ln = b->lines.back();
     int lvl = ln.hilight ? 3 : (ln.kind == LK::MSG || ln.kind == LK::ACTION) && !ln.self ? 2 : quieted(*b, ln) ? 0 : 1;
     if (quiet_add || (lvl == 1 && time(nullptr) < b->sync_until)) lvl = 0;  // server tab: a fixed 5s window (end it at 376/422 if a slow MOTD outlasts it); a channel: 30s past its MODE reply
+    if (!b->srv && b->type == BT::QUERY) lvl = 0;  // iSekur's own pages (*guide, *about), redrawn by a theme change too: never news
     // the "new" marker goes above the first message you missed, then counts everything after it
     if (b->unread || (b != active && b != split_buf && lvl >= 2)) b->unread++;
     if (b != active && b != split_buf && lvl > b->activity) { b->activity = lvl; notify(Ev::BUFFER, b); }  // split: on screen too

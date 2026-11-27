@@ -3664,8 +3664,17 @@ function suggest(s) {
   const cmd = ircLower(s.slice(1, sp)), arg = s.slice(sp + 1);
   // "/msg al", "/op alice bo": nicks for the word being typed
   const at = s.lastIndexOf(" ") + 1, word = s.slice(at), nk = cmds.find(c => c[0] === cmd || (c[3] || "").split(" ").includes(cmd)), b = bufs.get(active);
-  if (word && nk && b && b.net && nickArg(nk[1], arg.split(" ").length - 1, arg.split(" ")[0])) {
-    const nr = nickRows(b, word, true);
+  const words = arg.split(" "), wi = words.length - 1, first = words[0], name = nk ? nk[0] : "";
+  if (nk && b && b.net) {
+    const cr = chanRows(b, name, nk[1], wi, word);
+    if (cr.length) return [at, cr];
+  }
+  // "/mode +o al", "/mode #chan +b al": nicks after modes that take one
+  const m = /^[+-]/.test(first) ? 0 : 1, modeNick = name === "mode" && wi > m && /[qaohvb]/.test(words[m]);
+  // "/kick #chan al", "/mode #chan +o al": that channel's nicks
+  const nb = (wi && b && b.net && /^[#&]/.test(first) && [...bufs.values()].find(x => x.net === b.net && ircLower(x.name) === ircLower(first))) || b;
+  if (word && nk && b && b.net && (modeNick || nickArg(nk[1], wi, first))) {
+    const nr = nickRows(nb, word, true);
     if (nr.length) return [at, nr];
   }
   if (arg.includes(" ")) return [-1, []];
@@ -3685,6 +3694,23 @@ function suggest(s) {
   const k = cmds.find(c => c[0] === cmd || (c[3] || "").split(" ").includes(cmd));
   if (k) { out.push(["/" + k[0], (k[1] ? " " + k[1] : "") + "  ", k[2]]); return [-2, out]; }
   return [-1, []];
+}
+// "/part ", "/mode #", "/msg #is": the network's channels, this tab's first. /join: those you're not in; /mode: those
+// where you can set modes (more than voice); /part and /cycle: any tab. Like Tui::suggest() in src/tui.cpp
+function chanRows(b, name, usage, wi, word) {
+  const u = usage.split(" | ")[0].split(" ");
+  const want = word ? /^[#&]/.test(word) && /#channel|target/.test(usage)
+    : name === "mode" ? !wi : name !== "kick" && (u[wi] || "").includes("#channel");
+  if (!want) return [];
+  const w = ircLower(word);
+  const out = [b, ...order.map(id => bufs.get(id)).filter(x => x !== b)].filter(x => {
+    if (!x || x.net !== b.net || x.type !== "channel" || !ircLower(x.name).startsWith(w)) return false;
+    if (name === "join" ? x.joined : !x.joined && name !== "part" && name !== "cycle") return false;
+    if (name !== "mode" || wi) return true;
+    const me = x.nickmap.get(ircLower(x.me || ""));
+    return !!(me && me[0] && me[0][0] !== "+");
+  }).map(x => [x.name, "  ", x === b ? "(this tab)" : ""]);
+  return out.length === 1 && ircLower(out[0][0]) === w ? [] : out;  // typed out already: Up is history's
 }
 // does word i of a command with this usage take a nick? Like nick_arg() in src/help.cpp
 function nickArg(usage, i, first) {
