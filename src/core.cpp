@@ -424,7 +424,7 @@ std::vector<Core::Setting> Core::settings() const {
 // it (opt() reads it that way). A key added here belongs in iSekur.conf.example too (the tests check both ways)
 static const std::vector<KeyInfo> KEYS = {
     {"name", "Connection", 'n'}, {"host", "Connection", 'n'}, {"port", "Connection", 'n'}, {"tls", "Connection", 'n'},
-    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'}, {"vhost", "Connection", 'n'}, {"ip_version", "Connection", 'n'}, {"cap", "Connection", 'n'}, {"noproxy", "Connection", 'n'},
+    {"tls_verify", "Connection", 'n'}, {"autoconnect", "Connection", 'n'}, {"encoding", "Connection", 'n'}, {"vhost", "Connection", 'n'}, {"ip_version", "Connection", 'n'}, {"cap", "Connection", 'n'}, {"noproxy", "Connection", 'n'}, {"ws_protocol", "Connection", 'n'},
     {"password", "Login", 'n'}, {"auto_identify", "Login", 'n'}, {"sasl_mech", "Login", 'n'}, {"sasl_user", "Login", 'n'},
     {"sasl_pass", "Login", 'n'}, {"nickserv_pass", "Login", 'n'}, {"cert", "Login", 'n'}, {"key", "Login", 'n'},
     {"umodes", "On connect", 'n'}, {"perform", "On connect", 'n'}, {"join_wait", "On connect", 'n'},
@@ -552,7 +552,8 @@ static const std::vector<std::string> WEB_FONTS = {"theme", "mono", "sans", "ser
 static const std::map<std::string, std::vector<std::string>> CHOICES = {
     {"cursor", {"blink", "block", "off"}}, {"timestamp_align", {"left", "right"}}, {"timestamp_hover", {"off", "web", "term", "both"}},
     {"web_font", WEB_FONTS}, {"tab_bar_position", {"top", "left", "right"}}, {"nicklist_side", {"right", "left"}}, {"colors", {"auto", "truecolor", "256"}},
-    {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}}};
+    {"join_filter", {"off", "smart", "all"}}, {"ip_version", {"auto", "4", "6"}},
+    {"ws_protocol", {"auto", "text", "binary"}}};
 
 // what key in [sec] takes when that is a few words: v is its value (or default), lowercased. Empty: a number or free text
 static std::vector<std::string> choices_of(const std::string& sec, const std::string& k, const std::string& v) {
@@ -803,6 +804,7 @@ std::vector<Core::SetRow> Core::setting_rows() const {
         std::map<std::string, std::string> uses = {
             {"name", d.name}, {"host", d.host}, {"port", std::to_string(d.port)}, {"tls", d.tls ? "true" : "false"},
             {"tls_verify", d.tls_verify ? "true" : "false"}, {"autoconnect", d.autoconnect ? "true" : "false"}, {"cap", d.cap ? "true" : "false"}, {"noproxy", d.noproxy ? "true" : "false"}, {"ip_version", d.ipv ? std::to_string(d.ipv) : "auto"},
+            {"ws_protocol", d.ws_proto == 1 ? "text" : d.ws_proto == 2 ? "binary" : "auto"},
             {"auto_identify", d.auto_identify ? "true" : "false"}, {"encoding", d.encoding.empty() ? "utf-8" : d.encoding}, {"nick", d.nick}, {"altnick", d.altnick}, {"user", d.user}, {"realname", d.realname}, {"join_wait", d.join_wait ? "on" : "off"}};
         for (auto& k : KEYS) {
             if (k.scope == 'g') continue;
@@ -938,6 +940,9 @@ ServerCfg Core::server_cfg(const std::string& name) const {
     sc.cap = is_on(ini_get(cfg, sec, "cap", "true"));
     sc.noproxy = is_on(ini_get(cfg, sec, "noproxy", "false"));
     sc.ipv = ini_get(cfg, sec, "ip_version") == "4" ? 4 : ini_get(cfg, sec, "ip_version") == "6" ? 6 : 0;
+    std::string wsp = ini_get(cfg, sec, "ws_protocol");
+    to_lower(wsp);
+    sc.ws_proto = wsp == "text" ? 1 : wsp == "binary" ? 2 : 0;
     std::string enc = sc.encoding;
     if (to_lower(enc) == "utf-8" || enc == "utf8") sc.encoding.clear();  // the default, spelled out
     sc.nick = ini_get(cfg, sec, "nick", gnick);
@@ -2436,10 +2441,10 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "server") {
-        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] [-noconnect] | del name"); return; }
+        if (argv.empty()) { print(b, LK::ERROR, "Usage: /server host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-wsproto auto|text|binary] [-rawlog] [-login method] [-save] [-noconnect] | del name"); return; }
         std::string nick, port, login, name;
         std::vector<std::string> pos;  // the address, then the port
-        std::vector<std::pair<std::string, std::string>> sets;  // config keys the options write: -host, -cap, -nocap, -cmdspeed, -cmdmax, -noproxy, -4, -6
+        std::vector<std::pair<std::string, std::string>> sets;  // config keys the options write: -host, -cap, -nocap, -cmdspeed, -cmdmax, -noproxy, -4, -6, -wsproto
         bool tls = false, verify = true, rawlog_on = false, keep = false, nocon = false;
         // the options come before or after the address, like irssi's: /server -host vhost irc.sekurnet.org 6697 -tls
         for (size_t i = 0; i < argv.size(); i++) {
@@ -2453,13 +2458,19 @@ void Core::exec(Buffer* b, const std::string& input) {
             else if (a == "-rawlog") rawlog_on = true;
             else if (a == "-save") keep = true;
             else if (a == "-noconnect") nocon = true;  // add it (and -save it) without connecting: /connect name later
-            else if (a == "-name" || a == "-nick" || a == "-login" || a == "-host" || a == "-cmdspeed" || a == "-cmdmax") {
+            else if (a == "-name" || a == "-nick" || a == "-login" || a == "-host" || a == "-wsproto" || a == "-cmdspeed" || a == "-cmdmax") {
                 if (i + 1 >= argv.size()) { print(b, LK::ERROR, a + " takes a value (/help server)"); return; }
                 const std::string& v = argv[++i];
                 if (a == "-name") name = v;
                 else if (a == "-nick") nick = v;
                 else if (a == "-login") login = v, to_lower(login);
                 else if (a == "-host") sets.push_back({"vhost", v});
+                else if (a == "-wsproto") {
+                    std::string w = v;
+                    to_lower(w);
+                    if (w != "auto" && w != "text" && w != "binary") { print(b, LK::ERROR, "-wsproto takes auto, text or binary"); return; }
+                    sets.push_back({"ws_protocol", w});
+                }
                 else {
                     bool speed = a == "-cmdspeed";
                     if (v.size() > 6 || v.find_first_not_of("0123456789") != std::string::npos || (!speed && atoi(v.c_str()) < 1)) {

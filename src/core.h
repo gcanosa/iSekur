@@ -249,6 +249,7 @@ struct ServerCfg {
     bool cap = true;       // IRCv3 capability negotiation (CAP LS) on connect; off (/server -nocap): for a server that chokes on it, no SASL either
     bool noproxy = false;  // connect direct whatever a proxy plugin says (/server -noproxy)
     int ipv = 0;           // 4 or 6: connect over that IP version only (/server -4, -6), 0 = whichever the lookup gives
+    int ws_proto = 0;      // WebSocket only, Conn::ws_proto (/server -wsproto): 1 text, 2 binary, 0 = the server picks
     std::string sasl_user, sasl_pass, sasl_mech, cert, key, nickserv_pass;
     std::vector<std::string> autojoin;  // "#chan" or "#chan key"
     std::string umodes;                 // sent as MODE <nick> umodes after 001 ("+ix")

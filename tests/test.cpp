@@ -1810,6 +1810,12 @@ int main() {
         assert(core.server_cfg("so7").ipv == 0 && bad_value("server.so7", "ip_version", "auto").empty() && bad_value("server.so7", "ip_version", "6").empty());
         assert(!bad_value("server.so7", "ip_version", "5").empty());
         core.exec(home, "/server del so7");
+        core.exec(home, "/server 127.0.0.1 1 -name so8 -wsproto Binary");
+        assert(core.cfg["server.so8"]["ws_protocol"] == "binary" && srv("so8")->cfg.ws_proto == 2 && srv("so8")->conn.ws_proto == 2);
+        assert(bad_value("server.so8", "ws_protocol", "text").empty() && !bad_value("server.so8", "ws_protocol", "blob").empty());
+        core.exec(home, "/server del so8");
+        core.exec(home, "/server 127.0.0.1 1 -name so9 -wsproto blob");
+        assert(!srv("so9"));
         // the options before the address, like irssi's /server -host vhost irc... : same as after it
         core.exec(home, "/server -host 127.0.0.1 -nocap 127.0.0.1 -name so4 2 -tls");
         assert(core.cfg["server.so4"]["host"] == "127.0.0.1" && core.cfg["server.so4"]["port"] == "2" && core.cfg["server.so4"]["vhost"] == "127.0.0.1" &&
@@ -2646,7 +2652,28 @@ int main() {
         for (int i = 0; i < 500 && ok; i++) step();
         assert(!ok && c.err.find("WebSocket closed") != std::string::npos);
         c.close();
-        close(peer), close(lfd);
+        close(peer);
+
+        // ws_proto: only that subprotocol is offered, and its frame type is sent even if the server names none
+        for (int want : {1, 2}) {
+            c.ws_proto = want;
+            assert(c.connect("127.0.0.1", ntohs(la.sin_port), 0, "", ""));
+            c.out = "NICK me\r\n";
+            peer = -1, ok = true, said.clear();
+            for (int i = 0; i < 500 && said.find("\r\n\r\n") == std::string::npos; i++) step();
+            assert(said.find(std::string("Sec-WebSocket-Protocol: ") + (want == 1 ? "text" : "binary") + ".ircv3.net\r\n") != std::string::npos);
+            ks = said.find("Sec-WebSocket-Key: ") + 19;
+            k2 = said.substr(ks, said.find("\r\n", ks) - ks) + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+            SHA1((const unsigned char*)k2.data(), k2.size(), sha);
+            reply = "HTTP/1.1 101 Switching Protocols\r\nSec-WebSocket-Accept: " + b64(std::string((char*)sha, 20)) + "\r\n\r\n";
+            said.clear();
+            assert(write(peer, reply.data(), reply.size()) == (ssize_t)reply.size());
+            for (int i = 0; i < 500 && said.empty(); i++) step();
+            assert(ws_parse(said, op, p) == (long)said.size() && op == want && p == "NICK me");
+            c.close();
+            close(peer);
+        }
+        close(lfd);
     }
 
     {  // /dcc: an offer, then a real download from a loopback sender

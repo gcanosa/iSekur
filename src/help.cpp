@@ -12,7 +12,7 @@
 
 static const std::vector<CmdInfo> CMDS = {
     // ---- Connection
-    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-rawlog] [-login method] [-save] [-noconnect] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
+    {"server", "Connection", "host [port] [-tls] [-noverify] [-name name] [-nick nick] [-host vhost] [-cap|-nocap] [-cmdspeed ms] [-cmdmax n] [-noproxy] [-4|-6] [-wsproto auto|text|binary] [-rawlog] [-login method] [-save] [-noconnect] | rename [old] [new] | del name", "Connect to a new server, rename or delete one",
      "Opens a server tab and connects. With -tls the port defaults to 6697, otherwise 6667. The options can come before the address too, as in irssi: /server -host vhost.example.org irc.sekurnet.org 6697 -tls. "
      "-noverify skips the certificate check (self-signed servers). -name is its [server.<name>] "
      "(default: the host), -nick its own nick (default: [general] nick), -host the local hostname or IP to connect from "
@@ -28,7 +28,10 @@ static const std::vector<CmdInfo> CMDS = {
      "before it connects (see /login). -noconnect only adds it (with -save it is kept): /connect name connects it later, and the webchat's Servers window uses it for its Save button. An IPv6 address works bare or "
      "in brackets with its port: /server [2001:db8::1]:6697 -tls (named 2001-db8--1). A ws:// or wss:// URL as the host "
      "is IRC over WebSocket (IRCv3), for a network that only listens that way or sits behind an HTTPS proxy: the scheme "
-     "says TLS, the URL the port (443 or 80 without one) and the path, -noverify still applies. Without -save the "
+     "says TLS, the URL the port (443 or 80 without one) and the path, -noverify still applies. "
+     "-wsproto text or binary offers only that WebSocket subprotocol (text.ircv3.net, binary.ircv3.net) and sends that kind of frame; auto, the default, offers both and the server picks "
+     "(server.<name>.ws_protocol). A network with a legacy encoding wants binary: a text frame has to be UTF-8. "
+     "Without -save the "
      "server is temporary: it stays out of /servers and the config, /save leaves it out, and it is gone at the next start. "
      "/autojoin snap saves it with its channels, and so does -save (written at once, as in /server irc.sekurnet.org 6697 -tls -name sekurnet -save, "
      "or /server sekurnet -save for one already open); so does anything else that saves a network's keys, like /autojoin add or /login. Naming a server you already have "

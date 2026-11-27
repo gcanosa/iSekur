@@ -50,6 +50,7 @@ struct Conn {
     // set before connect() like px, close() keeps it: not empty = IRC over WebSocket (IRCv3 text/binary.ircv3.net) at this
     // path, once the TCP / TLS / proxy is up. `out` stays plain IRC lines, `in` gets them back: the framing is in pump()
     std::string ws;
+    int ws_proto = 0;  // set like ws: 1 text, 2 binary: only that subprotocol is offered and used; 0: both, the server picks
 
     ~Conn() { close(); }
     // Start connecting; DNS runs on a thread so the UI never blocks.
@@ -68,7 +69,7 @@ private:
     std::string thost, pin;  // the target behind the proxy, the proxy's answer so far
     int tport = 0, pstep = 0;
     int ws_st = 0;  // 0 not started, 1 upgrade sent, 2 frames
-    bool ws_bin = false;  // the server picked binary.ircv3.net: our messages go out as binary frames
+    bool ws_bin = false;  // binary.ircv3.net, picked by the server or by ws_proto: our messages go out as binary frames
     int wsfrag_op = 0;
     std::string ws_key, wsin, wsout, wsfrag;  // wsout: what goes on the wire (the request, then masked frames) in place of `out`
     bool ws_begin();

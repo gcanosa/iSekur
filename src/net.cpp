@@ -560,10 +560,11 @@ bool Conn::ws_begin() {
     ws_key = b64(std::string((char*)k, sizeof k));
     std::string h = thost.find(':') == std::string::npos ? thost : "[" + thost + "]";
     if (tport != (tls ? 443 : 80)) h += ":" + std::to_string(tport);
-    // ponytail: no Origin header; a server that checks it (Ergo allowed-origins) refuses us. Both ircv3 subprotocols, the server picks
+    // ponytail: no Origin header; a server that checks it (Ergo allowed-origins) refuses us
+    const char* proto = ws_proto == 1 ? "text.ircv3.net" : ws_proto == 2 ? "binary.ircv3.net" : "text.ircv3.net, binary.ircv3.net";
     wsout = "GET " + ws + " HTTP/1.1\r\nHost: " + h + "\r\nUser-Agent: iSekur\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n"
             "Sec-WebSocket-Key: " + ws_key + "\r\nSec-WebSocket-Version: 13\r\n"
-            "Sec-WebSocket-Protocol: text.ircv3.net, binary.ircv3.net\r\n\r\n";
+            "Sec-WebSocket-Protocol: " + proto + "\r\n\r\n";
     ws_st = 1;
     return true;
 }
@@ -604,7 +605,8 @@ bool Conn::ws_pull(std::string& in) {
             err = "WebSocket: the server's answer isn't for our request (a proxy in the way?)";
             return false;
         }
-        ws_bin = hdr("sec-websocket-protocol") == "binary.ircv3.net";  // none or text.ircv3.net: text
+        // forced: that one, even from a server that names no subprotocol. Else none or text.ircv3.net: text
+        ws_bin = ws_proto ? ws_proto == 2 : hdr("sec-websocket-protocol") == "binary.ircv3.net";
         ws_st = 2;
     }
     for (;;) {

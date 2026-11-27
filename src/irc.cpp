@@ -324,6 +324,7 @@ void Core::connect(Server* s) {
     }
     s->conn.px = {};
     s->conn.ws = s->cfg.ws;
+    s->conn.ws_proto = s->cfg.ws_proto;
     s->conn.vhost = s->cfg.vhost;
     s->conn.family = s->cfg.ipv == 4 ? AF_INET : s->cfg.ipv == 6 ? AF_INET6 : AF_UNSPEC;
     plugin_emit("connect", s, "");  // a proxy plugin calls isekur.proxy(srv, url) here
@@ -331,7 +332,8 @@ void Core::connect(Server* s) {
     std::string how = tls ? "TLS" + why : "";
     if (s->cfg.ipv) how += (how.empty() ? "IPv" : ", IPv") + std::to_string(s->cfg.ipv) + " only";
     if (!s->cfg.cap) how += (how.empty() ? "" : ", ") + std::string("no CAP");
-    if (!s->cfg.ws.empty()) how += (how.empty() ? "WebSocket " : ", WebSocket ") + s->cfg.ws;
+    if (!s->cfg.ws.empty()) how += (how.empty() ? "WebSocket " : ", WebSocket ") + s->cfg.ws +
+                                          (s->cfg.ws_proto == 1 ? " text" : s->cfg.ws_proto == 2 ? " binary" : "");
     print(s->status, LK::INFO,
           "Connecting to " + s->cfg.host + ":" + std::to_string(port) + (how.empty() ? "" : " (" + how + ")") +
               (s->conn.px.kind ? " via " + proxy_desc(s->conn.px) : "") + (s->cfg.vhost.empty() ? "" : " from " + s->cfg.vhost));
