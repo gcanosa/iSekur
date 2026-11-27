@@ -278,14 +278,16 @@ backlog       = 50           ; lines of each tab a client gets when it connects 
 ; brb    = /away $* && /nick $nick|away
 
 [keys]
-; The defaults are shown. Uncomment a line to change that action's keys (or /set keys.next_tab "M-Right C-n").
+; The defaults are shown. Uncomment a line to give that action only the keys you write; add the word default to
+; keep the built-in ones too (find_tab = default F5). Two keys in a row, as tmux's prefix: detach = C-b>d.
+; In the terminal or the webchat, /keys (F1) learns a key when you pick an action there.
 ; next_tab = M-Down C-n
 ; prev_tab = M-Up C-p
-; next_server = M-Right C-x
-; prev_server = M-Left
+; next_server = M-Right M-f C-x M-x
+; prev_server = M-Left M-b
 ; next_active = C-a M-a
-; mark_all_read = C-r D-r
-; close_tab = C-w
+; mark_all_read = C-r M-r D-r
+; close_tab = C-w M-w
 ; find_tab = C-g M-j
 ; other_pane = F6 M-o
 ; tab_1 = M-1
@@ -303,6 +305,7 @@ backlog       = 50           ; lines of each tab a client gets when it connects 
 ; toggle_nicklist = C-l M-l F2
 ; toggle_topic = C-t M-t
 ; toggle_mouse = F3
+; copy_input = M-c
 ; keys = F1 M-k
 ; lock = M-s
 ; detach = M-d C-z

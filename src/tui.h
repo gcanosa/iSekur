@@ -25,6 +25,7 @@ struct Tui {
     void input_edge();                          // that drag at an edge: scroll one character that way
 
 private:
+    friend struct TuiTest;  // tests/test.cpp presses keys
     std::u32string input;
     int typed_id = 0;  // the tab the input line was last typed in (+typing goes there)
     size_t cur = 0;
@@ -186,8 +187,20 @@ private:
     void find_key(int k, uint32_t ch);
     void find_mouse(int k, int x, int y);
     // /keys, F1, Alt+K: every key binding as keycaps, by group, from the live keymap ([keys] included)
-    struct KeysWin { bool open = false; int top = 0, rows = 0, n = 0, x0 = 0, w = 0, list_y = 0; };
+    // a row picked (Enter, a click) learns a key: act is the action, got the key or two pressed, btn the button Tab is on
+    struct KeysWin {
+        bool open = false;
+        int top = 0, rows = 0, n = 0, x0 = 0, w = 0, list_y = 0, sel = -1, btn = 0, btn_y = -1;
+        std::string act, desc, msg;
+        std::vector<std::string> got;
+        std::vector<std::pair<int, int>> bx;  // the buttons' columns as last drawn
+    };
     KeysWin kw;
+    std::string chord;  // the first key of a two-key binding, waiting for the second
+    bool is_prefix(const std::string& spec, const char* act = nullptr) const;
+    void draw_learn(int W, int H);
+    void learn_act(int btn);  // 0 Replace, 1 Add, 2 Default, 3 Cancel
+    void keys_mouse(int mod, int k, int x, int y);
     // /plugin alone: the installed plugins and the catalog's, a tab each; c configures one, per scope
     struct PlugWin {
         bool open = false, avail = false;  // avail: the Available tab
@@ -281,7 +294,7 @@ private:
     void bans_key(int k, uint32_t ch);
     void bans_mouse(int k, int x, int y);
     void draw_keys(int W, int H);
-    void keys_key(int k, uint32_t ch);
+    void keys_key(int mod, int k, uint32_t ch);
     bool action(const std::string& a);
     void complete();
     // live list under the input line: config keys after "/set ", commands while

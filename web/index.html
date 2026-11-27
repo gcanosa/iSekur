@@ -421,8 +421,16 @@ dialog .btns .left { margin-right: auto; }
 #klist h3::after { content: ""; flex: 1; border-top: 1px solid var(--line); }
 #klist h3:first-child { margin-top: 0; }
 #klist .ks { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; color: var(--muted); font-size: calc(11px * var(--z, 1)); }
-#klist .d { font-size: calc(13px * var(--z, 1)); color: var(--fg); }
+#klist .d { font-size: calc(13px * var(--z, 1)); color: var(--fg); padding: 1px 6px; }
 #klist .none { grid-column: 1 / -1; color: var(--muted); }
+#klist .pick { cursor: pointer; align-self: stretch; display: flex; align-items: center; flex-wrap: wrap; border-radius: 6px; }
+#klist .d.pick:is(:hover, :focus-visible) { background: var(--menu_sel-bg); color: var(--menu_sel-fg); outline: 0; }
+/* the box that learns a key (/keys, a row clicked) */
+#dbind { width: min(440px, calc(100vw - 32px)); }
+#bind-got { min-height: 34px; display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; padding: 8px; border: 1px dashed var(--line); border-radius: 8px; color: var(--muted); }
+#bind-got:focus-visible { outline: 1px dotted var(--fg); outline-offset: 2px; }
+#bind-note { color: var(--fg); font-size: calc(13px * var(--z, 1)); display: grid; gap: 4px; }
+#bind-note:empty { display: none; }
 kbd { display: inline-block; min-width: 1.6em; padding: 2px 7px; box-sizing: border-box; text-align: center; font: 600 calc(11.5px * var(--z, 1))/1.5 ui-monospace, Menlo, Consolas, monospace;
   color: var(--fg); background: var(--bg); border: 1px solid var(--line); border-bottom-width: 3px; border-radius: 6px; }
 #dset { width: min(900px, calc(100vw - 32px)); overflow: hidden; }
@@ -816,6 +824,8 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
 .win-95 #setlist .sw input:focus-visible + i { outline: 1px dotted #000; outline-offset: 2px; }
 .win-95 kbd { border-radius: 0; background: #c0c0c0; color: #000; border: 1px solid; border-color: #fff #404040 #404040 #fff; box-shadow: inset -1px -1px #808080; font: 400 calc(11px * var(--z, 1))/1.5 Tahoma, "MS Sans Serif", Geneva, Verdana, sans-serif; }
 .win-95 #klist h3 { color: #000080; }
+.win-95 #klist .pick { border-radius: 0; } .win-95 #klist .d.pick:is(:hover, :focus-visible) { background: #000080; color: #fff; }
+.win-95 #bind-got { border-radius: 0; background: #fff; color: #404040; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; }
 .win-95 :is(#setnav, #thlist, .flist, #srvlist) { background: #fff; border: 1px solid; border-color: #808080 #fff #fff #808080; box-shadow: inset 1px 1px #000; padding: 2px; gap: 0; }
 .win-95 #setnav { margin-right: 0; }
 .win-95 :is(#setnav button, #thlist button, .flist .r, #srvlist button) { border-radius: 0; padding: 2px 6px; }
@@ -1007,8 +1017,16 @@ progress::-moz-progress-bar { background: linear-gradient(90deg, var(--accent), 
   <h2>Keys</h2>
   <input id="kq" placeholder="Filter, e.g. tab, nick, bold..." autocomplete="off" aria-label="Filter keys">
   <div id="klist"></div>
-  <div class="hint">Change one with /set keys.&lt;action&gt; "&lt;key&gt; ..." · /help keys</div>
+  <div class="hint">Click an action to give it a new key · /help keys</div>
   <div class="btns"><button class="go" value="ok">Close</button></div>
+</form></dialog>
+<dialog id="dbind"><form method="dialog">
+  <h2>New key</h2>
+  <div id="bind-what"></div>
+  <div id="bind-got" tabindex="0" aria-live="polite"></div>
+  <div id="bind-note" aria-live="polite"></div>
+  <div class="hint">The terminal uses the same keys. The browser keeps Ctrl+W, Ctrl+T and Ctrl+N: they never get here. Backspace starts over.</div>
+  <div class="btns"><button value="cancel">Cancel</button><button type="button" data-v="default">Default</button><button type="button" data-v="add">Add</button><button type="button" class="go" data-v="set">Replace</button></div>
 </form></dialog>
 <dialog id="dlogs"><form method="dialog">
   <h2>Logs</h2>
@@ -2003,7 +2021,8 @@ function onMsg(ev) {
   } else if (m.t === "cmds") {
     cmds = m.list;
   } else if (m.t === "keys") {
-    keymap = {...KEYS_DEF, ...m.map};
+    keymap = {...Object.fromEntries(Object.entries(KEYS_DEF).filter(([, a]) => !(m.off || []).includes(a))), ...m.map};
+    if (dkeys.open) renderKeys();
   } else if (m.t === "stat") {
     stat = m; renderStatus();
   } else if (m.t === "speak") {  // a plugin's text: the browser's voice
@@ -2856,17 +2875,24 @@ const KEY_GROUPS = [
   ["Tabs", [["next_tab", "next tab"], ["prev_tab", "previous tab"], ["next_active", "the busiest tab"], ["mark_all_read", "mark every tab read"], ["next_server", "next server or console tab"], ["prev_server", "previous server or console tab"],
             ["find_tab", "find a tab by name"], ["other_pane", "the other /split pane"], ["close_tab", "close the tab"]]],
   ["View", [["scroll_up", "scroll up half a page"], ["scroll_down", "scroll down half a page"], ["toggle_nicklist", "show or hide the nick list"],
-            ["toggle_topic", "show or hide the topic bar"], ["keys", "this list"]]],
+            ["toggle_topic", "show or hide the topic bar"], ["copy_input", "copy the line"], ["keys", "this list"]]],
   ["Session", [["lock", "lock the screen now (/lock)"], ["quit", "exit iSekur (asks first)"]]],
   ["Typing", [["Enter", "send the line"], ["Tab", "complete nick or command"], ["Up Down", "earlier lines you typed"],
-              ["C-b C-c C-o", "bold, color, reset"], ["C-r C-i C-u", "reverse, italic, underline"], ["Esc", "cancel a password prompt"], ["M-c", "copy the line"]], true]];
+              ["C-b C-c C-o", "bold, color, reset"], ["C-r C-i C-u", "reverse, italic, underline"], ["Esc", "cancel a password prompt"]], true]];
 const MAC = /Mac|iP(hone|ad)/.test(navigator.platform), escH = s => String(s).replace(/[&<>"]/g, c => ({"&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;"})[c]);
-function keyCaps(sp) {  // "M-Right" -> <kbd>Alt</kbd>+<kbd>→</kbd>
-  const N = {Right: "→", Left: "←", Up: "↑", Down: "↓"}, M = {M: MAC ? "⌥ Opt" : "Alt", C: MAC ? "⌃ Ctrl" : "Ctrl", S: "Shift", D: "⌘ Cmd"};
+// [keys]: one key ("M-Right") or two in a row ("C-b>d"); a '>' that is the key itself comes after a '-', or ends it
+function chordSplit(sp) { const m = /^(.*?[^-])>(.+)$/.exec(sp); return m ? [m[1], m[2]] : [sp, ""]; }
+function capsOf(sp) {  // "M-Right" -> ["Alt", "→"]
+  const N = {Right: "→", Left: "←", Up: "↑", Down: "↓", Backspace: "⌫", " ": "Space"}, M = {M: MAC ? "⌥ Opt" : "Alt", C: MAC ? "⌃ Ctrl" : "Ctrl", S: "Shift", D: "⌘ Cmd"};
   const caps = [];
   while (/^[MCSD]-./.test(sp)) caps.push(M[sp[0]]), sp = sp.slice(2);
+  if (!caps.length && /^[A-Z]$/.test(sp)) caps.push("Shift");  // a second key typed as D
   caps.push(N[sp] || (sp.length === 1 ? sp.toUpperCase() : sp));
-  return caps.map(c => "<kbd>" + escH(c) + "</kbd>").join("+").replace("<kbd>1…0</kbd>", "<kbd>1</kbd>…<kbd>0</kbd>");
+  return caps;
+}
+const keyLabel = sp => chordSplit(sp).filter(Boolean).map(h => capsOf(h).join("+")).join(" then ");
+function keyCaps(sp) {  // the same as <kbd>s
+  return chordSplit(sp).filter(Boolean).map(h => capsOf(h).map(c => "<kbd>" + escH(c) + "</kbd>").join("+")).join(" then ").replace("<kbd>1…0</kbd>", "<kbd>1</kbd>…<kbd>0</kbd>");
 }
 function renderKeys() {
   const q = $("#kq").value.trim().toLowerCase(), by = {};
@@ -2876,19 +2902,82 @@ function renderKeys() {
     const rows = [];
     if (g === "Tabs") {  // Alt+1..0 in one row; a tab_N bound elsewhere gets its own
       rows.push([[ "M-1…0" ], "go to tab 1 to 10"]);
-      for (let i = 1; i <= 10; i++) { const own = (by["tab_" + i] || []).filter(s => s !== "M-" + i % 10); if (own.length) rows.push([own, "go to tab " + i]); }
+      for (let i = 1; i <= 10; i++) { const own = (by["tab_" + i] || []).filter(s => s !== "M-" + i % 10); if (own.length) rows.push([own, "go to tab " + i, "tab_" + i]); }
     }
-    for (const [a, d] of acts) { const ks = fixed ? a.split(" ") : by[a]; if (ks && ks.length) rows.push([ks, d]); }
+    for (const [a, d] of acts) rows.push(fixed ? [a.split(" "), d] : [by[a] || [], d, a]);  // an action left without keys stays, to give it one
     const shown = rows.filter(([ks, d]) => !q || (g + " " + d + " " + ks.join(" ")).toLowerCase().includes(q));
     if (!shown.length) continue;
     h += "<h3>" + g + "</h3>";
-    for (const [ks, d] of shown) h += '<div class="ks">' + ks.map(keyCaps).join(" / ") + '</div><div class="d">' + escH(d) + "</div>";
+    for (const [ks, d, a] of shown) {
+      const at = a ? ' data-a="' + a + '" data-d="' + escH(d) + '"' : "", cl = a ? " pick" : "";
+      h += '<div class="ks' + cl + '"' + at + ">" + (ks.map(keyCaps).join(" / ") || "no key") + '</div><div class="d' + cl + '"' + at + (a ? ' tabindex="0" role="button" title="Change its key"' : "") + ">" + escH(d) + "</div>";
+    }
   }
   $("#klist").innerHTML = h || '<div class="none">no key matches</div>';
 }
 const dkeys = $("#dkeys");
 function openKeys() { $("#side").classList.remove("open"); $("#kq").value = ""; renderKeys(); dkeys.showModal(); deskFocus($("#kq")); }
 $("#kq").oninput = renderKeys;
+// a click on an action learns a key for it: what is pressed shows, with what it takes it from; the buttons send /keys
+const dbind = $("#dbind");
+let bindAct = "", bindGot = [], bindBad = "";
+const bindSpec = () => bindGot.join(">");
+function keyProblem(sp) {  // core's key_problem: what can't be bound never reaches the buttons
+  const [a, b] = chordSplit(sp);
+  if (!/^[MCD]-./.test(a) && !/^F\d+$/.test(a) && !/^(PgUp|PgDn|Insert)$/.test(a)) return keyLabel(a) + " can't be bound on its own: use it with Ctrl or Alt, or an F key";
+  if (/^(Enter|Tab|Esc|Backspace)$/.test(b)) return b + " can't be the second key";
+  return /\s/.test(sp) ? "that key can't be bound" : "";
+}
+function renderBind() {
+  const spec = bindSpec(), notes = [];
+  $("#bind-got").innerHTML = spec ? keyCaps(spec) : "Press the key…";
+  if (bindGot.length === 1) notes.push("Press a second key for a two-key combo, or click Replace to save this one.");
+  if (spec) {
+    const first = bindGot[0], names = Object.fromEntries(KEY_GROUPS.filter(g => !g[2]).flatMap(g => g[1]));
+    for (const [sp, a] of Object.entries(keymap)) {
+      const [x, y] = chordSplit(sp);
+      if (a !== bindAct && (sp === spec || (x === first && !y !== (bindGot.length < 2)))) notes.push(keyLabel(sp) + ' is "' + (names[a] || a.replace("_", " ")) + '" now: it moves here.');
+    }
+    if (/^C-([bcoiu_\]])$/.test(first)) notes.push(keyLabel(first) + (bindGot.length > 1 ? " formats text now: press it twice for that." : " formats text now: it won't any more."));
+  }
+  if (bindBad) notes.push(bindBad);
+  const box = $("#bind-note"); box.textContent = "";
+  for (const n of notes) { const d = document.createElement("div"); d.textContent = n; if (n === bindBad) d.className = "err"; box.append(d); }
+  for (const b of dbind.querySelectorAll('[data-v="set"], [data-v="add"]')) b.disabled = !spec;
+}
+function openBind(el) {
+  bindAct = el.dataset.a; bindGot = []; bindBad = "";
+  $("#bind-what").textContent = "Press the new key for: " + el.dataset.d;
+  renderBind(); dbind.showModal(); $("#bind-got").focus();
+}
+$("#klist").onclick = e => { const el = e.target.closest(".pick"); if (el) openBind(el); };
+$("#klist").onkeydown = e => { if ((e.key === "Enter" || e.key === " ") && e.target.classList.contains("pick")) { e.preventDefault(); openBind(e.target); } };
+const MODKEYS = /^(Shift|Control|Alt|Meta|AltGraph|CapsLock)$/;  // held, not pressed: the key with it is still to come
+dbind.addEventListener("keydown", e => {
+  // Esc closes, Tab moves the focus, Enter and Space press the button that has it
+  if (e.key === "Escape" || e.key === "Tab" || e.isComposing) return;
+  if (e.target.tagName === "BUTTON" && (e.key === "Enter" || e.key === " ")) return;
+  e.preventDefault(); e.stopPropagation();
+  if (MODKEYS.test(e.key)) return;
+  const plain = !e.ctrlKey && !e.altKey && !e.metaKey;
+  if (plain && e.key === "Enter") { bindSend("set"); return; }
+  bindBad = "";
+  if (plain && e.key === "Backspace") bindGot = [];
+  else {
+    const sp = keyspec(e);
+    if (bindGot.length === 1 && sp === bindGot[0]) return;  // the first twice types what it did before: not a combo
+    const why = keyProblem(bindGot.length === 1 ? bindGot[0] + ">" + sp : sp);
+    if (bindGot.length !== 1) bindGot = [];
+    if (why) bindBad = why; else bindGot.push(sp);
+  }
+  renderBind();
+});
+function bindSend(v) {
+  if (v !== "default" && !bindGot.length) return;
+  send({t: "input", buf: active, text: "/keys " + v + " " + bindAct + (v === "default" ? "" : " " + bindSpec())});
+  dbind.close();
+}
+for (const b of dbind.querySelectorAll("[data-v]")) b.onclick = () => bindSend(b.dataset.v);
 // 📜 /logs: the log browser. The tree is network > channel or query > its days, newest first. A day comes whole
 // (logread); the find box filters it as you type, and Enter searches every day of the channel or network picked in
 // the tree (logfind). A found line opens in its day. The calendar shows a channel's month, its logged days in color
@@ -4035,6 +4124,25 @@ function action(a) {
   return true;
 }
 try { if (localStorage.getItem("topic") === "0") $("#topic").classList.add("hide"); } catch (e) {}
+// two keys in a row ([keys] "C-b>d"): the first waits for the second, ahead of the input line's own keys (Ctrl+B is
+// bold). The first twice does what it does alone
+let chord = "";
+document.addEventListener("keydown", e => {
+  if (locked || e.isComposing || MODKEYS.test(e.key) || (e.target.closest && e.target.closest("dialog"))) return;
+  if (altRight && !e.ctrlKey && !e.metaKey) return;
+  const sp = keyspec(e), pre = chord;
+  if (pre) {
+    chord = ""; flashMsg("", 0);
+    if (sp === pre) return;
+    const a = keymap[pre + ">" + sp];
+    if (a) action(a); else if (e.key !== "Escape") flashMsg(keyLabel(pre + ">" + sp) + " isn't bound", 2000);
+  } else {
+    if (!Object.keys(keymap).some(k => { const [x, y] = chordSplit(k); return y && x === sp && !/^(detach|toggle_mouse)$/.test(keymap[k]); })) return;  // the terminal's own leave the key alone here
+    chord = sp; clearTimeout(flashT); flash = keyLabel(sp) + " …"; renderStatus();
+  }
+  e.preventDefault(); e.stopPropagation();
+}, true);
+addEventListener("pointerdown", () => { if (chord) chord = "", flashMsg("", 0); }, true);
 document.addEventListener("keydown", e => {
   if (locked || (e.target.closest && e.target.closest("dialog"))) return;
   if (!e.altKey && !e.ctrlKey && !e.metaKey && e.target !== line && /^.$/.test(e.key)) {  // typing elsewhere

@@ -1301,12 +1301,16 @@ std::string Web::cmds_json() {  // [name, usage, summary, aliases]
 }
 
 std::string Web::keys_json() {
-    std::string o = "{\"t\":\"keys\",\"map\":{";
+    std::string o = "{\"t\":\"keys\",\"map\":{", off;  // off: the actions whose own keys replace the page's defaults
     auto ks = c.cfg.find("keys");
     if (ks != c.cfg.end())
-        for (auto& [act, specs] : ks->second)
-            for (auto& sp : split(specs, ' ')) o += std::string(o.back() == '{' ? "" : ",") + json_str(sp) + ":" + json_str(act);
-    return o + "}}";
+        for (auto& [act, specs] : ks->second) {
+            auto l = split(specs, ' ');
+            if (!l.empty() && std::find(l.begin(), l.end(), "default") == l.end()) off += (off.empty() ? "" : ",") + json_str(act);
+            for (auto& sp : l)
+                if (sp != "default") o += std::string(o.back() == '{' ? "" : ",") + json_str(sp) + ":" + json_str(act);
+        }
+    return o + "},\"off\":[" + off + "]}";
 }
 
 std::string Web::stat_json() {

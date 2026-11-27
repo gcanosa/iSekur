@@ -354,11 +354,16 @@ static const std::vector<CmdInfo> CMDS = {
      "config are listed too. log_keep deletes old days: /set log_keep 30 keeps 30 days, also 2w, 6m (months), 1y; "
      "0 keeps all.",
      {"/logs", "/logs release", "/logs nick:alice green"}},
-    {"keys", "Windows", "", "Show every keyboard shortcut",
+    {"keys", "Windows", "[set|add|default action [key]]", "Show every keyboard shortcut, and change them",
      "Opens a window with every key binding drawn as keycaps, by group (tabs, view, session, typing), in the terminal "
-     "and the webchat; F1 or Alt+K open it too. Your own [keys] bindings show as well. Up/Down scrolls, Esc closes. "
-     "Change a key with /set keys.<action> \"<key> [key...]\" (e.g. /set keys.next_tab \"M-Right C-n\").",
-     {"/keys", "/set keys.find_tab \"C-g M-j\""}},
+     "and the webchat; F1 or Alt+K open it too. To change one, pick its action (Up/Down and Enter, or a click), press "
+     "the new key, and choose Replace, Add (the old keys stay too) or Default; it is saved at once. Press two keys for a "
+     "combo like tmux's: Ctrl+B then D (the second one can be a plain letter). Only keys that reach iSekur can be "
+     "learned: browsers keep Ctrl+W, Ctrl+T and Ctrl+N, and many terminals send Ctrl+I as Tab and Ctrl+M as Enter. A "
+     "first key that formats or edits text (Ctrl+B, Ctrl+U) still does when pressed twice; inside tmux, press Ctrl+B "
+     "twice for each one. The same by hand: /keys set <action> <key> (C-b, M-Right, F5; C-b>d for two keys), "
+     "/keys add, /keys default <action>. Both UIs share the keys; they are the [keys] section of the config.",
+     {"/keys", "/keys set detach C-b>d", "/keys add find_tab F5", "/keys default detach"}},
     {"theme", "Windows", "[name]", "Show or switch the color theme",
      "Alone: a picker in the terminal and the webchat; type to filter, Up/Down previews live (both), Enter keeps (as /set theme, so /save writes it), Esc goes back. "
      "Themes are files in themes/*.theme (also ~/.config/isekur/themes/); /set theme_dir ~/mythemes looks in your own folder first, "
@@ -913,7 +918,7 @@ static const std::vector<GuidePage> GUIDE = {
         "",
         G_NOTE "On a Mac, Alt is " BOLD "Option" RESET ". If Option+A types " BOLD "å" RESET ", make Option Alt: Ghostty " BOLD "macos-option-as-alt = left" RESET ",",
         "  iTerm2 Left Option " BOLD "Esc+" RESET ", Terminal.app " BOLD "Use Option as Meta key" RESET ". The same Alt keys work in the webchat.",
-        "  " G_KEY("Alt+C") " copies the input line (or drag over it). Keys are yours to change in " BOLD "[keys]" RESET " (" G_CMD("/help set") ").",
+        "  " G_KEY("Alt+C") " copies the input line (or drag over it). Keys are yours to change: pick one in " G_CMD("/keys") ".",
         "  " G_CMD("/keys") ", " G_KEY("F1") " or " G_KEY("Alt+K") " shows every key in a window, anytime.",
     }},
     {"Make it yours", {

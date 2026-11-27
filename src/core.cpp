@@ -640,6 +640,79 @@ std::string bad_value(const std::string& sec, const std::string& key, const std:
     return "";
 }
 
+// '>' joins two keys; a '>' that is the key itself ("M->") comes after a '-', or ends the spec
+std::pair<std::string, std::string> chord_split(const std::string& spec) {
+    for (size_t i = 1; i + 1 < spec.size(); i++)
+        if (spec[i] == '>' && spec[i - 1] != '-') return {spec.substr(0, i), spec.substr(i + 1)};
+    return {spec, ""};
+}
+
+// a lone letter, Enter, Tab, arrows... typed on their own would stop typing: only as the second of two keys
+std::string key_problem(const std::string& spec) {
+    if (spec.empty() || spec.find(' ') != std::string::npos) return "that key can't be bound";
+    auto [a, b] = chord_split(spec);
+    bool mod = a.size() > 2 && a[1] == '-' && (a[0] == 'M' || a[0] == 'C' || a[0] == 'D');
+    bool fkey = a.size() > 1 && a[0] == 'F' && a.find_first_not_of("0123456789", 1) == std::string::npos;
+    if (!mod && !fkey && a != "PgUp" && a != "PgDn" && a != "Insert")
+        return a + " can't be bound on its own: use it with Ctrl or Alt, or an F key";
+    if (b == "Enter" || b == "Tab" || b == "Esc" || b == "Backspace") return b + " can't be the second key";
+    if (!b.empty() && !chord_split(b).second.empty()) return "two keys at most";
+    return "";
+}
+
+// /keys set <action> <key> replaces the action's keys, add keeps them too ("default" in the list stands for the
+// built-in ones, which the terminal and the webchat each know), default goes back to them. The key is taken from the
+// other actions that name it, and a key and a two-key combo starting with it can't both stay
+void Core::keys_cmd(Buffer* b, const std::vector<std::string>& argv) {
+    const std::string usage = "Usage: /keys set|add <action> <key> · /keys default <action>  (/help keys)";
+    std::string verb = argv[0], act = argv.size() > 1 ? argv[1] : "", spec = argv.size() > 2 ? argv[2] : "";
+    bool def = verb == "default";
+    if ((!def && verb != "set" && verb != "add") || argv.size() != (def ? 2u : 3u)) { print(b, LK::ERROR, usage); return; }
+    if (plugin_depth) { plug_print(b, LK::ERROR, "/keys " + verb + " can't be run by a plugin"); return; }
+    if (!key_known("keys", act)) { print(b, LK::ERROR, "No action " + act + ": /set lists them under keys."); return; }
+    if (!def)
+        if (std::string m = key_problem(spec); !m.empty()) { print(b, LK::ERROR, m); return; }
+    auto clash = [&](const std::string& o) {  // the same key, or one that is the other's first half
+        auto x = chord_split(o), y = chord_split(spec);
+        return o == spec || (x.first == y.first && x.second.empty() != y.second.empty());
+    };
+    auto without = [&](const std::string& list, bool& changed) {
+        std::string out;
+        for (auto& o : split(list, ' '))
+            if (!def && clash(o)) changed = true;
+            else out += (out.empty() ? "" : " ") + o;
+        return out;
+    };
+    Ini part;
+    auto& keys = cfg["keys"];
+    for (auto& [other, list] : keys) {
+        bool changed = false;
+        std::string v = other == act ? "" : without(list, changed);
+        if (changed) part["keys"][other] = v;
+    }
+    std::string v;
+    if (verb == "set") v = spec;
+    else if (verb == "add") {
+        bool changed = false;
+        v = keys.count(act) ? without(keys[act], changed) : "";
+        if (v.empty()) v = "default";
+        v += " " + spec;
+    }
+    part["keys"][act] = v;
+    std::string err;
+    for (auto& [k, val] : part["keys"]) keys[k] = val;
+    cfg_changed = dirty = true;
+    if (!cfg_path.empty() && !ini_save(cfg_path, part, err)) {
+        for (auto& [k, val] : part["keys"]) unsaved["keys"][k] = val;
+        print(b, LK::ERROR, err + " (in use until restart; /save tries again)");
+        return;
+    }
+    for (auto& [k, val] : part["keys"]) unsaved["keys"].erase(k), set_was["keys"].erase(k);
+    if (unsaved["keys"].empty()) unsaved.erase("keys");
+    if (set_was["keys"].empty()) set_was.erase("keys");
+    print(b, LK::INFO, "keys." + act + " = " + (v.empty() ? "(default)" : v) + "  (saved)");
+}
+
 std::vector<std::string> conf_check(const std::string& path) {
     std::ifstream f(path);
     if (!f) return {"can't read " + path};
@@ -2101,7 +2174,8 @@ void Core::exec(Buffer* b, const std::string& input) {
         return;
     }
     if (cmd == "keys") {  // the terminal's window (the webchat opens its own dialog)
-        if (tty && !from_web) keys_win = dirty = true;
+        if (!argv.empty()) keys_cmd(b, argv);
+        else if (tty && !from_web) keys_win = dirty = true;
         else print(b, LK::INFO, "The key list is a window: F1 or Alt+K in the terminal or the webchat");
         return;
     }

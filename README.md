@@ -31,6 +31,8 @@ your browser or phone shows the same live session.
 - **A TUI you can use with the mouse.** Click tabs and nicks, right-click menus, drag to move or
   resize, `/set` settings window, tab completion with live suggestions, `/split` panes, tabs on top
   or as a side tree.
+- **Your own keys.** Pick an action in `/keys` (F1), press the key you want and save it, in the terminal or the
+  webchat. Two keys in a row work too, like tmux: Ctrl+B then D to detach.
 - **Lua plugins** run in a sandbox and install from a catalog checked by sha256 (`/plugin install autoaway`).
 - **Drag a file in, get a link.** With the `dropzone` plugin, a file dropped on the webchat (it shows what letting go
   does first), a pasted screenshot, the paperclip on a phone, a file dropped on the terminal or `/upload file` goes to a

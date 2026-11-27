@@ -28,8 +28,75 @@
 #include "session.h"
 #include "web.h"
 #include "bnc.h"
+#include "tui.h"
+#include "termbox2.h"
 #include "net.h"
 #include <openssl/sha.h>
+
+// [keys]: what a config does to the terminal's bindings, two keys in a row, and /keys writing it
+struct TuiTest {
+    static void run(Core& core, Buffer* b) {
+        using P = std::pair<std::string, std::string>;
+        assert(chord_split("C-b>d") == P("C-b", "d") && chord_split("F5") == P("F5", "") && chord_split("M->") == P("M->", ""));
+        assert(chord_split("M->>d") == P("M->", "d") && chord_split("C-b>>") == P("C-b", ">"));
+        for (const char* ok : {"C-b", "M-x", "D-r", "F5", "PgUp", "C-Left", "C-b>d", "F2>D", "M-Enter"}) assert(key_problem(ok).empty());
+        for (const char* bad : {"d", "Enter", "Tab", "Esc", "Up", "S-Up", "Home", "", "d>C-b", "C-b>Enter", "C-b>Esc", "C-a>C-b>d", "M- "}) assert(!key_problem(bad).empty());
+
+        std::string path = "build/test-keys.conf", was = core.cfg_path;
+        unlink(path.c_str());
+        core.cfg_path = path, core.cfg.erase("keys"), core.unsaved.erase("keys");
+        Tui tui(core);
+        auto bound = [&](const char* sp, const char* act) { auto it = tui.keymap.find(sp); return act ? it != tui.keymap.end() && it->second == act : it == tui.keymap.end(); };
+        auto run = [&](const char* cmd) { core.exec(b, cmd), tui.load_keys(); return b->lines.back().kind != LK::ERROR; };
+        auto disk = [&](const char* act) { Ini i; ini_load(path, i); return i["keys"].count(act) ? i["keys"][act] : std::string("-"); };
+
+        assert(run("/keys set close_tab F5") && disk("close_tab") == "F5" && !core.unsaved.count("keys"));
+        assert(bound("F5", "close_tab") && bound("C-w", nullptr) && bound("M-w", nullptr));  // replaced, not added
+        // add keeps the built-in keys, and takes the key from whoever had it (left empty: its own defaults again)
+        assert(run("/keys add find_tab F5") && disk("find_tab") == "default F5" && disk("close_tab") == "");
+        assert(bound("F5", "find_tab") && bound("C-g", "find_tab") && bound("C-w", "close_tab"));
+        // two keys in a row
+        assert(run("/keys set detach C-b>d") && bound("C-b>d", "detach") && bound("M-d", nullptr) && bound("C-z", nullptr));
+        auto ctrl_b = [&] { tui.key(TB_MOD_CTRL, TB_KEY_CTRL_B, 0); };
+        core.detach_req = false, tui.input.clear(), tui.cur = 0;
+        ctrl_b();
+        assert(tui.chord == "C-b" && tui.input.empty() && !core.detach_req);
+        tui.key(0, 0, 'd');
+        assert(core.detach_req && tui.chord.empty() && tui.input.empty());
+        core.detach_req = false;
+        ctrl_b(), tui.key(0, 0, 'x');  // not a combo: the key goes nowhere
+        assert(!core.detach_req && tui.input.empty() && tui.chord.empty());
+        ctrl_b(), tui.key(0, TB_KEY_ESC, 0);
+        assert(tui.chord.empty() && tui.input.empty());
+        ctrl_b(), ctrl_b();  // twice: bold, as it was
+        assert(tui.input == U"\x02" && tui.chord.empty());
+        tui.input.clear(), tui.cur = 0;
+        core.locked = true;  // detaching works on the lock screen too, and the second key isn't typed
+        ctrl_b(), tui.key(0, 0, 'd');
+        assert(core.detach_req);
+        core.locked = false, core.detach_req = false;
+        // a single key and a combo starting with it can't both stay
+        assert(run("/keys set toggle_topic C-b") && disk("detach") == "" && bound("C-b", "toggle_topic") && bound("M-d", "detach"));
+        assert(run("/keys set detach C-b>d") && disk("toggle_topic") == "");
+        assert(run("/keys default detach") && disk("detach") == "" && bound("M-d", "detach") && bound("C-b>d", nullptr));
+        for (const char* bad : {"/keys set detach d", "/keys set nope F5", "/keys set detach C-b>Enter", "/keys set detach", "/keys bogus detach F5", "/keys default detach F5"})
+            assert(!run(bad));
+        assert(disk("detach") == "");
+        // the learning box: a row, two presses, Enter saves
+        tui.kw = Tui::KeysWin{}, tui.kw.open = true, tui.kw.act = "detach";
+        tui.key(0, 0, 'q');  // refused: a plain letter first
+        assert(tui.kw.got.empty() && !tui.kw.msg.empty());
+        ctrl_b(), tui.key(0, 0, 'd');
+        assert(tui.kw.got == (std::vector<std::string>{"C-b", "d"}) && !core.detach_req);
+        tui.kw.got = {"C-b"}, tui.key(0, 0, 0);  // a key with no name isn't a second key
+        assert(tui.kw.got == std::vector<std::string>{"C-b"});
+        tui.key(0, 0, 'd');
+        tui.key(TB_MOD_CTRL, TB_KEY_ENTER, 0);
+        assert(tui.kw.act.empty() && tui.kw.open && disk("detach") == "C-b>d");
+        unlink(path.c_str());
+        core.cfg_path = was, core.cfg.erase("keys"), core.unsaved.erase("keys");
+    }
+};
 
 static std::string client_frame(const std::string& p) {  // masked, like a browser
     std::string f = ws_frame(p);
@@ -2306,6 +2373,7 @@ int main() {
     assert(!ini_get(core.cfg, "general", "gera").size() && !core.unsaved["general"].count("gera"));
     core.exec(chb, "/set keys.find_tab C-g"), assert(chb->lines.back().kind != LK::ERROR);
     core.exec(chb, "/set web.port 8443"), assert(chb->lines.back().kind != LK::ERROR);
+    TuiTest::run(core, chb);
     core.exec(chb, "/set plugin.x.foo 1"), assert(chb->lines.back().kind != LK::ERROR);
 
     // our /nick is remembered per server (in the file when the server is saved); /set nick drops it

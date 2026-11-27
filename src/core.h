@@ -478,6 +478,7 @@ struct Core {
     bool settings_servers = false;  // /servers: that window, at the first server
     std::string settings_srv;       // /servers name: that window, at this network
     bool keys_win = false;      // /keys in the terminal: the TUI opens its key list
+    void keys_cmd(Buffer* b, const std::vector<std::string>& argv);  // /keys set|add|default: [keys], written at once
     bool logs_win = false;      // /logs in the terminal: the TUI opens its log browser
     std::string logs_at, logs_q;  // ...at this tab's logs ("net" or "net\tname" as on disk), searching logs_q
     std::vector<LogFile> log_files() const;  // every log on disk (logs.cpp), by network, name, newest day first
@@ -920,6 +921,9 @@ const std::vector<KeyInfo>& setting_keys();
 const KeyInfo* key_info(const std::string& key);                 // nullptr: not one iSekur knows
 void log_prune(const std::string& dir, int keep);                // log_keep: delete rotated logs older than keep days
 std::vector<LogFile> log_days(const std::string& dir);          // a folder's rotated <name>.YYYY-MM-DD.log (logs.cpp)
+// [keys]: a spec is one key ("M-Right") or two in a row, as tmux's prefix ("C-b>d")
+std::pair<std::string, std::string> chord_split(const std::string& spec);  // {"C-b", "d"}; a single key: {spec, ""}
+std::string key_problem(const std::string& spec);  // why it can't be bound, "" = it can
 std::string bad_value(const std::string& sec, const std::string& key, const std::string& v);  // why key can't take v, "" if it can
 int keep_days(const std::string& v);                            // log_keep: "30", "30d", "2w", "6m", "1y" in days (0 = keep all); -1: not one
 const char* key_unit(const std::string& key);                    // what a number key counts ("lines", "seconds"), "" if none

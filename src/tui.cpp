@@ -266,6 +266,8 @@ static RGB readable(RGB c, RGB bg) {
 }
 
 // a word-wrapped question for a yes/no box
+static std::string key_label(const std::string& spec);
+
 static std::vector<std::string> wrap_words(const std::string& s, int w) {
     std::vector<std::string> out;
     std::string line;
@@ -1282,6 +1284,7 @@ void Tui::draw() {
             }
             seg("-- MORE --", ms);
         }
+        if (!chord.empty()) seg(key_label(chord) + " …", sh);  // waiting for the second key
         if (!c.flash.empty()) seg(c.flash, sh);
         {  // status_info (uptime, cpu, ...), under the nick list (right edge without one); the last ones drop when it won't fit
             Style is = sty(T, "status_info", "status_hi");
@@ -2098,7 +2101,8 @@ void Tui::theme_key(int k, uint32_t ch) {
 }
 
 // /keys: the key list. A row is a group header (desc empty) or the keys of one action ("M-Right C-n") and what it does
-struct KeyRow { std::string head, specs, desc; };
+struct KeyRow { std::string head, specs, desc; std::string act{}; };  // act: the action a pick on the row rebinds ("": fixed)
+static std::string keyspec(int mod, int key, uint32_t ch);
 static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& keymap) {
     static const std::vector<std::pair<const char*, std::vector<std::pair<const char*, const char*>>>> GROUPS = {
         {"Tabs", {{"next_tab", "next tab"}, {"prev_tab", "previous tab"}, {"next_active", "the busiest tab"}, {"mark_all_read", "mark every tab read"},
@@ -2118,11 +2122,10 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
             for (int i = 1; i <= 10; i++) {
                 std::string a = "tab_" + std::to_string(i), own;
                 for (auto& sp : split(by[a], ' ')) if (sp != "M-" + std::to_string(i % 10)) own += (own.empty() ? "" : " ") + sp;
-                if (!own.empty()) out.push_back({"", own, "go to tab " + std::to_string(i)});
+                if (!own.empty()) out.push_back({"", own, "go to tab " + std::to_string(i), a});
             }
         }
-        for (auto& [a, d] : acts)
-            if (!by[a].empty()) out.push_back({"", by[a], d});
+        for (auto& [a, d] : acts) out.push_back({"", by[a], d, a});  // one left without keys stays, to give it one
     }
     out.push_back({"Mouse", "", ""});  // not keymap actions: fixed
     out.push_back({"", "Double-click C-Click M-Click", "open a link (copied over SSH)"});
@@ -2132,48 +2135,75 @@ static std::vector<KeyRow> key_rows(const std::map<std::string, std::string>& ke
     for (auto& r : std::vector<KeyRow>{
              {"", "Enter", "send the line"}, {"", "Tab", "complete nick or command"}, {"", "Up Down", "earlier lines you typed"},
              {"", "Home End", "start / end of the line"}, {"", "C-u C-k", "delete to start / end"}, {"", "M-BS", "delete the previous word"},
-             {"", by["copy_input"], "copy the line (or drag over it)"},
+             {"", by["copy_input"], "copy the line (or drag over it)", "copy_input"},
              {"", "C-b C-c C-o", "bold, color, reset"}, {"", "C-v C-] C-_", "reverse, italic, underline"}})
-        if (!r.specs.empty()) out.push_back(r);  // copy_input unbound in [keys]: no row
+        out.push_back(r);
     return out;
 }
 
 // "M-Right" -> {"Alt", "→"}: the keycaps of one key
 static std::vector<std::string> key_caps(const std::string& sp) {
-    static const std::map<std::string, std::string> NAMES = {{"Right", "→"}, {"Left", "←"}, {"Up", "↑"}, {"Down", "↓"}, {"BS", "⌫"}, {"Esc", "Esc"}};
+    static const std::map<std::string, std::string> NAMES = {{"Right", "→"}, {"Left", "←"}, {"Up", "↑"}, {"Down", "↓"}, {"BS", "⌫"}, {"Backspace", "⌫"}, {"Esc", "Esc"}, {" ", "Space"}};
     std::vector<std::string> caps;
     size_t i = 0;
     for (; i + 1 < sp.size() && sp[i + 1] == '-' && sp.size() > i + 2; i += 2)
         caps.push_back(sp[i] == 'M' ? "Alt" : sp[i] == 'C' ? "Ctrl" : sp[i] == 'S' ? "Shift" : sp[i] == 'D' ? "Cmd" : std::string(1, sp[i]));
     std::string k = sp.substr(i);
     auto n = NAMES.find(k);
+    if (caps.empty() && k.size() == 1 && isupper((unsigned char)k[0])) caps.push_back("Shift");  // a second key typed as D
     caps.push_back(n != NAMES.end() ? n->second : k.size() == 1 ? std::string(1, (char)toupper((unsigned char)k[0])) : k);
     return caps;
+}
+
+// "C-b>d" -> "Ctrl+B then D"
+static std::string key_label(const std::string& sp) {
+    auto [a, b] = chord_split(sp);
+    std::string o;
+    for (auto& k : key_caps(a)) o += (o.empty() ? "" : "+") + k;
+    if (b.empty()) return o;
+    std::string o2;
+    for (auto& k : key_caps(b)) o2 += (o2.empty() ? "" : "+") + k;
+    return o + " then " + o2;
+}
+
+bool Tui::is_prefix(const std::string& spec, const char* act) const {
+    for (auto& [sp, a] : keymap) {
+        auto [first, second] = chord_split(sp);
+        if (!second.empty() && first == spec && (!act || a == act)) return true;
+    }
+    return false;
 }
 
 void Tui::draw_keys(int W, int H) {
     const Theme& T = c.look(false);
     Style bs = sty(T, "menu", "nicklist"), ls = sty(T, "menu_border", "separator"), hs = bs, dim = sty(T, "timestamp", "menu"),
-          cap = sty(T, "menu_sel", "tab_active"), grp = sty(T, "hilight", "menu");
+          cap = sty(T, "menu_sel", "tab_active"), grp = sty(T, "hilight", "menu"), ss = cap;
     for (Style* st : {&ls, &dim, &grp}) st->bg = bs.bg;
     grp.fg = readable(grp.fg, bs.bg), dim.fg = readable(dim.fg, bs.bg);
     hs.attr |= A_BOLD, grp.attr |= A_BOLD, cap.attr |= A_BOLD;
     auto rows = key_rows(keymap);
     kw.n = (int)rows.size();
     kw.rows = std::max(1, std::min(kw.n, H - 5));
-    auto caps_w = [&](const std::string& sp, bool first) {  // " Alt "+" → ", " / " before an alternative
-        int w = first ? -1 : 2;
-        for (auto& k : key_caps(sp)) { Row rr; cells(rr, k, cap, false); w += width(rr) + 3; }
+    if (kw.sel < 0 || kw.sel >= kw.n || rows[(size_t)kw.sel].act.empty())
+        for (kw.sel = 0; kw.sel + 1 < kw.n && rows[(size_t)kw.sel].act.empty(); kw.sel++) {}
+    auto width_of = [&](const std::string& s) { Row rr; cells(rr, s, cap, false); return width(rr); };
+    // one key's caps: " Ctrl "+" B " then " D "
+    auto caps_w = [&](const std::string& sp) {
+        auto [a, b] = chord_split(sp);
+        int w = b.empty() ? -1 : 4;  // " then " for the "+" the loops don't draw
+        for (auto& half : {a, b})
+            if (!half.empty())
+                for (auto& k : key_caps(half)) w += width_of(k) + 3;
         return w;
     };
     int need = 0, dw = 0;  // the widest keycaps and description, for the box's width
     for (auto& r : rows) {
         int w = 0;
         bool first = true;
-        for (auto& sp : split(r.specs, ' ')) w += caps_w(sp, first), first = false;
+        for (auto& sp : split(r.specs, ' ')) w += caps_w(sp) + (first ? 0 : 3), first = false;
         need = std::max(need, w), dw = std::max(dw, (int)from_utf8(r.desc).size());
     }
-    kw.w = std::min(W - 2, need + dw + 7), kw.x0 = (W - kw.w) / 2;
+    kw.w = std::min(W - 2, std::max(need + dw + 7, 52)), kw.x0 = (W - kw.w) / 2;
     kw.top = std::max(0, std::min(kw.top, kw.n - kw.rows));
     int bh = kw.rows + 3, y0 = std::max(0, (H - bh) / 2 - 1), x1 = kw.x0 + kw.w, capx = kw.x0 + 3,
         descx = capx + std::min(need, std::max(12, kw.w - 5 - dw)) + 2;
@@ -2187,7 +2217,7 @@ void Tui::draw_keys(int W, int H) {
     for (int i = 0; i < kw.rows && kw.top + i < kw.n; i++) {
         auto& r = rows[(size_t)(kw.top + i)];
         int y = kw.list_y + i;
-        if (r.specs.empty()) {  // a group: its name and a rule to the edge
+        if (!r.head.empty()) {  // a group: its name and a rule to the edge
             int ex = text(kw.x0 + 2, y, x1 - 2, r.head, grp, false);
             for (int xx = ex + 1; xx < x1 - 2; xx++) cell(xx, y, U'─', ls);
             continue;
@@ -2195,32 +2225,141 @@ void Tui::draw_keys(int W, int H) {
         // the keycaps: " Alt "+" → ", alternatives apart; what doesn't fit before the description is left out
         int x = capx;
         bool first = true;
+        if (r.specs.empty()) text(x, y, descx - 1, "no key", dim, false);
         for (auto& sp : split(r.specs, ' ')) {
-            auto caps = key_caps(sp);
-            if (x + caps_w(sp, first) + (first ? 1 : 0) > descx - 1) break;
+            if (x + caps_w(sp) + (first ? 0 : 3) > descx - 1) break;
             if (!first) x = text(x, y, descx, " / ", dim, false);
-            for (size_t j = 0; j < caps.size(); j++) {
-                if (j) x = text(x, y, descx, "+", dim, false);
-                x = text(x, y, descx, " " + caps[j] + " ", cap, false);
+            auto [a, b] = chord_split(sp);
+            for (int h = 0; h < (b.empty() ? 1 : 2); h++) {
+                if (h) x = text(x, y, descx, " then ", dim, false);
+                auto caps = key_caps(h ? b : a);
+                for (size_t j = 0; j < caps.size(); j++) {
+                    if (j) x = text(x, y, descx, "+", dim, false);
+                    x = text(x, y, descx, " " + caps[j] + " ", cap, false);
+                }
             }
             first = false;
         }
-        text(descx, y, x1 - 2, r.desc, bs, false);
+        if (kw.top + i == kw.sel) {  // the row Enter changes
+            cell(kw.x0 + 1, y, U'▶', hs);
+            fill(y, descx - 1, x1 - 1, ss);
+            text(descx, y, x1 - 2, r.desc, ss, false);
+        } else text(descx, y, x1 - 2, r.desc, bs, false);
     }
-    std::string more = kw.n > kw.rows ? "↑↓ scroll · " : "";
-    text(kw.x0 + 2, y0 + bh - 2, x1 - 2, more + "Esc close · /help keys", dim, false);
+    text(kw.x0 + 2, y0 + bh - 2, x1 - 2, !kw.msg.empty() ? kw.msg : "↑↓ pick · Enter or click: change · Esc close", dim, false);
+    tb_hide_cursor();
+    if (!kw.act.empty()) draw_learn(W, H);
+}
+
+// the box that learns a key: what was pressed, what it takes the key from, and four buttons
+void Tui::draw_learn(int W, int H) {
+    static const char* const BTN[4] = {"Replace", "Add", "Default", "Cancel"};
+    std::vector<std::string> info;
+    auto say = [&](const std::string& t) { for (auto& w : wrap_words(t, 44)) info.push_back(w); };
+    say("Press the new key for: " + kw.desc);
+    info.push_back("");
+    std::string spec = kw.got.empty() ? "" : kw.got[0] + (kw.got.size() > 1 ? ">" + kw.got[1] : "");
+    info.push_back(spec.empty() ? "waiting for a key..." : "New:  " + key_label(spec));
+    if (kw.got.size() == 1) say("Press a second key for a two-key combo, or Enter to save this one.");
+    if (!spec.empty()) {
+        std::string first = kw.got[0];
+        auto rows = key_rows(keymap);
+        for (auto& r : rows)
+            for (auto& sp : split(r.specs, ' ')) {
+                auto [a, b] = chord_split(sp);
+                if (!r.act.empty() && r.act != kw.act && (sp == spec || (a == first && b.empty() != (kw.got.size() < 2))))
+                    say(key_label(sp) + " is \"" + r.desc + "\" now: it moves here.");
+            }
+        static const std::set<std::string> TYPING = {"C-b", "C-c", "C-o", "C-v", "C-]", "C-_", "C-u", "C-k", "C-e"};
+        if (TYPING.count(first)) say(key_label(first) + (kw.got.size() > 1 ? " edits the line now: press it twice for that." : " edits the line now: it won't any more."));
+        if (first == "C-b") say("Inside tmux, tmux takes Ctrl+B: press it twice there.");
+    }
+    if (!kw.msg.empty()) info.push_back("!" + kw.msg);
+    info.push_back("");
+    say("Enter: save · Tab: button · Backspace: again · Esc: cancel");
+    draw_dialog(W, H, "New key", info, "", false, U"", 0, "", 0, 0, 'K');
+    const Theme& T = c.look(false);
+    Style bs = sty(T, "menu", "nicklist"), on = sty(T, "menu_sel", "tab_active");
+    on.attr |= A_BOLD;
+    int bw = std::min(W - 2, 48), x = (W - bw) / 2 + 2, bh = 4 + (int)info.size();
+    kw.btn_y = std::max(0, (H - bh) / 2 - 1) + 2 + (int)info.size();
+    kw.bx.clear();
+    for (int i = 0; i < 4; i++) {
+        int from = x;
+        x = text(x, kw.btn_y, (W - bw) / 2 + bw - 1, std::string("[ ") + BTN[i] + " ]", i == kw.btn ? on : bs, false);
+        kw.bx.push_back({from, x - 1});
+        x++;
+    }
     tb_hide_cursor();
 }
 
-void Tui::keys_key(int k, uint32_t ch) {
-    int last = std::max(0, kw.n - kw.rows);
-    if (k == TB_KEY_ARROW_DOWN) kw.top = std::min(last, kw.top + 1);
-    else if (k == TB_KEY_ARROW_UP) kw.top = std::max(0, kw.top - 1);
-    else if (k == TB_KEY_PGDN || k == TB_KEY_SPACE) kw.top = std::min(last, kw.top + kw.rows);
-    else if (k == TB_KEY_PGUP) kw.top = std::max(0, kw.top - kw.rows);
-    else if (k == TB_KEY_HOME) kw.top = 0;
-    else if (k == TB_KEY_END) kw.top = last;
-    else kw.open = false;  // Esc, q, Enter, F1 or Alt+K again: anything else closes
+void Tui::learn_act(int btn) {
+    if (btn == 3) { kw.act.clear(), kw.msg.clear(); return; }
+    if (btn != 2 && kw.got.empty()) { kw.msg = "Press a key first"; return; }
+    std::string cmd = btn == 2 ? "/keys default " + kw.act
+                               : std::string(btn == 1 ? "/keys add " : "/keys set ") + kw.act + " " + kw.got[0] + (kw.got.size() > 1 ? ">" + kw.got[1] : "");
+    kw.act.clear();
+    c.exec(c.active, cmd);
+    kw.msg = c.active->lines.empty() ? "" : c.active->lines.back().text;  // "saved", or why not
+}
+
+void Tui::keys_key(int mod, int k, uint32_t ch) {
+    bool plain = !(mod & (TB_MOD_ALT | TB_MOD_SUPER)) && !ch;
+    if (!kw.act.empty()) {  // learning: every key is the answer, but these four
+        kw.msg.clear();
+        if (plain && k == TB_KEY_ESC) learn_act(3);
+        else if (plain && k == TB_KEY_ENTER) learn_act(kw.btn);
+        else if (plain && k == TB_KEY_TAB) kw.btn = (kw.btn + 1) % 4;
+        else if (plain && (k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2)) kw.got.clear();
+        else {
+            std::string sp = keyspec(mod, k, ch);
+            if (kw.got.size() == 1 && sp == kw.got[0]) return;  // the first twice types what it did before: not a combo
+            std::string why = sp.empty() ? key_problem(sp) : kw.got.size() == 1 ? key_problem(kw.got[0] + ">" + sp) : key_problem(sp);
+            if (kw.got.size() != 1) kw.got.clear();
+            if (!why.empty()) kw.msg = why;
+            else kw.got.push_back(sp), kw.btn = 0;
+        }
+        return;
+    }
+    kw.msg.clear();
+    auto rows = key_rows(keymap);
+    int last = std::max(0, (int)rows.size() - kw.rows), d = 0, steps = 1;
+    if (k == TB_KEY_ARROW_DOWN) d = 1;
+    else if (k == TB_KEY_ARROW_UP) d = -1;
+    else if (k == TB_KEY_PGDN || k == TB_KEY_SPACE) d = 1, steps = kw.rows;
+    else if (k == TB_KEY_PGUP) d = -1, steps = kw.rows;
+    else if (k == TB_KEY_HOME) d = -1, steps = (int)rows.size();
+    else if (k == TB_KEY_END) d = 1, steps = (int)rows.size();
+    if (d) {  // to the next row that can change; past the last one the list still scrolls to its end
+        int at = kw.sel;
+        for (int i = at + d; i >= 0 && i < (int)rows.size() && steps > 0; i += d)
+            if (!rows[(size_t)i].act.empty()) kw.sel = i, steps--;
+        if (kw.sel == at) kw.top = d > 0 ? last : 0;
+        else if (kw.sel < kw.top + 1) kw.top = std::max(0, kw.sel - 1);
+        else if (kw.sel >= kw.top + kw.rows) kw.top = std::min(last, kw.sel - kw.rows + 1);
+    } else if (plain && k == TB_KEY_ENTER && kw.sel >= 0 && kw.sel < (int)rows.size() && !rows[(size_t)kw.sel].act.empty())
+        kw.act = rows[(size_t)kw.sel].act, kw.desc = rows[(size_t)kw.sel].desc, kw.got.clear(), kw.btn = 0;
+    else kw.open = false;  // Esc, q, F1 or Alt+K again: anything else closes
+}
+
+// the wheel scrolls, a click picks a row (or a button of the learning box), a click outside closes
+void Tui::keys_mouse(int mod, int k, int x, int y) {
+    bool click = k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION);
+    if (!kw.act.empty()) {
+        for (int i = 0; click && y == kw.btn_y && i < (int)kw.bx.size(); i++)
+            if (x >= kw.bx[(size_t)i].first && x <= kw.bx[(size_t)i].second) { kw.msg.clear(), learn_act(i); return; }
+        return;
+    }
+    if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) {
+        kw.top = std::max(0, std::min(kw.n - kw.rows, kw.top + (k == TB_KEY_MOUSE_WHEEL_UP ? -1 : 1)));
+        return;
+    }
+    if (!click) return;
+    if (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1) { kw.open = false; return; }
+    auto rows = key_rows(keymap);
+    int i = kw.top + y - kw.list_y;
+    if (y >= kw.list_y && y < kw.list_y + kw.rows && i < (int)rows.size() && !rows[(size_t)i].act.empty())
+        kw.sel = i, kw.msg.clear(), keys_key(0, TB_KEY_ENTER, 0);
 }
 
 // every word typed must be in the tab's name, its network, or its kind ("server", "query"...)
@@ -3206,7 +3345,7 @@ static std::string keyspec(int mod, int key, uint32_t ch) {
     }
     if (key >= TB_KEY_F12 && key <= TB_KEY_F1) return s + "F" + std::to_string(TB_KEY_F1 - key + 1);
     if (key >= 1 && key <= 26) return s + "C-" + (char)('a' + key - 1);
-    return s + "?";
+    return "";  // a key with no name: nothing is bound to it
 }
 
 bool Tui::guide_tab() const { return c.active && !c.active->srv && c.active->name == "*guide"; }
@@ -3266,11 +3405,19 @@ void Tui::load_keys() {
     keymap["F1"] = keymap["M-k"] = "keys";
     keymap["M-s"] = "lock";
     keymap["M-d"] = keymap["C-z"] = "detach";  // C-z: detach (still connected) where a shell would suspend
-    // [keys] action = spec [spec...]
+    // [keys] action = spec [spec...]: those are the action's keys, with the ones above only if "default" is among them
     auto ks = c.cfg.find("keys");
-    if (ks != c.cfg.end())
-        for (auto& [act, specs] : ks->second)
-            for (auto& sp : split(specs, ' ')) keymap[sp] = act;
+    if (ks == c.cfg.end()) return;
+    std::set<std::string> replaced;
+    for (auto& [act, specs] : ks->second) {
+        auto l = split(specs, ' ');
+        if (!l.empty() && std::find(l.begin(), l.end(), "default") == l.end()) replaced.insert(act);
+    }
+    for (auto it = keymap.begin(); it != keymap.end();)
+        it = replaced.count(it->second) ? keymap.erase(it) : std::next(it);
+    for (auto& [act, specs] : ks->second)
+        for (auto& sp : split(specs, ' '))
+            if (sp != "default") keymap[sp] = act;
 }
 
 void Tui::shutdown() { tb_shutdown(); }
@@ -3338,7 +3485,7 @@ void Tui::on_readable() {
         }
         if ((c.locked || sw.open || tw.open || fw.open || kw.open || pw.open || c.pwin.open || lw.open || bw.open) && ev.type == TB_EVENT_KEY) { key(ev.mod, ev.key, ev.ch); c.dirty = true; continue; }  // a paste is keys too (the settings window: Enter edits)
         bool nl = ev.type == TB_EVENT_KEY && !(ev.mod & TB_MOD_ALT) && (ev.key == TB_KEY_ENTER || ev.key == TB_KEY_CTRL_J);
-        if (nl && (!c.choices.empty() || (paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0))) { enter = true; continue; }  // a highlighted suggestion: key() takes it
+        if (nl && (!c.choices.empty() || (paste.empty() && confirm.empty() && menu.items.empty() && sugg_sel < 0))) { chord.clear(), enter = true; continue; }  // a highlighted suggestion: key() takes it
         if (ev.type == TB_EVENT_KEY) key(ev.mod, ev.key, ev.ch);
         else if (ev.type == TB_EVENT_MOUSE) mouse(ev.mod, ev.key, ev.x, ev.y);
         c.dirty = true;
@@ -3408,9 +3555,14 @@ bool Tui::action(const std::string& a) {
 }
 
 void Tui::key(int mod, int k, uint32_t ch) {
+    std::string pre;
+    pre.swap(chord);  // the first of two keys: this one is the second, wherever it goes
     if (c.locked) {  // only the password; Alt+D still detaches
-        auto it = keymap.find(keyspec(mod, k, ch));
+        std::string sp = keyspec(mod, k, ch);
+        auto it = keymap.find(pre.empty() ? sp : pre + ">" + sp);
         if (it != keymap.end() && it->second == "detach") { action("detach"); return; }
+        if (!pre.empty()) return;
+        if (is_prefix(sp, "detach")) { chord = sp; return; }
         if (mod & (TB_MOD_ALT | TB_MOD_SUPER)) return;
         if (peek_at) {  // over the screensaver: Esc puts the box away, a key keeps it up
             if (k == TB_KEY_ESC) { peek_at = 0, lock_in.clear(); return; }
@@ -3428,7 +3580,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
     if (sw.open && confirm.empty() && !c.asking(c.active)) { settings_key(mod, k, ch); return; }  // asking: the password box has the keys, below
     if (tw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) theme_key(k, ch); return; }
     if (fw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) find_key(k, ch); return; }
-    if (kw.open) { keys_key(k, ch); return; }
+    if (kw.open) { keys_key(mod, k, ch); return; }
     if (pw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) plugin_key(k, ch); return; }
     if (c.pwin.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) pwin_key(k, ch); return; }
     if (lw.open) { if (!(mod & (TB_MOD_ALT | TB_MOD_SUPER))) logs_key(k, ch); return; }
@@ -3482,6 +3634,13 @@ void Tui::key(int mod, int k, uint32_t ch) {
         if (c.pass_hidden) cur = input.size();  // no moving inside what you can't see
         if (k == TB_KEY_ARROW_UP || k == TB_KEY_ARROW_DOWN || k == TB_KEY_TAB) return;  // no history or completion in it
     }
+    // two keys in a row (C-b>d): the first waits for the second. The first twice does what it does alone
+    const std::string spec = keyspec(mod, k, ch);
+    if (!pre.empty()) {
+        if (k == TB_KEY_ESC && !ch && !(mod & TB_MOD_ALT)) return;
+        if (auto two = keymap.find(pre + ">" + spec); two != keymap.end()) { action(two->second); return; }
+        if (spec != pre) { c.flash = key_label(pre + ">" + spec) + " isn't bound", c.flash_until = now_ms() + 2000; return; }
+    } else if (is_prefix(spec)) { chord = spec; return; }
     // the suggestion list under the input line takes Up/Down while it shows;
     // Enter or Tab on the highlight puts it in the input line without sending
     // (only Alt/Cmd are excluded: termbox reports Enter and Tab as Ctrl+M / Ctrl+I)
@@ -3500,7 +3659,7 @@ void Tui::key(int mod, int k, uint32_t ch) {
         }
     }
     sugg_sel = -1;
-    auto it = keymap.find(keyspec(mod, k, ch));
+    auto it = keymap.find(spec);
     if (it != keymap.end() && action(it->second)) return;
     if (k != TB_KEY_TAB) completing = false;
     bool bs = k == TB_KEY_BACKSPACE || k == TB_KEY_BACKSPACE2;
@@ -3747,6 +3906,7 @@ void Tui::close_box() {
     case 't': tw.q.clear(), theme_key(TB_KEY_ESC, 0); break;  // back to the theme it had
     case 'f': fw.open = false; break;
     case 'k': kw.open = false; break;
+    case 'K': learn_act(3); break;
     case 'g': pw.open = false; break;
     case 'w': c.pwin_act("close", 0); break;  // a plugin's window: its plugin is told
     case 'l': lw.open = false; break;
@@ -3787,11 +3947,8 @@ void Tui::mouse(int mod, int k, int x, int y) {
     if (c.pwin.open) { if (!(mod & TB_MOD_MOTION)) pwin_mouse(k, x, y); return; }
     if (lw.open) { if (!(mod & TB_MOD_MOTION)) logs_mouse(k, x, y); return; }
     if (bw.open) { if (!(mod & TB_MOD_MOTION)) bans_mouse(k, x, y); return; }
-    if (kw.open) {  // the wheel scrolls, a click outside closes
-        if (k == TB_KEY_MOUSE_WHEEL_UP || k == TB_KEY_MOUSE_WHEEL_DOWN) keys_key(k == TB_KEY_MOUSE_WHEEL_UP ? TB_KEY_ARROW_UP : TB_KEY_ARROW_DOWN, 0);
-        else if (k == TB_KEY_MOUSE_LEFT && !(mod & TB_MOD_MOTION) && (x < kw.x0 || x >= kw.x0 + kw.w || y < kw.list_y - 1 || y > kw.list_y + kw.rows + 1)) kw.open = false;
-        return;
-    }
+    if (k == TB_KEY_MOUSE_LEFT) chord.clear();
+    if (kw.open) { keys_mouse(mod, k, x, y); return; }
     int top = top_row(), ch = chat_height();
     bool over_topic = topicbar && !zen && y < topic_h, over_chat = y >= top && y < top + ch && x >= chat_x && x < chat_end && (nl_x < 0 || x < std::min(nl_x, nl_x0) || x >= std::max(nl_x + 1, nl_x1));  // not on the nicklist or its │
     if (in_selecting && (k == TB_KEY_MOUSE_LEFT || k == TB_KEY_MOUSE_RELEASE)) {  // a drag over the input line
