@@ -1,0 +1,68 @@
+# No color: the terminal's own foreground and background everywhere; bold, italic, underline, reverse and dim
+# tell things apart. The terminal uses it for the default theme when $NO_COLOR is set (no-color.org). /theme nocolor
+
+[colors]
+default        = default default
+topic          = default default reverse
+tabbar         = default default
+tab_server     = default default bold
+tab_home       = default default bold
+tab_active     = default default reverse bold
+tab_data       = default default underline
+tab_msg        = default default bold
+tab_hilight    = default default bold underline
+tab_quiet      = default default dim italic
+tab_quiet_act  = default default reverse dim
+status         = default default reverse
+status_hi      = default default reverse bold
+status_info    = default default reverse
+status_ok      = default default
+status_warn    = default default bold
+status_high    = default default bold underline
+status_crit    = default default bold underline
+status_bat     = default default
+input          = default default
+input_prompt   = default default bold
+set_key        = default default bold
+set_value      = default default
+timestamp      = default default dim
+separator      = default default dim
+nicklist       = default default
+nicklist_title = default default italic
+nicklist_border= default default dim
+nicklist_op    = default default bold
+nicklist_voice = default default italic
+menu           = default default
+menu_sel       = default default reverse bold
+menu_border    = default default
+msg_self       = default default bold
+marker         = default default bold
+hilight        = default default reverse bold
+hilight_text   = default default bold
+join           = default default dim
+part           = default default dim italic
+quit           = default default dim italic
+notice         = default default bold
+action         = default default italic
+info           = default default
+error          = default default bold underline
+# note         = default default reverse bold    the INFO badge on iSekur's own notices; unset: hilight's
+# event        = default default    nick, mode and topic lines; unset: info's
+# hilight_line = default default    webchat only: a highlighted line's background; unset: a faint pink tint
+# link         = default default underline    links in the chat and the topic; unset: underlined here
+
+[nicks]
+palette = default
+
+[layout]
+nicklist       = on
+nicklist_width = 18
+tab_bar_width  = 20
+nick_width     = 12
+separator      = │
+timestamp      = %H:%M
+mirc_colors    = off
+# nick_brackets = <>    wrap the nick in the chat: <nick>; unset: the bare nick
+# event_marker = *    marks join, part, nick, mode... lines; unset: --> <-- --
+# font         = ui-monospace, monospace    the webchat's font stack; unset: ui-monospace and friends
+# window       = mac    dialog window buttons: mac | win95; unset: the title on the border

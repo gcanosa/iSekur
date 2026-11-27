@@ -444,9 +444,12 @@ static double rel_lum(RGB c) {
     auto ch = [](int v) { double x = v / 255.0; return x <= .03928 ? x / 12.92 : std::pow((x + .055) / 1.055, 2.4); };
     return .2126 * ch(c >> 16 & 255) + .7152 * ch(c >> 8 & 255) + .0722 * ch(c & 255);
 }
+// a theme that names no color for the badge or the text (nocolor): the badge in reverse, not a color of our own
+static bool uncolored(const Style& a, const Style& d) { return a.fg < 0 && a.bg < 0 && d.fg < 0 && d.bg < 0; }
 Style note_style(const Theme& t) {
     if (t.el.count("note")) return t.get("note");
     Style h = t.get("hilight"), d = t.get("default");
+    if (uncolored(h, d)) return {-1, -1, A_REV | A_BOLD};
     RGB bg = h.bg >= 0 && h.bg != d.bg ? h.bg : h.fg >= 0 ? h.fg : 0xc2185b;
     double l = rel_lum(bg);
     return {(1.05 / (l + .05) >= (l + .05) / .05) ? 0xffffff : 0x000000, bg, A_BOLD};
@@ -455,6 +458,7 @@ Style note_style(const Theme& t) {
 Style plugin_style(const Theme& t) {
     if (t.el.count("plugin")) return t.get("plugin");
     Style a = t.get("tab_active"), d = t.get("default");
+    if (uncolored(a, d)) return {-1, -1, A_REV | A_BOLD};
     RGB bg = a.bg >= 0 && a.bg != d.bg ? a.bg : a.fg >= 0 ? a.fg : 0x5f87ff;
     double l = rel_lum(bg);
     return {(1.05 / (l + .05) >= (l + .05) / .05) ? 0xffffff : 0x000000, bg, A_BOLD};

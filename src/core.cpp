@@ -1299,9 +1299,12 @@ std::string Core::opt(const Server* s, const std::string& key, const std::string
     return k && k->scope == 'g' ? g : s ? ini_get(cfg, "server." + s->cfg.name, key, g) : g;  // a [general]-only key: the network's is ignored
 }
 
-// /reload: the config file again, without restarting. Unsaved /set changes stay
-// on top; servers pick up their settings like /set does (on the next connect),
-// new [server.*] sections are added and connected when autoconnect is on.
+void Core::no_color_check() {
+    const char* v = getenv("NO_COLOR");
+    std::string err;
+    no_color = v && *v && load_theme("nocolor", plain, err);
+}
+
 bool Core::use_theme(const std::string& name, std::string& err) {
     if (!load_theme(name, theme, err)) return false;
     dirty = true;
@@ -1309,6 +1312,9 @@ bool Core::use_theme(const std::string& name, std::string& err) {
     return true;
 }
 
+// /reload: the config file again, without restarting. Unsaved /set changes stay
+// on top; servers pick up their settings like /set does (on the next connect),
+// new [server.*] sections are added and connected when autoconnect is on.
 void Core::reload(Buffer* b) {
     Ini fresh;
     if (!ini_load(cfg_path, fresh)) { print(b, LK::ERROR, "Can't read " + cfg_path); return; }

@@ -290,6 +290,9 @@ static std::u32string from_utf8(const std::string& s) {
     return o;
 }
 
+// s drawn on a row styled `row`: its background, and the reverse that marks a selection or a bar in a theme with no colors
+static void on_row(Style& s, const Style& row) { s.bg = row.bg, s.attr |= row.attr & A_REV; }
+
 // theme element with a fallback element instead of "default"
 static Style sty(const Theme& t, const std::string& k, const std::string& fb) {
     return t.el.count(k) ? t.get(k) : t.get(fb);
@@ -881,6 +884,7 @@ void Tui::draw() {
     if (c.bell) c.bell = false, tb_send("\a", 1);
     if (!c.copy_out.empty()) copy_text(c.copy_out), c.copy_out.clear();  // isekur.copy
     const Theme& T = c.look(false);
+    mirc_colors = T.lay("mirc_colors", "on") != "off";  // the drawn theme's, whichever was loaded last
     Style def = T.get("default");
     g_tint = c.tint.term && c.tint.on() ? &c.tint : nullptr;
     if (c.tint.ver != g_tint_ver) g_tint_memo.clear(), g_tint_ver = c.tint.ver;
@@ -1048,7 +1052,7 @@ void Tui::draw() {
             int x2 = text(side_x + nw - (int)num.size() + 1, y2, sx1, num + " ", s, false);
             if (kid) {
                 Style l2 = lines;
-                l2.bg = s.bg;
+                on_row(l2, s);
                 x2 = text(x2, y2, sx1, last ? "└ " : "├ ", l2, false);
             }
             Style ns = s;
@@ -1207,6 +1211,7 @@ void Tui::draw() {
         sh.fg = readable(sh.fg, sh.bg >= 0 ? sh.bg : ss.bg);  // the bar's bright text reads whatever the theme (tokyonight-day: 4.0:1)
         fill(y, 0, W, ss);
         auto seg = [&](const std::string& inner, Style is) {
+            is.attr |= ss.attr & A_REV;
             x = text(x, y, W, "[", ss, false);
             x = text(x, y, W, inner, is, false);
             x = text(x, y, W, "] ", ss, false);
@@ -1256,7 +1261,7 @@ void Tui::draw() {
             x = text(x, y, W, "[Act: ", ss, false);
             for (size_t i = 0; i < act.size(); i++) {
                 Style as = act[i].second == 3 ? T.get("tab_hilight") : act[i].second == 2 ? T.get("tab_msg") : T.get("tab_data");
-                as.bg = ss.bg;
+                on_row(as, ss);
                 if (i) x = text(x, y, W, ",", as, false);
                 int x0 = x;
                 x = text(x, y, W, std::to_string(act[i].first), as, false);
@@ -1699,7 +1704,7 @@ void Tui::draw_settings(int W, int H) {
         bool on = i == ci, uns = false;
         for (auto& r : all) uns |= r.unsaved && (cn.empty() || r.cat == cn || r.cat.rfind(cn + "/", 0) == 0);
         Style st = on ? sel : counts[(size_t)i] ? bs : dim;
-        if (on && sw.focus != 0) st = keyst, st.attr |= A_BOLD;  // chosen, but the keys have the focus
+        if (on && sw.focus != 0) st = keyst, st.attr |= A_BOLD | (st.fg < 0 ? A_UNDER : 0);  // chosen, but the keys have the focus (no color: underlined)
         if (cn == "general" || (cn.rfind("server.", 0) == 0 && cat_parent(cn).empty())) st.attr |= A_BOLD;  // a level's top
         fill(ly + j, x0 + 2, x0 + 2 + nw - 1, on && sw.focus == 0 ? sel : bs);
         text(x0 + 3, ly + j, x0 + nw - 5, name, st, false);
@@ -2056,7 +2061,7 @@ void Tui::draw_themes(int W, int H) {
         Style st = on ? sel : bs;
         fill(tw.list_y + i, tw.x0 + 1, x1 - 1, st);
         int nx = text(tw.x0 + 2, tw.list_y + i, x1 - 2, (on ? "▸ " : "  ") + name, st, false);
-        if (name == tw.orig) { Style d = dim; d.bg = st.bg; text(nx + 1, tw.list_y + i, x1 - 2, "(was)", d, false); }
+        if (name == tw.orig) { Style d = dim; on_row(d, st); text(nx + 1, tw.list_y + i, x1 - 2, "(was)", d, false); }
     }
     text(tw.x0 + 2, y0 + bh - 2, x1 - 2, "↑↓ preview · type: filter · Enter keep · Esc back", dim, false);
 }
@@ -2274,7 +2279,7 @@ void Tui::draw_find(int W, int H) {
         int wx = x1 - 2 - (int)where.size();
         text(fw.x0 + 2, fw.list_y + i, wx - 1, (on ? "▸ " : "  ") + std::to_string(c.index_of(b) + 1) + ":" + buf_label(b), st, false);
         Style d = dim;
-        d.bg = on ? sel.bg : bs.bg;
+        on_row(d, on ? sel : bs);
         text(wx, fw.list_y + i, x1 - 2, where, d, false);
     }
     text(fw.x0 + 2, y0 + bh - 2, x1 - 2, "type: filter · ↑↓ · Enter go · Esc close", dim, false);
@@ -2408,7 +2413,7 @@ void Tui::draw_plugins(int W, int H) {
         pw.tab_mid = x + 1;
         x = text(x + 2, pw.tab_y, xm, " Available ", ta, false);
         x = text(x, pw.tab_y, xm, (c.catalog_have ? std::to_string(cat.size()) : std::string("?")) + " ", ta, false);
-        if (ups) { Style u = up; if (pw.avail) u.bg = sel.bg; text(x, pw.tab_y, xm, "↑" + std::to_string(ups) + " ", u, false); }
+        if (ups) { Style u = up; if (pw.avail) on_row(u, sel); text(x, pw.tab_y, xm, "↑" + std::to_string(ups) + " ", u, false); }
         text(ca, pw.tab_y + 1, xm, "PLUGIN", dim, false), text(cb2, pw.tab_y + 1, xm, pw.avail ? "VERSION" : "STATUS", dim, false);
         text(cc, pw.tab_y + 1, xm, pw.avail ? "" : "VERSION", dim, false), text(pw.avail ? cc : cd, pw.tab_y + 1, xm, "DESCRIPTION", dim, false);
     }
@@ -2432,7 +2437,7 @@ void Tui::draw_plugins(int W, int H) {
         int k = pw.top + i, y = pw.list_y + i;
         bool on = k == pw.sel;
         Style st = on ? sel : bs, d = dim, g = dim;
-        auto mk = [&](Style s) { if (on) s.bg = sel.bg, s.fg = sel.fg; else s.bg = bs.bg; return s; };  // the selected row in one color: it must read
+        auto mk = [&](Style s) { if (on) on_row(s, sel), s.fg = sel.fg; else s.bg = bs.bg; return s; };  // the selected row in one color: it must read
         fill(y, pw.x0 + 1, x1 - 1, st);
         text(pw.x0 + 2, y, xm, on ? "▸" : " ", st, false);
         if (cp) {
@@ -3230,6 +3235,7 @@ void Tui::apply_cfg() {
                 (mode == "auto" && ct && (std::string(ct) == "truecolor" || std::string(ct) == "24bit"));
     g_true = truecolor;
     tb_set_output_mode(truecolor ? TB_OUTPUT_TRUECOLOR : TB_OUTPUT_256);
+    c.no_color_check();
     load_keys();
 }
 
@@ -4453,7 +4459,7 @@ void Tui::draw_logs(int W, int H) {
         int y = lw.body_y + i;
         bool on = lw.ttop + i == lw.sel, focus = on && lw.focus == 0;
         Style st = focus ? sel : bs, d = dim;
-        if (focus) d.fg = sel.fg, d.bg = sel.bg;
+        if (focus) d.fg = sel.fg, on_row(d, sel);
         else if (on) st.attr |= A_BOLD | A_UNDER;
         fill(y, lw.x0 + 1, lw.xd, st);
         std::string label, right;

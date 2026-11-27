@@ -23,7 +23,7 @@ your browser or phone shows the same live session.
   share its networks, channels and recent lines. Clients that support IRCv3 also get chathistory and echoes.
 - **A webchat built in.** It shows the same live session over HTTPS in a browser and installs
   as an app on a phone, with notifications and Face ID unlock. You don't need a separate relay or web client.
-- **45 24-bit themes** (dark, light, soft contrast, the classic mIRC, high contrast, mono)
+- **46 themes** (24-bit dark, light, soft contrast, the classic mIRC, high contrast, mono, and no color at all: `NO_COLOR` works)
   with a live picker, a 256-color fallback, and theme files that work as templates for your own.
 - **Modern IRC.** TLS, WebSocket, SASL (PLAIN, SCRAM-SHA-256, EXTERNAL), and most of IRCv3:
   server-time, chathistory, MONITOR, replies, reactions, typing, redaction, read markers synced between your clients, and more.

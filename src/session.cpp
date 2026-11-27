@@ -19,7 +19,7 @@
 
 static const char* HELLO = "isekur-attach 1\n";
 // what the terminal's side decides: terminfo, truecolor, character widths
-static const char* ENV_KEYS[] = {"TERM", "COLORTERM", "LANG", "LC_ALL", "LC_CTYPE"};
+static const char* ENV_KEYS[] = {"TERM", "COLORTERM", "NO_COLOR", "LANG", "LC_ALL", "LC_CTYPE"};
 // SSH_CONNECTION and ISEKUR_TTY come along too, only for the audit lines: never
 // setenv'd here (/exec would inherit them)
 std::string attach_who(const std::string& ssh, const std::string& tty) {

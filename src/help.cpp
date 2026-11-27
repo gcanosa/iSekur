@@ -363,7 +363,9 @@ static const std::vector<CmdInfo> CMDS = {
      "Alone: a picker in the terminal and the webchat; type to filter, Up/Down previews live (both), Enter keeps (as /set theme, so /save writes it), Esc goes back. "
      "Themes are files in themes/*.theme (also ~/.config/isekur/themes/); /set theme_dir ~/mythemes looks in your own folder first, "
      "the shipped ones still found after it. Every theme file names every key a theme can set, live or as a \"# key = ...\" example with what it does and what happens unset, "
-     "so copying one is a full template for your own. The switch is live; /set theme name + /save keeps it.",
+     "so copying one is a full template for your own. The switch is live; /set theme name + /save keeps it. "
+     "With $NO_COLOR set (no-color.org), the terminal draws the default theme without colors (it is the nocolor theme); "
+     "a theme you chose and the webchat keep theirs. --attach brings the attaching shell's NO_COLOR.",
      {"/theme", "/theme dracula", "/theme catppuccin-latte", "/set theme_dir ~/mythemes"}},
 
     // ---- Settings

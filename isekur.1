@@ -289,6 +289,17 @@ Other backslashes stay as typed.
 .PP
 The pipe is owner-only (mode 0600), ignored while iSekur is locked, and removed at exit.
 Not available on native Windows.
+.SH ENVIRONMENT
+.TP
+.B NO_COLOR
+Set and not empty (see https://no\-color.org): the terminal draws the default theme without
+colors, as the
+.I nocolor
+theme. A theme chosen with
+.B /theme
+and the webchat keep their colors.
+.B \-\-attach
+brings the attaching shell's value.
 .SH FILES
 .TP
 .I ~/.config/isekur/isekur.conf

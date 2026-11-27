@@ -555,7 +555,14 @@ struct Core {
     struct View { std::string by; bool term = false, web = false, events = true, own = false; int width = 80, lines = 5; Theme theme; };
     View view;
     bool view_on(bool web) const { return !view.by.empty() && (web ? view.web : view.term); }
-    const Theme& look(bool web) const { return view_on(web) && view.own ? view.theme : theme; }  // what that side draws with
+    // NO_COLOR (no-color.org): the terminal draws `plain`, the nocolor theme, in place of the default one. A theme you chose
+    // and the webchat keep their colors. Read when the terminal applies the config (an attach brings its own NO_COLOR)
+    Theme plain;
+    bool no_color = false;
+    void no_color_check();
+    const Theme& look(bool web) const {  // what that side draws with
+        return view_on(web) && view.own ? view.theme : !web && no_color && theme.name == "default" ? plain : theme;
+    }
     void view_end();
     // a plugin's color tint (API 15, isekur.tint, api_ui.cpp): tint_set starts a fade to the target over secs, tint_end the one back to
     // none over tint.out (the plugin went), tint_step (every second) moves it along and tells the screens when what is shown changed

@@ -2467,7 +2467,7 @@ int main() {
         std::string terr;
         assert(load_theme(n, th, terr));
         for (const char* k : {"default", "status", "tab_active", "input", "timestamp", "join", "error"}) assert(th.el.count(k));
-        assert(th.nicks.size() >= (n.rfind("mirc", 0) == 0 || n.rfind("mono", 0) == 0 ? 1u : 6u));  // mirc, mono: one nick color
+        assert(th.nicks.size() >= (n.rfind("mirc", 0) == 0 || n.rfind("mono", 0) == 0 || n == "nocolor" ? 1u : 6u));  // mirc, mono, nocolor: one nick color
         // a tab with activity (data, messages, a mention) is plainly another color than a quiet one, in every theme
         for (const char* k : {"tab_data", "tab_msg", "tab_hilight"})
             if (th.get("tabbar").fg >= 0 && th.get(k).fg >= 0) assert(color_distance(th.get(k).fg, th.get("tabbar").fg) >= 24.5);
@@ -2500,6 +2500,23 @@ int main() {
         assert(v.size() == 3 && v[0].fg == 0x111111 && v[0].bg == 0x222222 && v[1].fg == 0x111111 && (v[2].attr & A_BOLD));
         assert(load_theme("mono-light", th, terr) && !mirc_colors && load_theme("default", th, terr) && mirc_colors);
         assert(walk()[0].fg != 0x111111);
+    }
+    {  // NO_COLOR: the terminal draws nocolor for the default theme; a chosen theme and the webchat keep their colors
+        std::string terr, was = core.theme.name;
+        assert(core.use_theme("default", terr));
+        setenv("NO_COLOR", "", 1), core.no_color_check();  // empty: as unset
+        assert(!core.no_color && core.look(false).name == "default");
+        setenv("NO_COLOR", "0", 1), core.no_color_check();  // any value
+        assert(core.look(false).name == "nocolor" && core.look(true).name == "default" && core.theme.name == "default");
+        const Theme& p = core.look(false);
+        for (auto& [k, st] : p.el)
+            if (st.fg >= 0 || st.bg >= 0) fprintf(stderr, "nocolor.theme colors %s\n", k.c_str()), assert(false);
+        for (Style st : {note_style(p), plugin_style(p), link_style(p), fold_style(p)}) assert(st.fg < 0 && st.bg < 0);
+        assert((note_style(p).attr & A_REV) && (link_style(p).attr & A_UNDER) && p.self_nick < 0 && p.lay("mirc_colors", "") == "off");
+        for (RGB c : p.nicks) assert(c < 0);
+        assert(core.use_theme("dracula", terr) && core.look(false).name == "dracula");
+        unsetenv("NO_COLOR"), core.no_color_check();
+        assert(core.use_theme(was, terr) && !core.no_color);
     }
     {  // theme_dir: themes from there too, the shipped ones still found after it
         char d[] = "/tmp/isekur-themes-XXXXXX";
