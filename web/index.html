@@ -1492,12 +1492,14 @@ function renderSide() {
       f.onclick = e => { e.stopPropagation(); send({t: "fold", buf: id}); };
       t.append(f);
     }
-    if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) {  // the hover ×: same asks as the tab menu's Close
+    if (b.type === "channel" || b.type === "query" || (b.type === "status" && !b.home)) {  // the hover ×: asks as the tab menu's Close, and for a disconnected network too (it shows up where the fold arrow was)
       const x = document.createElement("span"); x.className = "x"; x.textContent = "×"; x.title = "Close";
       x.onclick = async e => {
         e.stopPropagation();
         const ask = b.type === "channel" && b.joined ? "Leave " + b.name + " and close its tab?"
-                  : b.type === "status" && b.state !== "disconnected" ? "Disconnect from " + b.srv + " and close all its tabs?" : "";
+                  : b.type !== "status" ? ""
+                  : b.state !== "disconnected" ? "Disconnect from " + b.srv + " and close all its tabs?"
+                  : "Close " + b.srv + " and all its tabs? A saved network stays in /servers.";
         if (!ask || await askBox({title: "Close", text: ask, ok: "Close"}) !== null) send({t: "input", buf: id, text: "/close"});
       };
       t.append(x);
