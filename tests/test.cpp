@@ -2238,6 +2238,57 @@ int main() {
         size_t n = chb->lines.size();
         feed(":NickServ!s@services NOTICE me :This nickname is registered.");
         assert(chb->lines.size() == n && ts->status->lines.back().text == "This nickname is registered.");
+        feed(":srv 306 me :You have been marked as being away");  // unasked (autoaway): the server tab too
+        assert(chb->lines.size() == n && ts->status->lines.back().text.find("being away") != std::string::npos);
+        feed(":srv 305 me :You are no longer marked as being away");
+        assert(chb->lines.size() == n && ts->status->lines.back().text.find("no longer") != std::string::npos);
+        for (const char* u : {"002 me :Your host is srv", "251 me :There are 1 users", "396 me hid.den :is now your hidden host", "901 me me!u@h :You are now logged out",
+                              "465 me :You are banned", "718 me bob u@h :is messaging you", "421 me FOO :Unknown command", "FAIL FOO BAR :nope"}) {
+            size_t st = ts->status->lines.size();
+            feed(std::string(":srv ") + u);
+            assert(chb->lines.size() == n && ts->status->lines.size() == st + 1);
+        }
+        feed(":srv FAIL CHATHISTORY MESSAGE_ERROR LATEST " + chb->name + " :no history");  // names an open tab
+        assert(chb->lines.size() == ++n);
+        feed(":ann!a@h INVITE me #party");  // an invite is for you to see: the tab on screen
+        assert(chb->lines.size() > n);
+        n = chb->lines.size();
+        bool motd = ts->motd_done;
+        ts->motd_done = true;
+        core.exec(chb, "/quote LUSERS"), sent();  // you caused it: that tab
+        feed(":srv 251 me :There are 2 users");
+        assert(chb->lines.size() == ++n);
+        ts->motd_done = false;  // reconnecting after a /command: the burst is still the server tab's
+        feed(":srv 251 me :There are 3 users");
+        assert(chb->lines.size() == n);
+        ts->motd_done = motd, ts->typed_at = 0;
+        feed(":srv 265 me 5 9 :Current local users 5, max 9");  // the numbers once
+        assert(ts->status->lines.back().text == "Current local users 5, max 9");
+        // a join's NAMES is silent; a /names shows it, bare: this channel
+        bool joined = chb->joined;
+        chb->joined = true, n = chb->lines.size();
+        feed(":srv 353 me = " + chb->name + " :@me bob"), feed(":srv 366 me " + chb->name + " :End of /NAMES list.");
+        assert(chb->lines.size() == n);
+        core.exec(chb, "/names"), assert(sent() == "NAMES " + chb->name + "\r\n");
+        feed(":srv 353 me = " + chb->name + " :@me bob!b@h"), feed(":srv 366 me " + chb->name + " :End of /NAMES list.");
+        assert(chb->lines.size() == n + 2 && chb->lines[n].text == "Names in " + chb->name + ": @me bob" && ts->names_asked.empty());
+        // about a channel you're not on: all of it in the server tab
+        n = chb->lines.size();
+        auto in_status = [&](const std::string& l, const char* text) {
+            feed(l);
+            assert(chb->lines.size() == n && ts->status->lines.back().text.find(text) != std::string::npos);
+        };
+        core.exec(chb, "/mode #away"), sent();
+        in_status(":srv 324 me #away +nt", "#away modes: [+nt]");
+        in_status(":srv 329 me #away 1700000000", "#away created");
+        in_status(":srv 482 me #away :You're not channel operator", "not channel operator");
+        core.exec(chb, "/topic #away"), sent();
+        in_status(":srv 332 me #away :hello there", "Topic of #away: hello there");
+        in_status(":srv 331 me #away :No topic is set", "No topic is set in #away");
+        core.exec(chb, "/names #away"), sent();
+        in_status(":srv 353 me = #away :@zed", "Names in #away: @zed");
+        in_status(":srv 366 me #away :End of /NAMES list.", "End of names for #away");
+        chb->joined = joined, ts->typed_at = 0;
         feed(":CTCPServ!s@services PRIVMSG me :\x01VERSION\x01");
         assert(chb->lines.size() == n && ts->status->lines.back().text.find("CTCP VERSION from CTCPServ") == 0);
         sent();
@@ -3693,6 +3744,12 @@ int main() {
         v->typed_at = 0;  // no 30s guess: only the label says where
         vf("@label=" + lab + " :srv 401 me carol :No such nick");
         assert(vb->lines.back().text.find("No such nick") != std::string::npos && v->labels.empty());
+        core.exec(vb, "/away lunch");  // a labeled /away: its reply where it was typed
+        lab = label(vs()), v->typed_at = 0;
+        vf("@label=" + lab + " :srv 306 me :You have been marked as being away");
+        assert(vb->lines.back().text.find("being away") != std::string::npos);
+        vf(":srv 305 me :You are no longer marked as being away");
+        assert(v->status->lines.back().text.find("no longer") != std::string::npos);
         core.exec(vb, "/quote CHATHISTORY LATEST #v3 * 10");
         lab = label(vs()), v->typed_at = 0;
         vf("@label=" + lab + " :srv FAIL CHATHISTORY INVALID_TARGET #v3 :No history here");

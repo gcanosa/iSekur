@@ -367,6 +367,7 @@ struct Server {
     std::function<void(const char*, const std::string&)> raw_hook;  // /rawlog: every line in or out, set while its *raw tab is open
     std::set<std::string> join_focus;      // lower(chan) of our /join: its JOIN takes focus; autojoin's don't
     std::set<std::string> who_auto;        // channels whose WHO we asked for on join: the replies aren't shown
+    std::set<std::string> names_asked;     // a command's NAMES ("*": no channel): these replies are shown, a join's aren't
     std::map<std::string, bool> online;    // /notify (MONITOR or ISON): irc_lower(nick) -> online
     std::map<std::string, std::string> bnc_watch;  // the BNC clients' MONITOR lists, merged (bnc.cpp): lowered -> nick
     time_t ison_at = 0;

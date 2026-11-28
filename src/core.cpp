@@ -2105,6 +2105,9 @@ void Core::exec(Buffer* b, const std::string& input) {
         ~LabelScope() { for (auto& sv : c.servers) if (sv.get() == s) s->label_buf = was; }
     } label_scope{*this, s, s ? s->label_buf : 0};
     if (s) s->label_buf = b->id;
+    // asking about a channel you're not on: the answers go to the server tab
+    if (s && !argv.empty() && (cmd == "mode" || cmd == "topic" || cmd == "names") && s->is_chan(argv[0]))
+        if (Buffer* c = find(s, argv[0]); !c || !c->joined) s->typed_in = s->label_buf = s->status->id;
     auto need = [&]() {
         if (s && s->state == SS::CONNECTED) return true;
         print(b, LK::ERROR, "Not connected to a server");
@@ -2979,7 +2982,7 @@ void Core::exec(Buffer* b, const std::string& input) {
         ask_pass(b, "password for the account " + s->nick, [this, s, bid, mail](const std::string& p) {
             if (std::none_of(servers.begin(), servers.end(), [&](auto& sv) { return sv.get() == s; })) return;  // /server del meanwhile
             s->reg_pass = p;
-            s->label_buf = bid;
+            s->label_buf = s->typed_in = bid, s->typed_at = time(nullptr);  // typing the password may take a while
             s->send("REGISTER * " + mail + " :" + p);
             s->label_buf = 0;
         }, true, "Register " + s->nick, {"An account for your nick on " + s->cfg.name});
@@ -3233,5 +3236,6 @@ void Core::exec(Buffer* b, const std::string& input) {
         if (!tail.empty() && tail[0] != ':')
             args = args.substr(0, args.size() - tail.size()) + ":" + tail;
     }
+    if (cmd == "NAMES" && args.empty() && s->is_chan(b->name)) args = b->name;
     s->send(cmd + (args.empty() ? "" : " " + args));
 }

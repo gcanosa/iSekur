@@ -136,6 +136,10 @@ void Server::send(const std::string& line) {
     std::string l = line;
     // an AWAY of our own (autoaway, /away, /back) replaces the pre-away AWAY *: attaching mustn't clear it
     if (pre_away && l.rfind("AWAY", 0) == 0 && l != "AWAY *") pre_away = false;
+    if (std::string w = irc_lower(l.substr(0, 6)); label_buf && (w == "names" || w == "names ")) {
+        auto a = split(l, ' ');
+        for (auto& c : split(a.size() > 1 ? a[1] : "*", ',')) names_asked.insert(lower(c));
+    }
     // labeled-response: what a typed command makes the server say comes back with its label (its tab)
     if (label_buf && caps.count("labeled-response") && !l.empty() && l[0] != '@' && l.rfind("BATCH ", 0) && l.rfind("QUIT", 0)) {
         std::string id = "i" + std::to_string(label_next++);
@@ -306,7 +310,7 @@ void Core::connect(Server* s) {
     s->away = s->pre_away = false;
     s->status->sync_until = time(nullptr) + 5;  // the handshake's own lines (hostname lookup, CAP) aren't activity either
     s->hist_batches.clear(), s->cap_vals.clear(), s->isupport.clear(), s->casemap = 0;
-    s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear();
+    s->labels.clear(), s->batch_labels.clear(), s->multi.clear(), s->who_auto.clear(), s->names_asked.clear();
     s->online.clear(), s->ison_at = 0, s->ison_wait = 0, s->typing_sent.clear(), s->motd_done = false, s->markread_off = false;
     s->inbuf.clear(), s->umodes.clear(), s->sendq.clear(), s->kb_wait.clear();
     s->tokens = s->flood_burst, s->tokens_at = now_ms();
@@ -685,7 +689,6 @@ void Core::handle(Server* s, const Msg& m) {
         if (m.tags.count("bot") && (cmd == "PRIVMSG" || cmd == "NOTICE"))
             each_entry(m.nick, [&](NickEntry& e) { bool ch = !e.bot; e.bot = true; return ch; });
     }
-    // where server replies go: the active buffer if it's ours, else status
     // the tab the user typed a command in, for its replies (whois, errors...): its label's, else within 30s, if still open
     auto typed_buf = [&]() -> Buffer* {
         int id = label_id ? label_id : time(nullptr) - s->typed_at > 30 ? 0 : s->typed_in;
@@ -693,7 +696,13 @@ void Core::handle(Server* s, const Msg& m) {
             if (id && b->id == id && b->srv == s) return b.get();
         return nullptr;
     };
+    // where server replies go: the tab you caused them in, else status -- never just the one on screen
     auto reply_buf = [&]() {
+        Buffer* b = typed_buf();
+        return b ? b : s->status;
+    };
+    // the one on screen, for what you should see wherever you are (an invite)
+    auto seen_buf = [&]() {
         if (Buffer* b = typed_buf()) return b;
         return active && active->srv == s && s->state == SS::CONNECTED ? active : s->status;
     };
@@ -880,6 +889,11 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "353") {  // NAMES
         Buffer* b = find(s, m.p(2));
+        if (s->names_asked.count(s->lower(m.p(2))) || s->names_asked.count("*")) {
+            std::string list;
+            for (auto& n : split(m.p(3), ' ')) list += " " + n.substr(0, n.find('!'));
+            print(reply_buf(), LK::INFO, "Names in " + m.p(2) + ":" + list);
+        }
         if (!b) return;
         for (auto& n : split(m.p(3), ' ')) {
             size_t k = 0;
@@ -892,6 +906,7 @@ void Core::handle(Server* s, const Msg& m) {
     }
     if (cmd == "366") {
         Buffer* b = find(s, m.p(1));
+        if (s->names_asked.erase(s->lower(m.p(1)))) print(reply_buf(), LK::INFO, "End of names for " + m.p(1));
         if (b) notify(Ev::BUFFER, b), dirty = true;
         // WHOX after our own join: accounts, real names, away and bots for the nick list (not for huge channels)
         if (b && s->who_auto.count(s->lower(b->name))) {
@@ -920,17 +935,20 @@ void Core::handle(Server* s, const Msg& m) {
     if (cmd == "332" || cmd == "TOPIC") {
         bool num = cmd == "332";
         Buffer* b = find(s, m.p(num ? 1 : 0));
+        if (num && (!b || !b->joined)) print(reply_buf(), LK::TOPIC, "Topic of " + m.p(1) + ": " + m.p(2));  // asked about a channel you're not on
         if (!b) return;
         b->topic = m.p(num ? 2 : 1);
-        line(b, LK::TOPIC, m.nick,  // "TOPIC #c :" (empty): the topic is gone
-             num ? "Topic: " + b->topic : b->topic.empty() ? m.nick + " removed the topic" : m.nick + " changed the topic to: " + b->topic, !num && is_me(m.nick));
+        if (!num || b->joined)
+            line(b, LK::TOPIC, m.nick,  // "TOPIC #c :" (empty): the topic is gone
+                 num ? "Topic: " + b->topic : b->topic.empty() ? m.nick + " removed the topic" : m.nick + " changed the topic to: " + b->topic, !num && is_me(m.nick));
         notify(Ev::BUFFER, b);
         return;
     }
     if (cmd == "331") {  // RPL_NOTOPIC, to a TOPIC query: none (anymore)
         Buffer* b = find(s, m.p(1));
         if (b) b->topic.clear(), notify(Ev::BUFFER, b);
-        line(b ? b : reply_buf(), LK::TOPIC, "", "No topic is set" + (b ? std::string() : " in " + m.p(1)));
+        bool on = b && b->joined;
+        line(on ? b : reply_buf(), LK::TOPIC, "", "No topic is set" + (on ? std::string() : " in " + m.p(1)));
         return;
     }
     if (cmd == "333") return;  // topic setter
@@ -940,13 +958,13 @@ void Core::handle(Server* s, const Msg& m) {
         if (b) b->modes = m.p(2).substr(m.p(2).rfind('+', 0) == 0), notify(Ev::BUFFER, b), dirty = true;
         std::string args;
         for (size_t i = 2; i < m.params.size(); i++) args += (i > 2 ? " " : "") + m.params[i];
-        print(b ? b : reply_buf(), LK::INFO, "Channel " + m.p(1) + " modes: [" + args + "]");
+        print(b && b->joined ? b : reply_buf(), LK::INFO, "Channel " + m.p(1) + " modes: [" + args + "]");
         return;
     }
     if (cmd == "329") {
         Buffer* b = find(s, m.p(1));
         time_t t = (time_t)atoll(m.p(2).c_str());
-        if (t > 0) print(b ? b : reply_buf(), LK::INFO,
+        if (t > 0) print(b && b->joined ? b : reply_buf(), LK::INFO,
                          "Channel " + m.p(1) + " created " + fmt_time(t, "%Y-%m-%d %H:%M:%S"));
         return;
     }
@@ -1233,7 +1251,9 @@ void Core::handle(Server* s, const Msg& m) {
         if (cmd == "FAIL" && m.p(0) == "MARKREAD" && m.p(1) == "ACCOUNT_REQUIRED") { s->markread_off = true; return; }
         std::string ctx;
         for (size_t i = 2; i + 1 < m.params.size(); i++) ctx += " " + m.params[i];
-        print(reply_buf(), cmd == "NOTE" ? LK::INFO : LK::ERROR,
+        Buffer* b = typed_buf();  // else the first open tab its context names, else status
+        for (size_t i = 2; !b && i + 1 < m.params.size(); i++) b = find(s, m.p(i));
+        print(b ? b : s->status, cmd == "NOTE" ? LK::INFO : LK::ERROR,
               (cmd == "WARN" ? "Warning: " : "") + (m.p(0) == "*" || m.p(0).empty() ? "" : m.p(0) + ": ") +
                   (m.params.size() > 2 ? m.params.back() : m.p(1)) + " (" + m.p(1) + ctx + ")");
         if (cmd == "FAIL" && m.p(0) == "REGISTER") s->reg_pass.clear();
@@ -1330,13 +1350,13 @@ void Core::handle(Server* s, const Msg& m) {
         return;
     }
     if (cmd == "INVITE") {
-        print(reply_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));
+        print(seen_buf(), LK::INFO, m.nick + " invites " + m.p(0) + " to " + m.p(1));
         if (is_me(m.p(0))) {
             ring(s, true);
             // invite_join: an ignored inviter never got here (/ignore -i); a channel we're in already isn't joined twice
             Buffer* jb = find(s, m.p(1));
             if (opt_on(s, "invite_join", false) && s->is_chan(m.p(1)) && !(jb && jb->joined) && !s->twitch()) {
-                info_note(reply_buf(), "Joining " + m.p(1) + ", " + m.nick + " invited you (invite_join)");
+                info_note(seen_buf(), "Joining " + m.p(1) + ", " + m.nick + " invited you (invite_join)");
                 s->send("JOIN " + m.p(1));
             }
         }
@@ -1591,11 +1611,14 @@ void Core::handle(Server* s, const Msg& m) {
         if (m.params.size() > 2) b = find(s, m.p(1));
         if (cmd == "401" && b && b->type == BT::QUERY && !on_notify(s, b->name)) s->online[s->lower(b->name)] = false;  // not sent again until it's back
         bool motd = cmd == "372" || cmd == "375" || cmd == "376" || cmd == "422";
-        // not in that channel (join failures 471/473/474/475/477...): where it was typed, else the server tab
-        bool chan = m.params.size() > 2 && s->is_chan(m.p(1));
-        if (!b) b = motd ? s->status : chan ? (typed_buf() ? typed_buf() : s->status) : reply_buf();
+        // status too: the connect burst (even after a /connect typed elsewhere), and away / back unless the
+        // label says /away was typed (autoaway sends it, and its /me lines would count as typing)
+        bool away = cmd == "305" || cmd == "306";
+        bool burst = !s->motd_done && cmd < "300";
+        if (!b) b = motd || ((away || burst) && !label_id) ? s->status : reply_buf();
         std::string txt;
         size_t from = b->type == BT::CHANNEL && b->name == m.p(1) ? 2 : 1;  // channel is implied
+        if ((cmd == "265" || cmd == "266") && m.params.size() > 1) from = m.params.size() - 1;  // the text says the numbers again
         for (size_t i = from; i < m.params.size(); i++) txt += (i > from ? " " : "") + m.params[i];
         print(b, cmd[0] == '4' || cmd[0] == '5' ? LK::ERROR : LK::INFO, txt);
         return;
